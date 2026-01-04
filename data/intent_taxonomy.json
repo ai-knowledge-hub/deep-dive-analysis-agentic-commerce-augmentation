@@ -1,0 +1,20 @@
+[
+  {
+    "label": "workspace_upgrade",
+    "domain": "career",
+    "keywords": ["desk", "chair", "monitor", "workspace", "ergonomic"],
+    "questions": ["How do you feel at work?", "What workspace pains do you have?"]
+  },
+  {
+    "label": "health_improvement",
+    "domain": "wellbeing",
+    "keywords": ["sleep", "supplement", "meditation", "stress", "energy"],
+    "questions": ["What helps you recover?", "How is your energy lately?"]
+  },
+  {
+    "label": "career_growth",
+    "domain": "career",
+    "keywords": ["course", "certification", "promotion", "interview", "skill"],
+    "questions": ["What skill do you want next?", "What roles inspire you?"]
+  }
+]

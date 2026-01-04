@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import Dict, List
 
 
 @dataclass
@@ -12,3 +12,6 @@ class Product:
     name: str
     price: float
     tags: List[str]
+    description: str = ""
+    empowerment_scores: Dict[str, float] = field(default_factory=dict)
+    capabilities_enabled: List[str] = field(default_factory=list)
