@@ -2,7 +2,7 @@
 
 **An empowerment-first commerce platform that optimizes for human flourishing, not clicks.**
 
-This repository implements Contextual Commerce Optimization (CCO) — a paradigm where AI-driven commerce is subordinated to human intent, not the other way around.
+This repository implements [Contextual Commerce Optimization (CCO)](https://ai-news-hub.performics-labs.com/news/agentic-commerce-llm-shopping-revolution) — a paradigm where AI-driven commerce is subordinated to human intent, not the other way around.
 
 > Philosophy without code is commentary. This repo is the proof.
 
@@ -120,12 +120,3 @@ This implementation operationalizes:
 - [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) — The manifesto for agentic marketing that serves human flourishing
 - **Computational Intentionality Theory (CIT)** — Framework treating AI advertising as a Turing-class machine whose objective function determines outcomes (paper forthcoming)
 
----
-
-## License
-
-MIT
-
----
-
-**The code is the argument.**

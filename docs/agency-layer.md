@@ -2,7 +2,7 @@
 
 ## Overview
 
-If you build agentic marketing without guardrails, you default to World A. Not because you're evil—because that's where the local gradient points.
+If you build agentic marketing without guardrails, you default to [World A](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing). Not because you're evil—because that's where the local gradient points.
 
 This document specifies the **minimal layer** that changes the trajectory from extraction to empowerment.
 
@@ -195,7 +195,7 @@ The agency layer is not a separate module bolted on top. It is woven through the
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
-�� GUARDRAIL 1: Explicit Goals                              │
+| GUARDRAIL 1: Explicit Goals                              │
 │ Intent clarification before any commerce action          │
 │ src/intent/ + src/memory/semantic.py                     │
 └─────────────────────────────────────────────────────────┘

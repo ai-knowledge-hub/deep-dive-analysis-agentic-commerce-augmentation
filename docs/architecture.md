@@ -30,21 +30,22 @@ This repo is also the first applied use case of the forthcoming foundational res
 
 The system is organized into **three strict layers**:
 
+```
 ┌──────────────────────────────────────────┐
 │ UI / Demo Layer                          │
-│ (chat, modals, flows, hackathon UX)     │
+│ (chat, modals, flows, hackathon UX)      │
 └──────────────────────────────────────────┘
 ↓
 ┌──────────────────────────────────────────┐
 │ Agent Façade Layer                       │
-│ (thin orchestration, no core logic)     │
+│ (thin orchestration, no core logic)      │
 └──────────────────────────────────────────┘
 ↓
 ┌──────────────────────────────────────────┐
 │ Core Cognition Layer (src/)              │
-│ Intent · Memory · Empowerment · MCP     │
+│ Intent · Memory · Empowerment · MCP      │
 └──────────────────────────────────────────┘
-
+```
 **Only the bottom layer defines system behavior.**  
 Everything above it can be replaced without changing the system’s meaning.
 
@@ -68,7 +69,7 @@ This layer is framework-agnostic and portable to future production systems.
 
 ### 3.1 Intent Module (`src/intent/`)
 
-**Responsibility**  
+**Responsibility**
 Understand *what the user is trying to achieve*, not just what they are searching for.
 
 **Key concepts**
@@ -77,6 +78,21 @@ Understand *what the user is trying to achieve*, not just what they are searchin
 - Intent grounding before commerce execution
 
 This module ensures that **commerce is always downstream of clarified human goals**.
+
+**Critical Design Note: Intent ≠ Objective Function**
+
+The intent taxonomy (`data/intent_taxonomy.json`) provides **routing signals**, not optimization targets. It helps the system understand the domain of a request (workspace, health, career) to ask better clarifying questions.
+
+The **actual objective function** operates on user-declared goals stored in semantic memory (`src/memory/semantic.py`). These goals are:
+- Free-form strings in the user's own words
+- Explicitly stated, not inferred from behavior
+- The target against which all recommendations are scored
+
+This distinction is critical:
+- **World A** would infer intent from clicks and optimize toward platform-defined categories
+- **World B** asks the user what they want and optimizes toward their stated goals
+
+The intent classifier is a heuristic helper. The goal alignment engine (`src/empowerment/goal_alignment.py`) is the objective function.
 
 ---
 
