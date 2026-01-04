@@ -1,0 +1,20 @@
+[
+  {
+    "id": "desk-01",
+    "name": "Ergo Desk",
+    "price": 599,
+    "empowerment_scores": {
+      "physical_agency": 0.82,
+      "cognitive_relief": 0.68
+    }
+  },
+  {
+    "id": "chair-05",
+    "name": "Lumbar Chair",
+    "price": 349,
+    "empowerment_scores": {
+      "physical_agency": 0.91,
+      "wellbeing": 0.74
+    }
+  }
+]
