@@ -10,3 +10,7 @@ def test_goal_alignment_scores_supporting_products():
     assert "Learn guitar" in result.misaligned_goals
     assert result.score < 1
     assert result.supporting_products
+    assert "average_confidence" in result.confidence_summary
+    avg_conf = result.confidence_summary["average_confidence"]
+    assert isinstance(avg_conf, (int, float))
+    assert avg_conf >= 0

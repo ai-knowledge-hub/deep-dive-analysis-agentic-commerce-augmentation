@@ -51,6 +51,28 @@ Everything above it can be replaced without changing the system’s meaning.
 
 ---
 
+## 2.1 Implementation Directories (Clean Boundaries, Pragmatic Modules)
+
+To keep the philosophy portable, the repo mirrors these layers without forcing
+Clean Architecture everywhere:
+
+- `core/` — canonical schemas, text utilities, and transformers. These modules
+  have zero platform dependencies and can be reused in any runtime.
+- `adapters/` — integration surfaces (Shopify, CSV, mock loaders). They are
+  intentionally messy and may depend on vendor SDKs.
+- `src/` — legacy glue while we migrate existing logic into the new layout.
+- `agents/` and `demos/` — façade logic and hackathon-ready experiences; allowed
+  to be lightweight scripts so we don’t over-engineer conversational flows.
+- `attribution/` and `evaluation/` — measurement scaffolding that proves
+  empowerment wins in practice.
+- `api/` — thin FastAPI bindings that expose the core feed + search features.
+
+This mapping preserves the empowerment-first constraints (objective function,
+memory, autonomy guardrails) while giving contributors a clear place to plug in
+without coupling unrelated concerns.
+
+---
+
 ## 3. Core Cognition Layer (`src/`) — Source of Truth
 
 The `src/` directory defines the **canonical Contextual Commerce Optimization core**.
@@ -132,6 +154,22 @@ They explicitly avoid:
 - popularity
 - social proof
 - manipulation signals
+
+#### Ingestion Surfaces (RawOffer → RawProduct → Product)
+
+LLM-mediated commerce spans merchant-owned catalogs (e.g., Shopify) and third-party discovery graphs (e.g., Google Shopping). To prevent any source from leaking platform semantics upstream, adapters emit **RawOffer** objects that describe:
+
+- `source` (shopify, google_shopping, amazon, etc.)
+- `confidence` and `completeness` scores
+- merchant metadata (offer URL, merchant name)
+- asserted vs. inferred attributes
+
+These offers are converted into **RawProduct** entries (variant-level truth) and finally into canonical **Product** models that power reasoning. This layered pipeline lets the empowerment objective function reason about uncertainty:
+
+- First-party feeds (Shopify) → high confidence, precise variants
+- Aggregated feeds (Google Shopping) → lower confidence, explicit caveats
+
+The agent can therefore say “this is a strong candidate” vs. “this is a hunch,” preserving autonomy even when data quality varies.
 
 ---
 

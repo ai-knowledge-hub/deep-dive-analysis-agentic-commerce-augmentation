@@ -47,17 +47,16 @@ Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performic
 ├── app.py                    # Demo entrypoint
 ├── vision.md                 # High-level platform vision
 │
-├── src/                      # Core Cognition Layer (source of truth)
-│   ├── intent/               # CCIA-inspired intent classification
-│   ├── memory/               # Working, episodic, semantic stores
-│   ├── products/             # Capability-based product reasoning
-│   ├── empowerment/          # AIS core: alignment, alienation, optimization
-│   └── mcp/                  # LLM-callable tool interfaces
-│
+├── core/                     # Canonical schemas & transformers (vendor-agnostic)
+├── adapters/                 # Shopify + mock feed adapters
+├── src/                      # Legacy core logic (intent, memory, empowerment, MCP)
 ├── agents/                   # Façade agents (orchestration only)
+├── attribution/              # AI-aware measurement scaffolding
+├── evaluation/               # Representation A/B testing harness
+├── api/                      # Thin FastAPI interface
+├── demos/                    # Gemini/ChatGPT/Gradio demos
 ├── ui/                       # Demo UI components
 ├── data/                     # Empowerment catalog + fixtures
-├── demos/                    # Scenario JSONs for walkthroughs
 └── docs/                     # Architecture & design documentation
 ```
 
@@ -69,6 +68,12 @@ Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performic
 # Validate imports and run stub runtime
 python app.py
 ```
+
+### Catalog Sources
+
+The platform loads products via adapters. Set `CATALOG_SOURCE` to choose the
+source (`mock`, `shopify`, `google_shopping`). When using Shopify, provide
+`SHOPIFY_DOMAIN` and `SHOPIFY_TOKEN` in your environment (see `.env.example`).
 
 ---
 
@@ -119,4 +124,3 @@ This implementation operationalizes:
 
 - [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) — The manifesto for agentic marketing that serves human flourishing
 - **Computational Intentionality Theory (CIT)** — Framework treating AI advertising as a Turing-class machine whose objective function determines outcomes (paper forthcoming)
-

@@ -1,0 +1,41 @@
+[
+  {
+    "source_id": "google_offer_001",
+    "merchant_name": "Tech Plaza",
+    "offer_url": "https://shopping.google.com/product/123",
+    "title": "Noise Guard Headphones",
+    "description": "Adaptive noise cancellation with lightweight build.",
+    "price": 279.00,
+    "currency": "USD",
+    "availability": "in_stock",
+    "media": ["https://example.com/noise-guard.jpg"],
+    "variant_attributes": {"sku": "NG-01"},
+    "attributes": {
+      "tags": ["headphones", "noise cancellation"],
+      "capabilities": ["Focus", "Travel"]
+    },
+    "confidence": 0.7,
+    "completeness": 0.5,
+    "inferred_fields": ["capabilities"]
+  },
+  {
+    "source_id": "google_offer_002",
+    "merchant_name": "Wellbeing Hub",
+    "offer_url": "https://shopping.google.com/product/456",
+    "title": "Blue Light Care Lamp",
+    "description": "Portable blue light blocking lamp for evening rituals.",
+    "price": 149.00,
+    "currency": "USD",
+    "availability": "limited",
+    "media": ["https://example.com/blue-light.jpg"],
+    "variant_attributes": {"sku": "BL-CARE"},
+    "attributes": {
+      "tags": ["lighting", "wellbeing"],
+      "capabilities": ["Sleep hygiene"],
+      "empowerment_scores": {"wellbeing": 0.6}
+    },
+    "confidence": 0.6,
+    "completeness": 0.6,
+    "inferred_fields": ["empowerment_scores"]
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "workspace_focus",
+    "utterance": "Need a desk setup that keeps me comfortable and focused for 8 hours",
+    "constraints": {"budget": 800, "space": "apartment"}
+  },
+  {
+    "id": "wellbeing_evening",
+    "utterance": "Looking for tools to wind down and reduce screen glare",
+    "constraints": {"budget": 300, "time": "evening"}
+  }
+]

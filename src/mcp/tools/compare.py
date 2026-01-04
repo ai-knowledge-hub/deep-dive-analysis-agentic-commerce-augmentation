@@ -10,4 +10,16 @@ def run(ids: list[str]) -> dict:
     catalog = search("")
     id_to_product = {product.id: product for product in catalog}
     selected = [id_to_product[_id] for _id in ids if _id in id_to_product]
-    return {"comparison": compare_products(selected)}
+    comparison = compare_products(selected)
+    return {
+        "comparison": comparison,
+        "metadata": [
+            {
+                "id": product.id,
+                "confidence": product.confidence,
+                "source": product.source,
+                "merchant_name": product.merchant_name,
+            }
+            for product in selected
+        ],
+    }
