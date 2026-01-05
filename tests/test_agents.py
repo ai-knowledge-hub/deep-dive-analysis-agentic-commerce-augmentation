@@ -38,6 +38,30 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
     assert ids == ["p_high", "p_mid"]
     assert any("hidden" in message.lower() for message in plan["clarifications"])
 
+def test_commerce_agent_fallback_query(monkeypatch):
+    def mock_search(query: str):
+        mapping = {
+            "workspace upgrade": [],
+            "career": [
+                Product(
+                    id="career1",
+                    name="Career Product",
+                    price=200,
+                    tags=["workspace"],
+                    confidence=0.8,
+                    source="google_shopping",
+                    merchant_name="CareerShop",
+                )
+            ],
+        }
+        return mapping.get(query, [])
+
+    monkeypatch.setattr("src.products.search.search", mock_search)
+    agent = CommerceAgent()
+    plan = agent.build_plan({"label": "workspace_upgrade", "domain": "career"})
+    assert plan["query"] == "career"
+    assert any("fell back" in clarification for clarification in plan["clarifications"])
+
 
 def test_reflection_mentions_data_quality():
     plan = {
@@ -50,3 +74,25 @@ def test_reflection_mentions_data_quality():
     reflection_text = agent.reflect(plan)
     assert "Average data confidence" in reflection_text
     assert "Clarification" in reflection_text
+from agents.autonomy_guard_agent import AutonomyGuardAgent
+from agents.explain_agent import ExplainAgent
+
+
+def test_explain_agent_mentions_confidence():
+    products = [
+        {"name": "Focus Chair", "confidence": 0.6, "source": "google_shopping"},
+        {"name": "Desk", "confidence": 0.9, "source": "shopify"},
+    ]
+    explanation = ExplainAgent().explain(products)
+    assert "Focus Chair" in explanation and "0.60" in explanation
+
+
+def test_autonomy_guard_flags_low_confidence():
+    guard = AutonomyGuardAgent()
+    result = guard.check(
+        rationale="",
+        clarifications=["Some recommendations come from discovery"],
+        products=[{"confidence": 0.4, "source": "google_shopping"}],
+    )
+    assert result["status"] == "needs_review"
+    assert any("confidence" in flag.lower() for flag in result["flags"])

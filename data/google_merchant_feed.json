@@ -1,0 +1,28 @@
+[
+  {
+    "id": "merchant_offer_001",
+    "title": "Adaptive Focus Desk",
+    "description": "Adjustable-height desk with integrated cable management.",
+    "link": "https://merchant.example.com/products/adaptive-desk",
+    "image_link": "https://merchant.example.com/images/adaptive-desk.jpg",
+    "price": "749.00 USD",
+    "availability": "in stock",
+    "brand": "MindfulWork",
+    "google_product_category": "Furniture > Office Furniture > Desks",
+    "capabilities": ["Deep work", "Posture"],
+    "empowerment_scores": {"physical_agency": 0.78}
+  },
+  {
+    "id": "merchant_offer_002",
+    "title": "Evening Calm Lamp",
+    "description": "Blue-light filtering lamp for evening routines.",
+    "link": "https://merchant.example.com/products/calm-lamp",
+    "image_link": "https://merchant.example.com/images/calm-lamp.jpg",
+    "price": "129.50 USD",
+    "availability": "preorder",
+    "brand": "CalmGlow",
+    "google_product_category": "Home & Garden > Lighting",
+    "capabilities": ["Sleep hygiene"],
+    "empowerment_scores": {"wellbeing": 0.62}
+  }
+]

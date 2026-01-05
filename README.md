@@ -69,6 +69,54 @@ Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performic
 python app.py
 ```
 
+### Gradio Demo
+
+```bash
+cp .env.example .env   # configure CATALOG_SOURCE and credentials
+uv venv venv && source venv/bin/activate
+uv pip install -r requirements.txt
+python -m demos.gradio.app
+```
+
+The interface surfaces clarifications/guardrails so you can see how data
+confidence affects recommendations. Change `CATALOG_SOURCE` to switch between
+mock, Shopify, Google Shopping, or Google Merchant feeds.
+
+### FastAPI Surface
+
+```bash
+export CATALOG_SOURCE=google_merchant
+export GOOGLE_MERCHANT_FEED_PATH=/absolute/path/to/google_merchant_feed.json  # required when using google_merchant
+uvicorn api.main:app --reload --port 8000
+```
+
+Check `http://localhost:8000/products/search?query=workspace` to verify the feed.
+If you don’t have Shopify or Google credentials/feeds yet, keep
+`CATALOG_SOURCE=mock` so the API/Gradio demo can run with the bundled fixture.
+
+### Gradio Demo
+
+```bash
+cp .env.example .env   # set CATALOG_SOURCE, Shopify/Google credentials as needed
+uv venv venv && source venv/bin/activate
+uv pip install -r requirements.txt
+python -m demos.gradio.app
+```
+
+The UI displays clarifications and guardrail status so you can see how data quality
+affects the empowerment objective. Switch `CATALOG_SOURCE` (mock, shopify,
+google_shopping, google_merchant) via `.env` to test each feed.
+
+### FastAPI Surface
+
+```bash
+export CATALOG_SOURCE=google_merchant
+export GOOGLE_MERCHANT_FEED_PATH=/absolute/path/to/google_merchant_feed.json
+uvicorn api.main:app --reload
+```
+
+Try `http://localhost:8000/products/search?query=workspace` to verify the feed.
+
 ### Catalog Sources
 
 The platform loads products via adapters. Set `CATALOG_SOURCE` to choose the
@@ -87,6 +135,10 @@ source (`mock`, `shopify`, `google_shopping`). When using Shopify, provide
 | [docs/empowerment_metrics.md](docs/empowerment_metrics.md) | The dual dashboard — what we measure |
 | [docs/terminology.md](docs/terminology.md) | Precise definitions for all concepts |
 | [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
+| [docs/adapters.md](docs/adapters.md) | Shopify/Google adapter setup |
+| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product schema |
+| [docs/attribution.md](docs/attribution.md) | AI-aware attribution loop |
+| [docs/deployment.md](docs/deployment.md) | Local/HF/FastAPI deployment guide |
 
 ---
 
@@ -124,3 +176,13 @@ This implementation operationalizes:
 
 - [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) — The manifesto for agentic marketing that serves human flourishing
 - **Computational Intentionality Theory (CIT)** — Framework treating AI advertising as a Turing-class machine whose objective function determines outcomes (paper forthcoming)
+
+### Google Merchant Center
+
+To load Merchant Center feeds locally set `CATALOG_SOURCE=google_merchant` and
+point `GOOGLE_MERCHANT_FEED_PATH` to a JSON file containing feed entries (see
+`data/google_merchant_feed.json` for a sample). Each entry must include the
+standard Merchant Center fields (`id`, `title`, `description`, `price`,
+`availability`, etc.). The adapter validates required fields and converts them
+into canonical product representations with confidence metadata so downstream
+agents know the data originates from aggregated discovery surfaces.

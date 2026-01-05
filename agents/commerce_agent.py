@@ -12,14 +12,24 @@ class CommerceAgent:
     fallback_limit: int = 3
 
     def build_plan(self, intent: dict) -> dict:
-        query = intent.get("label", "workspace")
-        products = product_search.search(query)
+        queries = self._derive_queries(intent)
+        fallback_reason = None
+        query = queries[0] if queries else "workspace"
+        products = []
+        for candidate in queries:
+            candidate_products = product_search.search(candidate)
+            if candidate_products:
+                products = candidate_products
+                query = candidate
+                if candidate != queries[0]:
+                    fallback_reason = f"No products for '{queries[0]}', fell back to '{candidate}'."
+                break
         selected_products, filtered_count = self._select_products(products)
         enriched_products = [self._product_summary(product) for product in selected_products]
         comparison = compare(selected_products[:2])
         data_quality = self._data_quality(enriched_products)
         data_quality["filtered_low_confidence"] = filtered_count
-        clarifications = self._clarifications(enriched_products, data_quality, filtered_count)
+        clarifications = self._clarifications(enriched_products, data_quality, filtered_count, fallback_reason)
         return {
             "query": query,
             "products": enriched_products,
@@ -30,6 +40,17 @@ class CommerceAgent:
 
     def recommend(self, query: str) -> List[str]:
         return [product.name for product in product_search.search(query)]
+
+    def _derive_queries(self, intent: dict) -> List[str]:
+        label = intent.get("label", "")
+        domain = intent.get("domain", "")
+        candidates = []
+        if label:
+            candidates.append(label.replace("_", " "))
+        if domain and domain not in candidates:
+            candidates.append(domain)
+        candidates.append("workspace")
+        return [candidate for candidate in candidates if candidate]
 
     def _product_summary(self, product) -> dict:
         summary = {
@@ -64,7 +85,9 @@ class CommerceAgent:
             "filtered_low_confidence": 0,
         }
 
-    def _clarifications(self, products: List[dict], data_quality: dict, filtered_count: int) -> List[str]:
+    def _clarifications(
+        self, products: List[dict], data_quality: dict, filtered_count: int, fallback_reason: str | None
+    ) -> List[str]:
         clarifications: List[str] = []
         avg_conf = data_quality.get("average_confidence", 0.0) or 0.0
         if avg_conf < 0.75:
@@ -77,6 +100,8 @@ class CommerceAgent:
             clarifications.append(
                 "Some recommendations come from discovery surfaces (e.g., Google Shopping). Confirm availability before purchasing."
             )
+        if fallback_reason:
+            clarifications.append(fallback_reason)
         if not clarifications:
             clarifications.append("All recommendations are merchant-verified with high confidence.")
         return clarifications

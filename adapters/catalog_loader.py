@@ -29,6 +29,10 @@ def load_catalog(source: str | None = None) -> List[Product]:
             from adapters.google_shopping.mock_feed import load_catalog as load_google
 
             _SOURCE_MAP[source_name] = load_google
+        elif source_name in {"google_merchant", "google_mc"}:
+            from adapters.google_shopping.merchant_center import load_catalog as load_google_merchant
+
+            _SOURCE_MAP[source_name] = load_google_merchant
         else:
             raise ValueError(f"Unknown catalog source: {source_name}")
     loader = _SOURCE_MAP[source_name]
