@@ -1,35 +1,43 @@
-"""Long-lived semantic memory backed by a JSON document."""
+"""Long-lived semantic memory backed by SQLite."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Dict, List
+from typing import List, Sequence
+
+from db.connection import init_db, set_database_path
+from db.repositories import semantic as semantic_repo
 
 
 class SemanticMemory:
-    def __init__(self, data_path: Path | None = None) -> None:
-        self._path = data_path or Path(__file__).resolve().parents[2] / "data" / "demo_memory.json"
-        self._store: Dict[str, List[str]] = self._load()
+    """SQLite-backed semantic memory.
+
+    Args:
+        data_path: Optional path to a SQLite database file. Kept for
+            backwards compatibility with the previous JSON signature.
+        user_id: Which user the semantic memory belongs to. Defaults to a
+            shared "__default__" user for demo mode.
+    """
+
+    def __init__(self, data_path: Path | None = None, user_id: str | None = None) -> None:
+        if data_path:
+            set_database_path(data_path)
+        init_db()
+        self._user_id = user_id or semantic_repo.DEFAULT_USER_ID
 
     def get(self, key: str) -> List[str]:
-        return self._store.get(key, [])
+        entry = semantic_repo.get_entry(key, self._user_id)
+        value = entry["value"] if entry else None
+        if isinstance(value, list):
+            return value
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            return list(value)
+        return []
 
     def set(self, key: str, values: List[str]) -> None:
-        self._store[key] = values
-        self._persist()
+        semantic_repo.upsert_entry(key, list(values), user_id=self._user_id)
 
     def append(self, key: str, value: str) -> None:
-        self._store.setdefault(key, []).append(value)
-        self._persist()
-
-    def _load(self) -> Dict[str, List[str]]:
-        if not self._path.exists():
-            return {"goals": [], "capabilities": [], "episodes": []}
-        with self._path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        return {key: value for key, value in data.items() if isinstance(value, list)}
-
-    def _persist(self) -> None:
-        with self._path.open("w", encoding="utf-8") as handle:
-            json.dump(self._store, handle, indent=2)
+        entries = self.get(key)
+        entries.append(value)
+        self.set(key, entries)

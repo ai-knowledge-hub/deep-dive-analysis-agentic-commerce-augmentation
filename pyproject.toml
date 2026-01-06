@@ -10,6 +10,8 @@ dependencies = [
     "gradio>=4.0.0",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
+    "google-auth>=2.25.0",
+    "google-genai>=0.1.0",
 ]
 
 [project.optional-dependencies]

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from src.intent import classifier
+from llm.agents.intent_classifier import HybridIntentClassifier
 
 
 class IntentAgent:
+    def __init__(self) -> None:
+        self._classifier = HybridIntentClassifier()
+
     def detect_intent(self, utterance: str) -> dict:
-        intent = classifier.classify(utterance)
-        return intent.to_dict()
+        return self._classifier.classify(utterance).to_dict()

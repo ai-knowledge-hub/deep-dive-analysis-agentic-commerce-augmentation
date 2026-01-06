@@ -19,10 +19,11 @@ def test_commerce_agent_emits_clarifications(monkeypatch):
 
     monkeypatch.setattr("src.products.search.search", lambda query: mock_products)
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace"})
+    plan = agent.build_plan({"label": "workspace"}, goals=["workspace upgrade"])
     clarifications = plan["clarifications"]
     assert any("confidence" in message.lower() for message in clarifications)
     assert plan["data_quality"]["average_confidence"] == round(0.6, 2)
+    assert "goal_alignment" in plan["empowerment"]
 
 
 def test_commerce_agent_filters_low_confidence(monkeypatch):
@@ -33,10 +34,11 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
     ]
     monkeypatch.setattr("src.products.search.search", lambda query: products)
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace"})
+    plan = agent.build_plan({"label": "workspace"}, goals=["workspace"])
     ids = [product["id"] for product in plan["products"]]
     assert ids == ["p_high", "p_mid"]
     assert any("hidden" in message.lower() for message in plan["clarifications"])
+    assert plan["empowerment"]["goal_alignment"]["score"] >= 0.0
 
 def test_commerce_agent_fallback_query(monkeypatch):
     def mock_search(query: str):
@@ -58,7 +60,7 @@ def test_commerce_agent_fallback_query(monkeypatch):
 
     monkeypatch.setattr("src.products.search.search", mock_search)
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace_upgrade", "domain": "career"})
+    plan = agent.build_plan({"label": "workspace_upgrade", "domain": "career"}, goals=["career growth"])
     assert plan["query"] == "career"
     assert any("fell back" in clarification for clarification in plan["clarifications"])
 

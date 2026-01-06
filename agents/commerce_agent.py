@@ -1,8 +1,9 @@
 """Agent that orchestrates search and comparison within the commerce core."""
 
 from __future__ import annotations
-from typing import List
+from typing import List, Optional
 
+from src.empowerment import goal_alignment
 from src.products import search as product_search
 from src.products.compare import compare
 
@@ -11,7 +12,7 @@ class CommerceAgent:
     confidence_threshold: float = 0.65
     fallback_limit: int = 3
 
-    def build_plan(self, intent: dict) -> dict:
+    def build_plan(self, intent: dict, goals: Optional[List[str]] = None) -> dict:
         queries = self._derive_queries(intent)
         fallback_reason = None
         query = queries[0] if queries else "workspace"
@@ -25,17 +26,19 @@ class CommerceAgent:
                     fallback_reason = f"No products for '{queries[0]}', fell back to '{candidate}'."
                 break
         selected_products, filtered_count = self._select_products(products)
-        enriched_products = [self._product_summary(product) for product in selected_products]
+        enrichment = self._product_summaries(selected_products)
         comparison = compare(selected_products[:2])
-        data_quality = self._data_quality(enriched_products)
+        data_quality = self._data_quality(enrichment)
         data_quality["filtered_low_confidence"] = filtered_count
-        clarifications = self._clarifications(enriched_products, data_quality, filtered_count, fallback_reason)
+        clarifications = self._clarifications(enrichment, data_quality, filtered_count, fallback_reason)
+        empowerment = self._empowerment_snapshot(goals or [], selected_products)
         return {
             "query": query,
-            "products": enriched_products,
+            "products": enrichment,
             "comparison": comparison,
             "data_quality": data_quality,
             "clarifications": clarifications,
+            "empowerment": empowerment,
         }
 
     def recommend(self, query: str) -> List[str]:
@@ -52,18 +55,20 @@ class CommerceAgent:
         candidates.append("workspace")
         return [candidate for candidate in candidates if candidate]
 
-    def _product_summary(self, product) -> dict:
-        summary = {
-            "id": product.id,
-            "name": product.name,
-            "price": product.price,
-            "confidence": product.confidence,
-            "source": product.source,
-            "merchant_name": product.merchant_name,
-            "offer_url": product.offer_url,
-            "capabilities_enabled": product.capabilities_enabled,
-        }
-        return summary
+    def _product_summaries(self, products: List) -> List[dict]:
+        return [
+            {
+                "id": product.id,
+                "name": product.name,
+                "price": product.price,
+                "confidence": product.confidence,
+                "source": product.source,
+                "merchant_name": product.merchant_name,
+                "offer_url": product.offer_url,
+                "capabilities_enabled": product.capabilities_enabled,
+            }
+            for product in products
+        ]
 
     def _select_products(self, products):
         sorted_products = sorted(products, key=lambda product: product.confidence, reverse=True)
@@ -105,3 +110,25 @@ class CommerceAgent:
         if not clarifications:
             clarifications.append("All recommendations are merchant-verified with high confidence.")
         return clarifications
+
+    def _empowerment_snapshot(self, goals: List[str], products: List) -> dict:
+        if not goals or not products:
+            return {
+                "goal_alignment": {
+                    "score": 0.0,
+                    "aligned_goals": [],
+                    "misaligned_goals": goals or [],
+                    "supporting_products": [],
+                    "confidence_summary": {"average_confidence": 0.0, "aligned_goal_confidence": {}},
+                }
+            }
+        result = goal_alignment.assess(goals, products)
+        return {
+            "goal_alignment": {
+                "score": result.score,
+                "aligned_goals": result.aligned_goals,
+                "misaligned_goals": result.misaligned_goals,
+                "supporting_products": result.supporting_products,
+                "confidence_summary": result.confidence_summary,
+            }
+        }

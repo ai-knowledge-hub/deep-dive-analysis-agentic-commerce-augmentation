@@ -10,5 +10,6 @@ def render_demo(message: str) -> dict:
     intent_agent = IntentAgent()
     commerce_agent = CommerceAgent()
     intent = intent_agent.detect_intent(message)
-    plan = commerce_agent.build_plan(intent)
+    goals = [intent["label"].replace("_", " ")] if intent.get("label") else []
+    plan = commerce_agent.build_plan(intent, goals=goals)
     return {"intent": intent, "plan": plan}

@@ -1,19 +1,18 @@
-import json
 from pathlib import Path
 
 from src.memory.semantic import SemanticMemory
 from src.memory.working import WorkingMemory
 
 
-def test_semantic_memory_loads_from_json(tmp_path: Path):
-    data_path = tmp_path / "memory.json"
-    payload = {"goals": ["Rest more"], "capabilities": ["Stretching"], "episodes": []}
-    data_path.write_text(json.dumps(payload), encoding="utf-8")
-    memory = SemanticMemory(data_path=data_path)
-    assert memory.get("goals") == ["Rest more"]
+def test_semantic_memory_persists_in_sqlite(tmp_path: Path):
+    db_path = tmp_path / "memory.db"
+    memory = SemanticMemory(data_path=db_path)
+    memory.set("goals", ["Rest more"])
     memory.append("goals", "Build stamina")
-    updated = json.loads(data_path.read_text())
-    assert "Build stamina" in updated["goals"]
+
+    new_instance = SemanticMemory(data_path=db_path)
+    assert "Rest more" in new_instance.get("goals")
+    assert "Build stamina" in new_instance.get("goals")
 
 
 def test_working_memory_tracks_turns():

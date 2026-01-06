@@ -31,7 +31,8 @@ class DemoRuntime:
 
         intent = intent_agent.detect_intent("Need a better workspace setup")
         print("Intent:", intent)
-        plan = commerce_agent.build_plan(intent)
+        initial_goals = [intent["label"].replace("_", " ")] if intent.get("label") else []
+        plan = commerce_agent.build_plan(intent, goals=initial_goals)
         print("Plan:", plan)
         reflection = reflection_agent.reflect(plan)
         print("Reflection:", reflection)
