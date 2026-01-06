@@ -6,8 +6,12 @@ import type { ReactNode } from "react";
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-950 text-slate-100">
-        <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
+      <head>
+        <title>Empowerment Commerce</title>
+        <meta name="description" content="AI shopping that optimizes for empowerment, not addiction" />
+      </head>
+      <body>
+        {children}
       </body>
     </html>
   );

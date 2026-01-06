@@ -6,17 +6,37 @@ type Message = {
 };
 
 export function ChatWindow({ messages }: { messages: Message[] }) {
+  if (messages.length === 0) {
+    return (
+      <div className="chat__empty">
+        <p>Start a conversation to begin the values dialogue.</p>
+        <p className="chat__hint">
+          Try: "I need a better desk" or "Help me find running shoes"
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+    <div className="chat__list">
       {messages.map((message, idx) => (
-        <div key={idx} className="flex gap-3">
-          <div className="text-xs uppercase tracking-wide text-slate-400">{message.role}</div>
-          <div className="text-sm text-slate-100 whitespace-pre-wrap">{message.content}</div>
+        <div
+          key={`${message.role}-${idx}`}
+          className={`message ${
+            message.role === "user" ? "message--user" : "message--agent"
+          }`}
+        >
+          <div className="message__avatar">
+            {message.role === "user" ? "U" : "E"}
+          </div>
+          <div className="message__content">
+            <span className="message__role">
+              {message.role === "user" ? "You" : "Empowerment Agent"}
+            </span>
+            <p className="message__text">{message.content}</p>
+          </div>
         </div>
       ))}
-      {messages.length === 0 && (
-        <p className="text-sm text-slate-400">Start the conversation to see the values dialogue.</p>
-      )}
     </div>
   );
 }

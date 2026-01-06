@@ -16,3 +16,20 @@ env/
 
 # macOS noise
 .DS_Store
+
+# Node / React / Next.js artifacts
+node_modules/
+.next/
+dist/
+out/
+.turbo/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+.vercel/

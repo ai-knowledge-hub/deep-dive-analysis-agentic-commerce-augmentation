@@ -25,6 +25,7 @@ export type ConversationResponse = {
     query?: string;
     products?: Product[];
     clarifications?: string[];
+    world_a_example?: string;
     empowerment?: {
       goal_alignment?: {
         score?: number;

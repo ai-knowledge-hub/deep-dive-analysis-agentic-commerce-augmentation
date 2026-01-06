@@ -3,32 +3,45 @@
 type Props = {
   clarifications: string[];
   empowermentScore?: number;
+  worldAExample?: string;
 };
 
-export function WorldAvsB({ clarifications, empowermentScore }: Props) {
+export function WorldAvsB({ clarifications, empowermentScore, worldAExample }: Props) {
+  const score = Math.round((empowermentScore ?? 0) * 100);
+  const statusQuo = worldAExample?.trim();
+
   return (
-    <section className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl border border-red-900/60 bg-red-900/20 p-4">
-        <h2 className="text-lg font-semibold text-red-200">World A (Extraction)</h2>
-        <p className="text-sm text-red-100">
-          High-pressure funnels push urgency, scarcity, and opacity. We show this column as a reminder of the
-          status quo we are replacing.
-        </p>
+    <div className="panel__card">
+      <div className="panel__header">
+        <h3>World A vs B</h3>
+        <span className="panel__badge">{score}%</span>
       </div>
-      <div className="rounded-xl border border-emerald-700 bg-emerald-900/20 p-4 space-y-3">
-        <h2 className="text-lg font-semibold text-emerald-200">World B (Empowerment)</h2>
-        <p className="text-sm text-emerald-100">
-          Clarifications and constraints drive every action. Empowerment Score:{" "}
-          <strong>{Math.round((empowermentScore ?? 0) * 100)}%</strong>
-        </p>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-emerald-100">
-          {clarifications.length > 0 ? (
-            clarifications.map((item, idx) => <li key={idx}>{item}</li>)
-          ) : (
-            <li>No clarifications issued in this turn.</li>
-          )}
+
+      <div className="comparison">
+        <div className="comparison__item comparison__item--a">
+          <span className="comparison__label">World A</span>
+          <p className="comparison__text">
+            {statusQuo ?? "Baseline persuasion: urgency, scarcity, and opacity."}
+          </p>
+        </div>
+
+        <div className="comparison__item comparison__item--b">
+          <span className="comparison__label">World B</span>
+          <p className="comparison__text">
+            {clarifications.length > 0
+              ? clarifications[0]
+              : "Awaiting values clarification..."}
+          </p>
+        </div>
+      </div>
+
+      {clarifications.length > 1 && (
+        <ul className="panel__list">
+          {clarifications.slice(1).map((item, idx) => (
+            <li key={idx}>{item}</li>
+          ))}
         </ul>
-      </div>
-    </section>
+      )}
+    </div>
   );
 }
