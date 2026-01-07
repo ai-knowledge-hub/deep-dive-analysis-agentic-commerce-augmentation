@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from config import env as _env  # noqa: F401  # ensure dotenv loaded for CLI runs
 from orchestration.intent_service import IntentAgent
 from orchestration.commerce_service import CommerceAgent
 from orchestration.reflection_service import ReflectionAgent

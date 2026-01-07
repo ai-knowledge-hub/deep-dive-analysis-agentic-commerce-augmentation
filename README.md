@@ -83,17 +83,14 @@ The chat experience consumes the FastAPI routes (`NEXT_PUBLIC_API_URL` defaults 
 ### FastAPI Surface
 
 ```bash
-export CATALOG_SOURCE=google_merchant
-export GOOGLE_MERCHANT_FEED_PATH=/absolute/path/to/google_merchant_feed.json
 uvicorn api.main:app --reload
 ```
-### Use mock locally
+The backend automatically loads `.env.local` / `.env`, so set environment-specific values there. For example:
 
-```bash
-export CATALOG_SOURCE=mock
-uvicorn api.main:app --reload
+- `.env.local`: `CATALOG_SOURCE=mock`, `LLM_PROVIDER=openrouter`, `DATABASE_PATH=./tmp/local.db`.
+- `.env.dev`: `CATALOG_SOURCE=google_merchant`, `LLM_PROVIDER=gemini`, `GOOGLE_MERCHANT_FEED_PATH=...`.
 
-```
+Switch catalog sources by editing the env file instead of exporting variables manually.
 
 Try `http://localhost:8000/products/search?query=workspace` to verify the feed.
 
@@ -105,12 +102,12 @@ source (`mock`, `shopify`, `google_shopping`, `google_merchant`). When using Sho
 
 ### Environment Strategy
 
-- `.env.local`: Local development (mock catalog, SQLite in `./tmp`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`).
+- `.env.local`: Local development (mock catalog, SQLite in `./tmp`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`). The backend loads this automatically.
 - `.env.dev` or managed secrets: Preview deployments (e.g., Railway backend) using `CATALOG_SOURCE=google_merchant`, `LLM_PROVIDER=gemini`, limited `GOOGLE_API_KEY`.
 - Production secrets: Same as dev but with production feeds, telemetry, and prod Gemini credentials.
-- When using OpenRouter locally, export `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optionally `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` so completions identify your app.
+- When using OpenRouter locally, define `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optionally `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` so completions identify your app.
 
-Copy the relevant section from `.env.example` and export the variables before running `uvicorn` or `pnpm dev`.
+Copy the relevant section from `.env.example` into `.env.local` (or `.env` for dev/prod). The app auto-loads it; you can still override with `export` if needed.
 
 
 ## Testing

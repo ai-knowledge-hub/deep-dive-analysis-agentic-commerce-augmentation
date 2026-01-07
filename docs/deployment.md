@@ -8,18 +8,7 @@
 | **Dev / Preview** (`.env.dev` or secrets) | `google_merchant` (or Shopify) | `gemini` | `./db/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
 | **Prod** (platform secrets) | `google_merchant` | `gemini` | `/var/lib/app/prod.db` | Real feeds/telemetry, rate-limit logging on. |
 
-When developing locally, export:
-```bash
-export LLM_PROVIDER=openrouter
-export OPENROUTER_API_KEY=...
-export OPENROUTER_MODEL=meta-llama/Meta-Llama-3.1-8B-Instruct
-export CATALOG_SOURCE=mock
-export DATABASE_PATH=./tmp/local.db
-```
-
-> Tip: Set `OPENROUTER_SITE_URL` and `OPENROUTER_APP_NAME` so OpenRouter can associate usage with your dev environment.
-
-For dev/prod deployments, keep `LLM_PROVIDER=gemini` and set `GOOGLE_API_KEY`/`GEMINI_MODEL` as needed.
+When developing locally, copy the `Local` section of `.env.example` into `.env.local`. The backend automatically loads this file, so you can change catalog source or LLM provider by editing the file instead of exporting variables.
 
 ## 2. Local Backend
 
