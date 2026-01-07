@@ -4,7 +4,7 @@
 1. Create a private app with read-only product access.
 2. Set `CATALOG_SOURCE=shopify` in `.env`.
 3. Provide `SHOPIFY_DOMAIN` and `SHOPIFY_TOKEN` via `.env` or environment vars.
-4. Run `python -m demos.gradio.app` (or API) to pull live merchant catalogs.
+4. Run the FastAPI surface (`uvicorn api.main:app --reload`) or the orchestration runtime to pull live merchant catalogs.
 
 ## Google Shopping (Mock)
 - Set `CATALOG_SOURCE=google_shopping` to use the deterministic mock data.

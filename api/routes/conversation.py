@@ -8,11 +8,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from agents.intent_agent import IntentAgent
-from agents.commerce_agent import CommerceAgent
-from agents.reflection_agent import ReflectionAgent
-from agents.autonomy_guard_agent import AutonomyGuardAgent
-from agents.explain_agent import ExplainAgent
+from orchestration.intent_service import IntentAgent
+from orchestration.commerce_service import CommerceAgent
+from orchestration.reflection_service import ReflectionAgent
+from orchestration.autonomy_guard_service import AutonomyGuardAgent
+from orchestration.explain_service import ExplainAgent
 from src.memory.session_manager import SessionManager
 from llm.agents.values import ValuesAgent, ClarificationState
 from llm.agents.product_reasoner import reason_about_products

@@ -1,44 +1,54 @@
 # Deployment & Runtime Guide
 
-## 1. Local Environment
+## 1. Environment Profiles
 
-1. Copy `.env.example` to `.env` and set `CATALOG_SOURCE` along with any
-   adapter-specific variables (e.g., `SHOPIFY_DOMAIN`, `GOOGLE_MERCHANT_FEED_PATH`).
+| Environment | Catalog | LLM Provider | DB Path | Notes |
+|-------------|--------|--------------|---------|-------|
+| **Local** (`.env.local`) | `mock` | `openrouter` | `./tmp/local.db` | Requires `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`. Avoids spending Gemini quota. |
+| **Dev / Preview** (`.env.dev` or secrets) | `google_merchant` (or Shopify) | `gemini` | `./db/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
+| **Prod** (platform secrets) | `google_merchant` | `gemini` | `/var/lib/app/prod.db` | Real feeds/telemetry, rate-limit logging on. |
+
+When developing locally, export:
+```bash
+export LLM_PROVIDER=openrouter
+export OPENROUTER_API_KEY=...
+export OPENROUTER_MODEL=meta-llama/Meta-Llama-3.1-8B-Instruct
+export CATALOG_SOURCE=mock
+export DATABASE_PATH=./tmp/local.db
+```
+
+> Tip: Set `OPENROUTER_SITE_URL` and `OPENROUTER_APP_NAME` so OpenRouter can associate usage with your dev environment.
+
+For dev/prod deployments, keep `LLM_PROVIDER=gemini` and set `GOOGLE_API_KEY`/`GEMINI_MODEL` as needed.
+
+## 2. Local Backend
+
+1. Copy `.env.example` → `.env.local` and adjust the *Local* section (catalog, OpenRouter, DB path).
 2. Create a virtual environment (uv recommended):
    ```bash
    uv venv venv
    source venv/bin/activate
    uv pip install -r requirements.txt
    ```
-3. Run the Gradio demo locally:
+3. Start FastAPI:
    ```bash
-   python -m demos.gradio.app
+   uvicorn api.main:app --reload --port 8000
    ```
-4. Switch data sources by updating `CATALOG_SOURCE` and restarting the demo.
 
-## 2. FastAPI Runtime
+## 3. Next.js Frontend
 
-Expose the search/feed APIs via FastAPI:
 ```bash
-export CATALOG_SOURCE=google_merchant  # or shopify/mock
-uvicorn api.main:app --reload --port 8000
+cd web
+cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL if the API is remote
+pnpm install
+pnpm dev
 ```
-The API now serves `/products/search` using whichever adapter you enabled.
 
-## 3. Hugging Face Spaces
-
-1. Copy the repository (or subset) into a new Space.
-2. Ensure `requirements.txt` is present (Spaces installs dependencies from this file).
-3. Set the Space entry point to `hf_space/app.py`. This module imports the shared
-   Gradio Blocks from `demos.gradio.app` so the same UI runs both locally and in
-   the cloud.
-4. Configure Space secrets for `CATALOG_SOURCE`, `SHOPIFY_DOMAIN`, etc., via the
-   Hugging Face Secrets UI.
+Visit `http://localhost:3000` to interact with the assistant.
 
 ## 4. Attribution Exports
 
-When running the Gradio demo locally, attribution events are buffered in-memory
-via `attribution.events`. Export them for GA4 verification:
+Attribution events are buffered in-memory via `attribution.events`. Export them for GA4 verification:
 ```bash
 python -m attribution.ga4_export --path ga4_events.json
 ```

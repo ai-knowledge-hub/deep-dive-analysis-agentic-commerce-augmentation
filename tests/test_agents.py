@@ -1,6 +1,47 @@
-from agents.commerce_agent import CommerceAgent
-from agents.reflection_agent import ReflectionAgent
+from orchestration.commerce_service import CommerceAgent
+from orchestration.reflection_service import ReflectionAgent
+from typing import List
+import sys
+import types
+
 from core.schema.product import Product
+from src.memory.semantic import SemanticMemory
+
+# Provide lightweight google.genai stubs before importing modules that rely on them.
+if "google" not in sys.modules:
+    google_pkg = types.ModuleType("google")
+    genai_pkg = types.ModuleType("google.genai")
+    genai_types_pkg = types.ModuleType("google.genai.types")
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            self.models = types.SimpleNamespace(generate_content=lambda **_: types.SimpleNamespace(text=""))
+
+    class GenerateContentConfig:
+        def __init__(self, temperature: float = 0.7, max_output_tokens: int = 2048):
+            self.temperature = temperature
+            self.max_output_tokens = max_output_tokens
+            self.tools = None
+
+    class FunctionDeclaration:
+        def __init__(self, name: str, description: str | None = None, parameters: dict | None = None):
+            self.name = name
+            self.description = description
+            self.parameters = parameters
+
+    class Tool:
+        def __init__(self, function_declarations: List[FunctionDeclaration] | None = None):
+            self.function_declarations = function_declarations or []
+
+    genai_pkg.Client = DummyClient
+    genai_pkg.types = genai_types_pkg
+    google_pkg.genai = genai_pkg
+    sys.modules["google"] = google_pkg
+    sys.modules["google.genai"] = genai_pkg
+    sys.modules["google.genai.types"] = genai_types_pkg
+
+from orchestration.intent_service import IntentAgent
+from orchestration.capability_service import CapabilityAgent
 
 
 def test_commerce_agent_emits_clarifications(monkeypatch):
@@ -76,8 +117,8 @@ def test_reflection_mentions_data_quality():
     reflection_text = agent.reflect(plan)
     assert "Average data confidence" in reflection_text
     assert "Clarification" in reflection_text
-from agents.autonomy_guard_agent import AutonomyGuardAgent
-from agents.explain_agent import ExplainAgent
+from orchestration.autonomy_guard_service import AutonomyGuardAgent
+from orchestration.explain_service import ExplainAgent
 
 
 def test_explain_agent_mentions_confidence():
@@ -98,3 +139,38 @@ def test_autonomy_guard_flags_low_confidence():
     )
     assert result["status"] == "needs_review"
     assert any("confidence" in flag.lower() for flag in result["flags"])
+
+
+def test_intent_agent_routes_through_hybrid(monkeypatch):
+    classifier_calls = {"count": 0}
+
+    class FakeResult:
+        def to_dict(self):
+            classifier_calls["count"] += 1
+            return {"label": "workspace_upgrade", "confidence": 0.9}
+
+    monkeypatch.setattr(
+        "orchestration.intent_service.HybridIntentClassifier",
+        lambda: type("Fake", (), {"classify": lambda self, _: FakeResult()})(),
+    )
+
+    intent_agent = IntentAgent()
+    result = intent_agent.detect_intent("Need focus")
+
+    assert result["label"] == "workspace_upgrade"
+    assert classifier_calls["count"] == 1
+
+
+def test_capability_agent_reads_semantic_memory(monkeypatch, tmp_path):
+    db_path = tmp_path / "memory.db"
+    memory = SemanticMemory(data_path=db_path)
+    memory.set("goals", ["Improve posture"])
+    memory.set("capabilities", ["Ergo expert"])
+
+    monkeypatch.setattr("orchestration.capability_service.SemanticMemory", lambda: SemanticMemory(data_path=db_path))
+
+    agent = CapabilityAgent()
+    summary = agent.summarize()
+
+    assert summary["goals"] == ["Improve posture"]
+    assert summary["capabilities"] == ["Ergo expert"]

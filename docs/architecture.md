@@ -210,9 +210,9 @@ No business logic lives here — **only interfaces**.
 
 ---
 
-## 4. Agent Façade Layer (`agents/`)
+## 4. Orchestration Layer (`orchestration/`)
 
-Agents are **thin orchestration wrappers**.
+These modules are **thin orchestration wrappers**.
 
 They:
 - coordinate calls across modules
@@ -228,16 +228,12 @@ If logic appears here, it belongs in `src/`.
 
 ---
 
-## 5. UI / Demo Layer (`ui/`, `app.py`)
+## 5. Experience Layer (`web/`, `app.py`)
 
-This layer exists to:
-- demonstrate behavior
-- support hackathon UX
-- enable fast iteration
+- `web/` hosts the Next.js chat + empowerment dashboard
+- `app.py` documents how to orchestrate the services from a CLI/demo context
 
-It is **intentionally disposable**.
-
-The system remains valid even if this layer is removed.
+This layer can be replaced without changing platform semantics.
 
 ---
 
@@ -304,7 +300,7 @@ it is **subordinated to human intent**.
 - `empowerment/` defines ethics and optimization  
 - `memory/` enables agency  
 - `agents/` orchestrate  
-- `ui/` demonstrates  
+- `web/` demonstrates  
 
 Everything else is implementation detail.
 

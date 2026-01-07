@@ -12,7 +12,7 @@
 | Keywords → Products | Gemini values dialogue (multi-turn) |
 | JSON file memory | SQLite (sessions, users, goals, episodes) + vector sidecars |
 | Static scoring | Gemini product reasoning + empowerment scoring |
-| Gradio forms | Next.js chat UI + empowerment dashboard |
+| Legacy forms | Next.js chat UI + empowerment dashboard |
 
 ## 3. Phase Plan
 
@@ -45,7 +45,7 @@
    - Empowerment UI: World A vs World B comparison, empowerment gauge, reflection panel.
    - Client libs (`lib/api.ts`, `types.ts`).
 2. **Frontend Strategy**
-   - Prioritize Next.js; Day 5 pivot to enhanced Gradio (`demos/gradio/app.py`) if blocked (ChatInterface, goal sidebar, World A vs B panel).
+   - Prioritize Next.js chat/dashboard and keep scope tight (no secondary UI).
 
 ### Phase 4 – Polish & Demo (Week 4)
 1. **Demo Scenarios**
@@ -55,7 +55,7 @@
 2. **Deployment**
    - Backend on Railway (`uvicorn api.main:app`).
    - Frontend on Vercel (set `NEXT_PUBLIC_API_URL`).
-   - HF Spaces fallback (Gradio demo).
+   - (Removed) HF Spaces fallback; focus energy on the Next.js experience.
 
 ### Phase 5 – Submission (Week 5)
 1. 3-minute demo video walking through scenarios.
@@ -83,7 +83,7 @@
 | Risk | Mitigation |
 | --- | --- |
 | Gemini rate limits | Exponential backoff, caching classifiers, hybrid routing with cheaper models. |
-| Next.js timeline | Day 5 pivot plan to upgraded Gradio demo. |
+| Next.js timeline | Single-track delivery (no alternate UI pivot). |
 | SQLite concurrency | `check_same_thread=False`, WAL mode. |
 | Free-tier limits | HF Spaces fallback, OpenRouter for low-cost tasks. |
 
