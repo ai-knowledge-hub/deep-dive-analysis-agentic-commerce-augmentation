@@ -59,27 +59,36 @@ class ValuesAgent:
 
     min_questions: int = 2
 
-    def start(self, query: str, metadata: Optional[dict] = None) -> ClarificationState:
+    def start(
+        self,
+        query: str,
+        metadata: Optional[dict] = None,
+        context: Optional[str] = None,
+    ) -> ClarificationState:
         state = ClarificationState(query=query, metadata=metadata or {})
         prompt = f"User request: {query}\nRespond per instructions."
         response = chat(
-            messages=[
-                {"role": "system", "content": VALUES_CLARIFICATION_PROMPT},
-                {"role": "user", "content": prompt},
-            ]
+            messages=[{"role": "user", "content": prompt}],
+            system_instruction=self._system_prompt(context),
         )
         state.add_turn("user", query)
         state.add_turn("agent", response.strip())
         return state
 
-    def continue_dialogue(self, state: ClarificationState, user_message: str) -> ClarificationState:
+    def continue_dialogue(
+        self,
+        state: ClarificationState,
+        user_message: str,
+        context: Optional[str] = None,
+    ) -> ClarificationState:
         history = [
             {"role": turn.speaker, "content": turn.content}
             for turn in state.turns
         ]
         history.append({"role": "user", "content": user_message})
         response = chat(
-            messages=[{"role": "system", "content": VALUES_CLARIFICATION_PROMPT}, *history]
+            messages=history,
+            system_instruction=self._system_prompt(context),
         )
         state.add_turn("user", user_message)
         state.add_turn("agent", response.strip())
@@ -87,6 +96,11 @@ class ValuesAgent:
             state.extracted_goals = self._extract_goals(response)
             state.ready_for_products = True
         return state
+
+    def _system_prompt(self, context: Optional[str]) -> str:
+        if not context:
+            return VALUES_CLARIFICATION_PROMPT
+        return f"{VALUES_CLARIFICATION_PROMPT}\n\nSession context:\n{context}"
 
     def _has_summary(self, agent_response: str) -> bool:
         return "does that capture" in agent_response.lower() or "summary" in agent_response.lower()

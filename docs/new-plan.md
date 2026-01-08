@@ -68,13 +68,13 @@
 | `gemini/__init__.py` | Module entry | ✅ |
 | `llm/clients/gemini.py` | Gemini gateway implementation | ✅ |
 | `llm/prompts.py` & `llm/tools.py` | Model-agnostic prompts + tools | ✅ |
-| `gemini/values_agent.py` | Values dialogue | ⏳ |
-| `gemini/product_reasoner.py` | Alignment explanations | ⏳ |
-| `gemini/intent_classifier.py` | Semantic classification | ⏳ |
+| `gemini/values_agent.py` | Values dialogue | ✅ |
+| `gemini/product_reasoner.py` | Alignment explanations | ✅ |
+| `gemini/intent_classifier.py` | Semantic classification | ✅ |
 | `db/schema.sql`, `db/connection.py`, `db/repositories/*` | SQLite backbone | ✅ |
 | `api/routes/conversation.py` | Conversation endpoints | ✅ |
-| `web/` Next.js app | Frontend | ⏳ |
-| `src/intent/classifier.py` | Hybrid classification | ⏳ |
+| `web/` Next.js app | Frontend | ✅ (chat + empowerment UI) |
+| `src/intent/classifier.py` | Hybrid classification | ✅ |
 | `.env.example` | Gemini/DB config, `LLM_PROVIDER` | ✅ |
 | `requirements.txt` | Add `google-genai` | ✅ |
 

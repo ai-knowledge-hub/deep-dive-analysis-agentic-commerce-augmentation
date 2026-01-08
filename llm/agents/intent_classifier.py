@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from typing import Dict, List
 
+# Orchestrator imports are currently unused but retained to signal
+# the dependency for future context-aware inference work.
 from llm.gateway import generate
 from llm.prompts import INTENT_CLASSIFICATION_PROMPT
 from src.intent import classifier as keyword_classifier
@@ -34,13 +36,17 @@ class IntentResult:
 class HybridIntentClassifier:
     def __init__(self, threshold: float = 0.55) -> None:
         self.threshold = threshold
+        self._context: str | None = None
 
-    def classify(self, text: str) -> IntentResult:
+    def classify(self, text: str, context: str | None = None) -> IntentResult:
+        previous_context = self._context
+        self._context = context
         keyword_intent = keyword_classifier.classify(
             text,
             llm_fallback=self._call_llm,
             llm_threshold=self.threshold,
         )
+        self._context = previous_context
         return IntentResult(
             label=keyword_intent.label,
             confidence=keyword_intent.confidence,
@@ -53,7 +59,8 @@ class HybridIntentClassifier:
     # Core helpers -----------------------------------------------------
     def _call_llm(self, text: str) -> Dict[str, object]:
         try:
-            raw = generate(prompt=f"{INTENT_CLASSIFICATION_PROMPT}\nInput: {text}")
+            context = f"\n\nSession context:\n{self._context}" if self._context else ""
+            raw = generate(prompt=f"{INTENT_CLASSIFICATION_PROMPT}{context}\nInput: {text}")
             parsed = self._parse_raw_response(raw)
         except Exception:
             parsed = {}

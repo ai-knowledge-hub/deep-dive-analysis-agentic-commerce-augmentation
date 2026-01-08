@@ -91,14 +91,14 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
     result = classifier.classify("Need help")
 
     assert result.label == "workspace_upgrade"
-    assert result.source == "keyword_fallback"
+    assert result.source == "keyword"
     assert result.confidence == pytest.approx(0.85)
     assert "workspace" in result.evidence
 
 
 def test_values_agent_start_records_turns(monkeypatch):
-    def fake_chat(messages: List[dict]) -> str:
-        assert messages[0]["content"].startswith("You are")
+    def fake_chat(messages: List[dict], system_instruction: str | None = None) -> str:
+        assert system_instruction and system_instruction.startswith("You are")
         return "Let's explore what matters most to you."
 
     monkeypatch.setattr("llm.agents.values.chat", fake_chat)
@@ -120,7 +120,7 @@ def test_values_agent_continue_marks_ready(monkeypatch):
 
     Does that capture it?"""
 
-    def fake_chat(messages: List[dict]) -> str:
+    def fake_chat(messages: List[dict], system_instruction: str | None = None) -> str:
         # respond with summary to trigger ready_for_products
         return summary_response
 

@@ -87,7 +87,7 @@ def _process_message(
             values_state=clarification_state.to_dict() if clarification_state else None,
         )
 
-    intent = INTENT_AGENT.detect_intent(message)
+    intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
     plan = COMMERCE_AGENT.build_plan(intent, goals=goals)

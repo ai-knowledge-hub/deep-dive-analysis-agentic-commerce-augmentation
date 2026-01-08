@@ -165,9 +165,14 @@ def test_intent_agent_routes_through_hybrid(monkeypatch):
             classifier_calls["count"] += 1
             return {"label": "workspace_upgrade", "confidence": 0.9}
 
+    class FakeClassifier:
+        def classify(self, text, context=None):
+            assert context is None
+            return FakeResult()
+
     monkeypatch.setattr(
         "orchestration.intent_service.HybridIntentClassifier",
-        lambda: type("Fake", (), {"classify": lambda self, _: FakeResult()})(),
+        lambda: FakeClassifier(),
     )
 
     intent_agent = IntentAgent()

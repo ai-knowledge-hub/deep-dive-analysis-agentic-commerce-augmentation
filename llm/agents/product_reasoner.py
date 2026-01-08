@@ -8,19 +8,25 @@ from llm.gateway import generate
 from llm.prompts import PRODUCT_REASONING_PROMPT
 
 
-def reason_about_products(goals: List[str], products: List[dict]) -> List[dict]:
+def reason_about_products(goals: List[str], products: List[dict], context: str | None = None) -> List[dict]:
     """Annotate product entries with empowerment reasoning."""
     if not products:
         return []
 
     annotated = []
     for product in products:
-        context = _format_context(goals, product)
-        response = generate(
-            prompt=f"{PRODUCT_REASONING_PROMPT}\n\n{context}"
-        )
+        prompt = _compose_prompt(goals, product, context)
+        response = generate(prompt=prompt)
         annotated.append({**product, "reasoning": response.strip()})
     return annotated
+
+
+def _compose_prompt(goals: List[str], product: dict, session_context: str | None) -> str:
+    sections = [PRODUCT_REASONING_PROMPT]
+    if session_context:
+        sections.append(f"Session context:\n{session_context}")
+    sections.append(_format_context(goals, product))
+    return "\n\n".join(sections)
 
 
 def _format_context(goals: List[str], product: dict) -> str:
