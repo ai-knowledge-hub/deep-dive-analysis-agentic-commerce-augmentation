@@ -91,8 +91,9 @@ def _process_message(
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
     plan = COMMERCE_AGENT.build_plan(intent, goals=goals)
-    plan["products"] = reason_about_products(goals, plan.get("products", []))
-    product_explanations = _format_reasoning(plan.get("products", []))
+    product_explanations = plan.get("product_explanations")
+    if not product_explanations:
+        product_explanations = _format_reasoning(plan.get("products", []))
     clarifications = plan.get("clarifications", [])
     guard = AUTONOMY_GUARD.check(
         rationale="; ".join(clarifications),

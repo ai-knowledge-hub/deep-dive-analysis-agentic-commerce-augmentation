@@ -36,49 +36,30 @@ class HybridIntentClassifier:
         self.threshold = threshold
 
     def classify(self, text: str) -> IntentResult:
-        keyword_result = keyword_classifier.classify(text)
-        llm_intent = self._call_llm(text, keyword_result)
-
-        if self._should_fallback(llm_intent):
-            return self._merge_with_keyword(llm_intent, keyword_result)
-        return llm_intent
+        keyword_intent = keyword_classifier.classify(
+            text,
+            llm_fallback=self._call_llm,
+            llm_threshold=self.threshold,
+        )
+        return IntentResult(
+            label=keyword_intent.label,
+            confidence=keyword_intent.confidence,
+            evidence=keyword_intent.evidence,
+            domain=keyword_intent.domain,
+            clarifying_questions=keyword_intent.clarifying_questions,
+            source=keyword_intent.source,
+        )
 
     # Core helpers -----------------------------------------------------
-    def _call_llm(self, text: str, keyword_result) -> IntentResult:
+    def _call_llm(self, text: str) -> Dict[str, object]:
         try:
             raw = generate(prompt=f"{INTENT_CLASSIFICATION_PROMPT}\nInput: {text}")
             parsed = self._parse_raw_response(raw)
         except Exception:
             parsed = {}
 
-        return IntentResult(
-            label=self._get_str(parsed, "intent", keyword_result.label),
-            confidence=self._get_float(parsed, "confidence", keyword_result.confidence),
-            evidence=self._get_list(parsed, "evidence", keyword_result.evidence),
-            domain=self._get_str(parsed, "domain", keyword_result.domain),
-            clarifying_questions=self._get_list(
-                parsed, "clarifying_questions", keyword_result.clarifying_questions
-            ),
-            source="gemini",
-        )
-
-    def _should_fallback(self, intent: IntentResult) -> bool:
-        return intent.confidence < self.threshold or intent.label in {"", "unknown"}
-
-    def _merge_with_keyword(self, llm_intent: IntentResult, keyword_result) -> IntentResult:
-        data = keyword_result.to_dict()
-        return IntentResult(
-            label=str(data.get("label", llm_intent.label)),
-            confidence=max(
-                float(data.get("confidence", 0.0)),
-                llm_intent.confidence,
-            ),
-            evidence=llm_intent.evidence or list(data.get("evidence", [])),
-            domain=str(data.get("domain", llm_intent.domain)),
-            clarifying_questions=llm_intent.clarifying_questions
-            or list(data.get("clarifying_questions", [])),
-            source="keyword_fallback",
-        )
+        parsed["source"] = parsed.get("source", "gemini")
+        return parsed
 
     # Parsing utilities ------------------------------------------------
     def _parse_raw_response(self, response: str) -> Dict[str, object]:

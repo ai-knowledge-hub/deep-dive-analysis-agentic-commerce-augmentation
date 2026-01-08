@@ -85,24 +85,32 @@ def _configure_full_pipeline(monkeypatch):
 
     class DummyCommerceAgent:
         def build_plan(self, intent, goals):
+            products = [
+                {
+                    "id": "p1",
+                    "name": "Focus Chair",
+                    "capabilities_enabled": ["Posture"],
+                    "confidence": 0.8,
+                    "source": "mock",
+                    "reasoning": f"Supports {goals[0]}",
+                }
+            ]
             return {
                 "query": "workspace focus kit",
-                "products": [
+                "products": products,
+                "product_explanations": [
                     {
                         "id": "p1",
                         "name": "Focus Chair",
+                        "reasoning": f"Supports {goals[0]}",
                         "capabilities_enabled": ["Posture"],
                         "confidence": 0.8,
-                        "source": "mock",
                     }
                 ],
                 "clarifications": ["We prioritized posture support."],
                 "empowerment": {"goal_alignment": {"score": 0.75}},
                 "data_quality": {"average_confidence": 0.8},
             }
-
-    def fake_reason(goals, products):
-        return [dict(product, reasoning=f"Supports {goals[0]}") for product in products]
 
     class DummyGuard:
         def check(self, rationale, clarifications, products):
@@ -119,11 +127,8 @@ def _configure_full_pipeline(monkeypatch):
     monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
-    monkeypatch.setattr("api.routes.conversation.reason_about_products", fake_reason)
     monkeypatch.setattr("api.routes.conversation.AUTONOMY_GUARD", DummyGuard())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
-    monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
-
     monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
 
 

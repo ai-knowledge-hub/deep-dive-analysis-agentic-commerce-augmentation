@@ -1,11 +1,13 @@
-from orchestration.commerce_service import CommerceAgent
-from orchestration.reflection_service import ReflectionAgent
-from typing import List
 import sys
 import types
+from typing import List
+
+import pytest
 
 from core.schema.product import Product
 from src.memory.semantic import SemanticMemory
+from orchestration.commerce_service import CommerceAgent
+from orchestration.reflection_service import ReflectionAgent
 
 # Provide lightweight google.genai stubs before importing modules that rely on them.
 if "google" not in sys.modules:
@@ -36,12 +38,26 @@ if "google" not in sys.modules:
     genai_pkg.Client = DummyClient
     genai_pkg.types = genai_types_pkg
     google_pkg.genai = genai_pkg
-    sys.modules["google"] = google_pkg
-    sys.modules["google.genai"] = genai_pkg
-    sys.modules["google.genai.types"] = genai_types_pkg
+sys.modules["google"] = google_pkg
+sys.modules["google.genai"] = genai_pkg
+sys.modules["google.genai.types"] = genai_types_pkg
 
 from orchestration.intent_service import IntentAgent
 from orchestration.capability_service import CapabilityAgent
+
+
+@pytest.fixture(autouse=True)
+def mock_reason_about_products(monkeypatch):
+    def _fake_reasoner(goals, products):
+        annotated = []
+        for product in products:
+            copy = dict(product)
+            copy["reasoning"] = f"Supports {', '.join(goals) or 'autonomy'}"
+            annotated.append(copy)
+        return annotated
+
+    monkeypatch.setattr("orchestration.commerce_service.reason_about_products", _fake_reasoner)
+    yield
 
 
 def test_commerce_agent_emits_clarifications(monkeypatch):

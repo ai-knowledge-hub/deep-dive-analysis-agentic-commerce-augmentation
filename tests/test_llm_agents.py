@@ -82,10 +82,10 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
     )
 
     monkeypatch.setattr("llm.agents.intent_classifier.generate", fake_generate)
-    monkeypatch.setattr(
-        "llm.agents.intent_classifier.keyword_classifier.classify",
-        lambda _: fallback_intent,
-    )
+    def fake_keyword(text: str, **kwargs):
+        return fallback_intent
+
+    monkeypatch.setattr("llm.agents.intent_classifier.keyword_classifier.classify", fake_keyword)
 
     classifier = HybridIntentClassifier()
     result = classifier.classify("Need help")

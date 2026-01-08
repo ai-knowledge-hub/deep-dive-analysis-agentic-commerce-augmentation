@@ -32,7 +32,11 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-3-pro-preview", validation_alias=AliasChoices("GEMINI_MODEL"))
     gemini_fallback_model: str = Field(default="gemini-2.0-flash", validation_alias=AliasChoices("GEMINI_FALLBACK_MODEL"))
     openrouter_api_key: str | None = Field(default=None, validation_alias=AliasChoices("OPENROUTER_API_KEY"))
-    openrouter_model: str = Field(default="meta-llama/Meta-Llama-3.1-8B-Instruct", validation_alias=AliasChoices("OPENROUTER_MODEL"))
+    openrouter_model: str = Field(default="meta-llama/Meta-Llama-3-8B-Instruct", validation_alias=AliasChoices("OPENROUTER_MODEL"))
+    openrouter_temperature: float = Field(default=0.3, validation_alias=AliasChoices("OPENROUTER_TEMPERATURE"))
+    openrouter_max_tokens: int = Field(default=1024, validation_alias=AliasChoices("OPENROUTER_MAX_TOKENS"))
+    openrouter_site_url: str | None = Field(default=None, validation_alias=AliasChoices("OPENROUTER_SITE_URL"))
+    openrouter_app_name: str | None = Field(default=None, validation_alias=AliasChoices("OPENROUTER_APP_NAME"))
 
     frontend_url: str = Field(default="http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL"))
 

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import requests
 
+from config.env import settings
 from llm.clients.base import LLMClient
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
@@ -16,10 +15,12 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
 
 @dataclass
 class OpenRouterConfig:
-    api_key: str | None = os.getenv("OPENROUTER_API_KEY")
-    model: str = os.getenv("OPENROUTER_MODEL", "meta-llama/Meta-Llama-3.1-8B-Instruct")
-    temperature: float = float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
-    max_tokens: int = int(os.getenv("OPENROUTER_MAX_TOKENS", "1024"))
+    api_key: str | None = settings.openrouter_api_key
+    model: str = settings.openrouter_model
+    temperature: float = float(settings.__dict__.get("openrouter_temperature", 0.3))
+    max_tokens: int = int(settings.__dict__.get("openrouter_max_tokens", 1024))
+    site_url: str | None = settings.openrouter_site_url
+    app_name: str | None = settings.openrouter_app_name
 
 
 class OpenRouterLLMClient(LLMClient):
@@ -31,12 +32,15 @@ class OpenRouterLLMClient(LLMClient):
             raise ValueError("OPENROUTER_API_KEY must be set when using LLM_PROVIDER=openrouter")
 
     def _headers(self) -> dict[str, str]:
-        return {
+        headers = {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": os.getenv("OPENROUTER_SITE_URL", "http://localhost"),
-            "X-Title": os.getenv("OPENROUTER_APP_NAME", "Agentic Commerce Dev"),
         }
+        if self.config.site_url:
+            headers["HTTP-Referer"] = self.config.site_url
+        if self.config.app_name:
+            headers["X-Title"] = self.config.app_name
+        return headers
 
     def _request(self, messages: list[dict[str, str]]) -> str:
         payload = {
@@ -45,8 +49,12 @@ class OpenRouterLLMClient(LLMClient):
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
-        response = requests.post(OPENROUTER_API_BASE, headers=self._headers(), data=json.dumps(payload), timeout=60)
-        response.raise_for_status()
+        response = requests.post(OPENROUTER_API_BASE, headers=self._headers(), json=payload, timeout=60)
+        if response.status_code >= 400:
+            raise requests.HTTPError(
+                f"OpenRouter error {response.status_code}: {response.text}",
+                response=response,
+            )
         data = response.json()
         choices = data.get("choices") or []
         if not choices:
@@ -74,11 +82,8 @@ class OpenRouterLLMClient(LLMClient):
         tools: list[dict],
         system_instruction: str | None = None,
     ) -> dict:
-        # Basic implementation: just include tool descriptions in the prompt.
         tool_descriptions = "\n".join(f"{tool['name']}: {tool.get('description','')}" for tool in tools)
-        full_prompt = prompt
-        if tool_descriptions:
-            full_prompt = f"{tool_descriptions}\n\n{prompt}"
+        full_prompt = f"{tool_descriptions}\n\n{prompt}" if tool_descriptions else prompt
         text = self.generate(full_prompt, system_instruction=system_instruction)
         return {"text": text}
 

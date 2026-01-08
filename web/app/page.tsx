@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { startConversation, sendConversationMessage } from "../lib/api";
 import type { ConversationResponse } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
@@ -41,6 +41,7 @@ export default function HomePage() {
   const [inputValue, setInputValue] = useState("");
   const [worldAExample, setWorldAExample] = useState<string>();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   const resetConversation = useCallback(() => {
     setSessionId(null);
@@ -114,6 +115,13 @@ export default function HomePage() {
     (plan?.products?.length ?? 0) > 0 ||
     !!worldAExample;
 
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages]);
+
   return (
     <div className="app">
       <Sidebar mobileOpen={isSidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
@@ -138,7 +146,7 @@ export default function HomePage() {
             </button>
           </div>
           <div className="chat">
-            <div className="chat__messages">
+            <div className="chat__messages" ref={chatContainerRef}>
               <ChatWindow messages={messages} />
             </div>
 

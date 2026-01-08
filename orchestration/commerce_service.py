@@ -1,8 +1,10 @@
 """Agent that orchestrates search and comparison within the commerce core."""
 
 from __future__ import annotations
+
 from typing import List, Optional
 
+from llm.agents.product_reasoner import reason_about_products
 from src.empowerment import goal_alignment
 from src.products import search as product_search
 from src.products.compare import compare
@@ -27,14 +29,16 @@ class CommerceAgent:
                 break
         selected_products, filtered_count = self._select_products(products)
         enrichment = self._product_summaries(selected_products)
+        annotated = reason_about_products(goals or [], enrichment) or enrichment
         comparison = compare(selected_products[:2])
-        data_quality = self._data_quality(enrichment)
+        data_quality = self._data_quality(annotated)
         data_quality["filtered_low_confidence"] = filtered_count
-        clarifications = self._clarifications(enrichment, data_quality, filtered_count, fallback_reason)
+        clarifications = self._clarifications(annotated, data_quality, filtered_count, fallback_reason)
         empowerment = self._empowerment_snapshot(goals or [], selected_products)
         return {
             "query": query,
-            "products": enrichment,
+            "products": annotated,
+            "product_explanations": self._product_explanations(annotated),
             "comparison": comparison,
             "data_quality": data_quality,
             "clarifications": clarifications,
@@ -132,3 +136,17 @@ class CommerceAgent:
                 "confidence_summary": result.confidence_summary,
             }
         }
+
+    def _product_explanations(self, products: List[dict]) -> List[dict]:
+        explanations: List[dict] = []
+        for product in products or []:
+            explanations.append(
+                {
+                    "id": product.get("id"),
+                    "name": product.get("name"),
+                    "reasoning": product.get("reasoning", ""),
+                    "capabilities_enabled": product.get("capabilities_enabled", []),
+                    "confidence": product.get("confidence"),
+                }
+            )
+        return explanations

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Tuple
 
 from .taxonomy import INTENT_TAXONOMY, IntentDefinition
+
+LLMClassifier = Callable[[str], Mapping[str, Any]]
 
 
 @dataclass
@@ -15,6 +17,7 @@ class Intent:
     evidence: List[str]
     domain: str
     clarifying_questions: List[str]
+    source: str = "keyword"
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -23,6 +26,7 @@ class Intent:
             "evidence": self.evidence,
             "domain": self.domain,
             "clarifying_questions": self.clarifying_questions,
+            "source": self.source,
         }
 
 
@@ -36,10 +40,7 @@ def _score_definition(user_text: str, definition: IntentDefinition) -> Tuple[flo
     return confidence, hits
 
 
-def classify(user_text: str) -> Intent:
-    """Return an intent by naive keyword matching against the taxonomy."""
-
-    user_text_lower = user_text.lower()
+def _keyword_intent(user_text_lower: str) -> Intent:
     ranked = [
         (definition, *_score_definition(user_text_lower, definition))  # type: ignore[misc]
         for definition in INTENT_TAXONOMY
@@ -54,6 +55,7 @@ def classify(user_text: str) -> Intent:
             evidence=evidence,
             domain=top_definition.domain,
             clarifying_questions=top_definition.questions,
+            source="keyword",
         )
     return Intent(
         label="unknown",
@@ -61,4 +63,76 @@ def classify(user_text: str) -> Intent:
         evidence=["insufficient context"],
         domain="unknown",
         clarifying_questions=["What goal are you working toward?", "How can we help?"],
+        source="keyword",
     )
+
+
+def classify(
+    user_text: str,
+    llm_fallback: LLMClassifier | None = None,
+    llm_threshold: float = 0.55,
+) -> Intent:
+    """Return an intent via keyword matching, with optional LLM fallback."""
+
+    keyword_result = _keyword_intent(user_text.lower())
+    if not llm_fallback:
+        return keyword_result
+
+    try:
+        llm_data = dict(llm_fallback(user_text) or {})
+    except Exception:
+        return keyword_result
+
+    llm_label = _get_str(llm_data, ["label", "intent"], keyword_result.label)
+    llm_confidence = _get_float(llm_data, ["confidence", "score"], 0.0)
+    llm_domain = _get_str(llm_data, ["domain"], keyword_result.domain)
+    llm_evidence = _get_list(llm_data, ["evidence"], keyword_result.evidence)
+    llm_questions = _get_list(llm_data, ["clarifying_questions"], keyword_result.clarifying_questions)
+    llm_source = _get_str(llm_data, ["source"], "gemini")
+
+    if llm_label not in {"", "unknown"} and llm_confidence >= llm_threshold:
+        return Intent(
+            label=llm_label,
+            confidence=llm_confidence,
+            evidence=llm_evidence,
+            domain=llm_domain,
+            clarifying_questions=llm_questions,
+            source=llm_source,
+        )
+
+    return Intent(
+        label=keyword_result.label,
+        confidence=max(keyword_result.confidence, llm_confidence),
+        evidence=llm_evidence or keyword_result.evidence,
+        domain=llm_domain or keyword_result.domain,
+        clarifying_questions=llm_questions or keyword_result.clarifying_questions,
+        source="keyword_fallback",
+    )
+
+
+def _get_str(data: Mapping[str, Any], keys: List[str], default: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return default
+
+
+def _get_float(data: Mapping[str, Any], keys: List[str], default: float) -> float:
+    for key in keys:
+        value = data.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
+def _get_list(data: Mapping[str, Any], keys: List[str], default: List[str]) -> List[str]:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return value
+    return default
