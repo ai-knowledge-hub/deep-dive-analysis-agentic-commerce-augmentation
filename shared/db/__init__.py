@@ -1,7 +1,4 @@
-"""Re-export from shared.db for backward compatibility.
-
-DEPRECATED: Import from shared.db.connection instead.
-"""
+"""Database module - re-exports connection utilities."""
 
 from shared.db.connection import (
     get_connection,

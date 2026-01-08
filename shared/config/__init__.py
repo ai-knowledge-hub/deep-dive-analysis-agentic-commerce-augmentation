@@ -1,7 +1,4 @@
-"""Re-export from shared.config for backward compatibility.
-
-DEPRECATED: Import from shared.config.env instead.
-"""
+"""Configuration module - re-exports from env."""
 
 from shared.config.env import Settings, get_settings, settings
 

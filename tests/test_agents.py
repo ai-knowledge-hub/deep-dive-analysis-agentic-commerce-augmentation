@@ -38,9 +38,9 @@ if "google" not in sys.modules:
     genai_pkg.Client = DummyClient
     genai_pkg.types = genai_types_pkg
     google_pkg.genai = genai_pkg
-sys.modules["google"] = google_pkg
-sys.modules["google.genai"] = genai_pkg
-sys.modules["google.genai.types"] = genai_types_pkg
+    sys.modules["google"] = google_pkg
+    sys.modules["google.genai"] = genai_pkg
+    sys.modules["google.genai.types"] = genai_types_pkg
 
 from orchestration.intent_service import IntentAgent
 from orchestration.capability_service import CapabilityAgent
@@ -48,7 +48,7 @@ from orchestration.capability_service import CapabilityAgent
 
 @pytest.fixture(autouse=True)
 def mock_reason_about_products(monkeypatch):
-    def _fake_reasoner(goals, products):
+    def _fake_reasoner(goals, products, context=None):
         annotated = []
         for product in products:
             copy = dict(product)

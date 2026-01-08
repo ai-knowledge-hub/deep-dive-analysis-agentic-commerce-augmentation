@@ -14,7 +14,7 @@ class CommerceAgent:
     confidence_threshold: float = 0.65
     fallback_limit: int = 3
 
-    def build_plan(self, intent: dict, goals: Optional[List[str]] = None) -> dict:
+    def build_plan(self, intent: dict, goals: Optional[List[str]] = None, context: str | None = None) -> dict:
         queries = self._derive_queries(intent)
         fallback_reason = None
         query = queries[0] if queries else "workspace"
@@ -29,7 +29,7 @@ class CommerceAgent:
                 break
         selected_products, filtered_count = self._select_products(products)
         enrichment = self._product_summaries(selected_products)
-        annotated = reason_about_products(goals or [], enrichment) or enrichment
+        annotated = reason_about_products(goals or [], enrichment, context=context) or enrichment
         comparison = compare(selected_products[:2])
         data_quality = self._data_quality(annotated)
         data_quality["filtered_low_confidence"] = filtered_count

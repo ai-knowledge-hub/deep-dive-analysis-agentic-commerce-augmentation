@@ -80,11 +80,11 @@ def _configure_full_pipeline(monkeypatch):
         return state, None
 
     class DummyIntentAgent:
-        def detect_intent(self, utterance):
+        def detect_intent(self, utterance, manager=None):
             return {"label": "workspace_upgrade", "confidence": 0.9, "domain": "career"}
 
     class DummyCommerceAgent:
-        def build_plan(self, intent, goals):
+        def build_plan(self, intent, goals, context=None):
             products = [
                 {
                     "id": "p1",

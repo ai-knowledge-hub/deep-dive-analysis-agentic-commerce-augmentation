@@ -57,11 +57,11 @@ def integration_client(tmp_path, monkeypatch):
         return state, None
 
     class DummyIntentAgent:
-        def detect_intent(self, utterance):
+        def detect_intent(self, utterance, manager=None):
             return {"label": "workspace_upgrade", "confidence": 0.9, "domain": "career"}
 
     class DummyCommerceAgent:
-        def build_plan(self, intent, goals):
+        def build_plan(self, intent, goals, context=None):
             return {
                 "query": "workspace focus kit",
                 "products": [
@@ -71,15 +71,13 @@ def integration_client(tmp_path, monkeypatch):
                         "capabilities_enabled": ["Posture"],
                         "confidence": 0.8,
                         "source": "mock",
+                        "reasoning": f"Supports {goals[0]}" if goals else "Supports autonomy",
                     }
                 ],
                 "clarifications": ["We prioritized posture support."],
                 "empowerment": {"goal_alignment": {"score": 0.75}},
                 "data_quality": {"average_confidence": 0.8},
             }
-
-    def fake_reason(goals, products):
-        return [dict(product, reasoning=f"Supports {goals[0]}") for product in products]
 
     class DummyGuard:
         def check(self, rationale, clarifications, products):
@@ -96,7 +94,6 @@ def integration_client(tmp_path, monkeypatch):
     monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
-    monkeypatch.setattr("api.routes.conversation.reason_about_products", fake_reason)
     monkeypatch.setattr("api.routes.conversation.AUTONOMY_GUARD", DummyGuard())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
     monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())

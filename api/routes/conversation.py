@@ -15,7 +15,7 @@ from orchestration.autonomy_guard_service import AutonomyGuardAgent
 from orchestration.explain_service import ExplainAgent
 from src.memory.session_manager import SessionManager
 from llm.agents.values import ValuesAgent, ClarificationState
-from llm.agents.product_reasoner import reason_about_products
+from llm.orchestrator import context_for
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
@@ -87,10 +87,12 @@ def _process_message(
             values_state=clarification_state.to_dict() if clarification_state else None,
         )
 
+    _, context_snapshot = context_for(manager)
+
     intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
-    plan = COMMERCE_AGENT.build_plan(intent, goals=goals)
+    plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
     product_explanations = plan.get("product_explanations")
     if not product_explanations:
         product_explanations = _format_reasoning(plan.get("products", []))
