@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from modules.evaluation.simulators.llm_recommendation import run_simulation
-from modules.commerce.adapters.loader import load_catalog
 
 INTENTS_PATH = Path(__file__).resolve().parent / "queries" / "shopping_intents.json"
 

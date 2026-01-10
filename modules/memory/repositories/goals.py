@@ -44,24 +44,32 @@ def create_goal(
 
 def list_goals(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """List goals for a user."""
-    rows = get_connection().execute(
-        """
+    rows = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM goals
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT ?
         """,
-        (user_id, limit),
-    ).fetchall()
+            (user_id, limit),
+        )
+        .fetchall()
+    )
     return [_row_to_dict(row) for row in rows]
 
 
 def list_goals_for_session(session_id: str) -> List[Dict[str, Any]]:
     """List goals for a session."""
-    rows = get_connection().execute(
-        "SELECT * FROM goals WHERE session_id = ? ORDER BY created_at ASC",
-        (session_id,),
-    ).fetchall()
+    rows = (
+        get_connection()
+        .execute(
+            "SELECT * FROM goals WHERE session_id = ? ORDER BY created_at ASC",
+            (session_id,),
+        )
+        .fetchall()
+    )
     return [_row_to_dict(row) for row in rows]
 
 
@@ -74,10 +82,18 @@ def delete_goal(goal_id: str) -> None:
 
 def get_goal(goal_id: str) -> Optional[Dict[str, Any]]:
     """Get a goal by ID."""
-    row = get_connection().execute(
-        "SELECT * FROM goals WHERE id = ?", (goal_id,)
-    ).fetchone()
+    row = (
+        get_connection()
+        .execute("SELECT * FROM goals WHERE id = ?", (goal_id,))
+        .fetchone()
+    )
     return _row_to_dict(row) if row else None
 
 
-__all__ = ["create_goal", "list_goals", "list_goals_for_session", "delete_goal", "get_goal"]
+__all__ = [
+    "create_goal",
+    "list_goals",
+    "list_goals_for_session",
+    "delete_goal",
+    "get_goal",
+]

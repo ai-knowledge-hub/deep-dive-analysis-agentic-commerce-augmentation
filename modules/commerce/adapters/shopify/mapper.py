@@ -13,14 +13,18 @@ from .metafields import derive_capabilities, extract_llm_metafields
 
 def shopify_product_to_offers(product: Dict) -> List[RawOffer]:
     description = strip_html(product.get("body_html"))
-    images = [image.get("src", "") for image in product.get("images", []) if image.get("src")]
+    images = [
+        image.get("src", "") for image in product.get("images", []) if image.get("src")
+    ]
     metafields = extract_llm_metafields(product)
     offers: List[RawOffer] = []
     for variant in product.get("variants", []):
         attributes = {
             **metafields,
             "capabilities": derive_capabilities(metafields),
-            "tags": [tag.strip() for tag in product.get("tags", "").split(",") if tag.strip()],
+            "tags": [
+                tag.strip() for tag in product.get("tags", "").split(",") if tag.strip()
+            ],
             "empowerment_scores": _collect_empowerment_scores(metafields),
         }
         variant_attributes = {

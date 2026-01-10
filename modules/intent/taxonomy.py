@@ -9,7 +9,9 @@ from typing import Iterable, List
 from modules.intent.domain import IntentDefinition
 
 
-_DEFAULT_TAXONOMY_PATH = Path(__file__).resolve().parents[2] / "data" / "intent_taxonomy.json"
+_DEFAULT_TAXONOMY_PATH = (
+    Path(__file__).resolve().parents[2] / "data" / "intent_taxonomy.json"
+)
 
 
 def load_intent_taxonomy(path: Path | None = None) -> List[IntentDefinition]:
@@ -20,7 +22,9 @@ def load_intent_taxonomy(path: Path | None = None) -> List[IntentDefinition]:
     return [IntentDefinition(**item) for item in payload]
 
 
-def iter_keywords(definitions: Iterable[IntentDefinition] | None = None) -> Iterable[str]:
+def iter_keywords(
+    definitions: Iterable[IntentDefinition] | None = None,
+) -> Iterable[str]:
     """Iterate over all keywords from intent definitions."""
     defs = definitions if definitions is not None else INTENT_TAXONOMY
     for definition in defs:
@@ -31,4 +35,9 @@ def iter_keywords(definitions: Iterable[IntentDefinition] | None = None) -> Iter
 INTENT_TAXONOMY: List[IntentDefinition] = load_intent_taxonomy()
 
 
-__all__ = ["INTENT_TAXONOMY", "iter_keywords", "load_intent_taxonomy", "IntentDefinition"]
+__all__ = [
+    "INTENT_TAXONOMY",
+    "iter_keywords",
+    "load_intent_taxonomy",
+    "IntentDefinition",
+]

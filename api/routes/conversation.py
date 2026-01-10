@@ -82,7 +82,9 @@ def _process_message(
 
     manager.record_turn("user", message, metadata=metadata or {})
 
-    clarification_state, clarification_reply = _handle_values_dialogue(manager, message, metadata)
+    clarification_state, clarification_reply = _handle_values_dialogue(
+        manager, message, metadata
+    )
     if clarification_reply:
         return _session_response(
             manager,
@@ -139,7 +141,9 @@ def _process_message(
         explanation=explanation,
         reflection=reflection,
         product_explanations=product_explanations,
-        values_state=clarification_state.to_dict() if clarification_state else manager.get_state().get("clarification_state"),
+        values_state=clarification_state.to_dict()
+        if clarification_state
+        else manager.get_state().get("clarification_state"),
     )
 
 
@@ -161,7 +165,9 @@ def _handle_values_dialogue(
     manager.update_state(clarification_state=state.to_dict())
     latest_turn = state.turns[-1] if state.turns else None
     if not state.ready_for_products and latest_turn and latest_turn.speaker == "agent":
-        manager.record_turn("agent", latest_turn.content, metadata={"type": "clarification"})
+        manager.record_turn(
+            "agent", latest_turn.content, metadata={"type": "clarification"}
+        )
         return state, latest_turn.content
 
     if state.ready_for_products:
@@ -222,13 +228,17 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
 
 
 @router.get("/{session_id}")
-def get_session_snapshot(session_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+def get_session_snapshot(
+    session_id: str, user_id: Optional[str] = None
+) -> Dict[str, Any]:
     manager = SessionManager(session_id=session_id, user_id=user_id)
     return _session_response(manager)
 
 
 @router.post("/{session_id}/goals")
-def ingest_clarified_goals(session_id: str, request: ClarifiedGoalsRequest) -> Dict[str, Any]:
+def ingest_clarified_goals(
+    session_id: str, request: ClarifiedGoalsRequest
+) -> Dict[str, Any]:
     if not request.goals:
         raise HTTPException(status_code=400, detail="At least one goal is required.")
 

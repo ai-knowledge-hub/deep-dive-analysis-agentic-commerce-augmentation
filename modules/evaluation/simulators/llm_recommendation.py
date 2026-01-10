@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from modules.commerce.domain import Product
 from modules.commerce import search as product_search
 
 
@@ -19,7 +18,9 @@ class SimulationResult:
 
 def run_simulation(intent_id: str, query: str, limit: int = 3) -> SimulationResult:
     products = product_search.search(query, limit=limit)
-    average_confidence = sum(product.confidence for product in products) / max(len(products), 1)
+    average_confidence = sum(product.confidence for product in products) / max(
+        len(products), 1
+    )
     return SimulationResult(
         intent_id=intent_id,
         query=query,

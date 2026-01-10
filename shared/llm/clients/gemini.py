@@ -36,7 +36,8 @@ def _model_priority() -> List[str]:
 class GeminiConfig:
     model_priority: List[str] = field(default_factory=_model_priority)
     api_key: str | None = field(
-        default_factory=lambda: os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        default_factory=lambda: os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
     )
     max_retries: int = 3
     base_delay: float = 1.0
@@ -89,7 +90,9 @@ class GeminiLLMClient(LLMClient):
         headers = getattr(http_response, "headers", None) if http_response else None
         if not headers:
             return
-        rate_headers = {k: v for k, v in headers.items() if k.lower().startswith("x-ratelimit")}
+        rate_headers = {
+            k: v for k, v in headers.items() if k.lower().startswith("x-ratelimit")
+        }
         if rate_headers:
             logger.info("Gemini rate limits: %s", rate_headers)
 
@@ -136,10 +139,12 @@ class GeminiLLMClient(LLMClient):
                 return func()
             except Exception as exc:  # pragma: no cover - depends on SDK
                 error_str = str(exc).lower()
-                if any(term in error_str for term in ["rate", "quota", "429", "503"]) and attempt < (
-                    self.config.max_retries - 1
-                ):
-                    logger.warning("Rate limited, retrying in %ss (attempt %s)", delay, attempt + 1)
+                if any(
+                    term in error_str for term in ["rate", "quota", "429", "503"]
+                ) and attempt < (self.config.max_retries - 1):
+                    logger.warning(
+                        "Rate limited, retrying in %ss (attempt %s)", delay, attempt + 1
+                    )
                     time.sleep(delay)
                     delay = min(delay * 2, self.config.max_delay)
                     continue
@@ -164,7 +169,9 @@ class GeminiLLMClient(LLMClient):
 
         return self._retry_with_backoff(_generate)
 
-    def chat(self, messages: list[dict[str, str]], system_instruction: str | None = None) -> str:
+    def chat(
+        self, messages: list[dict[str, str]], system_instruction: str | None = None
+    ) -> str:
         self._ensure_initialized()
 
         def _chat():

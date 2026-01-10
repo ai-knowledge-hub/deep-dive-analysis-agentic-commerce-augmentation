@@ -34,24 +34,36 @@ def create_recommendation(
         INSERT INTO recommendations (id, session_id, product_ids_json, empowering_score, context_json)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (recommendation_id, session_id, to_json(product_ids), empowering_score, to_json(context)),
+        (
+            recommendation_id,
+            session_id,
+            to_json(product_ids),
+            empowering_score,
+            to_json(context),
+        ),
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM recommendations WHERE id = ?", (recommendation_id,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM recommendations WHERE id = ?", (recommendation_id,)
+    ).fetchone()
     return _row_to_dict(row)
 
 
 def list_recommendations(session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     """List recommendations for a session."""
-    rows = get_connection().execute(
-        """
+    rows = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM recommendations
         WHERE session_id = ?
         ORDER BY created_at DESC
         LIMIT ?
         """,
-        (session_id, limit),
-    ).fetchall()
+            (session_id, limit),
+        )
+        .fetchall()
+    )
     return [_row_to_dict(row) for row in rows]
 
 

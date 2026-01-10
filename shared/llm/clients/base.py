@@ -13,7 +13,9 @@ class LLMClient(ABC):
     def generate(self, prompt: str, system_instruction: str | None = None) -> str: ...
 
     @abstractmethod
-    def chat(self, messages: list[dict[str, str]], system_instruction: str | None = None) -> str: ...
+    def chat(
+        self, messages: list[dict[str, str]], system_instruction: str | None = None
+    ) -> str: ...
 
     @abstractmethod
     def generate_with_tools(

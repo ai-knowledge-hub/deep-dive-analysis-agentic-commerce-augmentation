@@ -19,7 +19,9 @@ class SemanticMemory:
             shared "__default__" user for demo mode.
     """
 
-    def __init__(self, data_path: Path | None = None, user_id: str | None = None) -> None:
+    def __init__(
+        self, data_path: Path | None = None, user_id: str | None = None
+    ) -> None:
         if data_path:
             set_database_path(data_path)
         init_db()

@@ -40,7 +40,9 @@ def assess(goals: List[str], products: List[Product]) -> GoalAlignmentResult:
     )
     weighted_score = round(base_score * (0.7 + 0.3 * confidence_weight), 3)
     confidence_summary: dict[str, float | dict[str, float]] = {
-        "average_confidence": round(_average_confidence(products), 2) if products else 0.0,
+        "average_confidence": round(_average_confidence(products), 2)
+        if products
+        else 0.0,
         "aligned_goal_confidence": {
             goal: round(score, 2) for goal, score in goal_confidence.items()
         },

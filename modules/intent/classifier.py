@@ -42,7 +42,9 @@ def classify(
     llm_confidence = _get_float(llm_data, ["confidence", "score"], 0.0)
     llm_domain = _get_str(llm_data, ["domain"], keyword_result.domain)
     llm_evidence = _get_list(llm_data, ["evidence"], keyword_result.evidence)
-    llm_questions = _get_list(llm_data, ["clarifying_questions"], keyword_result.clarifying_questions)
+    llm_questions = _get_list(
+        llm_data, ["clarifying_questions"], keyword_result.clarifying_questions
+    )
     llm_source = _get_str(llm_data, ["source"], "gemini")
 
     if llm_label not in {"", "unknown"} and llm_confidence >= llm_threshold:
@@ -65,7 +67,9 @@ def classify(
     )
 
 
-def _score_definition(user_text: str, definition: IntentDefinition) -> Tuple[float, List[str]]:
+def _score_definition(
+    user_text: str, definition: IntentDefinition
+) -> Tuple[float, List[str]]:
     """Score how well user text matches an intent definition."""
     hits = [keyword for keyword in definition.keywords if keyword in user_text]
     if not hits:
@@ -128,7 +132,9 @@ def _get_float(data: Mapping[str, Any], keys: List[str], default: float) -> floa
     return default
 
 
-def _get_list(data: Mapping[str, Any], keys: List[str], default: List[str]) -> List[str]:
+def _get_list(
+    data: Mapping[str, Any], keys: List[str], default: List[str]
+) -> List[str]:
     """Extract list value from dict trying multiple keys."""
     for key in keys:
         value = data.get(key)

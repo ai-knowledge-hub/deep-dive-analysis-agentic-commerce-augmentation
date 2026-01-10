@@ -25,7 +25,9 @@ def load_catalog(source: str | None = None) -> List[Product]:
 
             _SOURCE_MAP["shopify"] = load_shopify
         elif source_name in {"google", "google_shopping"}:
-            from modules.commerce.adapters.google_shopping import load_catalog as load_google
+            from modules.commerce.adapters.google_shopping import (
+                load_catalog as load_google,
+            )
 
             _SOURCE_MAP[source_name] = load_google
         elif source_name in {"google_merchant", "google_mc"}:

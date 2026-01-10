@@ -14,7 +14,9 @@ if "google" not in sys.modules:
 
     class DummyClient:
         def __init__(self, *args, **kwargs):
-            self.models = types.SimpleNamespace(generate_content=lambda **_: types.SimpleNamespace(text=""))
+            self.models = types.SimpleNamespace(
+                generate_content=lambda **_: types.SimpleNamespace(text="")
+            )
 
     class GenerateContentConfig:
         def __init__(self, temperature: float = 0.7, max_output_tokens: int = 2048):
@@ -23,13 +25,20 @@ if "google" not in sys.modules:
             self.tools = None
 
     class FunctionDeclaration:
-        def __init__(self, name: str, description: str | None = None, parameters: dict | None = None):
+        def __init__(
+            self,
+            name: str,
+            description: str | None = None,
+            parameters: dict | None = None,
+        ):
             self.name = name
             self.description = description
             self.parameters = parameters
 
     class Tool:
-        def __init__(self, function_declarations: list[FunctionDeclaration] | None = None):
+        def __init__(
+            self, function_declarations: list[FunctionDeclaration] | None = None
+        ):
             self.function_declarations = function_declarations or []
 
     genai_pkg.Client = DummyClient
@@ -51,7 +60,9 @@ def integration_client(tmp_path, monkeypatch):
     init_db()
 
     def fake_handle(manager, message, metadata):
-        state = ClarificationState(query=message, ready_for_products=True, extracted_goals=["Stay energized"])
+        state = ClarificationState(
+            query=message, ready_for_products=True, extracted_goals=["Stay energized"]
+        )
         manager.record_goal("Stay energized")
         manager.update_state(clarification_state=state.to_dict())
         return state, None
@@ -71,7 +82,9 @@ def integration_client(tmp_path, monkeypatch):
                         "capabilities_enabled": ["Posture"],
                         "confidence": 0.8,
                         "source": "mock",
-                        "reasoning": f"Supports {goals[0]}" if goals else "Supports autonomy",
+                        "reasoning": f"Supports {goals[0]}"
+                        if goals
+                        else "Supports autonomy",
                     }
                 ],
                 "clarifications": ["We prioritized posture support."],
@@ -110,7 +123,9 @@ def test_full_conversation_flow(integration_client):
     start_payload = start_response.json()
     session_id = start_payload["session_id"]
     assert start_payload["guardrails"]["status"] == "ok"
-    assert start_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
+    assert (
+        start_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
+    )
 
     message_response = integration_client.post(
         f"/conversation/{session_id}/message",
@@ -120,6 +135,8 @@ def test_full_conversation_flow(integration_client):
     message_payload = message_response.json()
 
     assert message_payload["intent"]["label"] == "workspace_upgrade"
-    assert message_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
+    assert (
+        message_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
+    )
     assert message_payload["reflection"] == "Captured empowerment metrics."
     assert message_payload["guardrails"]["status"] == "ok"

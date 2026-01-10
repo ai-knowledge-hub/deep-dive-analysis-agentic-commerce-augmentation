@@ -11,6 +11,7 @@ from modules.commerce.domain import Product, RawProduct, RawOffer
 # RawOffer -> RawProduct transformations
 # ============================================================================
 
+
 def raw_offer_to_raw_product(offer: RawOffer) -> RawProduct:
     sku = str(offer.variant_attributes.get("sku") or offer.source_id)
     return RawProduct(
@@ -19,7 +20,11 @@ def raw_offer_to_raw_product(offer: RawOffer) -> RawProduct:
         title=offer.title,
         description=offer.description,
         brand=_extract_brand(offer),
-        category=str(offer.attributes.get("category") or offer.variant_attributes.get("category") or ""),
+        category=str(
+            offer.attributes.get("category")
+            or offer.variant_attributes.get("category")
+            or ""
+        ),
         price=offer.price,
         currency=offer.currency,
         availability=offer.availability,
@@ -50,6 +55,7 @@ def _extract_brand(offer: RawOffer) -> str:
 # ============================================================================
 # RawProduct -> Product normalization
 # ============================================================================
+
 
 def raw_product_to_product(raw: RawProduct) -> Product:
     return Product(

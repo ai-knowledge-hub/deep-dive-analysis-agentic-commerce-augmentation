@@ -46,7 +46,9 @@ class SessionManager:
         self._state = self._session.get("state") or {}
         self._memory = SemanticMemory(user_id=self.user_id)
 
-    def _resolve_session(self, session_id: str | None, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_session(
+        self, session_id: str | None, state: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Find existing session or create new one."""
         if session_id:
             existing = sessions_repo.get_session(session_id)
@@ -104,7 +106,10 @@ class SessionManager:
 
     def goal_texts(self) -> List[str]:
         """Get deduplicated list of goal texts from session and semantic memory."""
-        session_goals = [goal["goal_text"] for goal in goals_repo.list_goals_for_session(self.session_id)]
+        session_goals = [
+            goal["goal_text"]
+            for goal in goals_repo.list_goals_for_session(self.session_id)
+        ]
         semantic_goals = self._memory.get("goals")
         seen = []
         for goal in session_goals + semantic_goals:
@@ -154,7 +159,10 @@ class SessionManager:
         return SessionSnapshot(
             session=self._session_info(),
             turns=self.list_turns(limit=include_turn_limit),
-            goals=[goal["goal_text"] for goal in goals_repo.list_goals_for_session(self.session_id)],
+            goals=[
+                goal["goal_text"]
+                for goal in goals_repo.list_goals_for_session(self.session_id)
+            ],
             semantic_goals=self._memory.get("goals"),
             latest_episode=episodes_repo.get_latest(self.user_id),
         )

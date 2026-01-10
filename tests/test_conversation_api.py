@@ -14,7 +14,9 @@ if "google" not in sys.modules:
 
     class DummyClient:
         def __init__(self, *args, **kwargs):
-            self.models = types.SimpleNamespace(generate_content=lambda **_: types.SimpleNamespace(text=""))
+            self.models = types.SimpleNamespace(
+                generate_content=lambda **_: types.SimpleNamespace(text="")
+            )
 
     class GenerateContentConfig:
         def __init__(self, temperature: float = 0.7, max_output_tokens: int = 2048):
@@ -23,13 +25,20 @@ if "google" not in sys.modules:
             self.tools = None
 
     class FunctionDeclaration:
-        def __init__(self, name: str, description: str | None = None, parameters: dict | None = None):
+        def __init__(
+            self,
+            name: str,
+            description: str | None = None,
+            parameters: dict | None = None,
+        ):
             self.name = name
             self.description = description
             self.parameters = parameters
 
     class Tool:
-        def __init__(self, function_declarations: list[FunctionDeclaration] | None = None):
+        def __init__(
+            self, function_declarations: list[FunctionDeclaration] | None = None
+        ):
             self.function_declarations = function_declarations or []
 
     genai_pkg.Client = DummyClient
@@ -65,7 +74,9 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
 
     monkeypatch.setattr("api.routes.conversation.VALUES_AGENT", DummyValuesAgent())
 
-    response = client.post("/conversation/start", json={"opening_message": "Help me focus"})
+    response = client.post(
+        "/conversation/start", json={"opening_message": "Help me focus"}
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["clarification"] == "What matters most about this goal?"
@@ -75,7 +86,9 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
 
 def _configure_full_pipeline(monkeypatch):
     def fake_handle(manager, message, metadata):
-        state = ClarificationState(query=message, ready_for_products=True, extracted_goals=["Stay energized"])
+        state = ClarificationState(
+            query=message, ready_for_products=True, extracted_goals=["Stay energized"]
+        )
         manager.record_goal("Stay energized")
         return state, None
 
@@ -135,7 +148,10 @@ def _configure_full_pipeline(monkeypatch):
 def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
     _configure_full_pipeline(monkeypatch)
 
-    response = client.post("/conversation/start", json={"opening_message": "Focus setup", "user_id": "tester"})
+    response = client.post(
+        "/conversation/start",
+        json={"opening_message": "Focus setup", "user_id": "tester"},
+    )
     assert response.status_code == 200
     data = response.json()
 
@@ -151,11 +167,16 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
 def test_get_session_snapshot_returns_latest(client, monkeypatch):
     _configure_full_pipeline(monkeypatch)
 
-    start = client.post("/conversation/start", json={"opening_message": "Need focus", "user_id": "snapshot-user"})
+    start = client.post(
+        "/conversation/start",
+        json={"opening_message": "Need focus", "user_id": "snapshot-user"},
+    )
     assert start.status_code == 200
     session_id = start.json()["session_id"]
 
-    snapshot = client.get(f"/conversation/{session_id}", params={"user_id": "snapshot-user"})
+    snapshot = client.get(
+        f"/conversation/{session_id}", params={"user_id": "snapshot-user"}
+    )
     assert snapshot.status_code == 200
     data = snapshot.json()
     assert data["session_id"] == session_id

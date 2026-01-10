@@ -36,16 +36,22 @@ def update_metadata(
             preferences_json = COALESCE(excluded.preferences_json, users.preferences_json),
             metadata_json = COALESCE(excluded.metadata_json, users.metadata_json)
         """,
-        (user_id, to_json(preferences) or to_json({}), to_json(metadata) or to_json({})),
+        (
+            user_id,
+            to_json(preferences) or to_json({}),
+            to_json(metadata) or to_json({}),
+        ),
     )
     conn.commit()
 
 
 def get_user(user_id: str) -> Optional[Dict[str, Any]]:
     """Get a user by ID."""
-    row = get_connection().execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    row = (
+        get_connection()
+        .execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        .fetchone()
+    )
     if not row:
         return None
     return {

@@ -18,7 +18,9 @@ def _row_to_dict(row) -> Dict[str, Any]:
     }
 
 
-def create_session(user_id: str | None = None, state: dict | None = None) -> Dict[str, Any]:
+def create_session(
+    user_id: str | None = None, state: dict | None = None
+) -> Dict[str, Any]:
     """Create a new session."""
     session_id = str(uuid.uuid4())
     conn = get_connection()
@@ -36,9 +38,11 @@ def create_session(user_id: str | None = None, state: dict | None = None) -> Dic
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     """Get a session by ID."""
-    row = get_connection().execute(
-        "SELECT * FROM sessions WHERE id = ?", (session_id,)
-    ).fetchone()
+    row = (
+        get_connection()
+        .execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
+        .fetchone()
+    )
     return _row_to_dict(row) if row else None
 
 

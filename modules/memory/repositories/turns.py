@@ -42,15 +42,19 @@ def add_turn(
 
 def list_turns(session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     """List turns for a session."""
-    rows = get_connection().execute(
-        """
+    rows = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM turns
         WHERE session_id = ?
         ORDER BY created_at ASC
         LIMIT ?
         """,
-        (session_id, limit),
-    ).fetchall()
+            (session_id, limit),
+        )
+        .fetchall()
+    )
     return [_row_to_dict(row) for row in rows]
 
 

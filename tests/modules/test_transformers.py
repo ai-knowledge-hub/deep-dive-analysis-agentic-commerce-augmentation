@@ -16,7 +16,10 @@ def test_raw_offer_conversion_preserves_metadata():
         inventory_quantity=5,
         variant_attributes={"sku": "focus-chair"},
         media=["https://example.com/chair.jpg"],
-        attributes={"capabilities": ["Posture"], "empowerment_scores": {"physical_agency": 0.8}},
+        attributes={
+            "capabilities": ["Posture"],
+            "empowerment_scores": {"physical_agency": 0.8},
+        },
         confidence=0.95,
         completeness=0.9,
     )

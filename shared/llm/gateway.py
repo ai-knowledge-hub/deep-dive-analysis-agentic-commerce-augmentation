@@ -12,7 +12,9 @@ def get_llm_client(provider: str | None = None) -> LLMClient:
     return _get_llm_client(provider)
 
 
-def generate(prompt: str, system_instruction: str | None = None, provider: str | None = None) -> str:
+def generate(
+    prompt: str, system_instruction: str | None = None, provider: str | None = None
+) -> str:
     """Single-turn generation via the configured LLM."""
     client = get_llm_client(provider)
     return client.generate(prompt, system_instruction)

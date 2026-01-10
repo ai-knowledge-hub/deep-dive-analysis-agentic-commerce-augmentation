@@ -50,7 +50,9 @@ class PlanBuilder:
                 products = candidate_products
                 query = candidate
                 if candidate != queries[0]:
-                    fallback_reason = f"No products for '{queries[0]}', fell back to '{candidate}'."
+                    fallback_reason = (
+                        f"No products for '{queries[0]}', fell back to '{candidate}'."
+                    )
                 break
 
         selected_products, filtered_count = self._select_products(products)
@@ -58,17 +60,23 @@ class PlanBuilder:
 
         # Apply LLM reasoning if provided
         if reason_fn:
-            annotated = reason_fn(goals or [], enrichment, context=context) or enrichment
+            annotated = (
+                reason_fn(goals or [], enrichment, context=context) or enrichment
+            )
         else:
             annotated = enrichment
 
         comparison = compare(selected_products[:2])
         data_quality = self._data_quality(annotated)
         data_quality["filtered_low_confidence"] = filtered_count
-        clarifications = self._clarifications(annotated, data_quality, filtered_count, fallback_reason)
+        clarifications = self._clarifications(
+            annotated, data_quality, filtered_count, fallback_reason
+        )
 
         # Compute empowerment snapshot
-        empowerment = self._empowerment_snapshot(goals or [], selected_products, assess_fn)
+        empowerment = self._empowerment_snapshot(
+            goals or [], selected_products, assess_fn
+        )
 
         return {
             "query": query,
@@ -94,9 +102,13 @@ class PlanBuilder:
 
     def _select_products(self, products: List[Product]) -> Tuple[List[Product], int]:
         """Select products based on confidence threshold."""
-        sorted_products = sorted(products, key=lambda product: product.confidence, reverse=True)
+        sorted_products = sorted(
+            products, key=lambda product: product.confidence, reverse=True
+        )
         filtered_products = [
-            product for product in sorted_products if product.confidence >= self.confidence_threshold
+            product
+            for product in sorted_products
+            if product.confidence >= self.confidence_threshold
         ]
         filtered_count = len(sorted_products) - len(filtered_products)
         if not filtered_products:
@@ -123,7 +135,11 @@ class PlanBuilder:
     def _data_quality(self, products: List[dict]) -> dict:
         """Compute data quality metrics."""
         if not products:
-            return {"average_confidence": 0.0, "sources": [], "filtered_low_confidence": 0}
+            return {
+                "average_confidence": 0.0,
+                "sources": [],
+                "filtered_low_confidence": 0,
+            }
         confidence = sum(product["confidence"] for product in products) / len(products)
         sources = sorted({product["source"] for product in products})
         return {
@@ -133,7 +149,11 @@ class PlanBuilder:
         }
 
     def _clarifications(
-        self, products: List[dict], data_quality: dict, filtered_count: int, fallback_reason: str | None
+        self,
+        products: List[dict],
+        data_quality: dict,
+        filtered_count: int,
+        fallback_reason: str | None,
     ) -> List[str]:
         """Generate clarification messages based on plan quality."""
         clarifications: List[str] = []
@@ -143,7 +163,9 @@ class PlanBuilder:
                 "Data confidence is low; request merchant-verified options or additional context."
             )
         if filtered_count > 0:
-            clarifications.append(f"{filtered_count} low-confidence products were hidden from the plan.")
+            clarifications.append(
+                f"{filtered_count} low-confidence products were hidden from the plan."
+            )
         if any(product["source"] != "shopify" for product in products):
             clarifications.append(
                 "Some recommendations come from discovery surfaces (e.g., Google Shopping). Confirm availability before purchasing."
@@ -151,7 +173,9 @@ class PlanBuilder:
         if fallback_reason:
             clarifications.append(fallback_reason)
         if not clarifications:
-            clarifications.append("All recommendations are merchant-verified with high confidence.")
+            clarifications.append(
+                "All recommendations are merchant-verified with high confidence."
+            )
         return clarifications
 
     def _empowerment_snapshot(
@@ -165,7 +189,10 @@ class PlanBuilder:
                     "aligned_goals": [],
                     "misaligned_goals": goals or [],
                     "supporting_products": [],
-                    "confidence_summary": {"average_confidence": 0.0, "aligned_goal_confidence": {}},
+                    "confidence_summary": {
+                        "average_confidence": 0.0,
+                        "aligned_goal_confidence": {},
+                    },
                 }
             }
 
@@ -188,7 +215,10 @@ class PlanBuilder:
                 "aligned_goals": [],
                 "misaligned_goals": goals,
                 "supporting_products": [],
-                "confidence_summary": {"average_confidence": 0.0, "aligned_goal_confidence": {}},
+                "confidence_summary": {
+                    "average_confidence": 0.0,
+                    "aligned_goal_confidence": {},
+                },
             }
         }
 

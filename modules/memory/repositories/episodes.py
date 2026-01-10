@@ -43,29 +43,37 @@ def create_episode(
 
 def list_recent(user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     """List recent episodes for a user."""
-    rows = get_connection().execute(
-        """
+    rows = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM episodes
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT ?
         """,
-        (user_id, limit),
-    ).fetchall()
+            (user_id, limit),
+        )
+        .fetchall()
+    )
     return [_row_to_dict(row) for row in rows]
 
 
 def get_latest(user_id: str) -> Optional[Dict[str, Any]]:
     """Get the latest episode for a user."""
-    row = get_connection().execute(
-        """
+    row = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM episodes
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT 1
         """,
-        (user_id,),
-    ).fetchone()
+            (user_id,),
+        )
+        .fetchone()
+    )
     return _row_to_dict(row) if row else None
 
 

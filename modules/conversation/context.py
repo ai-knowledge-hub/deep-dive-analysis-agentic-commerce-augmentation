@@ -96,7 +96,9 @@ def render_context(packet: ContextPacket, include_turns: int = 6) -> str:
         for key, value in (packet.metadata or {}).items()
         if key not in {"clarification_state"}
     ]
-    metadata_text = "\n".join(metadata_lines) if metadata_lines else "(no state metadata)"
+    metadata_text = (
+        "\n".join(metadata_lines) if metadata_lines else "(no state metadata)"
+    )
 
     recent_turns = format_turns(packet.turns[-include_turns:]) or "(no prior turns)"
 

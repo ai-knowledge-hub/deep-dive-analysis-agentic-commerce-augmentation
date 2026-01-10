@@ -12,7 +12,12 @@ CATALOG = load_catalog()
 
 def _matches(product: Product, query: str) -> bool:
     query_lower = query.lower()
-    haystack: Sequence[str] = [product.name, product.description, *product.tags, *product.capabilities_enabled]
+    haystack: Sequence[str] = [
+        product.name,
+        product.description,
+        *product.tags,
+        *product.capabilities_enabled,
+    ]
     return any(query_lower in item.lower() for item in haystack)
 
 

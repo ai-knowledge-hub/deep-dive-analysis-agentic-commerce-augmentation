@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING
 
 from shared.config.env import settings
 from shared.llm.clients.base import LLMClient
-from shared.llm.clients.openrouter import OpenRouterLLMClient, get_client as get_openrouter_client
+from shared.llm.clients.openrouter import (
+    OpenRouterLLMClient,
+    get_client as get_openrouter_client,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from shared.llm.clients.gemini import GeminiLLMClient
@@ -29,5 +32,6 @@ def get_llm_client(provider: str | None = None) -> LLMClient:
 
 __all__ = [
     "LLMClient",
+    "OpenRouterLLMClient",
     "get_llm_client",
 ]

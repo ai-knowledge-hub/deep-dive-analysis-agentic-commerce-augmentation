@@ -16,7 +16,9 @@ if "google" not in sys.modules:
 
     class DummyClient:
         def __init__(self, *args, **kwargs):
-            self.models = types.SimpleNamespace(generate_content=lambda **_: types.SimpleNamespace(text=""))
+            self.models = types.SimpleNamespace(
+                generate_content=lambda **_: types.SimpleNamespace(text="")
+            )
 
     class GenerateContentConfig:
         def __init__(self, temperature: float = 0.7, max_output_tokens: int = 2048):
@@ -25,13 +27,20 @@ if "google" not in sys.modules:
             self.tools = None
 
     class FunctionDeclaration:
-        def __init__(self, name: str, description: str | None = None, parameters: dict | None = None):
+        def __init__(
+            self,
+            name: str,
+            description: str | None = None,
+            parameters: dict | None = None,
+        ):
             self.name = name
             self.description = description
             self.parameters = parameters
 
     class Tool:
-        def __init__(self, function_declarations: list[FunctionDeclaration] | None = None):
+        def __init__(
+            self, function_declarations: list[FunctionDeclaration] | None = None
+        ):
             self.function_declarations = function_declarations or []
 
     genai_pkg.Client = DummyClient
@@ -53,7 +62,9 @@ from modules.intent.domain import Intent as KeywordIntent
 
 
 def test_hybrid_intent_prefers_llm_response(monkeypatch):
-    def fake_generate(prompt: str, system_instruction: str | None = None, provider: str | None = None) -> str:
+    def fake_generate(
+        prompt: str, system_instruction: str | None = None, provider: str | None = None
+    ) -> str:
         return (
             '{"intent": "workspace_upgrade", "confidence": 0.9, '
             '"evidence": ["desk"], "clarifying_questions": ["q1"], "domain": "career"}'
@@ -71,7 +82,9 @@ def test_hybrid_intent_prefers_llm_response(monkeypatch):
 
 
 def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
-    def fake_generate(prompt: str, system_instruction: str | None = None, provider: str | None = None) -> str:
+    def fake_generate(
+        prompt: str, system_instruction: str | None = None, provider: str | None = None
+    ) -> str:
         return '{"intent": "unknown", "confidence": 0.2, "evidence": [], "clarifying_questions": []}'
 
     fallback_intent = KeywordIntent(
@@ -83,10 +96,13 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
     )
 
     monkeypatch.setattr("modules.intent.llm_classifier.generate", fake_generate)
+
     def fake_keyword(text: str, **kwargs):
         return fallback_intent
 
-    monkeypatch.setattr("modules.intent.llm_classifier.keyword_classifier.classify", fake_keyword)
+    monkeypatch.setattr(
+        "modules.intent.llm_classifier.keyword_classifier.classify", fake_keyword
+    )
 
     classifier = HybridIntentClassifier()
     result = classifier.classify("Need help")
@@ -105,7 +121,9 @@ def test_values_agent_start_records_turns(monkeypatch):
     monkeypatch.setattr("modules.values.agent.chat", fake_chat)
 
     agent = ValuesAgent()
-    state = agent.start("Help me design a calmer workspace", metadata={"channel": "test"})
+    state = agent.start(
+        "Help me design a calmer workspace", metadata={"channel": "test"}
+    )
 
     assert len(state.turns) == 2
     assert state.turns[0].content == "Help me design a calmer workspace"
@@ -143,7 +161,9 @@ def test_values_agent_continue_marks_ready(monkeypatch):
 def test_product_reasoner_attaches_reasoning(monkeypatch):
     prompts: list[str] = []
 
-    def fake_generate(prompt: str, system_instruction: str | None = None, provider: str | None = None) -> str:
+    def fake_generate(
+        prompt: str, system_instruction: str | None = None, provider: str | None = None
+    ) -> str:
         prompts.append(prompt)
         return "Supports posture goals and keeps you focused."
 
@@ -170,7 +190,9 @@ def test_product_reasoner_attaches_reasoning(monkeypatch):
 def test_product_reasoner_handles_empty_products(monkeypatch):
     called = {"count": 0}
 
-    def fake_generate(prompt: str, system_instruction: str | None = None, provider: str | None = None) -> str:
+    def fake_generate(
+        prompt: str, system_instruction: str | None = None, provider: str | None = None
+    ) -> str:
         called["count"] += 1
         return ""
 

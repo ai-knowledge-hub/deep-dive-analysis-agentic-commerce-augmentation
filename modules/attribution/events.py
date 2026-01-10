@@ -12,7 +12,11 @@ T = TypeVar("T", IntentEvent, RecommendationEvent, ConversionEvent)
 
 class EventRecorder:
     def __init__(self) -> None:
-        self._events: Dict[str, List[dict]] = {"intents": [], "recommendations": [], "conversions": []}
+        self._events: Dict[str, List[dict]] = {
+            "intents": [],
+            "recommendations": [],
+            "conversions": [],
+        }
 
     def record_intent(self, event: IntentEvent) -> None:
         self._events["intents"].append(asdict(event))

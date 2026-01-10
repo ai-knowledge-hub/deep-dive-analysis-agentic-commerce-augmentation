@@ -44,7 +44,9 @@ class HybridIntentClassifier:
         """Call LLM for intent classification."""
         try:
             context = f"\n\nSession context:\n{self._context}" if self._context else ""
-            raw = generate(prompt=f"{INTENT_CLASSIFICATION_PROMPT}{context}\nInput: {text}")
+            raw = generate(
+                prompt=f"{INTENT_CLASSIFICATION_PROMPT}{context}\nInput: {text}"
+            )
             parsed = self._parse_raw_response(raw)
         except Exception:
             parsed = {}
@@ -66,7 +68,9 @@ class HybridIntentClassifier:
         value = data.get(key, default)
         return value if isinstance(value, str) else default
 
-    def _get_list(self, data: Dict[str, object], key: str, default: List[str]) -> List[str]:
+    def _get_list(
+        self, data: Dict[str, object], key: str, default: List[str]
+    ) -> List[str]:
         """Extract list value from dict."""
         value = data.get(key, default)
         if isinstance(value, list) and all(isinstance(item, str) for item in value):

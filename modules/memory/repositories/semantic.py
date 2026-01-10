@@ -63,13 +63,17 @@ def upsert_entry(
 
 def get_entry(key: str, user_id: str = DEFAULT_USER_ID) -> Optional[Dict[str, Any]]:
     """Get a semantic memory entry by key."""
-    row = get_connection().execute(
-        """
+    row = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM semantic_memory
         WHERE user_id = ? AND key = ?
         """,
-        (user_id, key),
-    ).fetchone()
+            (user_id, key),
+        )
+        .fetchone()
+    )
     return _row_to_dict(row) if row else None
 
 
@@ -85,15 +89,25 @@ def delete_entry(key: str, user_id: str = DEFAULT_USER_ID) -> None:
 
 def list_entries(user_id: str = DEFAULT_USER_ID) -> List[Dict[str, Any]]:
     """List all semantic memory entries for a user."""
-    rows = get_connection().execute(
-        """
+    rows = (
+        get_connection()
+        .execute(
+            """
         SELECT * FROM semantic_memory
         WHERE user_id = ?
         ORDER BY updated_at DESC
         """,
-        (user_id,),
-    ).fetchall()
+            (user_id,),
+        )
+        .fetchall()
+    )
     return [_row_to_dict(row) for row in rows]
 
 
-__all__ = ["DEFAULT_USER_ID", "upsert_entry", "get_entry", "delete_entry", "list_entries"]
+__all__ = [
+    "DEFAULT_USER_ID",
+    "upsert_entry",
+    "get_entry",
+    "delete_entry",
+    "list_entries",
+]

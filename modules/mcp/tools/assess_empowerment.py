@@ -17,7 +17,9 @@ def run(goals: List[str], product_ids: List[str]) -> dict:
 
     catalog = search("")
     id_to_product = {product.id: product for product in catalog}
-    selected_products = [id_to_product[_id] for _id in product_ids if _id in id_to_product]
+    selected_products = [
+        id_to_product[_id] for _id in product_ids if _id in id_to_product
+    ]
 
     assessment = assess(combined_goals or stored_goals or goals, selected_products)
     return {

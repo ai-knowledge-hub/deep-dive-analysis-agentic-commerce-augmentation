@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from modules.commerce.adapters.loader import load_catalog

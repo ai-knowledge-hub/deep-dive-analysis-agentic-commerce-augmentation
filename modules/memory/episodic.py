@@ -16,7 +16,9 @@ class EpisodicMemory:
 
     def record(self, outcome: str, takeaways: List[str]) -> Episode:
         """Record an episode with outcome and takeaways."""
-        episode = Episode(timestamp=datetime.utcnow(), outcome=outcome, takeaways=takeaways)
+        episode = Episode(
+            timestamp=datetime.utcnow(), outcome=outcome, takeaways=takeaways
+        )
         self._episodes.append(episode)
         return episode
 

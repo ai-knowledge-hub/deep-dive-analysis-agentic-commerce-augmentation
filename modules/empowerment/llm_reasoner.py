@@ -36,7 +36,9 @@ def _compose_prompt(
 
 def _format_context(goals: List[str], product: dict) -> str:
     """Format goals and product info for the prompt."""
-    goals_text = "\n".join(f"- {goal}" for goal in goals) or "No explicit goals captured."
+    goals_text = (
+        "\n".join(f"- {goal}" for goal in goals) or "No explicit goals captured."
+    )
     details = [
         f"Name: {product.get('name')}",
         f"Capabilities: {', '.join(product.get('capabilities_enabled', []))}",

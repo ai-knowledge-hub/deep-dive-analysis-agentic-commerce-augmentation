@@ -29,7 +29,9 @@ class OpenRouterLLMClient(LLMClient):
     def __init__(self, config: OpenRouterConfig | None = None) -> None:
         self.config = config or OpenRouterConfig()
         if not self.config.api_key:
-            raise ValueError("OPENROUTER_API_KEY must be set when using LLM_PROVIDER=openrouter")
+            raise ValueError(
+                "OPENROUTER_API_KEY must be set when using LLM_PROVIDER=openrouter"
+            )
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -49,7 +51,9 @@ class OpenRouterLLMClient(LLMClient):
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
-        response = requests.post(OPENROUTER_API_BASE, headers=self._headers(), json=payload, timeout=60)
+        response = requests.post(
+            OPENROUTER_API_BASE, headers=self._headers(), json=payload, timeout=60
+        )
         if response.status_code >= 400:
             raise requests.HTTPError(
                 f"OpenRouter error {response.status_code}: {response.text}",
@@ -69,10 +73,14 @@ class OpenRouterLLMClient(LLMClient):
         messages.append({"role": "user", "content": prompt})
         return self._request(messages)
 
-    def chat(self, messages: list[dict[str, str]], system_instruction: str | None = None) -> str:
+    def chat(
+        self, messages: list[dict[str, str]], system_instruction: str | None = None
+    ) -> str:
         openrouter_messages = []
         if system_instruction:
-            openrouter_messages.append({"role": "system", "content": system_instruction})
+            openrouter_messages.append(
+                {"role": "system", "content": system_instruction}
+            )
         openrouter_messages.extend(messages)
         return self._request(openrouter_messages)
 
@@ -82,8 +90,12 @@ class OpenRouterLLMClient(LLMClient):
         tools: list[dict],
         system_instruction: str | None = None,
     ) -> dict:
-        tool_descriptions = "\n".join(f"{tool['name']}: {tool.get('description','')}" for tool in tools)
-        full_prompt = f"{tool_descriptions}\n\n{prompt}" if tool_descriptions else prompt
+        tool_descriptions = "\n".join(
+            f"{tool['name']}: {tool.get('description', '')}" for tool in tools
+        )
+        full_prompt = (
+            f"{tool_descriptions}\n\n{prompt}" if tool_descriptions else prompt
+        )
         text = self.generate(full_prompt, system_instruction=system_instruction)
         return {"text": text}
 

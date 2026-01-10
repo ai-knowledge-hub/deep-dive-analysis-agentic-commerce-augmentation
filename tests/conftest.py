@@ -5,4 +5,4 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config import env as _env  # noqa: F401  # ensures dotenv loaded in tests
+from config import env as _env  # noqa: F401, E402  # ensures dotenv loaded in tests

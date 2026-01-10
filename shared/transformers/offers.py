@@ -15,7 +15,11 @@ def raw_offer_to_raw_product(offer: RawOffer) -> RawProduct:
         title=offer.title,
         description=offer.description,
         brand=_extract_brand(offer),
-        category=str(offer.attributes.get("category") or offer.variant_attributes.get("category") or ""),
+        category=str(
+            offer.attributes.get("category")
+            or offer.variant_attributes.get("category")
+            or ""
+        ),
         price=offer.price,
         currency=offer.currency,
         availability=offer.availability,

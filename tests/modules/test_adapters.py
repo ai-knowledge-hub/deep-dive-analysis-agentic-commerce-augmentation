@@ -1,5 +1,3 @@
-import os
-
 from modules.commerce.adapters.loader import load_catalog
 from modules.commerce.adapters.google_shopping.mock_feed import (
     load_catalog as load_google_catalog,
