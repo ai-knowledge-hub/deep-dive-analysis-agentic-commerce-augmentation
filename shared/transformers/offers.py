@@ -1,15 +1,10 @@
-"""Helpers converting RawOffer objects into RawProduct instances.
-
-NOTE: This file imports from core.schema during the migration period.
-After Phase 2, it will import from modules.commerce.domain.
-"""
+"""Helpers converting RawOffer objects into RawProduct instances."""
 
 from __future__ import annotations
 
 from typing import Iterable, List
 
-from core.schema.offer import RawOffer
-from core.schema.product import RawProduct
+from modules.commerce.domain import RawOffer, RawProduct
 
 
 def raw_offer_to_raw_product(offer: RawOffer) -> RawProduct:

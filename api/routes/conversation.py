@@ -8,14 +8,17 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from orchestration.intent_service import IntentAgent
-from orchestration.commerce_service import CommerceAgent
-from orchestration.reflection_service import ReflectionAgent
-from orchestration.autonomy_guard_service import AutonomyGuardAgent
-from orchestration.explain_service import ExplainAgent
-from src.memory.session_manager import SessionManager
-from llm.agents.values import ValuesAgent, ClarificationState
-from llm.orchestrator import context_for
+from modules.conversation.agents import (
+    IntentAgent,
+    CommerceAgent,
+    ReflectionAgent,
+    ExplainAgent,
+)
+from modules.conversation.guards import AutonomyGuardAgent
+from modules.memory.session_manager import SessionManager
+from modules.values.agent import ValuesAgent
+from modules.values.domain import ClarificationState
+from modules.conversation.context import context_for
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 

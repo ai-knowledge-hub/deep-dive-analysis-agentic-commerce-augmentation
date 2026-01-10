@@ -47,12 +47,8 @@ Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performic
 ├── app.py                    # Demo entrypoint
 ├── vision.md                 # High-level platform vision
 │
-├── core/                     # Canonical schemas & transformers (vendor-agnostic)
-├── adapters/                 # Shopify + mock feed adapters
-├── src/                      # Legacy core logic (intent, memory, empowerment, MCP)
-├── orchestration/            # Façade services orchestrating domain modules
-├── attribution/              # AI-aware measurement scaffolding
-├── evaluation/               # Representation A/B testing harness
+├── modules/                  # Feature modules (commerce, intent, memory, empowerment, values, conversation, mcp, attribution, evaluation)
+├── shared/                   # Shared infrastructure (config, db, llm clients, transformers)
 ├── api/                      # Thin FastAPI interface
 ├── demos/                    # Sample empowerment journeys and fixtures
 ├── web/                      # Next.js chat + empowerment dashboard
@@ -116,7 +112,7 @@ Copy the relevant section from `.env.example` into `.env.local` (or `.env` for d
 make test   # (falls back to python3 -m pytest)
 ```
 
-The suite exercises the LLM agents, orchestration services, and conversation API (including clarification workflow and empowerment reasoning). Frontend/Next.js tests are deferred until the UI stabilizes; for now, keep visual verification in the web app.
+The suite exercises the modular monolith (commerce/intent/memory/values/empowerment modules), MCP tooling, and the FastAPI conversation routes (including clarification workflow and empowerment reasoning). Frontend/Next.js tests are deferred until the UI stabilizes; for now, keep visual verification in the web app.
 
 ### Continuous Integration
 

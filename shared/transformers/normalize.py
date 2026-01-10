@@ -1,14 +1,10 @@
-"""Normalisation helpers that convert raw adapter output into canonical models.
-
-NOTE: This file imports from core.schema during the migration period.
-After Phase 2, it will import from modules.commerce.domain.
-"""
+"""Normalisation helpers that convert raw adapter output into canonical models."""
 
 from __future__ import annotations
 
 from typing import Iterable, List
 
-from core.schema.product import Product, RawProduct
+from modules.commerce.domain import Product, RawProduct
 
 
 def raw_product_to_product(raw: RawProduct) -> Product:
