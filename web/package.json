@@ -6,7 +6,9 @@
     "dev": "pnpm exec next dev",
     "build": "pnpm exec next build",
     "start": "pnpm exec next start",
-    "lint": "pnpm exec next lint"
+    "lint": "pnpm exec next lint",
+    "web:dev": "pnpm run dev",
+    "api:dev": "uvicorn api.main:app --reload"
   },
   "dependencies": {
     "ai": "3.0.25",

@@ -28,54 +28,48 @@ This repo is also the first applied use case of the forthcoming foundational res
 
 ## 2. Layered Architecture (Mental Model)
 
-The system is organized into **three strict layers**:
+The repository now implements a **modular monolith** with clear separation of concerns:
 
 ```
 ┌──────────────────────────────────────────┐
-│ UI / Demo Layer                          │
-│ (chat, modals, flows, hackathon UX)      │
+│ Experience Layer                         │
+│ (web/, demos/, api/ routes)              │
 └──────────────────────────────────────────┘
 ↓
 ┌──────────────────────────────────────────┐
-│ Agent Façade Layer                       │
-│ (thin orchestration, no core logic)      │
+│ Conversation / Agent Layer               │
+│ (modules.conversation.*, values agent)   │
 └──────────────────────────────────────────┘
 ↓
 ┌──────────────────────────────────────────┐
-│ Core Cognition Layer (src/)              │
-│ Intent · Memory · Empowerment · MCP      │
+│ Core Modules (modules/* + shared/)       │
+│ Commerce · Intent · Memory · Empowerment │
+│ MCP · Attribution · Evaluation           │
 └──────────────────────────────────────────┘
 ```
-**Only the bottom layer defines system behavior.**  
-Everything above it can be replaced without changing the system’s meaning.
+
+**Only the core modules define system behavior.**  
+UI surfaces and conversation orchestration can change without rewriting empowerment logic or objective functions.
 
 ---
 
-## 2.1 Implementation Directories (Clean Boundaries, Pragmatic Modules)
+## 2.1 Implementation Directories (Feature Modules + Shared Infrastructure)
 
-To keep the philosophy portable, the repo mirrors these layers without forcing
-Clean Architecture everywhere:
+To keep empowerment-first principles portable, the repo mirrors the mental model above:
 
-- `core/` — canonical schemas, text utilities, and transformers. These modules
-  have zero platform dependencies and can be reused in any runtime.
-- `adapters/` — integration surfaces (Shopify, CSV, mock loaders). They are
-  intentionally messy and may depend on vendor SDKs.
-- `src/` — legacy glue while we migrate existing logic into the new layout.
-- `agents/` and `demos/` — façade logic and hackathon-ready experiences; allowed
-  to be lightweight scripts so we don’t over-engineer conversational flows.
-- `attribution/` and `evaluation/` — measurement scaffolding that proves
-  empowerment wins in practice.
-- `api/` — thin FastAPI bindings that expose the core feed + search features.
+- `modules/` — feature modules that own their domain models, services, and adapters. Each subfolder (e.g., `modules/commerce`, `modules/intent`, `modules/memory`, `modules/empowerment`, `modules/values`, `modules/conversation`, `modules/mcp`, `modules/attribution`, `modules/evaluation`) contains the canonical implementation for that concern.
+- `shared/` — infrastructure shared by all modules: configuration loading, database connection management, LLM gateway + clients, and catalog transformers.
+- `api/` — thin FastAPI bindings that proxy requests to the conversation module.
+- `web/`, `demos/` — experience layers that consume the API.
+- `tests/` — module- and integration-level verification.
 
-This mapping preserves the empowerment-first constraints (objective function,
-memory, autonomy guardrails) while giving contributors a clear place to plug in
-without coupling unrelated concerns.
+Legacy directories (`src/`, `core/`, `orchestration/`, `adapters/`, `gemini/`) have been removed now that every concern lives in `modules/` or `shared/`.
 
 ---
 
-## 3. Core Cognition Layer (`src/`) — Source of Truth
+## 3. Core Modules (`modules/`) — Source of Truth
 
-The `src/` directory defines the **canonical Contextual Commerce Optimization core**.
+The `modules/` package defines the **canonical Contextual Commerce Optimization core**.
 
 Any logic that affects:
 - decisions
@@ -89,7 +83,7 @@ This layer is framework-agnostic and portable to future production systems.
 
 ---
 
-### 3.1 Intent Module (`src/intent/`)
+### 3.1 Intent Module (`modules/intent/`)
 
 **Responsibility**
 Understand *what the user is trying to achieve*, not just what they are searching for.
@@ -105,7 +99,7 @@ This module ensures that **commerce is always downstream of clarified human goal
 
 The intent taxonomy (`data/intent_taxonomy.json`) provides **routing signals**, not optimization targets. It helps the system understand the domain of a request (workspace, health, career) to ask better clarifying questions.
 
-The **actual objective function** operates on user-declared goals stored in semantic memory (`src/memory/semantic.py`). These goals are:
+The **actual objective function** operates on user-declared goals stored in semantic memory (`modules/memory/semantic.py`). These goals are:
 - Free-form strings in the user's own words
 - Explicitly stated, not inferred from behavior
 - The target against which all recommendations are scored
@@ -114,11 +108,11 @@ This distinction is critical:
 - **World A** would infer intent from clicks and optimize toward platform-defined categories
 - **World B** asks the user what they want and optimizes toward their stated goals
 
-The intent classifier is a heuristic helper. The goal alignment engine (`src/empowerment/goal_alignment.py`) is the objective function.
+The intent classifier is a heuristic helper. The goal alignment engine (`modules/empowerment/goal_alignment.py`) is the objective function.
 
 ---
 
-### 3.2 Memory Module (`src/memory/`)
+### 3.2 Memory Module (`modules/memory/`)
 
 **Responsibility**  
 Preserve continuity, learning, and agency over time.
@@ -136,7 +130,7 @@ Hackathon implementations are lightweight but **structurally correct**.
 
 ---
 
-### 3.3 Products Module (`src/products/`)
+### 3.3 Commerce Module (`modules/commerce/`)
 
 **Responsibility**  
 Provide agentic access to catalogs **without embedding persuasion logic**.
@@ -173,7 +167,7 @@ The agent can therefore say “this is a strong candidate” vs. “this is a hu
 
 ---
 
-### 3.4 Empowerment Module (`src/empowerment/`) — AIS Core
+### 3.4 Empowerment Module (`modules/empowerment/`) — AIS Core
 
 This module implements the **Augmented Intentionality System**.
 
@@ -185,7 +179,8 @@ It defines **what the system is allowed to optimize for**.
 | `alienation.py` | Detects manipulation & autonomy erosion |
 | `optimizer.py` | Optimizes for agency, not CTR |
 | `reflection.py` | Closes the learning loop |
-| `schemas.py` | Shared empowerment ontology |
+| `domain.py` | Shared empowerment ontology |
+| `llm_reasoner.py` | Gemini/OpenRouter-powered product reasoning |
 
 This module **replaces traditional engagement optimization**.
 
@@ -196,7 +191,7 @@ It is:
 
 ---
 
-### 3.5 MCP Module (`src/mcp/`)
+### 3.5 MCP Module (`modules/mcp/`)
 
 **Responsibility**  
 Expose system capabilities as **LLM-callable tools**.
@@ -210,34 +205,30 @@ No business logic lives here — **only interfaces**.
 
 ---
 
-## 4. Agent Façade Layer (`agents/`)
+## 4. Conversation / Orchestration Layer (`modules/conversation/`)
 
-Agents are **thin orchestration wrappers**.
+These modules are **thin orchestration wrappers** that live entirely under `modules/conversation/`.
 
 They:
-- coordinate calls across modules
-- manage execution order
-- adapt to UI / LLM constraints
+- coordinate calls across the core modules (`intent`, `memory`, `commerce`, `values`, `empowerment`)
+- manage execution order and context windows (`context.py`)
+- adapt to UI / LLM constraints via façade agents (`agents.py`) and autonomy guards (`guards.py`)
 
 They do **not**:
 - define objectives
 - score outcomes
 - override empowerment logic
 
-If logic appears here, it belongs in `src/`.
+If business logic appears here, it belongs in the relevant core module instead.
 
 ---
 
-## 5. UI / Demo Layer (`ui/`, `app.py`)
+## 5. Experience Layer (`web/`, `app.py`)
 
-This layer exists to:
-- demonstrate behavior
-- support hackathon UX
-- enable fast iteration
+- `web/` hosts the Next.js chat + empowerment dashboard
+- `app.py` documents how to orchestrate the services from a CLI/demo context
 
-It is **intentionally disposable**.
-
-The system remains valid even if this layer is removed.
+This layer can be replaced without changing platform semantics.
 
 ---
 
@@ -300,11 +291,10 @@ it is **subordinated to human intent**.
 
 ## 10. Summary
 
-- `src/` defines cognition  
-- `empowerment/` defines ethics and optimization  
-- `memory/` enables agency  
-- `agents/` orchestrate  
-- `ui/` demonstrates  
+- `modules/intent`, `modules/memory`, `modules/commerce`, `modules/empowerment`, `modules/values`, `modules/mcp`, `modules/attribution`, and `modules/evaluation` define the cognition and measurement core.
+- `shared/` provides infrastructure (config, db, LLM clients, transformers).
+- `modules/conversation` orchestrates the core via thin agents and guards.
+- `api/` + `web/` + `demos/` demonstrate the system without redefining objectives.
 
 Everything else is implementation detail.
 

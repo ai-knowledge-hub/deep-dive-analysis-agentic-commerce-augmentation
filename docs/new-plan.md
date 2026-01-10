@@ -12,31 +12,31 @@
 | Keywords → Products | Gemini values dialogue (multi-turn) |
 | JSON file memory | SQLite (sessions, users, goals, episodes) + vector sidecars |
 | Static scoring | Gemini product reasoning + empowerment scoring |
-| Gradio forms | Next.js chat UI + empowerment dashboard |
+| Legacy forms | Next.js chat UI + empowerment dashboard |
 
 ## 3. Phase Plan
 
 ### Phase 1 – Gemini Foundation (Week 1)
 1. **Client Module**
-   - `gemini/__init__.py` exports high-level helpers.
-   - `llm/clients/gemini.py` (new) uses Google GenAI SDK with ADC or `GEMINI_API_KEY`.
-   - Retry logic + model priority (`GEMINI_MODEL`, fallback list).
+   - `shared/llm/clients/gemini.py` uses the Google GenAI SDK with ADC or `GEMINI_API_KEY`.
+   - `shared/llm/gateway.py` exposes provider-agnostic helpers with retry + model priority (`GEMINI_MODEL`, fallback list).
+   - `shared/llm/clients/openrouter.py` routes to OpenRouter for cost-sensitive work.
 2. **Prompts & Tools (model-agnostic)**
-   - `llm/prompts.py`: values clarification, product reasoning, impulse guardian, reflection, intent classifier.
-   - `llm/tools.py`: MCP-aligned tool schemas (`product_search`, `compare`, `assess_empowerment`, `generate_reflection`) + execution helpers.
+   - `shared/llm/prompts.py`: values clarification, product reasoning, impulse guardian, reflection, intent classifier.
+   - `shared/llm/tools.py`: MCP-aligned tool schemas + execution helpers (now backed by `modules/mcp/`).
 3. **SQLite Data Layer**
-   - `db/schema.sql`, `db/connection.py`, and repositories for sessions/goals/turns/episodes/recommendations/semantic memory.
+   - `shared/db/schema.sql`, `shared/db/connection.py`, and repositories in `modules/memory/repositories/` for sessions/goals/turns/episodes/recommendations/semantic memory.
    - Semantic memory moves from JSON to SQLite; add future-ready `embedding` columns.
 4. **Dependencies & Config**
    - `requirements.txt` / `pyproject.toml`: add `google-genai`, `google-auth`.
    - `.env.example`: `LLM_PROVIDER`, Gemini keys/models, DB path, `FRONTEND_URL`.
 
 ### Phase 2 – Values Agent & Intelligence (Week 2)
-1. `gemini/values_agent.py`: WOW feature for goal clarification.
-2. `gemini/intent_classifier.py`: hybrid keywords + Gemini semantic fallback (modifies `src/intent/classifier.py`).
-3. `gemini/product_reasoner.py`: explains alignment/tradeoffs/confidence.
-4. `api/routes/conversation.py` + `api/main.py`: start/continue/goal/recommend/reflect endpoints, CORS for Next.js.
-5. **LLM Gateway:** expose `llm.gateway` so orchestration depends on protocol, not provider (DONE).
+1. `modules/values/agent.py`: WOW feature for goal clarification.
+2. `modules/intent/llm_classifier.py`: hybrid keywords + Gemini semantic fallback (wraps `modules/intent/classifier.py`).
+3. `modules/empowerment/llm_reasoner.py`: explains alignment/tradeoffs/confidence.
+4. `api/routes/conversation.py` + `modules/conversation/*`: start/continue/goal/recommend/reflect endpoints, CORS for Next.js.
+5. **LLM Gateway:** expose `shared.llm.gateway` so orchestration depends on protocol, not provider (DONE).
 
 ### Phase 3 – Experience Layer (Week 3)
 1. **Next.js App (`web/`)**
@@ -45,7 +45,7 @@
    - Empowerment UI: World A vs World B comparison, empowerment gauge, reflection panel.
    - Client libs (`lib/api.ts`, `types.ts`).
 2. **Frontend Strategy**
-   - Prioritize Next.js; Day 5 pivot to enhanced Gradio (`demos/gradio/app.py`) if blocked (ChatInterface, goal sidebar, World A vs B panel).
+   - Prioritize Next.js chat/dashboard and keep scope tight (no secondary UI).
 
 ### Phase 4 – Polish & Demo (Week 4)
 1. **Demo Scenarios**
@@ -55,7 +55,7 @@
 2. **Deployment**
    - Backend on Railway (`uvicorn api.main:app`).
    - Frontend on Vercel (set `NEXT_PUBLIC_API_URL`).
-   - HF Spaces fallback (Gradio demo).
+   - (Removed) HF Spaces fallback; focus energy on the Next.js experience.
 
 ### Phase 5 – Submission (Week 5)
 1. 3-minute demo video walking through scenarios.
@@ -65,25 +65,24 @@
 
 | File / Directory | Purpose | Status |
 | --- | --- | --- |
-| `gemini/__init__.py` | Module entry | ✅ |
-| `llm/clients/gemini.py` | Gemini gateway implementation | ✅ |
-| `llm/prompts.py` & `llm/tools.py` | Model-agnostic prompts + tools | ✅ |
-| `gemini/values_agent.py` | Values dialogue | ⏳ |
-| `gemini/product_reasoner.py` | Alignment explanations | ⏳ |
-| `gemini/intent_classifier.py` | Semantic classification | ⏳ |
-| `db/schema.sql`, `db/connection.py`, `db/repositories/*` | SQLite backbone | ✅ |
-| `api/routes/conversation.py` | Conversation endpoints | ✅ |
-| `web/` Next.js app | Frontend | ⏳ |
-| `src/intent/classifier.py` | Hybrid classification | ⏳ |
-| `.env.example` | Gemini/DB config, `LLM_PROVIDER` | ✅ |
-| `requirements.txt` | Add `google-genai` | ✅ |
+| `shared/llm/clients/gemini.py` | Gemini gateway implementation | ✅ |
+| `shared/llm/prompts.py` & `shared/llm/tools.py` | Model-agnostic prompts + tools | ✅ |
+| `modules/values/agent.py` & `modules/values/domain.py` | Values dialogue | ✅ |
+| `modules/empowerment/llm_reasoner.py` | Alignment explanations | ✅ |
+| `modules/intent/llm_classifier.py` | Semantic classification | ✅ |
+| `shared/db/schema.sql`, `shared/db/connection.py`, `modules/memory/repositories/*` | SQLite backbone | ✅ |
+| `modules/conversation/*`, `api/routes/conversation.py` | Conversation orchestration & endpoints | ✅ |
+| `modules/mcp/*` & `shared/llm/tools.py` | MCP tooling | ✅ |
+| `web/` Next.js app | Frontend | ✅ (chat + empowerment UI) |
+| `.env.example` | Gemini/OpenRouter config, DB path | ✅ |
+| `requirements.txt` | Add `google-genai`, `google-auth`, `openrouter` deps | ✅ |
 
 ## 5. Risk Mitigation
 
 | Risk | Mitigation |
 | --- | --- |
 | Gemini rate limits | Exponential backoff, caching classifiers, hybrid routing with cheaper models. |
-| Next.js timeline | Day 5 pivot plan to upgraded Gradio demo. |
+| Next.js timeline | Single-track delivery (no alternate UI pivot). |
 | SQLite concurrency | `check_same_thread=False`, WAL mode. |
 | Free-tier limits | HF Spaces fallback, OpenRouter for low-cost tasks. |
 

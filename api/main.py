@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from config import env as _env  # noqa: F401  # ensure dotenv is loaded early
+
 try:
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware

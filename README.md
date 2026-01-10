@@ -47,15 +47,11 @@ Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performic
 ├── app.py                    # Demo entrypoint
 ├── vision.md                 # High-level platform vision
 │
-├── core/                     # Canonical schemas & transformers (vendor-agnostic)
-├── adapters/                 # Shopify + mock feed adapters
-├── src/                      # Legacy core logic (intent, memory, empowerment, MCP)
-├── agents/                   # Façade agents (orchestration only)
-├── attribution/              # AI-aware measurement scaffolding
-├── evaluation/               # Representation A/B testing harness
+├── modules/                  # Feature modules (commerce, intent, memory, empowerment, values, conversation, mcp, attribution, evaluation)
+├── shared/                   # Shared infrastructure (config, db, llm clients, transformers)
 ├── api/                      # Thin FastAPI interface
-├── demos/                    # Gemini/ChatGPT/Gradio demos
-├── ui/                       # Demo UI components
+├── demos/                    # Sample empowerment journeys and fixtures
+├── web/                      # Next.js chat + empowerment dashboard
 ├── data/                     # Empowerment catalog + fixtures
 └── docs/                     # Architecture & design documentation
 ```
@@ -69,59 +65,84 @@ Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performic
 python app.py
 ```
 
-### Gradio Demo
+### Next.js UI
 
 ```bash
-cp .env.example .env   # configure CATALOG_SOURCE and credentials
-uv venv venv && source venv/bin/activate
-uv pip install -r requirements.txt
-python -m demos.gradio.app
+cd web
+cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL if backend is remote
+pnpm install
+pnpm dev
 ```
 
-The interface surfaces clarifications/guardrails so you can see how data
-confidence affects recommendations. Change `CATALOG_SOURCE` to switch between
-mock, Shopify, Google Shopping, or Google Merchant feeds.
+The chat experience consumes the FastAPI routes (`NEXT_PUBLIC_API_URL` defaults to `http://localhost:8000`).
 
 ### FastAPI Surface
 
 ```bash
-export CATALOG_SOURCE=google_merchant
-export GOOGLE_MERCHANT_FEED_PATH=/absolute/path/to/google_merchant_feed.json  # required when using google_merchant
-uvicorn api.main:app --reload --port 8000
-```
-
-Check `http://localhost:8000/products/search?query=workspace` to verify the feed.
-If you don’t have Shopify or Google credentials/feeds yet, keep
-`CATALOG_SOURCE=mock` so the API/Gradio demo can run with the bundled fixture.
-
-### Gradio Demo
-
-```bash
-cp .env.example .env   # set CATALOG_SOURCE, Shopify/Google credentials as needed
-uv venv venv && source venv/bin/activate
-uv pip install -r requirements.txt
-python -m demos.gradio.app
-```
-
-The UI displays clarifications and guardrail status so you can see how data quality
-affects the empowerment objective. Switch `CATALOG_SOURCE` (mock, shopify,
-google_shopping, google_merchant) via `.env` to test each feed.
-
-### FastAPI Surface
-
-```bash
-export CATALOG_SOURCE=google_merchant
-export GOOGLE_MERCHANT_FEED_PATH=/absolute/path/to/google_merchant_feed.json
 uvicorn api.main:app --reload
 ```
+The backend automatically loads `.env.local` / `.env`, so set environment-specific values there. For example:
+
+- `.env.local`: `CATALOG_SOURCE=mock`, `LLM_PROVIDER=openrouter`, `DATABASE_PATH=./tmp/local.db`.
+- `.env.dev`: `CATALOG_SOURCE=google_merchant`, `LLM_PROVIDER=gemini`, `GOOGLE_MERCHANT_FEED_PATH=...`.
+
+Switch catalog sources by editing the env file instead of exporting variables manually.
 
 Try `http://localhost:8000/products/search?query=workspace` to verify the feed.
 
 ### Catalog Sources
 
 The platform loads products via adapters. Set `CATALOG_SOURCE` to choose the
-source (`mock`, `shopify`, `google_shopping`). When using Shopify, provide
-`SHOPIFY_DOMAIN` and `SHOPIFY_TOKEN` in your environment (see `.env.example`).
+source (`mock`, `shopify`, `google_shopping`, `google_merchant`). When using Shopify, provide
+`SHOPIFY_DOMAIN` and `SHOPIFY_TOKEN` in your environment (see `.env.example`). For Google Merchant, supply `GOOGLE_MERCHANT_FEED_PATH`.
+
+### Environment Strategy
+
+- `.env.local`: Local development (mock catalog, SQLite in `./tmp`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`). The backend loads this automatically.
+- `.env.dev` or managed secrets: Preview deployments (e.g., Railway backend) using `CATALOG_SOURCE=google_merchant`, `LLM_PROVIDER=gemini`, limited `GOOGLE_API_KEY`.
+- Production secrets: Same as dev but with production feeds, telemetry, and prod Gemini credentials.
+- When using OpenRouter locally, define `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optionally `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` so completions identify your app.
+
+Copy the relevant section from `.env.example` into `.env.local` (or `.env` for dev/prod). The app auto-loads it; you can still override with `export` if needed.
+
+
+## Testing
+
+```bash
+make test   # (falls back to python3 -m pytest)
+```
+
+The suite exercises the modular monolith (commerce/intent/memory/values/empowerment modules), MCP tooling, and the FastAPI conversation routes (including clarification workflow and empowerment reasoning). Frontend/Next.js tests are deferred until the UI stabilizes; for now, keep visual verification in the web app.
+
+### Continuous Integration
+
+Use the Makefile targets in your CI pipeline so local and remote runs stay in sync. For example, a GitHub Actions workflow:
+
+```yaml
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install -r requirements.txt ruff
+      - name: Lint
+        run: make lint
+      - name: Test
+        run: make test
+```
+
+Add additional steps (e.g., `make run-frontend` for smoke tests) as needed for dev/prod branches. Remember to configure secrets for Gemini/OpenRouter keys in the workflow if you extend tests that hit live providers.
 
 ---
 

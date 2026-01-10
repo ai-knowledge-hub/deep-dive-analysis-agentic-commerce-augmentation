@@ -106,12 +106,12 @@ We're not waiting for regulation. We're not waiting for platforms to change. We'
 
 | Concept from Manifesto | Implementation in This Repo |
 |------------------------|----------------------------|
-| Explicit Goals (not inferred interests) | `src/intent/` — Intent clarification before commerce |
-| Consent Gates | `src/empowerment/alienation.py` — Detects autonomy erosion |
-| Constraint Checks | `src/empowerment/optimizer.py` — Agency-first ranking |
-| Dual Reward Signal (agency) | `src/empowerment/goal_alignment.py` + metrics |
-| Memory enables agency | `src/memory/` — Three-tier memory system |
-| Reflection is mandatory | `src/empowerment/reflection.py` — Learning loop closure |
+| Explicit Goals (not inferred interests) | `modules/intent/` — Intent clarification before commerce |
+| Consent Gates | `modules/empowerment/alienation.py` — Detects autonomy erosion |
+| Constraint Checks | `modules/empowerment/optimizer.py` — Agency-first ranking |
+| Dual Reward Signal (agency) | `modules/empowerment/goal_alignment.py` + metrics |
+| Memory enables agency | `modules/memory/` — Three-tier memory system |
+| Reflection is mandatory | `modules/empowerment/reflection.py` — Learning loop closure |
 
 ---
 

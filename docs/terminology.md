@@ -39,7 +39,7 @@ AIS specifies:
 Implemented primarily in:
 
 ```
-src/empowerment/
+modules/empowerment/
 ```
 
 AIS replaces traditional engagement or conversion optimization.
@@ -60,7 +60,7 @@ Unlike traditional intent classification, CCIA:
 **In Code**
 
 ```
-src/intent/
+modules/intent/
 ```
 
 ---
@@ -111,7 +111,7 @@ Alienation detection is a **negative constraint** on optimization.
 **In Code**
 
 ```
-src/empowerment/alienation.py
+modules/empowerment/alienation.py
 ```
 
 ---

@@ -5,7 +5,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     APIRouter = None  # type: ignore
 
-from src.products import search as product_search
+from modules.commerce import search as product_search
 
 if APIRouter:
     router = APIRouter(prefix="/products", tags=["products"])

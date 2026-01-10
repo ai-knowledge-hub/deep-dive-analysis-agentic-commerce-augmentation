@@ -8,14 +8,17 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from agents.intent_agent import IntentAgent
-from agents.commerce_agent import CommerceAgent
-from agents.reflection_agent import ReflectionAgent
-from agents.autonomy_guard_agent import AutonomyGuardAgent
-from agents.explain_agent import ExplainAgent
-from src.memory.session_manager import SessionManager
-from llm.agents.values import ValuesAgent, ClarificationState
-from llm.agents.product_reasoner import reason_about_products
+from modules.conversation.agents import (
+    IntentAgent,
+    CommerceAgent,
+    ReflectionAgent,
+    ExplainAgent,
+)
+from modules.conversation.guards import AutonomyGuardAgent
+from modules.memory.session_manager import SessionManager
+from modules.values.agent import ValuesAgent
+from modules.values.domain import ClarificationState
+from modules.conversation.context import context_for
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
@@ -79,7 +82,9 @@ def _process_message(
 
     manager.record_turn("user", message, metadata=metadata or {})
 
-    clarification_state, clarification_reply = _handle_values_dialogue(manager, message, metadata)
+    clarification_state, clarification_reply = _handle_values_dialogue(
+        manager, message, metadata
+    )
     if clarification_reply:
         return _session_response(
             manager,
@@ -87,12 +92,15 @@ def _process_message(
             values_state=clarification_state.to_dict() if clarification_state else None,
         )
 
-    intent = INTENT_AGENT.detect_intent(message)
+    _, context_snapshot = context_for(manager)
+
+    intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
-    plan = COMMERCE_AGENT.build_plan(intent, goals=goals)
-    plan["products"] = reason_about_products(goals, plan.get("products", []))
-    product_explanations = _format_reasoning(plan.get("products", []))
+    plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
+    product_explanations = plan.get("product_explanations")
+    if not product_explanations:
+        product_explanations = _format_reasoning(plan.get("products", []))
     clarifications = plan.get("clarifications", [])
     guard = AUTONOMY_GUARD.check(
         rationale="; ".join(clarifications),
@@ -133,7 +141,9 @@ def _process_message(
         explanation=explanation,
         reflection=reflection,
         product_explanations=product_explanations,
-        values_state=clarification_state.to_dict() if clarification_state else manager.get_state().get("clarification_state"),
+        values_state=clarification_state.to_dict()
+        if clarification_state
+        else manager.get_state().get("clarification_state"),
     )
 
 
@@ -155,7 +165,9 @@ def _handle_values_dialogue(
     manager.update_state(clarification_state=state.to_dict())
     latest_turn = state.turns[-1] if state.turns else None
     if not state.ready_for_products and latest_turn and latest_turn.speaker == "agent":
-        manager.record_turn("agent", latest_turn.content, metadata={"type": "clarification"})
+        manager.record_turn(
+            "agent", latest_turn.content, metadata={"type": "clarification"}
+        )
         return state, latest_turn.content
 
     if state.ready_for_products:
@@ -216,13 +228,17 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
 
 
 @router.get("/{session_id}")
-def get_session_snapshot(session_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+def get_session_snapshot(
+    session_id: str, user_id: Optional[str] = None
+) -> Dict[str, Any]:
     manager = SessionManager(session_id=session_id, user_id=user_id)
     return _session_response(manager)
 
 
 @router.post("/{session_id}/goals")
-def ingest_clarified_goals(session_id: str, request: ClarifiedGoalsRequest) -> Dict[str, Any]:
+def ingest_clarified_goals(
+    session_id: str, request: ClarifiedGoalsRequest
+) -> Dict[str, Any]:
     if not request.goals:
         raise HTTPException(status_code=400, detail="At least one goal is required.")
 

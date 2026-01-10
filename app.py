@@ -1,6 +1,6 @@
 """Entrypoint for running demo chat surfaces (CLI placeholder).
 
-This file would normally wire Streamlit, Gradio, or Gemini surfaces into the
+This file would normally wire Streamlit, Next.js, or Gemini surfaces into the
 core platform. For now it just documents the flow so each layer can be mocked
 independently during development.
 """
@@ -10,9 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from agents.intent_agent import IntentAgent
-from agents.commerce_agent import CommerceAgent
-from agents.reflection_agent import ReflectionAgent
+from config import env as _env  # noqa: F401  # ensure dotenv loaded for CLI runs
+from modules.conversation.agents import IntentAgent, CommerceAgent, ReflectionAgent
 
 Surface = Literal["hackathon", "gpt", "gemini"]
 
@@ -31,7 +30,9 @@ class DemoRuntime:
 
         intent = intent_agent.detect_intent("Need a better workspace setup")
         print("Intent:", intent)
-        initial_goals = [intent["label"].replace("_", " ")] if intent.get("label") else []
+        initial_goals = (
+            [intent["label"].replace("_", " ")] if intent.get("label") else []
+        )
         plan = commerce_agent.build_plan(intent, goals=initial_goals)
         print("Plan:", plan)
         reflection = reflection_agent.reflect(plan)

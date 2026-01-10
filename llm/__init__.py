@@ -1,8 +1,11 @@
-"""Model-agnostic LLM utilities (prompts, tools, clients)."""
+"""Re-export from shared.llm for backward compatibility.
+
+DEPRECATED: Import from shared.llm instead.
+"""
 
 from __future__ import annotations
 
-from llm.gateway import (
+from shared.llm import (
     chat,
     generate,
     generate_with_tools,

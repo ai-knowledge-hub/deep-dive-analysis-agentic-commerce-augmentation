@@ -45,7 +45,7 @@ These metrics ensure the system serves human flourishing, not just business outc
 
 **What it measures:** Whether recommendations and outcomes align with what the user said they wanted to achieve.
 
-**Implementation:** `src/empowerment/goal_alignment.py`
+**Implementation:** `modules/empowerment/goal_alignment.py`
 
 ```python
 class GoalAlignmentResult:
@@ -130,7 +130,7 @@ H = -Σ p(category) × log₂(p(category))
 | Fatigue consideration | Does it account for user energy levels? |
 | Health alignment | Does it align with stated health goals? |
 
-**Implementation:** `src/empowerment/schemas.py`
+**Implementation:** `modules/empowerment/schemas.py`
 
 ---
 
@@ -150,7 +150,7 @@ H = -Σ p(category) × log₂(p(category))
 - Rapid switching between options = possible overwhelm
 - Explicit "I don't understand" signals
 
-**Implementation:** `src/empowerment/alienation.py` (detects "overwhelmed" and "confused" states)
+**Implementation:** `modules/empowerment/alienation.py` (detects "overwhelmed" and "confused" states)
 
 ---
 
@@ -219,13 +219,13 @@ If agency is high but performance is low:
 
 | Metric | Primary Implementation |
 |--------|----------------------|
-| Goal Consistency | `src/empowerment/goal_alignment.py` |
-| Exploration Diversity | `src/empowerment/optimizer.py` |
-| Regret Proxy | `src/empowerment/reflection.py` |
-| Trust Proxy | `src/memory/episodic.py` |
-| Physical Agency | `src/empowerment/schemas.py` |
-| Cognitive Relief | `src/empowerment/alienation.py` |
-| Wellbeing Alignment | `src/empowerment/schemas.py` |
+| Goal Consistency | `modules/empowerment/goal_alignment.py` |
+| Exploration Diversity | `modules/empowerment/optimizer.py` |
+| Regret Proxy | `modules/empowerment/reflection.py` |
+| Trust Proxy | `modules/memory/episodic.py` |
+| Physical Agency | `modules/empowerment/schemas.py` |
+| Cognitive Relief | `modules/empowerment/alienation.py` |
+| Wellbeing Alignment | `modules/empowerment/schemas.py` |
 
 ---
 

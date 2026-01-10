@@ -76,14 +76,14 @@ Success is defined by empowerment metrics, not clicks.
 
 | Sequence Step | Implementation |
 |---------------|----------------|
-| Clarify contextual intent | `src/intent/classifier.py` |
-| Retrieve user memory | `src/memory/semantic.py`, `src/memory/working.py` |
-| Evaluate goal alignment | `src/empowerment/goal_alignment.py` |
-| Search products | `src/products/search.py` |
-| Score empowerment | `src/empowerment/optimizer.py` |
-| Check alienation risk | `src/empowerment/alienation.py` |
-| Store reflection | `src/memory/episodic.py` |
-| Generate explanation | `agents/explain_agent.py` |
+| Clarify contextual intent | `modules/intent/classifier.py` |
+| Retrieve user memory | `modules/memory/semantic.py`, `modules/memory/working.py` |
+| Evaluate goal alignment | `modules/empowerment/goal_alignment.py` |
+| Search products | `modules/commerce/search.py` |
+| Score empowerment | `modules/empowerment/optimizer.py` |
+| Check alienation risk | `modules/empowerment/alienation.py` |
+| Store reflection | `modules/memory/episodic.py` |
+| Generate explanation | `modules/conversation/agents.py` (`ExplainAgent`) |
 
 ---
 

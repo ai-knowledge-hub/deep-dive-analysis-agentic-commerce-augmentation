@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.mcp.server import dispatch
+from modules.mcp.server import dispatch
 
 # =============================================================================
 # TOOL DEFINITIONS
@@ -122,7 +122,10 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict:
     tool_mapping = {
         "product_search": ("product_search", lambda a: (a["query"],)),
         "product_compare": ("product_compare", lambda a: (a["product_ids"],)),
-        "assess_empowerment": ("assess_empowerment", lambda a: (a["goals"], a["product_ids"])),
+        "assess_empowerment": (
+            "assess_empowerment",
+            lambda a: (a["goals"], a["product_ids"]),
+        ),
         "generate_reflection": ("generate_reflection", lambda a: (a["entries"],)),
     }
 

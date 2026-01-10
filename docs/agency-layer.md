@@ -20,10 +20,10 @@ This document specifies the **minimal layer** that changes the trajectory from e
 
 | Component | Location | Behavior |
 |-----------|----------|----------|
-| Intent Classifier | `src/intent/classifier.py` | Classifies user intent into goal-oriented categories |
-| Intent Taxonomy | `src/intent/taxonomy.py` | Defines explicit goal types (learning, health, career, etc.) |
-| Semantic Memory | `src/memory/semantic.py` | Stores long-term goals and values |
-| Goal Alignment | `src/empowerment/goal_alignment.py` | Scores recommendations against declared goals |
+| Intent Classifier | `modules/intent/classifier.py` | Classifies user intent into goal-oriented categories |
+| Intent Taxonomy | `modules/intent/taxonomy.py` | Defines explicit goal types (learning, health, career, etc.) |
+| Semantic Memory | `modules/memory/semantic.py` | Stores long-term goals and values |
+| Goal Alignment | `modules/empowerment/goal_alignment.py` | Scores recommendations against declared goals |
 
 #### Interface Contract
 
@@ -58,9 +58,9 @@ class Recommendation:
 
 | Component | Location | Behavior |
 |-----------|----------|----------|
-| Working Memory | `src/memory/working.py` | Session-scoped only; no persistence without consent |
-| Episodic Memory | `src/memory/episodic.py` | Reflections stored only after explicit action |
-| MCP Tools | `src/mcp/tools/` | Each tool documents what data it accesses |
+| Working Memory | `modules/memory/working.py` | Session-scoped only; no persistence without consent |
+| Episodic Memory | `modules/memory/episodic.py` | Reflections stored only after explicit action |
+| MCP Tools | `modules/mcp/tools/` | Each tool documents what data it accesses |
 
 #### Interface Contract
 
@@ -94,9 +94,9 @@ class RecommendationExplanation:
 
 | Component | Location | Behavior |
 |-----------|----------|----------|
-| Alienation Detector | `src/empowerment/alienation.py` | Detects manipulation signals |
+| Alienation Detector | `modules/empowerment/alienation.py` | Detects manipulation signals |
 | Autonomy Guard Agent | `agents/autonomy_guard_agent.py` | Orchestrates constraint checking |
-| Empowerment Optimizer | `src/empowerment/optimizer.py` | Applies constraints before ranking |
+| Empowerment Optimizer | `modules/empowerment/optimizer.py` | Applies constraints before ranking |
 
 #### Constraint Catalog
 
@@ -141,10 +141,10 @@ class ActionGate:
 
 | Component | Location | Behavior |
 |-----------|----------|----------|
-| Goal Alignment | `src/empowerment/goal_alignment.py` | Measures goal-consistency |
-| Reflection System | `src/empowerment/reflection.py` | Captures regret signals |
-| Empowerment Schemas | `src/empowerment/schemas.py` | Defines agency metrics |
-| Empowerment Optimizer | `src/empowerment/optimizer.py` | Balances dual objectives |
+| Goal Alignment | `modules/empowerment/goal_alignment.py` | Measures goal-consistency |
+| Reflection System | `modules/empowerment/reflection.py` | Captures regret signals |
+| Empowerment Schemas | `modules/empowerment/schemas.py` | Defines agency metrics |
+| Empowerment Optimizer | `modules/empowerment/optimizer.py` | Balances dual objectives |
 
 #### The Dual Dashboard
 
@@ -197,42 +197,42 @@ The agency layer is not a separate module bolted on top. It is woven through the
 ┌─────────────────────────────────────────────────────────┐
 | GUARDRAIL 1: Explicit Goals                              │
 │ Intent clarification before any commerce action          │
-│ src/intent/ + src/memory/semantic.py                     │
+│ modules/intent/ + modules/memory/semantic.py                     │
 └─────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │ GUARDRAIL 2: Consent Gates                               │
 │ User controls what is remembered and personalized        │
-│ src/memory/working.py + src/memory/episodic.py           │
+│ modules/memory/working.py + modules/memory/episodic.py           │
 └─────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │ GUARDRAIL 3: Constraint Checks                           │
 │ Hard limits before any action executes                   │
-│ src/empowerment/alienation.py                            │
+│ modules/empowerment/alienation.py                            │
 └─────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │ GUARDRAIL 4: Dual Reward Signal                          │
 │ Optimize for agency AND performance                      │
-│ src/empowerment/goal_alignment.py + optimizer.py         │
+│ modules/empowerment/goal_alignment.py + optimizer.py         │
 └─────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    Commerce Action                       │
 │ Products as capability-enabling tools, not desire objects│
-│ src/products/                                            │
+│ modules/commerce/                                            │
 └─────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │ MANDATORY: Reflection                                    │
 │ Learning loop closure—did this actually help?            │
-│ src/empowerment/reflection.py                            │
+│ modules/empowerment/reflection.py                            │
 └─────────────────────────────────────────────────────────┘
 ```
 
