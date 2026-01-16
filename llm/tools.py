@@ -103,12 +103,79 @@ GENERATE_REFLECTION_TOOL = {
     },
 }
 
+WEB_FETCH_TOOL = {
+    "name": "web_fetch",
+    "description": (
+        "Fetch a web page from an allowlisted host for research/verification. "
+        "Returns truncated text with content type metadata."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "HTTP/HTTPS URL to fetch (must be on allowlist).",
+            },
+            "max_chars": {
+                "type": "integer",
+                "description": "Max characters to return (default 5000).",
+            },
+        },
+        "required": ["url"],
+    },
+}
+
+IMAGE_ANALYZE_TOOL = {
+    "name": "image_analyze",
+    "description": "Analyze an image for product-relevant attributes (stub until vision is wired).",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "image_url": {"type": "string", "description": "Public URL to the image."},
+            "image_base64": {
+                "type": "string",
+                "description": "Base64-encoded image data.",
+            },
+        },
+        "required": [],
+    },
+}
+
+MEMORY_WRITE_TOOL = {
+    "name": "memory_write",
+    "description": "Write entries to semantic memory with consent-aware controls.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "key": {
+                "type": "string",
+                "description": "Semantic memory key (e.g., goals).",
+            },
+            "value": {"type": "string", "description": "Single value to append."},
+            "values": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Values to set when mode='set'.",
+            },
+            "mode": {
+                "type": "string",
+                "description": "Write mode: append or set.",
+                "enum": ["append", "set"],
+            },
+        },
+        "required": ["key"],
+    },
+}
+
 
 ALL_TOOLS = [
     PRODUCT_SEARCH_TOOL,
     PRODUCT_COMPARE_TOOL,
     ASSESS_EMPOWERMENT_TOOL,
     GENERATE_REFLECTION_TOOL,
+    WEB_FETCH_TOOL,
+    IMAGE_ANALYZE_TOOL,
+    MEMORY_WRITE_TOOL,
 ]
 
 
@@ -127,6 +194,20 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict:
             lambda a: (a["goals"], a["product_ids"]),
         ),
         "generate_reflection": ("generate_reflection", lambda a: (a["entries"],)),
+        "web_fetch": ("web_fetch", lambda a: (a["url"], a.get("max_chars", 5000))),
+        "image_analyze": (
+            "image_analyze",
+            lambda a: (a.get("image_url"), a.get("image_base64")),
+        ),
+        "memory_write": (
+            "memory_write",
+            lambda a: (
+                a["key"],
+                a.get("values"),
+                a.get("value"),
+                a.get("mode", "append"),
+            ),
+        ),
     }
 
     if name not in tool_mapping:

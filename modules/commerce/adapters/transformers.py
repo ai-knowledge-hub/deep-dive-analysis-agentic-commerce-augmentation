@@ -70,6 +70,7 @@ def raw_product_to_product(raw: RawProduct) -> Product:
         media=raw.images,
         empowerment_scores=_extract_empowerment_scores(raw),
         capabilities_enabled=raw.attributes.get("capabilities", []),
+        capability_embedding=raw.attributes.get("capability_embedding"),
         source=raw.source,
         merchant_name=raw.merchant_name,
         offer_url=raw.offer_url,

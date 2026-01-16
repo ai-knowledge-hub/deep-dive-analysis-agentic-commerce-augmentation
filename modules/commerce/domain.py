@@ -66,6 +66,7 @@ class Product:
     description: str = ""
     empowerment_scores: Dict[str, float] = field(default_factory=dict)
     capabilities_enabled: List[str] = field(default_factory=list)
+    capability_embedding: List[float] | None = None
     brand: str | None = None
     category: str | None = None
     availability: str = "unknown"

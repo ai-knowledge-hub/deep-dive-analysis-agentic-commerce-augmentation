@@ -8,3 +8,8 @@ google-auth>=2.25.0
 google-genai>=0.1.0
 pytest>=9.0.0
 ruff>=0.5.6
+numpy>=1.24.0
+
+# Optional: Local embeddings fallback (no API needed)
+# Uncomment if you want offline embedding support
+# sentence-transformers>=2.2.0

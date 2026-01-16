@@ -1,172 +1,191 @@
-# Agentic Commerce Augmentation
+# World B: The Empowerment Commerce Engine
 
-**An empowerment-first commerce platform that optimizes for human flourishing, not clicks.**
+**AI shopping that optimizes for human flourishing, not clicks.**
 
-This repository implements [Contextual Commerce Optimization (CCO)](https://ai-news-hub.performics-labs.com/news/agentic-commerce-llm-shopping-revolution) — a paradigm where AI-driven commerce is subordinated to human intent, not the other way around.
-
-> Philosophy without code is commentary. This repo is the proof.
+> Google built the roads (UCP). OpenAI built the cars (Shopping Research). We built the compass that ensures you arrive where you actually want to go.
 
 ---
 
 ## The Fork
 
-The same AI machinery that can maximize compulsion can maximize empowerment. The technology doesn't choose. The objective function does.
+The same AI machinery that can maximize compulsion can maximize empowerment. The technology doesn't choose. **The objective function does.**
 
-This codebase builds **World B**: where marketing becomes genuine service, where systems that help you buy things are aligned with your interests, not just your impulses.
+This codebase builds **World B**: where AI commerce becomes genuine service, where systems that help you buy things are aligned with your interests, not just your impulses.
+
+| World A (Current Paradigm) | World B (What We Build) |
+|---------------------------|------------------------|
+| Optimize for clicks/conversion | Optimize for goal alignment |
+| Infer intent from behavior | Ask users what they want |
+| Products as desire objects | Products as capability tools |
+| Urgency, scarcity, FOMO | Honest tradeoffs, alternatives |
+| Track engagement | Measure empowerment |
+| Silent data collection | Explicit consent gates |
+| Funnel to purchase | Support "no purchase needed" |
 
 Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing)
 
 ---
 
-## Architecture
+## What This Is
+
+This repository implements **Contextual Commerce Optimization (CCO)** — a paradigm where AI-driven commerce is subordinated to human intent.
+
+We provide **the intelligence layer that transaction protocols don't define**:
 
 ```
-┌────────────────────────────────────────┐
-│ Research & Ethics Layer                │
-│ (CIT, AIS, Empowerment Theory)         │
-└────────────────────────────────────────┘
-              ↓
-┌────────────────────────────────────────┐
-│ Core Platform (CCO)                    │
-│ Memory · Intent · Products · MCP       │
-└────────────────────────────────────────┘
-              ↓
-┌────────────────────────────────────────┐
-│ Demo / Runtime Surfaces                │
-│ Hackathon · GPT App · Gemini App       │
-└────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│              AI Agents (Gemini, ChatGPT, Claude)            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│           THIS REPO: World B Intelligence Layer             │
+│                                                             │
+│   "Should this purchase happen?"                            │
+│   "Does it align with user's goals?"                        │
+│   "What alternatives exist?"                                │
+│   "Will they regret this?"                                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Commerce Protocols (UCP, ACP, Shopify, etc.)        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Key principle:** Only the Core Platform defines system behavior. Everything above it can be replaced without changing the system's meaning.
+**We are protocol-agnostic.** The empowerment layer works with Google's UCP, OpenAI's ACP, Shopify direct, or any future commerce protocol.
 
 ---
 
-## Repository Layout
+## Core Innovation: The Four Guardrails
+
+Every interaction passes through four checkpoints that distinguish World B from World A:
+
+| Guardrail | What It Does | Implementation |
+|-----------|--------------|----------------|
+| **Explicit Goals** | Ask what users want, don't infer from clicks | `modules/intent/`, `modules/values/` |
+| **Consent Gates** | Personalization is off until opted in | `modules/memory/` |
+| **Constraint Checks** | Hard limits on manipulation patterns | `modules/empowerment/alienation.py` |
+| **Dual Reward Signal** | Optimize for agency AND performance | `modules/empowerment/optimizer.py` |
+
+See [docs/agency-layer.md](docs/agency-layer.md) for the complete specification.
+
+---
+
+## Repository Structure
 
 ```
-├── app.py                    # Demo entrypoint
-├── vision.md                 # High-level platform vision
+├── modules/                  # Core feature modules
+│   ├── commerce/            # Product adapters, search, catalog
+│   ├── intent/              # Goal clarification, intent classification
+│   ├── memory/              # Working, episodic, semantic memory
+│   ├── empowerment/         # Goal alignment, alienation detection, optimizer
+│   ├── values/              # Values clarification agent
+│   ├── conversation/        # Orchestration, context management
+│   ├── mcp/                 # LLM-callable tools (MCP protocol)
+│   ├── attribution/         # Event tracking, conversion attribution
+│   └── evaluation/          # Empowerment metrics, A/B testing
 │
-├── modules/                  # Feature modules (commerce, intent, memory, empowerment, values, conversation, mcp, attribution, evaluation)
-├── shared/                   # Shared infrastructure (config, db, llm clients, transformers)
-├── api/                      # Thin FastAPI interface
-├── demos/                    # Sample empowerment journeys and fixtures
+├── shared/                   # Cross-cutting infrastructure
+│   ├── llm/                 # Gemini, OpenRouter clients + prompts
+│   ├── db/                  # SQLite schema + connection
+│   └── config/             # Environment configuration
+│
+├── api/                      # FastAPI routes
 ├── web/                      # Next.js chat + empowerment dashboard
-├── data/                     # Empowerment catalog + fixtures
-└── docs/                     # Architecture & design documentation
+├── data/                     # Product catalogs, intent taxonomy
+├── docs/                     # Architecture & design documentation
+└── tests/                    # Module + integration tests
 ```
+
+**Key principle:** Only `modules/` defines system behavior. Everything else can be replaced without changing what the system optimizes for.
 
 ---
 
 ## Quick Start
 
+### Backend (FastAPI)
+
 ```bash
-# Validate imports and run stub runtime
-python app.py
+# 1. Set up environment
+cp .env.example .env.local
+# Edit .env.local: set OPENROUTER_API_KEY for local dev
+
+# 2. Install dependencies
+uv sync
+
+# 3. Run
+uvicorn api.main:app --reload
 ```
 
-### Next.js UI
+### Frontend (Next.js)
 
 ```bash
 cd web
-cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL if backend is remote
-pnpm install
-pnpm dev
+cp .env.local.example .env.local
+pnpm install && pnpm dev
 ```
 
-The chat experience consumes the FastAPI routes (`NEXT_PUBLIC_API_URL` defaults to `http://localhost:8000`).
+Visit `http://localhost:3000` for the chat interface.
 
-### FastAPI Surface
+### Verify
 
 ```bash
-uvicorn api.main:app --reload
+# Test product search
+curl "http://localhost:8000/products/search?query=workspace"
+
+# Run test suite
+make test
 ```
-The backend automatically loads `.env.local` / `.env`, so set environment-specific values there. For example:
-
-- `.env.local`: `CATALOG_SOURCE=mock`, `LLM_PROVIDER=openrouter`, `DATABASE_PATH=./tmp/local.db`.
-- `.env.dev`: `CATALOG_SOURCE=google_merchant`, `LLM_PROVIDER=gemini`, `GOOGLE_MERCHANT_FEED_PATH=...`.
-
-Switch catalog sources by editing the env file instead of exporting variables manually.
-
-Try `http://localhost:8000/products/search?query=workspace` to verify the feed.
-
-### Catalog Sources
-
-The platform loads products via adapters. Set `CATALOG_SOURCE` to choose the
-source (`mock`, `shopify`, `google_shopping`, `google_merchant`). When using Shopify, provide
-`SHOPIFY_DOMAIN` and `SHOPIFY_TOKEN` in your environment (see `.env.example`). For Google Merchant, supply `GOOGLE_MERCHANT_FEED_PATH`.
-
-### Environment Strategy
-
-- `.env.local`: Local development (mock catalog, SQLite in `./tmp`, `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`). The backend loads this automatically.
-- `.env.dev` or managed secrets: Preview deployments (e.g., Railway backend) using `CATALOG_SOURCE=google_merchant`, `LLM_PROVIDER=gemini`, limited `GOOGLE_API_KEY`.
-- Production secrets: Same as dev but with production feeds, telemetry, and prod Gemini credentials.
-- When using OpenRouter locally, define `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optionally `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` so completions identify your app.
-
-Copy the relevant section from `.env.example` into `.env.local` (or `.env` for dev/prod). The app auto-loads it; you can still override with `export` if needed.
-
-
-## Testing
-
-```bash
-make test   # (falls back to python3 -m pytest)
-```
-
-The suite exercises the modular monolith (commerce/intent/memory/values/empowerment modules), MCP tooling, and the FastAPI conversation routes (including clarification workflow and empowerment reasoning). Frontend/Next.js tests are deferred until the UI stabilizes; for now, keep visual verification in the web app.
-
-### Continuous Integration
-
-Use the Makefile targets in your CI pipeline so local and remote runs stay in sync. For example, a GitHub Actions workflow:
-
-```yaml
-name: CI
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install deps
-        run: pip install -r requirements.txt ruff
-      - name: Lint
-        run: make lint
-      - name: Test
-        run: make test
-```
-
-Add additional steps (e.g., `make run-frontend` for smoke tests) as needed for dev/prod branches. Remember to configure secrets for Gemini/OpenRouter keys in the workflow if you extend tests that hit live providers.
 
 ---
 
 ## Documentation
 
+### Philosophy & Vision
+
 | Document | Purpose |
 |----------|---------|
-| [docs/manifesto.md](docs/manifesto.md) | Why this exists — World A vs World B |
-| [docs/architecture.md](docs/architecture.md) | How the system is built |
+| [docs/manifesto.md](docs/manifesto.md) | Why this exists — World A vs World B philosophy |
+| [docs/strategic-positioning.md](docs/strategic-positioning.md) | Market position, UCP/ACP integration, hackathon pitch |
+
+### Architecture & Design
+
+| Document | Purpose |
+|----------|---------|
+| [docs/architecture.md](docs/architecture.md) | System architecture and module responsibilities |
 | [docs/agency-layer.md](docs/agency-layer.md) | The four guardrails specification |
-| [docs/empowerment_metrics.md](docs/empowerment_metrics.md) | The dual dashboard — what we measure |
-| [docs/terminology.md](docs/terminology.md) | Precise definitions for all concepts |
+| [docs/terminology.md](docs/terminology.md) | Precise definitions (CCO, AIS, CCIA, etc.) |
 | [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
-| [docs/adapters.md](docs/adapters.md) | Shopify/Google adapter setup |
-| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product schema |
-| [docs/attribution.md](docs/attribution.md) | AI-aware attribution loop |
-| [docs/deployment.md](docs/deployment.md) | Local/HF/FastAPI deployment guide |
+
+### Technical Reference
+
+| Document | Purpose |
+|----------|---------|
+| [docs/empowerment_metrics.md](docs/empowerment_metrics.md) | Dual dashboard — what we measure |
+| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product data pipeline |
+| [docs/adapters.md](docs/adapters.md) | Shopify, Google Merchant adapter setup |
+| [docs/attribution.md](docs/attribution.md) | AI-aware conversion attribution |
+| [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
 ---
 
-## Core Concepts
+## Architectural Invariants
 
-| Concept | Definition |
-|---------|------------|
+These rules are **non-negotiable**. If any are violated, the system collapses back into persuasive AI:
+
+1. **Empowerment logic always outranks commerce logic**
+2. **Memory must exist** (even if minimal)
+3. **Agents orchestrate, modules decide**
+4. **Products are instruments, not objectives**
+5. **Reflection is mandatory feedback, not optional UX**
+
+---
+
+## Key Concepts
+
+| Term | Definition |
+|------|------------|
 | **CCO** | Contextual Commerce Optimization — the optimization paradigm |
 | **AIS** | Augmented Intentionality System — the governing constraints |
 | **CCIA** | Context-Conditioned Intent Activation — goal clarification |
@@ -177,17 +196,58 @@ See [docs/terminology.md](docs/terminology.md) for complete definitions.
 
 ---
 
-## Architectural Invariants
+## Environment Configuration
 
-These rules are non-negotiable:
+| Environment | Catalog | LLM Provider | Use Case |
+|-------------|---------|--------------|----------|
+| **Local** | `mock` | `openrouter` | Development without API costs |
+| **Dev** | `google_merchant` | `gemini` | Preview deployments |
+| **Prod** | `google_merchant` | `gemini` | Production with full telemetry |
 
-1. Empowerment logic always outranks commerce logic
-2. Memory must exist (even if minimal)
-3. Agents orchestrate, modules decide
-4. Products are instruments, not objectives
-5. Reflection is mandatory feedback, not optional UX
+Set `CATALOG_SOURCE` to choose: `mock`, `shopify`, `google_shopping`, or `google_merchant`.
 
-If any are violated, the system collapses back into persuasive AI.
+Copy `.env.example` to `.env.local` and adjust for your environment.
+
+---
+
+## Testing
+
+```bash
+make test          # Run full test suite
+make lint          # Check code style
+```
+
+The test suite covers module-level unit tests, MCP tool execution, conversation API routes, and clarification workflow integration.
+
+## Database Initialization
+
+SQLite is initialized automatically when `SessionManager` or any memory repository is used. The schema is loaded from `shared/db/schema.sql`.
+
+Manual helpers:
+
+```bash
+make db-init   # create/open DB and apply schema
+make db-reset  # delete local DB and re-init
+make db-path   # print current DB path
+```
+
+---
+
+## Strategic Position
+
+We are **the missing half of agentic commerce**.
+
+Google's UCP and OpenAI's ACP define *how* transactions flow. We define *whether* those transactions serve users.
+
+| What They Built | What We Built |
+|-----------------|---------------|
+| Transaction plumbing | **Objective function** |
+| Shopping Research | **Goal clarification** |
+| Checkout flow | **Empowerment scoring** |
+| Product discovery | **Alienation detection** |
+| Order management | **Reflection loops** |
+
+See [docs/strategic-positioning.md](docs/strategic-positioning.md) for complete competitive analysis and integration strategy.
 
 ---
 
@@ -195,15 +255,21 @@ If any are violated, the system collapses back into persuasive AI.
 
 This implementation operationalizes:
 
-- [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) — The manifesto for agentic marketing that serves human flourishing
-- **Computational Intentionality Theory (CIT)** — Framework treating AI advertising as a Turing-class machine whose objective function determines outcomes (paper forthcoming)
+- [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) — Manifesto for agentic marketing that serves human flourishing
+- **Computational Intentionality Theory (CIT)** — Framework treating AI advertising as a Turing-class machine whose objective function determines outcomes *(paper forthcoming)*
 
-### Google Merchant Center
+---
 
-To load Merchant Center feeds locally set `CATALOG_SOURCE=google_merchant` and
-point `GOOGLE_MERCHANT_FEED_PATH` to a JSON file containing feed entries (see
-`data/google_merchant_feed.json` for a sample). Each entry must include the
-standard Merchant Center fields (`id`, `title`, `description`, `price`,
-`availability`, etc.). The adapter validates required fields and converts them
-into canonical product representations with confidence metadata so downstream
-agents know the data originates from aggregated discovery surfaces.
+## Contributing
+
+This is an open-source project exploring ethical AI commerce. Contributions welcome.
+
+---
+
+## License
+
+Apache 2.0
+
+---
+
+> *Philosophy without code is commentary. This repo is the proof.*

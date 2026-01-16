@@ -19,6 +19,7 @@ from modules.memory.session_manager import SessionManager
 from modules.values.agent import ValuesAgent
 from modules.values.domain import ClarificationState
 from modules.conversation.context import context_for
+from modules.conversation.research import run_research
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
@@ -107,7 +108,17 @@ def _process_message(
         clarifications=clarifications,
         products=plan.get("products", []),
     )
-    explanation = EXPLAIN_AGENT.explain(plan.get("products", []))
+    blocked = guard.get("status") == "blocked"
+    if blocked:
+        plan["blocked"] = True
+        plan["products"] = []
+        plan["product_explanations"] = []
+        explanation = guard.get(
+            "summary",
+            "Recommendations paused due to constraint violations.",
+        )
+    else:
+        explanation = EXPLAIN_AGENT.explain(plan.get("products", []))
     reflection = REFLECTION_AGENT.reflect(plan)
 
     manager.record_turn(
@@ -120,6 +131,7 @@ def _process_message(
         empowering_score=(
             plan.get("empowerment", {}).get("goal_alignment", {}) or {}
         ).get("score"),
+        constraints_passed=not blocked,
         context={
             "query": plan.get("query"),
             "goal_alignment": plan.get("empowerment", {}).get("goal_alignment"),
@@ -133,11 +145,15 @@ def _process_message(
         last_empowerment=plan.get("empowerment"),
     )
 
+    research = _maybe_run_research(plan, goals, context_snapshot)
+
     return _session_response(
         manager,
         intent=intent,
         plan=plan,
+        research=research,
         guardrails=guard,
+        constraints=guard.get("constraints"),
         explanation=explanation,
         reflection=reflection,
         product_explanations=product_explanations,
@@ -192,6 +208,18 @@ def _format_reasoning(products: List[dict]) -> List[dict]:
             }
         )
     return explanations
+
+
+def _maybe_run_research(
+    plan: dict, goals: List[str], context_snapshot: str | None
+) -> dict | None:
+    products = plan.get("products", []) or []
+    data_quality = plan.get("data_quality", {})
+    avg_conf = float(data_quality.get("average_confidence", 0.0) or 0.0)
+    if products and avg_conf >= 0.6:
+        return None
+    query = plan.get("query") or "catalog research"
+    return run_research(query=query, goals=goals, context=context_snapshot)
 
 
 @router.post("/start")

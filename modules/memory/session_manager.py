@@ -15,6 +15,7 @@ from modules.memory.repositories import turns as turns_repo
 from modules.memory.repositories import users as users_repo
 from modules.memory.domain import SessionSnapshot
 from modules.memory.semantic import SemanticMemory
+from shared.llm.gateway import embed
 
 
 def _normalize_goal_text(goal: str | None) -> str | None:
@@ -83,12 +84,18 @@ class SessionManager:
         normalized_goal = _normalize_goal_text(goal_text)
         if not normalized_goal:
             raise ValueError("Goal text cannot be empty.")
+        goal_embedding = None
+        try:
+            goal_embedding = embed(normalized_goal)
+        except Exception:
+            goal_embedding = None
         entry = goals_repo.create_goal(
             user_id=self.user_id,
             goal_text=normalized_goal,
             session_id=self.session_id,
             domain=domain,
             importance=importance,
+            goal_embedding=goal_embedding,
         )
         existing_goals = self._memory.get("goals")
         if normalized_goal not in existing_goals:
@@ -122,6 +129,7 @@ class SessionManager:
         self,
         product_ids: List[str],
         empowering_score: float | None,
+        constraints_passed: bool = True,
         context: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Record a product recommendation."""
@@ -129,6 +137,7 @@ class SessionManager:
             session_id=self.session_id,
             product_ids=product_ids,
             empowering_score=empowering_score,
+            constraints_passed=constraints_passed,
             context=context or {},
         )
 

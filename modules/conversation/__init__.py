@@ -17,6 +17,7 @@ from modules.conversation.agents import (
     ExplainAgent,
     CapabilityAgent,
 )
+from modules.conversation.research import run_research
 
 __all__ = [
     # Context
@@ -35,4 +36,5 @@ __all__ = [
     "ReflectionAgent",
     "ExplainAgent",
     "CapabilityAgent",
+    "run_research",
 ]

@@ -145,6 +145,71 @@ def _configure_full_pipeline(monkeypatch):
     monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
 
 
+def _configure_research_pipeline(monkeypatch):
+    def fake_handle(manager, message, metadata):
+        state = ClarificationState(
+            query=message, ready_for_products=True, extracted_goals=["Verify data"]
+        )
+        manager.record_goal("Verify data")
+        return state, None
+
+    class DummyIntentAgent:
+        def detect_intent(self, utterance, manager=None):
+            return {"label": "workspace_upgrade", "confidence": 0.4, "domain": "career"}
+
+    class DummyCommerceAgent:
+        def build_plan(self, intent, goals, context=None):
+            products = [
+                {
+                    "id": "p1",
+                    "name": "Low Confidence Chair",
+                    "capabilities_enabled": ["Posture"],
+                    "confidence": 0.3,
+                    "source": "mock",
+                    "reasoning": "Uncertain match",
+                }
+            ]
+            return {
+                "query": "workspace chair",
+                "products": products,
+                "product_explanations": [
+                    {
+                        "id": "p1",
+                        "name": "Low Confidence Chair",
+                        "reasoning": "Uncertain match",
+                        "capabilities_enabled": ["Posture"],
+                        "confidence": 0.3,
+                    }
+                ],
+                "clarifications": ["Low confidence data."],
+                "empowerment": {"goal_alignment": {"score": 0.25}},
+                "data_quality": {"average_confidence": 0.4},
+            }
+
+    class DummyGuard:
+        def check(self, rationale, clarifications, products):
+            return {"status": "needs_review", "flags": clarifications}
+
+    class DummyExplain:
+        def explain(self, products):
+            return "Low confidence catalog results."
+
+    class DummyReflection:
+        def reflect(self, plan):
+            return "Research suggested."
+
+    def fake_research(query, goals, context):
+        return {"query": query, "goals": goals, "summary": "stub research"}
+
+    monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
+    monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
+    monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
+    monkeypatch.setattr("api.routes.conversation.AUTONOMY_GUARD", DummyGuard())
+    monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
+    monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
+    monkeypatch.setattr("api.routes.conversation.run_research", fake_research)
+
+
 def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
     _configure_full_pipeline(monkeypatch)
 
@@ -183,3 +248,17 @@ def test_get_session_snapshot_returns_latest(client, monkeypatch):
     assert "snapshot" in data
     assert data["snapshot"]["session"]["id"] == session_id
     assert data["snapshot"]["turns"], "turns should include prior conversation"
+
+
+def test_research_fallback_returns_payload(client, monkeypatch):
+    _configure_research_pipeline(monkeypatch)
+
+    response = client.post(
+        "/conversation/start",
+        json={"opening_message": "Need a chair", "user_id": "research-user"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["research"]
+    assert data["research"]["query"] == "workspace chair"
+    assert "Verify data" in data["research"]["goals"]
