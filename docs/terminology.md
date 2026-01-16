@@ -203,12 +203,96 @@ Changing the objective function changes the entire system.
 
 ---
 
+## World A vs World B
+
+**Definition**
+The fundamental fork in agentic commerce design:
+
+| World A | World B |
+|---------|---------|
+| Optimize for clicks/conversion | Optimize for goal alignment |
+| Infer intent from behavior | Ask users what they want |
+| Products as desire objects | Products as capability tools |
+| Silent data collection | Explicit consent gates |
+| Track engagement | Measure empowerment |
+
+This repository implements **World B**.
+
+---
+
+## UCP — Universal Commerce Protocol
+
+**Definition**
+Google's open standard for agentic commerce (released January 2026).
+
+UCP provides:
+- Merchant capability discovery (`/.well-known/ucp`)
+- Standardized checkout sessions
+- Payment handler abstraction
+- Fulfillment schemas
+
+**Key Property**
+UCP defines *how* transactions flow. It does **not** define *whether* transactions serve users. That's what CCO provides.
+
+**Integration**
+See [docs/strategic-positioning.md](./strategic-positioning.md) for UCP adapter design.
+
+---
+
+## ACP — Agentic Commerce Protocol
+
+**Definition**
+OpenAI's commerce protocol (co-built with Stripe).
+
+ACP enables:
+- Cart creation/update via API
+- Payment token delegation
+- Merchant-of-record preservation
+
+**Relationship to CCO**
+Like UCP, ACP is transaction plumbing. CCO provides the intelligence layer that decides what runs on that plumbing.
+
+---
+
+## Four Guardrails
+
+**Definition**
+The minimal intervention that changes the trajectory from extraction to empowerment:
+
+1. **Explicit Goals** — Ask, don't infer
+2. **Consent Gates** — Opt-in, not opt-out
+3. **Constraint Checks** — Hard limits before action
+4. **Dual Reward Signal** — Agency AND performance
+
+See [docs/agency-layer.md](./agency-layer.md) for implementation details.
+
+---
+
+## Dual Dashboard
+
+**Definition**
+The measurement system that tracks both traditional performance and agency metrics side by side.
+
+| Performance | Agency |
+|-------------|--------|
+| Conversions | Goal Consistency |
+| Revenue | Exploration Diversity |
+| ROAS | Regret Proxy |
+| Engagement | Trust Proxy |
+
+Neither dashboard is optional. Both must be healthy for the system to be healthy.
+
+See [docs/empowerment_metrics.md](./empowerment_metrics.md) for metric definitions.
+
+---
+
 ## Summary Statement
 
-> CCO defines *what is optimized*.
-> AIS defines *what is allowed*.
-> Agentic Commerce defines *where it runs*.
-> Memory defines *who the system remembers*.
+> **CCO** defines *what is optimized*
+> **AIS** defines *what is allowed*
+> **Agentic Commerce** defines *where it runs*
+> **Memory** defines *who the system remembers*
+> **World B** defines *why it matters*
 
 ---
 

@@ -15,6 +15,7 @@ def _row_to_dict(row) -> Dict[str, Any]:
         "session_id": row["session_id"],
         "product_ids": from_json(row["product_ids_json"], default=[]),
         "empowering_score": row["empowering_score"],
+        "constraints_passed": bool(row["constraints_passed"]),
         "context": from_json(row["context_json"], default={}),
         "created_at": row["created_at"],
     }
@@ -24,6 +25,7 @@ def create_recommendation(
     session_id: str,
     product_ids: List[str],
     empowering_score: float | None = None,
+    constraints_passed: bool = True,
     context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Create a recommendation record."""
@@ -31,14 +33,22 @@ def create_recommendation(
     conn = get_connection()
     conn.execute(
         """
-        INSERT INTO recommendations (id, session_id, product_ids_json, empowering_score, context_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO recommendations (
+            id,
+            session_id,
+            product_ids_json,
+            empowering_score,
+            constraints_passed,
+            context_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             recommendation_id,
             session_id,
             to_json(product_ids),
             empowering_score,
+            1 if constraints_passed else 0,
             to_json(context),
         ),
     )

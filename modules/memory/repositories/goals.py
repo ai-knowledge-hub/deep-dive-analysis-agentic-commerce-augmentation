@@ -6,6 +6,21 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from shared.db.connection import get_connection
+from modules.memory.repositories.base import from_json, to_json
+
+
+def _decode_embedding(value: bytes | str | None) -> List[float] | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    return from_json(value, default=None)
+
+
+def _encode_embedding(embedding: List[float] | None) -> str | None:
+    if embedding is None:
+        return None
+    return to_json(embedding)
 
 
 def _row_to_dict(row) -> Dict[str, Any]:
@@ -14,6 +29,7 @@ def _row_to_dict(row) -> Dict[str, Any]:
         "user_id": row["user_id"],
         "session_id": row["session_id"],
         "goal_text": row["goal_text"],
+        "goal_embedding": _decode_embedding(row["goal_embedding"]),
         "domain": row["domain"],
         "importance": row["importance"],
         "created_at": row["created_at"],
@@ -26,16 +42,25 @@ def create_goal(
     session_id: str | None = None,
     domain: str | None = None,
     importance: float = 0.5,
+    goal_embedding: List[float] | None = None,
 ) -> Dict[str, Any]:
     """Create a new goal."""
     goal_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute(
         """
-        INSERT INTO goals (id, user_id, session_id, goal_text, domain, importance)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO goals (id, user_id, session_id, goal_text, goal_embedding, domain, importance)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (goal_id, user_id, session_id, goal_text, domain, importance),
+        (
+            goal_id,
+            user_id,
+            session_id,
+            goal_text,
+            _encode_embedding(goal_embedding),
+            domain,
+            importance,
+        ),
     )
     conn.commit()
     row = conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()

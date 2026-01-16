@@ -38,3 +38,16 @@ run-local:
 .PHONY: run-dev
 run-dev:
 	LLM_PROVIDER=gemini uvicorn api.main:app --reload --port 8000
+
+.PHONY: db-init
+db-init:
+	$(PYTHON) -m shared.db.connection
+
+.PHONY: db-reset
+db-reset:
+	rm -f $${DATABASE_PATH:-./tmp/local.db}
+	$(PYTHON) -m shared.db.connection
+
+.PHONY: db-path
+db-path:
+	@python -c "from shared.db.connection import DEFAULT_DB_PATH; print(DEFAULT_DB_PATH)"

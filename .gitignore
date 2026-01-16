@@ -33,3 +33,7 @@ yarn-error.log*
 .env.production.local
 .env.test.local
 .vercel/
+
+
+# strategy docs
+docs/strategic-positioning.md

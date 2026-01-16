@@ -95,7 +95,7 @@ class RecommendationExplanation:
 | Component | Location | Behavior |
 |-----------|----------|----------|
 | Alienation Detector | `modules/empowerment/alienation.py` | Detects manipulation signals |
-| Autonomy Guard Agent | `agents/autonomy_guard_agent.py` | Orchestrates constraint checking |
+| Autonomy Guards | `modules/conversation/guards.py` | Orchestrates constraint checking |
 | Empowerment Optimizer | `modules/empowerment/optimizer.py` | Applies constraints before ranking |
 
 #### Constraint Catalog

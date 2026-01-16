@@ -5,4 +5,7 @@ __all__ = [
     "compare",
     "generate_reflection",
     "search",
+    "web_fetch",
+    "image_analyze",
+    "memory_write",
 ]

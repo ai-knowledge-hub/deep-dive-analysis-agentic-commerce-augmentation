@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS goals (
     user_id TEXT NOT NULL,
     session_id TEXT,
     goal_text TEXT NOT NULL,
+    goal_embedding BLOB,
     domain TEXT,
     importance REAL DEFAULT 0.5,
     created_at TEXT DEFAULT (datetime('now')),
