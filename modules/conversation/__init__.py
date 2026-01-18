@@ -9,11 +9,9 @@ from modules.conversation.context import (
     context_for,
     values_context,
 )
-from modules.conversation.guards import AutonomyGuardAgent
 from modules.conversation.agents import (
     IntentAgent,
     CommerceAgent,
-    ReflectionAgent,
     ExplainAgent,
     CapabilityAgent,
 )
@@ -28,12 +26,9 @@ __all__ = [
     "render_context",
     "context_for",
     "values_context",
-    # Guards
-    "AutonomyGuardAgent",
     # Agents
     "IntentAgent",
     "CommerceAgent",
-    "ReflectionAgent",
     "ExplainAgent",
     "CapabilityAgent",
     "run_research",

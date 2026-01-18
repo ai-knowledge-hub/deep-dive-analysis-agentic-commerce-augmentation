@@ -9,7 +9,7 @@ from typing import List
 from modules.commerce.domain import Product
 
 CATALOG_PATH = (
-    Path(__file__).resolve().parents[3] / "data" / "sample_catalog_empowerment.json"
+    Path(__file__).resolve().parents[3] / "data" / "sample_catalog_discovery.json"
 )
 
 

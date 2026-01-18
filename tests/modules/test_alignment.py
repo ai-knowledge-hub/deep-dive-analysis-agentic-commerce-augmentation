@@ -1,5 +1,4 @@
-from modules.empowerment.goal_alignment import assess
-from modules.empowerment.constraints import check_constraints
+from modules.alignment.goal_alignment import assess
 from modules.commerce import search
 
 
@@ -16,8 +15,3 @@ def test_goal_alignment_scores_supporting_products():
     assert isinstance(avg_conf, (int, float))
     assert avg_conf >= 0
 
-
-def test_constraints_block_scarcity_language():
-    result = check_constraints("Only 3 left, limited time offer!")
-    assert result.blocked is True
-    assert result.violations

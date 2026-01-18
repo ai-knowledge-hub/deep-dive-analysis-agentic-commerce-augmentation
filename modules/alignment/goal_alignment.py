@@ -2,8 +2,7 @@
 
 This module assesses how well products align with user-declared goals
 using semantic similarity (embeddings) rather than simple string matching.
-This is a core differentiator for World B — we understand what users
-actually mean, not just what words they use.
+This supports intent-alignment scoring for brand discovery.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from modules.commerce.domain import Product
-from modules.empowerment.domain import GoalAlignmentResult
+from modules.alignment.domain import AlignmentSummary
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ def assess(
     goals: List[str],
     products: List[Product],
     use_semantic: bool = True,
-) -> GoalAlignmentResult:
+) -> AlignmentSummary:
     """Assess how well products align with user goals.
 
     Args:
@@ -49,10 +48,10 @@ def assess(
         use_semantic: Whether to use semantic similarity (True) or fall back to keywords
 
     Returns:
-        GoalAlignmentResult with alignment scores and supporting products
+        AlignmentSummary with alignment scores and supporting products
     """
     if not goals:
-        return GoalAlignmentResult(
+        return AlignmentSummary(
             score=0.0,
             aligned_goals=[],
             misaligned_goals=[],
@@ -64,7 +63,7 @@ def assess(
         )
 
     if not products:
-        return GoalAlignmentResult(
+        return AlignmentSummary(
             score=0.0,
             aligned_goals=[],
             misaligned_goals=goals,
@@ -86,7 +85,7 @@ def assess(
         return _keyword_assess(goals, products)
 
 
-def _semantic_assess(goals: List[str], products: List[Product]) -> GoalAlignmentResult:
+def _semantic_assess(goals: List[str], products: List[Product]) -> AlignmentSummary:
     """Assess alignment using semantic similarity (embeddings)."""
     from shared.llm.embeddings import (
         get_embedding_provider,
@@ -169,7 +168,7 @@ def _semantic_assess(goals: List[str], products: List[Product]) -> GoalAlignment
         "alignment_method": "semantic",
     }
 
-    return GoalAlignmentResult(
+    return AlignmentSummary(
         score=weighted_score,
         aligned_goals=aligned_goals,
         misaligned_goals=misaligned_goals,
@@ -178,7 +177,7 @@ def _semantic_assess(goals: List[str], products: List[Product]) -> GoalAlignment
     )
 
 
-def _keyword_assess(goals: List[str], products: List[Product]) -> GoalAlignmentResult:
+def _keyword_assess(goals: List[str], products: List[Product]) -> AlignmentSummary:
     """Fallback: Assess alignment using keyword matching (original implementation)."""
     aligned: List[str] = []
     supporting_products: List[str] = []
@@ -219,7 +218,7 @@ def _keyword_assess(goals: List[str], products: List[Product]) -> GoalAlignmentR
         "alignment_method": "keyword",
     }
 
-    return GoalAlignmentResult(
+    return AlignmentSummary(
         score=weighted_score,
         aligned_goals=aligned,
         misaligned_goals=misaligned,

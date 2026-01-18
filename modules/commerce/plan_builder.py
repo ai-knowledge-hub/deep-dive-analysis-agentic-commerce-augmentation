@@ -1,7 +1,7 @@
 """Commerce plan building logic - extracted from CommerceAgent.
 
 This module contains the core business logic for building product recommendation plans,
-including query derivation, product selection, data quality assessment, and empowerment snapshots.
+including query derivation, product selection, data quality assessment, and alignment snapshots.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from modules.commerce.domain import Product
+from modules.intentionality.profiling import build_profile
 from modules.commerce.search import search as product_search
 from modules.commerce.compare import compare
 
@@ -37,7 +38,7 @@ class PlanBuilder:
             assess_fn: Optional function to assess goal alignment
 
         Returns:
-            Complete plan dictionary with products, clarifications, empowerment, etc.
+            Complete plan dictionary with products, clarifications, alignment, etc.
         """
         queries = self._derive_queries(intent)
         fallback_reason = None
@@ -73,8 +74,8 @@ class PlanBuilder:
             annotated, data_quality, filtered_count, fallback_reason
         )
 
-        # Compute empowerment snapshot
-        empowerment = self._empowerment_snapshot(
+        # Compute alignment snapshot
+        alignment = self._alignment_snapshot(
             goals or [], selected_products, assess_fn
         )
 
@@ -85,7 +86,7 @@ class PlanBuilder:
             "comparison": comparison,
             "data_quality": data_quality,
             "clarifications": clarifications,
-            "empowerment": empowerment,
+            "alignment": alignment,
         }
 
     def _derive_queries(self, intent: dict) -> List[str]:
@@ -128,6 +129,7 @@ class PlanBuilder:
                 "merchant_name": product.merchant_name,
                 "offer_url": product.offer_url,
                 "capabilities_enabled": product.capabilities_enabled,
+                "intentionality_profile": build_profile(product).to_dict(),
             }
             for product in products
         ]
@@ -178,10 +180,10 @@ class PlanBuilder:
             )
         return clarifications
 
-    def _empowerment_snapshot(
+    def _alignment_snapshot(
         self, goals: List[str], products: List[Product], assess_fn=None
     ) -> dict:
-        """Compute empowerment metrics for the plan."""
+        """Compute alignment metrics for the plan."""
         if not goals or not products:
             return {
                 "goal_alignment": {
@@ -193,11 +195,18 @@ class PlanBuilder:
                         "average_confidence": 0.0,
                         "aligned_goal_confidence": {},
                     },
+                    "baseline_score": 0.0,
                 }
             }
 
         if assess_fn:
             result = assess_fn(goals, products)
+            baseline_score = 0.0
+            try:
+                baseline = assess_fn(goals, products, use_semantic=False)
+                baseline_score = baseline.score
+            except TypeError:
+                baseline_score = 0.0
             return {
                 "goal_alignment": {
                     "score": result.score,
@@ -205,6 +214,7 @@ class PlanBuilder:
                     "misaligned_goals": result.misaligned_goals,
                     "supporting_products": result.supporting_products,
                     "confidence_summary": result.confidence_summary,
+                    "baseline_score": baseline_score,
                 }
             }
 
@@ -219,6 +229,7 @@ class PlanBuilder:
                     "average_confidence": 0.0,
                     "aligned_goal_confidence": {},
                 },
+                "baseline_score": 0.0,
             }
         }
 

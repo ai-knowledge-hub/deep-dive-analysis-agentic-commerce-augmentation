@@ -88,7 +88,7 @@ def render_context(packet: ContextPacket, include_turns: int = 6) -> str:
     episode_text = (
         latest_episode.get("takeaways")
         or latest_episode.get("outcome")
-        or "No reflections yet"
+        or "No outcomes yet"
     )
 
     metadata_lines = [
@@ -107,7 +107,7 @@ def render_context(packet: ContextPacket, include_turns: int = 6) -> str:
         f"User ID: {packet.user_id}\n"
         f"Explicit goals: {explicit_goals}\n"
         f"Semantic goals: {semantic}\n"
-        f"Latest reflection: {episode_text}\n"
+        f"Latest outcome note: {episode_text}\n"
         f"State metadata:\n{metadata_text}\n"
         f"Recent conversation:\n{recent_turns}"
     )

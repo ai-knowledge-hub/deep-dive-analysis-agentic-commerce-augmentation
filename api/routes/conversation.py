@@ -1,4 +1,4 @@
-"""Conversation endpoints exposing session + empowerment telemetry."""
+"""Conversation endpoints exposing session + discovery telemetry."""
 
 from __future__ import annotations
 
@@ -11,22 +11,19 @@ from pydantic import BaseModel, Field
 from modules.conversation.agents import (
     IntentAgent,
     CommerceAgent,
-    ReflectionAgent,
     ExplainAgent,
 )
-from modules.conversation.guards import AutonomyGuardAgent
 from modules.memory.session_manager import SessionManager
 from modules.values.agent import ValuesAgent
 from modules.values.domain import ClarificationState
 from modules.conversation.context import context_for
 from modules.conversation.research import run_research
+from modules.intentionality.profiling import build_profile_with_llm
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
 INTENT_AGENT = IntentAgent()
 COMMERCE_AGENT = CommerceAgent()
-REFLECTION_AGENT = ReflectionAgent()
-AUTONOMY_GUARD = AutonomyGuardAgent()
 EXPLAIN_AGENT = ExplainAgent()
 VALUES_AGENT = ValuesAgent()
 
@@ -98,29 +95,19 @@ def _process_message(
     intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
+    intent_signal = intent.get("label") or ""
+    if intent_signal:
+        manager.record_turn(
+            "agent",
+            f"Intent inferred: {intent_signal}",
+            metadata={"type": "intent_inference", "confidence": intent.get("confidence")},
+        )
     plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
     product_explanations = plan.get("product_explanations")
     if not product_explanations:
         product_explanations = _format_reasoning(plan.get("products", []))
     clarifications = plan.get("clarifications", [])
-    guard = AUTONOMY_GUARD.check(
-        rationale="; ".join(clarifications),
-        clarifications=clarifications,
-        products=plan.get("products", []),
-    )
-    blocked = guard.get("status") == "blocked"
-    if blocked:
-        plan["blocked"] = True
-        plan["products"] = []
-        plan["product_explanations"] = []
-        explanation = guard.get(
-            "summary",
-            "Recommendations paused due to constraint violations.",
-        )
-    else:
-        explanation = EXPLAIN_AGENT.explain(plan.get("products", []))
-    reflection = REFLECTION_AGENT.reflect(plan)
-
+    explanation = EXPLAIN_AGENT.explain(plan.get("products", []))
     manager.record_turn(
         "agent",
         explanation,
@@ -129,20 +116,18 @@ def _process_message(
     manager.record_recommendation(
         product_ids=[product["id"] for product in plan.get("products", [])],
         empowering_score=(
-            plan.get("empowerment", {}).get("goal_alignment", {}) or {}
+            plan.get("alignment", {}).get("goal_alignment", {}) or {}
         ).get("score"),
-        constraints_passed=not blocked,
         context={
             "query": plan.get("query"),
-            "goal_alignment": plan.get("empowerment", {}).get("goal_alignment"),
+            "goal_alignment": plan.get("alignment", {}).get("goal_alignment"),
             "data_quality": plan.get("data_quality"),
         },
     )
-    manager.record_reflection(reflection)
     manager.update_state(
         last_intent=intent,
         last_query=plan.get("query"),
-        last_empowerment=plan.get("empowerment"),
+        last_alignment=plan.get("alignment"),
     )
 
     research = _maybe_run_research(plan, goals, context_snapshot)
@@ -152,10 +137,12 @@ def _process_message(
         intent=intent,
         plan=plan,
         research=research,
-        guardrails=guard,
-        constraints=guard.get("constraints"),
+        baseline_alignment=plan.get("alignment", {}).get("goal_alignment", {}).get("baseline_score"),
+        intentionality_profiles=[
+            build_profile_with_llm(product).to_dict()
+            for product in (plan.get("products") or [])
+        ],
         explanation=explanation,
-        reflection=reflection,
         product_explanations=product_explanations,
         values_state=clarification_state.to_dict()
         if clarification_state

@@ -15,20 +15,35 @@ export type Product = {
   merchant_name?: string;
   offer_url?: string;
   capabilities_enabled?: string[];
+  intentionality_profile?: {
+    product_id?: string;
+    capabilities_enabled?: string[];
+    goals_served?: string[];
+    prerequisites?: string[];
+    outcomes_expected?: string[];
+    context_fit?: Record<string, number>;
+  };
   reasoning?: string;
 };
 
 export type ConversationResponse = {
   session_id: string;
   user_id: string;
+  intent?: {
+    label?: string;
+    confidence?: number;
+    evidence?: string[];
+    clarifying_questions?: string[];
+  };
+  baseline_alignment?: number;
   plan?: {
     query?: string;
     products?: Product[];
     clarifications?: string[];
-    world_a_example?: string;
-    empowerment?: {
+    alignment?: {
       goal_alignment?: {
         score?: number;
+        baseline_score?: number;
         aligned_goals?: string[];
         misaligned_goals?: string[];
       };
@@ -44,6 +59,12 @@ export type ConversationResponse = {
     confidence?: number;
   }[];
   explanation?: string;
-  reflection?: string;
-  guardrails?: Record<string, unknown>;
+  intentionality_profiles?: {
+    product_id?: string;
+    capabilities_enabled?: string[];
+    goals_served?: string[];
+    prerequisites?: string[];
+    outcomes_expected?: string[];
+    context_fit?: Record<string, number>;
+  }[];
 };

@@ -57,7 +57,7 @@ if "google" not in sys.modules:
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.values.domain import ClarificationState
 from modules.values.agent import ValuesAgent
-from modules.empowerment.llm_reasoner import reason_about_products
+from modules.alignment.llm_reasoner import reason_about_products
 from modules.intent.domain import Intent as KeywordIntent
 
 
@@ -167,7 +167,7 @@ def test_product_reasoner_attaches_reasoning(monkeypatch):
         prompts.append(prompt)
         return "Supports posture goals and keeps you focused."
 
-    monkeypatch.setattr("modules.empowerment.llm_reasoner.generate", fake_generate)
+    monkeypatch.setattr("modules.alignment.llm_reasoner.generate", fake_generate)
 
     products = [
         {
@@ -196,7 +196,7 @@ def test_product_reasoner_handles_empty_products(monkeypatch):
         called["count"] += 1
         return ""
 
-    monkeypatch.setattr("modules.empowerment.llm_reasoner.generate", fake_generate)
+    monkeypatch.setattr("modules.alignment.llm_reasoner.generate", fake_generate)
 
     assert reason_about_products(["Improve focus"], []) == []
     assert called["count"] == 0

@@ -121,28 +121,18 @@ def _configure_full_pipeline(monkeypatch):
                     }
                 ],
                 "clarifications": ["We prioritized posture support."],
-                "empowerment": {"goal_alignment": {"score": 0.75}},
+                "alignment": {"goal_alignment": {"score": 0.75}},
                 "data_quality": {"average_confidence": 0.8},
             }
-
-    class DummyGuard:
-        def check(self, rationale, clarifications, products):
-            return {"status": "ok", "flags": []}
 
     class DummyExplain:
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
-    class DummyReflection:
-        def reflect(self, plan):
-            return "Captured empowerment metrics."
-
     monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
-    monkeypatch.setattr("api.routes.conversation.AUTONOMY_GUARD", DummyGuard())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
-    monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
 
 
 def _configure_research_pipeline(monkeypatch):
@@ -182,21 +172,13 @@ def _configure_research_pipeline(monkeypatch):
                     }
                 ],
                 "clarifications": ["Low confidence data."],
-                "empowerment": {"goal_alignment": {"score": 0.25}},
+                "alignment": {"goal_alignment": {"score": 0.25}},
                 "data_quality": {"average_confidence": 0.4},
             }
-
-    class DummyGuard:
-        def check(self, rationale, clarifications, products):
-            return {"status": "needs_review", "flags": clarifications}
 
     class DummyExplain:
         def explain(self, products):
             return "Low confidence catalog results."
-
-    class DummyReflection:
-        def reflect(self, plan):
-            return "Research suggested."
 
     def fake_research(query, goals, context):
         return {"query": query, "goals": goals, "summary": "stub research"}
@@ -204,9 +186,7 @@ def _configure_research_pipeline(monkeypatch):
     monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
-    monkeypatch.setattr("api.routes.conversation.AUTONOMY_GUARD", DummyGuard())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
-    monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
     monkeypatch.setattr("api.routes.conversation.run_research", fake_research)
 
 
@@ -222,11 +202,144 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
 
     assert data["intent"]["label"] == "workspace_upgrade"
     assert data["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
-    assert data["guardrails"]["status"] == "ok"
     assert data["explanation"] == "Recommended Focus Chair for posture."
-    assert data["reflection"] == "Captured empowerment metrics."
     assert data["product_explanations"][0]["reasoning"] == "Supports Stay energized"
     assert data["values_state"]["ready_for_products"] is True
+    assert data["intentionality_profiles"]
+    assert data["baseline_alignment"] is not None
+
+
+def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypatch):
+    from modules.commerce.domain import Product
+
+    def mock_search(query: str):
+        return [
+            Product(
+                id="p1",
+                name="Focus Chair",
+                price=199.0,
+                tags=["chair"],
+                confidence=0.9,
+                source="mock",
+                capabilities_enabled=["Reduce back strain"],
+                description="Reduce back strain during long sessions.",
+            )
+        ]
+
+    class DummyClassifier:
+        def classify(self, text, context=None):
+            return type(
+                "Result",
+                (),
+                {"to_dict": lambda self: {"label": "workspace_upgrade"}},
+            )()
+
+    monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
+    monkeypatch.setattr("api.routes.products.HybridIntentClassifier", DummyClassifier)
+
+    response = client.post(
+        "/products/enrich",
+        json={"product_id": "p1", "query": "Need a better chair"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["product"]["id"] == "p1"
+    assert payload["profile"]["product_id"] == "p1"
+    assert payload["alignment"]["aligned_goals"]
+    assert "baseline_score" in payload["alignment"]
+
+
+def test_products_profile_endpoint_returns_profile(client, monkeypatch):
+    from modules.commerce.domain import Product
+
+    def mock_search(query: str):
+        return [
+            Product(
+                id="p2",
+                name="Desk Lamp",
+                price=49.0,
+                tags=["lamp"],
+                confidence=0.8,
+                source="mock",
+                capabilities_enabled=["Reduce eye strain"],
+                description="Soft lighting for focus.",
+            )
+        ]
+
+    monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
+
+    response = client.post("/products/profile", json={"product_id": "p2"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["profile"]["product_id"] == "p2"
+
+
+def test_products_profile_endpoint_requires_product_id(client):
+    response = client.post("/products/profile", json={})
+    assert response.status_code == 422
+
+
+def test_products_align_endpoint_returns_alignment(client, monkeypatch):
+    from modules.commerce.domain import Product
+
+    def mock_search(query: str):
+        return [
+            Product(
+                id="p3",
+                name="Monitor Stand",
+                price=29.0,
+                tags=["stand"],
+                confidence=0.75,
+                source="mock",
+                capabilities_enabled=["Improve posture"],
+                description="Raises monitor height for better posture.",
+            )
+        ]
+
+    class DummyClassifier:
+        def classify(self, text, context=None):
+            return type(
+                "Result",
+                (),
+                {"to_dict": lambda self: {"label": "workspace_upgrade"}},
+            )()
+
+    monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
+    monkeypatch.setattr("api.routes.products.HybridIntentClassifier", DummyClassifier)
+
+    response = client.post("/products/align", json={"query": "Need a stand"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"]["label"] == "workspace_upgrade"
+    assert payload["alignment"]["aligned_goals"]
+    assert "baseline_score" in payload["alignment"]
+
+
+def test_products_align_endpoint_requires_query(client):
+    response = client.post("/products/align", json={})
+    assert response.status_code == 422
+
+
+def test_intent_infer_endpoint_returns_intent(client, monkeypatch):
+    class DummyClassifier:
+        def classify(self, text, context=None):
+            return type(
+                "Result",
+                (),
+                {"to_dict": lambda self: {"label": "workspace_upgrade", "confidence": 0.9}},
+            )()
+
+    monkeypatch.setattr("api.routes.intent.HybridIntentClassifier", DummyClassifier)
+
+    response = client.post("/intent/infer", json={"query": "Need a better desk"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"]["label"] == "workspace_upgrade"
+
+
+def test_intent_infer_endpoint_requires_query(client):
+    response = client.post("/intent/infer", json={})
+    assert response.status_code == 422
 
 
 def test_get_session_snapshot_returns_latest(client, monkeypatch):

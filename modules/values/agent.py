@@ -10,7 +10,7 @@ from modules.values.domain import ClarificationState
 
 
 class ValuesAgent:
-    """Guides the user through World B values clarification before commerce."""
+    """Guides the user through intent clarification before commerce."""
 
     min_questions: int = 2
 

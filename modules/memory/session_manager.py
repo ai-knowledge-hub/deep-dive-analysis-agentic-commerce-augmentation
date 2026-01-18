@@ -142,15 +142,15 @@ class SessionManager:
         )
 
     # ---------------------------------------------------------------- episodic memory
-    def record_reflection(
-        self, reflection_text: str, outcome: str | None = "reflection_summary"
+    def record_outcome(
+        self, outcome_text: str, outcome: str | None = "outcome_summary"
     ) -> Dict[str, Any]:
-        """Record a reflection as an episode."""
+        """Record an outcome note as an episode."""
         return episodes_repo.create_episode(
             user_id=self.user_id,
             session_id=self.session_id,
             outcome=outcome,
-            takeaways=[reflection_text],
+            takeaways=[outcome_text],
         )
 
     # ---------------------------------------------------------------- state helpers

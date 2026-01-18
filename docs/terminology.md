@@ -1,222 +1,217 @@
 # Terminology Glossary
 
-This document defines the core terms used across the Agentic Commerce /
-Contextual Commerce Optimization (CCO) codebase.
+This document defines the core terms used across the Intentionality Optimization codebase.
 
-The goal is to ensure **conceptual precision**, prevent semantic drift,
-and align research, architecture, and implementation.
+The goal is to ensure **conceptual precision**, prevent semantic drift, and align architecture with implementation.
 
 ---
 
-## CCO — Contextual Commerce Optimization
+## Intentionality Optimization
 
 **Definition**
-Contextual Commerce Optimization (CCO) is an **optimization paradigm**, not a fixed platform.
+Intentionality Optimization is an **optimization paradigm** for LLM commerce discovery.
 
-CCO describes systems that:
-- evaluate commerce decisions within **human context**
-- ground execution in **explicitly clarified intent**
-- optimize for **human outcomes**, not proxy metrics like CTR
+Systems using intentionality optimization:
+- Transform product data to be **legible to LLM intent inference**
+- Score products on **alignment with inferred user goals**
+- Predict which products LLMs will **recommend organically**
 
 **Key Property**
-> CCO is defined by its **objective function**, not by a specific UI, stack, or deployment.
+> Intentionality optimization is defined by making products discoverable by reasoning agents, not by keyword matching or ad bidding.
 
-This repository represents the **first concrete implementation of CCO**.
-
----
-
-## AIS — Augmented Intentionality System
-
-**Definition**
-The Augmented Intentionality System (AIS) is the **governing logic** that constrains and guides optimization.
-
-AIS specifies:
-- what kinds of influence are allowed
-- how autonomy is preserved
-- how learning and reflection are incorporated
-
-**In Code**
-Implemented primarily in:
-
-```
-modules/empowerment/
-```
-
-AIS replaces traditional engagement or conversion optimization.
+This repository represents the **first implementation of intentionality optimization for commerce**.
 
 ---
 
-## CCIA — Context-Conditioned Intent Activation
+## Intent Inference
 
 **Definition**
-CCIA is a method for identifying **latent user intent** based on context,
-history, and interaction signals — not just keywords.
+Intent inference is the process by which LLMs determine what a user is **actually trying to achieve** from their query and context.
 
-Unlike traditional intent classification, CCIA:
-- distinguishes *goals* from *queries*
-- treats intent as dynamic and contextual
-- feeds into downstream reasoning, not direct execution
+Intent inference:
+- Goes beyond surface queries to underlying goals
+- Considers context, history, and implicit signals
+- Produces structured representations of user intent
 
 **In Code**
 
 ```
-modules/intent/
+modules/intent/inference.py
+```
+
+**Example**
+- Query: "I need a laptop"
+- Inferred Intent: "Enable portable creative work for freelance transition"
+- Underlying Needs: ["professional credibility", "mobility", "creative software support"]
+
+---
+
+## Inferred Intent
+
+**Definition**
+The structured output of intent inference, representing what the user is trying to achieve.
+
+**Data Structure**
+```python
+@dataclass
+class InferredIntent:
+    primary_goal: str           # "Enable portable creative work"
+    underlying_needs: List[str] # ["professional credibility", "mobility"]
+    context_signals: List[str]  # Evidence from query/session
+    confidence: float           # 0.0-1.0
 ```
 
 ---
 
-## Agentic Commerce
+## Intentionality Profile
 
 **Definition**
-Agentic Commerce is a **runtime context** in which CCO is applied to
-products, catalogs, and transactions.
+A structured representation of a product in terms of **human capabilities and outcomes**, not just specifications.
 
-In Agentic Commerce:
-- users are treated as agents with goals
-- products are treated as instruments
-- decisions are scaffolded, not forced
+Intentionality profiles:
+- Transform specs into capabilities
+- Map features to human goals
+- Describe expected outcomes
 
-Agentic Commerce is **one instantiation** of CCO (others include search,
-programmatic advertising, conversational assistants).
-
----
-
-## Empowerment
-
-**Definition**
-Empowerment is the **primary optimization objective** of the system.
-
-An interaction is empowering if it:
-1. respects user autonomy
-2. builds or preserves capability
-3. aligns with user-stated goals
-4. supports long-term wellbeing
-
-**Important**
-Empowerment is not a UX feature — it is a **system-level invariant**.
-
----
-
-## Alienation
-
-**Definition**
-Alienation refers to system behaviors that:
-- bypass reflection
-- erode autonomy
-- create dependency
-- optimize engagement at the expense of agency
-
-Alienation detection is a **negative constraint** on optimization.
+**Data Structure**
+```python
+@dataclass
+class IntentionalityProfile:
+    product_id: str
+    capabilities_enabled: List[str]    # What human capabilities this enables
+    goals_served: List[str]            # What goals this helps achieve
+    prerequisites: List[str]           # What user needs to benefit
+    outcomes_expected: List[str]       # What changes after purchase
+    context_fit: Dict[str, float]      # Fit scores for different contexts
+```
 
 **In Code**
 
 ```
-modules/empowerment/alienation.py
+modules/intentionality/profiler.py
 ```
 
 ---
 
-## Capability
+## Intent Legibility
 
 **Definition**
-A capability is a **durable human capacity** (skill, understanding, readiness)
-that enables goal achievement.
+The degree to which a product's data is structured in a way that LLMs can reason about for intent alignment.
 
-Products are evaluated by:
-- which capabilities they enable
-- what prerequisites they require
-- what effort they demand
+**High Intent Legibility**
+- "Combat glare in bright rooms"
+- "Run professional creative software"
+- "Reduce back pain during long sessions"
 
-Capabilities persist beyond a single transaction.
+**Low Intent Legibility**
+- "65-inch 4K QLED, 3000 nits"
+- "16GB RAM, M3 chip"
+- "Ergonomic lumbar support"
+
+Products with high intent legibility get recommended. Products with low intent legibility get overlooked.
 
 ---
 
-## Memory (Agentic Memory)
+## Alignment Score
 
 **Definition**
-Memory enables continuity, learning, and agency.
+A numerical measure (0.0-1.0) of how well a product's intentionality profile matches an inferred user intent.
+
+**Data Structure**
+```python
+@dataclass
+class AlignmentScore:
+    product_id: str
+    score: float                    # 0.0-1.0
+    matched_capabilities: List[str] # Which capabilities match intent
+    alignment_reasoning: str        # Human-readable explanation
+    confidence: float               # Certainty of the match
+```
+
+**Key Property**
+> High alignment score = LLM will recommend. Low alignment score = LLM will skip.
+
+**In Code**
+
+```
+modules/alignment/scoring.py
+```
+
+---
+
+## Organic Discovery
+
+**Definition**
+Products appearing in LLM recommendations without paid placement—because they genuinely align with user intent.
+
+**Contrast with Paid Placement**
+| Paid Placement | Organic Discovery |
+|---------------|------------------|
+| Pay to appear in results | Recommended because aligned |
+| Auction-based bidding | Intent-based matching |
+| Direct Offers (Google) | Intentionality optimization |
+
+Brands need both. We provide the organic path.
+
+---
+
+## Capability Mapping
+
+**Definition**
+The transformation of product specifications into human capabilities.
+
+**Examples**
+| Specification | Capability |
+|--------------|------------|
+| "3000 nits brightness" | "Combat glare in bright rooms" |
+| "M3 chip, 16GB RAM" | "Run professional creative software" |
+| "Lumbar support, adjustable arms" | "Reduce back pain during long sessions" |
+
+**In Code**
+
+```
+modules/intentionality/transforms.py
+```
+
+---
+
+## Discovery Metrics
+
+**Definition**
+Measurements of how well intentionality optimization works.
+
+| Metric | Description |
+|--------|-------------|
+| Alignment Accuracy | Correlation between our scores and actual LLM recommendations |
+| Discoverability Lift | Increase in recommendations after optimization |
+| Inference Quality | Accuracy of inferred intents (human evaluation) |
+
+**In Code**
+
+```
+modules/discovery/metrics.py
+```
+
+---
+
+## Memory (Context Memory)
+
+**Definition**
+Persistent context that improves intent inference over time.
 
 | Type | Description |
-|----|------------|
-| Working memory | In-session state |
-| Episodic memory | Reflections on outcomes |
-| Semantic memory | Long-term goals, values, capabilities |
+|------|-------------|
+| Working Memory | Current session context |
+| Semantic Memory | Long-term goals and preferences |
+| Episodic Memory | Purchase history for inference |
 
-Without memory, the system is reactive.
-With memory, the system is **agentic**.
+Memory enables **better inference**, not surveillance.
 
----
+**In Code**
 
-## Reflection Loop
-
-**Definition**
-The reflection loop is a mandatory feedback mechanism where the system asks:
-
-> "Did this action actually help?"
-
-Reflection updates memory and influences future decisions.
-It replaces passive behavioral telemetry.
-
----
-
-## MCP — Model Context Protocol
-
-**Definition**
-MCP defines how system capabilities are exposed as **LLM-callable tools**.
-
-It enables:
-- Gemini / GPT integration
-- tool-based reasoning
-- portability across LLM platforms
-
-MCP contains **interfaces only**, never business logic.
-
----
-
-## Agent (Façade Agent)
-
-**Definition**
-An agent is a **thin orchestration wrapper** that:
-- coordinates module calls
-- manages execution order
-- adapts to LLM or UI constraints
-
-Agents do not:
-- define objectives
-- score outcomes
-- override empowerment logic
-
----
-
-## Objective Function
-
-**Definition**
-The objective function defines what the system optimizes for.
-
-In this system:
-- not clicks
-- not conversion
-- not engagement
-- **empowerment, agency, alignment**
-
-Changing the objective function changes the entire system.
-
----
-
-## World A vs World B
-
-**Definition**
-The fundamental fork in agentic commerce design:
-
-| World A | World B |
-|---------|---------|
-| Optimize for clicks/conversion | Optimize for goal alignment |
-| Infer intent from behavior | Ask users what they want |
-| Products as desire objects | Products as capability tools |
-| Silent data collection | Explicit consent gates |
-| Track engagement | Measure empowerment |
-
-This repository implements **World B**.
+```
+modules/memory/
+```
 
 ---
 
@@ -231,11 +226,8 @@ UCP provides:
 - Payment handler abstraction
 - Fulfillment schemas
 
-**Key Property**
-UCP defines *how* transactions flow. It does **not** define *whether* transactions serve users. That's what CCO provides.
-
-**Integration**
-See [docs/strategic-positioning.md](./strategic-positioning.md) for UCP adapter design.
+**Relationship to Intentionality Optimization**
+UCP defines *how* transactions flow. We define which products are **discoverable** in the first place.
 
 ---
 
@@ -249,51 +241,75 @@ ACP enables:
 - Payment token delegation
 - Merchant-of-record preservation
 
-**Relationship to CCO**
-Like UCP, ACP is transaction plumbing. CCO provides the intelligence layer that decides what runs on that plumbing.
+**Relationship to Intentionality Optimization**
+Like UCP, ACP is transaction plumbing. We provide the **pre-transaction** discovery layer.
 
 ---
 
-## Four Guardrails
+## Direct Offers
 
 **Definition**
-The minimal intervention that changes the trajectory from extraction to empowerment:
+Google's paid placement system for AI Mode recommendations (announced January 2026).
 
-1. **Explicit Goals** — Ask, don't infer
-2. **Consent Gates** — Opt-in, not opt-out
-3. **Constraint Checks** — Hard limits before action
-4. **Dual Reward Signal** — Agency AND performance
+Direct Offers:
+- Lets retailers pay to appear in AI recommendations
+- Auction-based bidding (CPA, CPC)
+- Integrated with Google Shopping ecosystem
 
-See [docs/agency-layer.md](./agency-layer.md) for implementation details.
+**Relationship to Intentionality Optimization**
+Direct Offers = paid placement. We = organic discovery. Complementary, not competitive.
 
 ---
 
-## Dual Dashboard
+## Answer Independence
 
 **Definition**
-The measurement system that tracks both traditional performance and agency metrics side by side.
+OpenAI's principle that advertising should not influence AI answers.
 
-| Performance | Agency |
-|-------------|--------|
-| Conversions | Goal Consistency |
-| Revenue | Exploration Diversity |
-| ROAS | Regret Proxy |
-| Engagement | Trust Proxy |
+**How We Relate**
+If ads don't influence answers, then recommendations must be based on genuine alignment. We help brands achieve that alignment.
 
-Neither dashboard is optional. Both must be healthy for the system to be healthy.
+---
 
-See [docs/empowerment_metrics.md](./empowerment_metrics.md) for metric definitions.
+## LLM Commerce Surface
+
+**Definition**
+Any interface where an LLM can recommend products.
+
+Examples:
+- Google AI Mode
+- ChatGPT Shopping
+- Claude with commerce tools
+- Custom commerce agents
+
+We optimize for discoverability across all surfaces.
+
+---
+
+## Theoretical Foundation
+
+**Definition**
+The research basis for why intentionality optimization works.
+
+| Concept | Application |
+|---------|-------------|
+| Bayesian Intent Inference | User goals as latent variables inferred from signals |
+| Active Inference / Free Energy | LLMs minimize predictive surprise; aligned products are "low-surprise" |
+| Theory of Mind in LLMs | Models learn to predict beliefs, desires, intentions |
+
+The theory explains *why* it works. The demo shows *that* it works.
 
 ---
 
 ## Summary Statement
 
-> **CCO** defines *what is optimized*
-> **AIS** defines *what is allowed*
-> **Agentic Commerce** defines *where it runs*
-> **Memory** defines *who the system remembers*
-> **World B** defines *why it matters*
+> **Intent Inference** determines what users want
+> **Intentionality Profiles** describe what products provide
+> **Alignment Scoring** predicts what LLMs recommend
+> **Discovery Metrics** prove it works
+> **Organic Discovery** is the outcome
 
 ---
 
-**End of Glossary**
+*Document Version: 2026-01-17*
+*Status: Active*

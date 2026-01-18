@@ -1,6 +1,5 @@
--- SQLite schema for empowerment-first memory + session storage.
--- This schema mirrors the guardrails: explicit goals, consent gates,
--- constraint-aware recommendations, and reflection logging.
+-- SQLite schema for discovery-first memory + session storage.
+-- This schema supports intent inference, alignment, and catalog analytics.
 
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;

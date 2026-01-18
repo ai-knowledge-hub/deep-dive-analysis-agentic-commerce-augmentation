@@ -18,7 +18,7 @@ def test_raw_offer_conversion_preserves_metadata():
         media=["https://example.com/chair.jpg"],
         attributes={
             "capabilities": ["Posture"],
-            "empowerment_scores": {"physical_agency": 0.8},
+            "intent_scores": {"goal_alignment": 0.8},
         },
         confidence=0.95,
         completeness=0.9,

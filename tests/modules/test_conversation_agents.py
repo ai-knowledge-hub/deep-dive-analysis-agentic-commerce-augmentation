@@ -8,12 +8,10 @@ from modules.commerce.domain import Product
 from modules.memory.semantic import SemanticMemory
 from modules.conversation.agents import (
     CommerceAgent,
-    ReflectionAgent,
     IntentAgent,
     CapabilityAgent,
     ExplainAgent,
 )
-from modules.conversation.guards import AutonomyGuardAgent
 
 # Provide lightweight google.genai stubs before importing modules that rely on them.
 if "google" not in sys.modules:
@@ -96,7 +94,7 @@ def test_commerce_agent_emits_clarifications(monkeypatch):
     clarifications = plan["clarifications"]
     assert any("confidence" in message.lower() for message in clarifications)
     assert plan["data_quality"]["average_confidence"] == round(0.6, 2)
-    assert "goal_alignment" in plan["empowerment"]
+    assert "goal_alignment" in plan["alignment"]
 
 
 def test_commerce_agent_filters_low_confidence(monkeypatch):
@@ -137,7 +135,7 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
     ids = [product["id"] for product in plan["products"]]
     assert ids == ["p_high", "p_mid"]
     assert any("hidden" in message.lower() for message in plan["clarifications"])
-    assert plan["empowerment"]["goal_alignment"]["score"] >= 0.0
+    assert plan["alignment"]["goal_alignment"]["score"] >= 0.0
 
 
 def test_commerce_agent_fallback_query(monkeypatch):
@@ -167,21 +165,6 @@ def test_commerce_agent_fallback_query(monkeypatch):
     assert any("fell back" in clarification for clarification in plan["clarifications"])
 
 
-def test_reflection_mentions_data_quality():
-    plan = {
-        "query": "workspace",
-        "products": [{"id": "p1"}],
-        "data_quality": {"average_confidence": 0.58},
-        "clarifications": [
-            "Data confidence is low; request merchant-verified options or additional context."
-        ],
-    }
-    agent = ReflectionAgent()
-    reflection_text = agent.reflect(plan)
-    assert "Average data confidence" in reflection_text
-    assert "Clarification" in reflection_text
-
-
 def test_explain_agent_mentions_confidence():
     products = [
         {"name": "Focus Chair", "confidence": 0.6, "source": "google_shopping"},
@@ -189,17 +172,6 @@ def test_explain_agent_mentions_confidence():
     ]
     explanation = ExplainAgent().explain(products)
     assert "Focus Chair" in explanation and "0.60" in explanation
-
-
-def test_autonomy_guard_flags_low_confidence():
-    guard = AutonomyGuardAgent()
-    result = guard.check(
-        rationale="",
-        clarifications=["Some recommendations come from discovery"],
-        products=[{"confidence": 0.4, "source": "google_shopping"}],
-    )
-    assert result["status"] == "needs_review"
-    assert any("confidence" in flag.lower() for flag in result["flags"])
 
 
 def test_intent_agent_routes_through_hybrid(monkeypatch):

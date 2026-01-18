@@ -8,7 +8,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <title>Empowerment Commerce</title>
-        <meta name="description" content="AI shopping that optimizes for empowerment, not addiction" />
+        <meta
+          name="description"
+          content="Intentionality optimization for AI commerce discovery"
+        />
       </head>
       <body>
         {children}

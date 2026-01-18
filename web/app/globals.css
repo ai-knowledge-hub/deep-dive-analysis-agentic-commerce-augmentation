@@ -387,6 +387,128 @@ ul { list-style: none; }
   border-radius: 8px;
 }
 
+.profile-card {
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text-primary);
+}
+
+.profile-card__title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.profile-card__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.profile-card__score {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 12px;
+}
+
+.profile-card__delta {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-card__legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-card__delta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-card__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.profile-card__bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(90, 141, 255, 0.7), rgba(120, 200, 255, 0.9));
+}
+
+.profile-card__bar--current span {
+  background: linear-gradient(90deg, rgba(120, 255, 188, 0.7), rgba(140, 255, 208, 0.95));
+}
+
+.profile-card__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.profile-card__value {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.profile-card__delta-value {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.intent-card {
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text-primary);
+}
+
+.intent-card__title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.intent-card__label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.intent-card__meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
 .panel__header {
   display: flex;
   align-items: center;

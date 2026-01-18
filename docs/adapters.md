@@ -1,6 +1,6 @@
 # Commerce Adapters
 
-The platform loads products via adapters that transform external catalog formats into our empowerment-aware product model. Each adapter emits `RawOffer` objects that flow through the `RawOffer → RawProduct → Product` pipeline.
+The platform loads products via adapters that transform external catalog formats into our intent-legible product model. Each adapter emits `RawOffer` objects that flow through the `RawOffer → RawProduct → Product` pipeline, with optional intentionality enrichment.
 
 ## Available Adapters
 
@@ -10,6 +10,7 @@ The platform loads products via adapters that transform external catalog formats
 | `shopify` | Shopify Storefront API | High | First-party merchant data |
 | `google_shopping` | Mock Google Shopping | Medium | Testing aggregated flows |
 | `google_merchant` | Merchant Center JSON feed | Medium | Production aggregated data |
+| `ucp` | Universal Commerce Protocol | Low | Adapter stub (discovery) |
 
 ---
 
@@ -88,7 +89,7 @@ Each entry must include standard Merchant Center fields:
 ### Notes
 
 - Assigned **medium confidence** (aggregated discovery surface)
-- Empowerment scoring considers data uncertainty
+- Alignment scoring considers data quality for inference
 - See `data/google_merchant_feed.json` for sample format
 
 ---
@@ -125,13 +126,13 @@ See [docs/strategic-positioning.md](./strategic-positioning.md) for UCP adapter 
 All adapters feed into the same pipeline:
 
 ```
-External Source → RawOffer → RawProduct → Product
+External Source → RawOffer → RawProduct → Product → Product with IntentionalityProfile
                      ↓
               Confidence Score
               Completeness Score
               Inferred Fields List
 ```
 
-This metadata enables empowerment scoring to reason about data quality—agents can express uncertainty ("this is a strong candidate" vs. "this is a hunch").
+This metadata enables alignment scoring to reason about data quality—the system can express confidence in product-intent matches based on data completeness.
 
 See [docs/feed_schema.md](./feed_schema.md) for the complete schema specification.

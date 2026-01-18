@@ -39,7 +39,7 @@ def _entry_to_offer(entry: dict) -> RawOffer:
     price, currency = _parse_price(entry["price"])
     attributes = {
         "capabilities": entry.get("capabilities", []),
-        "empowerment_scores": entry.get("empowerment_scores", {}),
+        "intent_scores": entry.get("intent_scores", entry.get("empowerment_scores", {})),
         "tags": [entry.get("google_product_category", "")],
         "brand_override": entry.get("brand"),
     }
@@ -60,7 +60,7 @@ def _entry_to_offer(entry: dict) -> RawOffer:
         confidence=0.8,
         completeness=0.7,
         inferred_fields=[
-            key for key in ["capabilities", "empowerment_scores"] if key not in entry
+            key for key in ["capabilities", "intent_scores", "empowerment_scores"] if key not in entry
         ],
     )
 

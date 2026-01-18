@@ -57,14 +57,14 @@ class RawProduct:
 
 @dataclass
 class Product:
-    """LLM-ready representation that powers reasoning and empowerment metrics."""
+    """LLM-ready representation that powers reasoning and alignment metrics."""
 
     id: str
     name: str
     price: float
     tags: List[str]
     description: str = ""
-    empowerment_scores: Dict[str, float] = field(default_factory=dict)
+    intent_scores: Dict[str, float] = field(default_factory=dict)
     capabilities_enabled: List[str] = field(default_factory=list)
     capability_embedding: List[float] | None = None
     brand: str | None = None

@@ -1,4 +1,4 @@
-"""SQLite connection helpers for empowerment-first memory storage."""
+"""SQLite connection helpers for discovery-first memory storage."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from threading import Lock
 from typing import Callable, Iterator, Optional
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
-DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "./db/empowerment.db")).resolve()
+DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "./db/discovery.db")).resolve()
 
 _connection: Optional[sqlite3.Connection] = None
 _lock = Lock()

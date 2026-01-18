@@ -10,7 +10,7 @@ def test_session_manager_tracks_goals_and_turns(tmp_path: Path):
     manager.record_goal("Reduce back pain", domain="health", importance=0.9)
     manager.record_turn("agent", "Logged your goal.", metadata={"type": "ack"})
     manager.record_recommendation(["p1", "p2"], empowering_score=0.8)
-    manager.record_reflection("Session captured.")
+    manager.record_outcome("Session captured.")
 
     goals = manager.goal_texts()
     assert "Reduce back pain" in goals

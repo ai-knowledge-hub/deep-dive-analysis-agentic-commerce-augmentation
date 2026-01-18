@@ -8,8 +8,8 @@ from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.conversation.context import build_context
 from modules.memory.session_manager import SessionManager
 from modules.memory.semantic import SemanticMemory
-from modules.empowerment import reflection, goal_alignment
-from modules.empowerment.llm_reasoner import reason_about_products
+from modules.alignment import goal_alignment
+from modules.alignment.llm_reasoner import reason_about_products
 from modules.commerce.plan_builder import PlanBuilder
 from modules.commerce import search as commerce_search
 
@@ -64,23 +64,6 @@ class CommerceAgent:
         return [product.name for product in commerce_search(query)]
 
 
-class ReflectionAgent:
-    """Agent that triggers empowerment-aware reflection."""
-
-    def reflect(self, plan: dict) -> str:
-        """Generate reflection from plan."""
-        products = plan.get("products", [])
-        data_quality = plan.get("data_quality", {})
-        entries = [
-            f"Plan query: {plan.get('query')}",
-            f"Products considered: {len(products)}",
-            f"Average data confidence: {data_quality.get('average_confidence', 0.0)}",
-        ]
-        clarifications = plan.get("clarifications", [])
-        entries.extend(f"Clarification: {message}" for message in clarifications)
-        return reflection.generate(entries)
-
-
 class ExplainAgent:
     """Agent that provides short explanations of recommendations."""
 
@@ -111,7 +94,6 @@ class CapabilityAgent:
 __all__ = [
     "IntentAgent",
     "CommerceAgent",
-    "ReflectionAgent",
     "ExplainAgent",
     "CapabilityAgent",
 ]

@@ -35,8 +35,8 @@ def related_by_tag(tag: str) -> List[Product]:
     return [product for product in CATALOG if tag in product.tags]
 
 
-def list_empowerment_scores(products: Iterable[Product]) -> List[dict]:
+def list_intent_scores(products: Iterable[Product]) -> List[dict]:
     summaries = []
     for product in products:
-        summaries.append({"id": product.id, "scores": product.empowerment_scores})
+        summaries.append({"id": product.id, "scores": product.intent_scores})
     return summaries

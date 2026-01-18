@@ -54,55 +54,6 @@ PRODUCT_COMPARE_TOOL = {
 }
 
 
-ASSESS_EMPOWERMENT_TOOL = {
-    "name": "assess_empowerment",
-    "description": (
-        "Assess how well a set of products aligns with the user's stated goals. "
-        "Returns alignment scores and identifies which goals are served vs not served. "
-        "Use this before presenting recommendations to ensure empowerment focus."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "goals": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "List of user's stated goals (from values clarification)",
-            },
-            "product_ids": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "List of product IDs to assess",
-            },
-        },
-        "required": ["goals", "product_ids"],
-    },
-}
-
-
-GENERATE_REFLECTION_TOOL = {
-    "name": "generate_reflection",
-    "description": (
-        "Generate a reflection on the shopping conversation. "
-        "Use this at the end of a conversation to help the user "
-        "internalize insights about their goals and decisions."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "entries": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": (
-                    "Key points from the conversation to reflect on. "
-                    "Include: goals identified, products considered, decision made"
-                ),
-            },
-        },
-        "required": ["entries"],
-    },
-}
-
 WEB_FETCH_TOOL = {
     "name": "web_fetch",
     "description": (
@@ -171,8 +122,6 @@ MEMORY_WRITE_TOOL = {
 ALL_TOOLS = [
     PRODUCT_SEARCH_TOOL,
     PRODUCT_COMPARE_TOOL,
-    ASSESS_EMPOWERMENT_TOOL,
-    GENERATE_REFLECTION_TOOL,
     WEB_FETCH_TOOL,
     IMAGE_ANALYZE_TOOL,
     MEMORY_WRITE_TOOL,
@@ -189,11 +138,6 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict:
     tool_mapping = {
         "product_search": ("product_search", lambda a: (a["query"],)),
         "product_compare": ("product_compare", lambda a: (a["product_ids"],)),
-        "assess_empowerment": (
-            "assess_empowerment",
-            lambda a: (a["goals"], a["product_ids"]),
-        ),
-        "generate_reflection": ("generate_reflection", lambda a: (a["entries"],)),
         "web_fetch": ("web_fetch", lambda a: (a["url"], a.get("max_chars", 5000))),
         "image_analyze": (
             "image_analyze",

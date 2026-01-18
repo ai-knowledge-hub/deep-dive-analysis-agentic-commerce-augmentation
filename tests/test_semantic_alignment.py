@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from modules.commerce.domain import Product
-from modules.empowerment.goal_alignment import (
+from modules.alignment.goal_alignment import (
     assess,
     get_alignment_explanation,
     _build_product_semantic_text,
