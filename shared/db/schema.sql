@@ -57,8 +57,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     product_ids_json TEXT NOT NULL,
-    empowering_score REAL,
-    constraints_passed INTEGER DEFAULT 1,
+    alignment_score REAL,
     context_json TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE

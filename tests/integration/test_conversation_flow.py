@@ -69,7 +69,11 @@ def integration_client(tmp_path, monkeypatch):
 
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
-            return {"label": "workspace_upgrade", "confidence": 0.9, "domain": "career"}
+            return {
+                "primary_goal": "workspace upgrade",
+                "confidence": 0.9,
+                "domain": "career",
+            }
 
     class DummyCommerceAgent:
         def build_plan(self, intent, goals, context=None):
@@ -124,7 +128,7 @@ def test_full_conversation_flow(integration_client):
     assert message_response.status_code == 200
     message_payload = message_response.json()
 
-    assert message_payload["intent"]["label"] == "workspace_upgrade"
+    assert message_payload["intent"]["primary_goal"] == "workspace upgrade"
     assert (
         message_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     )

@@ -1,32 +1,32 @@
-"""Hybrid intent classifier combining LLM with keyword fallback."""
+"""Hybrid intent inference combining LLM with keyword fallback."""
 
 from __future__ import annotations
 
 import json
-from typing import Dict, List
+from typing import Dict
 
 from shared.llm.gateway import generate
 from shared.llm.prompts import INTENT_CLASSIFICATION_PROMPT
-from modules.intent.domain import Intent
+from modules.intent.domain import InferredIntent
 from modules.intent import classifier as keyword_classifier
 
 
 class HybridIntentClassifier:
-    """Intent classifier that uses LLM first with keyword fallback."""
+    """Intent inference that uses LLM first with keyword fallback."""
 
     def __init__(self, threshold: float = 0.55) -> None:
         self.threshold = threshold
         self._context: str | None = None
 
-    def classify(self, text: str, context: str | None = None) -> Intent:
-        """Classify intent using LLM with keyword fallback.
+    def classify(self, text: str, context: str | None = None) -> InferredIntent:
+        """Infer intent using LLM with keyword fallback.
 
         Args:
             text: User input text to classify
             context: Optional session context for better classification
 
         Returns:
-            Intent object with classification result
+            InferredIntent object with structured intent result
         """
         previous_context = self._context
         self._context = context
@@ -41,7 +41,7 @@ class HybridIntentClassifier:
         return keyword_intent
 
     def _call_llm(self, text: str) -> Dict[str, object]:
-        """Call LLM for intent classification."""
+        """Call LLM for intent inference."""
         try:
             context = f"\n\nSession context:\n{self._context}" if self._context else ""
             raw = generate(
@@ -62,28 +62,5 @@ class HybridIntentClassifier:
             return json.loads(response)
         except json.JSONDecodeError:
             return {}
-
-    def _get_str(self, data: Dict[str, object], key: str, default: str) -> str:
-        """Extract string value from dict."""
-        value = data.get(key, default)
-        return value if isinstance(value, str) else default
-
-    def _get_list(
-        self, data: Dict[str, object], key: str, default: List[str]
-    ) -> List[str]:
-        """Extract list value from dict."""
-        value = data.get(key, default)
-        if isinstance(value, list) and all(isinstance(item, str) for item in value):
-            return value
-        return default
-
-    def _get_float(self, data: Dict[str, object], key: str, default: float) -> float:
-        """Extract float value from dict."""
-        value = data.get(key, default)
-        try:
-            return float(value)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return default
-
 
 __all__ = ["HybridIntentClassifier"]

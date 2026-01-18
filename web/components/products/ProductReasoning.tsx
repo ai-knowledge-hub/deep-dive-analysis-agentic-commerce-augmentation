@@ -38,6 +38,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
       id: product.id ?? explanation?.id ?? `product-${index}`,
       name: product.name ?? explanation?.name ?? "Recommendation",
       confidence: product.confidence ?? explanation?.confidence,
+      alignment_score: product.alignment_score,
       capabilities_enabled: product.capabilities_enabled ?? explanation?.capabilities_enabled,
       reasoning: product.reasoning ?? explanation?.reasoning,
     };
@@ -74,11 +75,18 @@ export function ProductReasoning({ products, explanations }: Props) {
             <div key={product.id} className="product">
               <div className="product__header">
                 <span className="product__name">{product.name}</span>
-                {product.confidence !== undefined && (
-                  <span className="product__confidence">
-                    {(product.confidence * 100).toFixed(0)}%
-                  </span>
-                )}
+                <div className="product__meta">
+                  {product.alignment_score !== undefined && (
+                    <span className="product__confidence">
+                      Align {(product.alignment_score * 100).toFixed(0)}%
+                    </span>
+                  )}
+                  {product.confidence !== undefined && (
+                    <span className="product__confidence">
+                      {(product.confidence * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
               </div>
               {(product.capabilities_enabled ?? []).length > 0 && (
                 <div className="product__tags">

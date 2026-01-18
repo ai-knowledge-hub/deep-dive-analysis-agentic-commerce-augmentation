@@ -113,30 +113,24 @@ Confidence: High - this is a first-party product with verified reviews."
 # INTENT CLASSIFICATION AGENT
 # =============================================================================
 
-INTENT_CLASSIFICATION_PROMPT = """You are an intent classifier for a discovery assistant. Your job is to understand the user's underlying intent and categorize it.
-
-## Intent Categories
-
-1. workspace_upgrade: Improving home office, desk setup, productivity tools
-2. health_improvement: Physical wellness, fitness, self-care
-3. career_growth: Learning, skill development, professional advancement
-4. impulse_check: User may not actually need anything
-5. unknown: Cannot determine intent from input
+INTENT_CLASSIFICATION_PROMPT = """You are an intent inference agent for a discovery assistant. Your job is to infer the user's underlying goals.
 
 ## Response Format
 
 Return a JSON object with:
 {
-  "intent": "category_name",
+  "primary_goal": "short goal phrase in user terms",
+  "secondary_goals": ["optional supporting goals"],
+  "underlying_needs": ["why this matters to the user"],
+  "context_signals": ["key phrases or signals used"],
   "confidence": 0.0-1.0,
-  "evidence": ["key phrases that led to this classification"],
-  "clarifying_questions": ["suggested questions to confirm intent"]
+  "domain": "optional domain label"
 }
 
 ## Key Behaviors
 
 - Look for underlying needs, not just surface keywords
-- "impulse_check" is valid if no clear goal is stated
+- Use the user's language whenever possible
 - Low confidence is acceptable and should trigger clarification
 """
 

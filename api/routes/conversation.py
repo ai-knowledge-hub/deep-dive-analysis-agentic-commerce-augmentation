@@ -95,7 +95,7 @@ def _process_message(
     intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
-    intent_signal = intent.get("label") or ""
+    intent_signal = intent.get("primary_goal") or intent.get("label") or ""
     if intent_signal:
         manager.record_turn(
             "agent",
@@ -115,7 +115,7 @@ def _process_message(
     )
     manager.record_recommendation(
         product_ids=[product["id"] for product in plan.get("products", [])],
-        empowering_score=(
+        alignment_score=(
             plan.get("alignment", {}).get("goal_alignment", {}) or {}
         ).get("score"),
         context={

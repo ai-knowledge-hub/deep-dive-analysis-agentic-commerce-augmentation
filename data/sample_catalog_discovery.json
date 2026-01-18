@@ -5,7 +5,7 @@
     "price": 599,
     "tags": ["workspace", "ergonomic", "standing"],
     "description": "Height-adjustable desk that reduces strain during long focus blocks.",
-    "empowerment_scores": {
+    "intent_scores": {
       "physical_agency": 0.82,
       "cognitive_relief": 0.68
     },
@@ -17,7 +17,7 @@
     "price": 349,
     "tags": ["workspace", "health"],
     "description": "Adaptive lumbar support with breathable fabric for long sessions.",
-    "empowerment_scores": {
+    "intent_scores": {
       "physical_agency": 0.91,
       "wellbeing": 0.74
     },
@@ -29,7 +29,7 @@
     "price": 129,
     "tags": ["lighting", "focus"],
     "description": "Variable color temperature lamp for circadian-friendly sprints.",
-    "empowerment_scores": {
+    "intent_scores": {
       "cognitive_relief": 0.55,
       "wellbeing": 0.61
     },

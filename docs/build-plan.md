@@ -15,11 +15,34 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 | `intentionality/` | Functional | Needs richer LLM enrichment + batch pipeline |
 | `alignment/` | Partial | Alignment summary in place; per-product scores still thin |
 | `commerce/` | Functional | Intentionality enrichment in plan only (not adapter pipeline) |
-| `memory/` | Functional | Needs intent‑aware summaries |
-| `conversation/` | Functional | Needs intent display + alignment card wiring |
+| `memory/` | Partial | Still carries legacy naming + fields; needs intent-aware summaries |
+| `conversation/` | Partial | Demo flow still uses legacy framing + values agent |
 | `mcp/` | Partial | Tooling not aligned to discovery workflow |
-| `api/` | Functional | Alignment endpoints now exist; needs schemas |
-| `web/` | Functional | Intent display + discoverability delta visuals missing |
+| `api/` | Functional | Alignment endpoints now exist; schemas present |
+| `web/` | Functional | Intent display + discoverability delta are live |
+
+---
+
+## Current Migration Findings (Code Scan → Plan Map)
+
+### In Place
+- Intentionality profiling module exists with LLM prompt + profile builder (`modules/intentionality/*`).
+- Alignment summary via embeddings + keyword fallback exists (`modules/alignment/goal_alignment.py`).
+- Discovery endpoints live: `/intent/infer`, `/products/align`, `/products/profile`, `/products/enrich` (`api/routes/*`).
+- UI shows inferred intent + discoverability delta (`web/components/intent/IntentDisplay.tsx`, `web/components/products/IntentionalityProfileCard.tsx`).
+- UCP adapter stub exists (`modules/commerce/adapters/ucp/loader.py`).
+
+### Still Partial
+- Intent model is taxonomy/keyword-based; no `InferredIntent` with signals/multi-goal output yet (`modules/intent/*`).
+- Intentionality enrichment is computed ad-hoc; not wired into adapter pipeline (`modules/commerce/plan_builder.py`, `modules/commerce/adapters/*`).
+- Per-product alignment scores + explanations are not first-class in API/UI (alignment summary only).
+- Conversation flow still uses legacy clarification + “autonomy” phrasing (`modules/conversation/*`, `modules/values/*`).
+- Memory schema still needs alignment-first fields (was using empowerment naming).
+
+### App Hygiene (Blocking) — resolved in cleanup
+- [x] Fix broken import: `llm/agents/product_reasoner.py` → alignment reasoner
+- [x] Remove `empowering_score` + `constraints_passed` from schema + repos
+- [x] Remove empowerment artifacts from adapters, tooling, data, and UI
 
 ---
 
@@ -80,7 +103,7 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - [x] Wire “discoverability delta” panel (before/after comparison)
 
 ### Phase 3 — Protocol & Catalog Integration
-- [ ] Add UCP adapter stub + loader registration
+- [x] Add UCP adapter stub + loader registration
 - [ ] Enrich Shopify + Google Merchant adapters with intentionality profiles
 - [ ] Batch enrichment pipeline + report output
 

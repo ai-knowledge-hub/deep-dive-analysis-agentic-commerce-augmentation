@@ -1,9 +1,9 @@
-"""Intent domain models - unified Intent type and supporting models."""
+"""Intent domain models - inferred intent representations and taxonomy."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 @dataclass(frozen=True)
@@ -17,51 +17,49 @@ class IntentDefinition:
 
 
 @dataclass
-class Intent:
-    """Unified intent representation used throughout the system.
+class InferredIntent:
+    """Structured inferred intent output for discovery alignment."""
 
-    This combines the previous Intent and IntentResult structures into a single class.
-    """
-
-    label: str
-    confidence: float
-    evidence: List[str]
-    domain: str
-    clarifying_questions: List[str]
+    primary_goal: str
+    secondary_goals: List[str] = field(default_factory=list)
+    underlying_needs: List[str] = field(default_factory=list)
+    context_signals: List[str] = field(default_factory=list)
+    confidence: float = 0.0
+    domain: str | None = None
     source: str = "keyword"
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
         return {
-            "label": self.label,
+            "primary_goal": self.primary_goal,
+            "secondary_goals": list(self.secondary_goals),
+            "underlying_needs": list(self.underlying_needs),
+            "context_signals": list(self.context_signals),
             "confidence": self.confidence,
-            "evidence": self.evidence,
             "domain": self.domain,
-            "clarifying_questions": self.clarifying_questions,
             "source": self.source,
         }
 
 
 @dataclass
 class IntentContext:
-    """Context for intent classification including prior turns and goals."""
+    """Context for intent inference including history and preferences."""
 
-    turns: List[str] = field(default_factory=list)
-    goals: List[str] = field(default_factory=list)
-
-    def add_turn(self, text: str) -> None:
-        """Add a conversation turn."""
-        self.turns.append(text)
-
-    def add_goal(self, goal: str) -> None:
-        """Add a user goal."""
-        self.goals.append(goal)
+    query: str
+    session_history: List[str] = field(default_factory=list)
+    user_goals: List[str] = field(default_factory=list)
+    user_preferences: Dict[str, Any] = field(default_factory=dict)
 
     def summarize(self) -> str:
         """Create a text summary of the context."""
-        joined_turns = " | ".join(self.turns)
-        joined_goals = ", ".join(self.goals)
-        return f"Turns: {joined_turns}\nGoals: {joined_goals}"
+        joined_turns = " | ".join(self.session_history)
+        joined_goals = ", ".join(self.user_goals)
+        return (
+            f"Query: {self.query}\n"
+            f"Turns: {joined_turns}\n"
+            f"Goals: {joined_goals}\n"
+            f"Preferences: {self.user_preferences}"
+        )
 
 
-__all__ = ["Intent", "IntentDefinition", "IntentContext"]
+__all__ = ["InferredIntent", "IntentDefinition", "IntentContext"]

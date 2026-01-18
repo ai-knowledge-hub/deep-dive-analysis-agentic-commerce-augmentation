@@ -57,6 +57,7 @@ class CommerceAgent:
             context=context,
             reason_fn=reason_about_products,
             assess_fn=goal_alignment.assess,
+            score_fn=goal_alignment.score_products,
         )
 
     def recommend(self, query: str) -> List[str]:

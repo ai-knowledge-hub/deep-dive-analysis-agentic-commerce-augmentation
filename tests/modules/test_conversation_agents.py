@@ -90,7 +90,7 @@ def test_commerce_agent_emits_clarifications(monkeypatch):
         "modules.commerce.plan_builder.product_search", lambda query: mock_products
     )
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace"}, goals=["workspace upgrade"])
+    plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace upgrade"])
     clarifications = plan["clarifications"]
     assert any("confidence" in message.lower() for message in clarifications)
     assert plan["data_quality"]["average_confidence"] == round(0.6, 2)
@@ -131,7 +131,7 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
         "modules.commerce.plan_builder.product_search", lambda query: products
     )
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace"}, goals=["workspace"])
+    plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace"])
     ids = [product["id"] for product in plan["products"]]
     assert ids == ["p_high", "p_mid"]
     assert any("hidden" in message.lower() for message in plan["clarifications"])
@@ -159,7 +159,8 @@ def test_commerce_agent_fallback_query(monkeypatch):
     monkeypatch.setattr("modules.commerce.plan_builder.product_search", mock_search)
     agent = CommerceAgent()
     plan = agent.build_plan(
-        {"label": "workspace_upgrade", "domain": "career"}, goals=["career growth"]
+        {"primary_goal": "workspace upgrade", "domain": "career"},
+        goals=["career growth"],
     )
     assert plan["query"] == "career"
     assert any("fell back" in clarification for clarification in plan["clarifications"])
@@ -180,7 +181,7 @@ def test_intent_agent_routes_through_hybrid(monkeypatch):
     class FakeResult:
         def to_dict(self):
             classifier_calls["count"] += 1
-            return {"label": "workspace_upgrade", "confidence": 0.9}
+            return {"primary_goal": "workspace upgrade", "confidence": 0.9}
 
     class FakeClassifier:
         def classify(self, text, context=None):
@@ -195,7 +196,7 @@ def test_intent_agent_routes_through_hybrid(monkeypatch):
     intent_agent = IntentAgent()
     result = intent_agent.detect_intent("Need focus")
 
-    assert result["label"] == "workspace_upgrade"
+    assert result["primary_goal"] == "workspace upgrade"
     assert classifier_calls["count"] == 1
 
 

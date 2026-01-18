@@ -636,6 +636,13 @@ ul { list-style: none; }
   font-weight: 600;
 }
 
+.product__meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .product__confidence {
   font-size: 11px;
   font-weight: 600;

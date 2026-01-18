@@ -86,7 +86,7 @@ export default function HomePage() {
     clarifications.length > 0 ||
     valuesState ||
     (plan?.products?.length ?? 0) > 0 ||
-    intent?.label;
+    intent?.primary_goal;
 
   useEffect(() => {
     const el = chatContainerRef.current;

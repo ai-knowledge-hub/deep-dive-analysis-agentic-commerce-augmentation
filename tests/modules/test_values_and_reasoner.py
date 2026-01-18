@@ -58,7 +58,7 @@ from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.values.domain import ClarificationState
 from modules.values.agent import ValuesAgent
 from modules.alignment.llm_reasoner import reason_about_products
-from modules.intent.domain import Intent as KeywordIntent
+from modules.intent.domain import InferredIntent as KeywordIntent
 
 
 def test_hybrid_intent_prefers_llm_response(monkeypatch):
@@ -66,8 +66,8 @@ def test_hybrid_intent_prefers_llm_response(monkeypatch):
         prompt: str, system_instruction: str | None = None, provider: str | None = None
     ) -> str:
         return (
-            '{"intent": "workspace_upgrade", "confidence": 0.9, '
-            '"evidence": ["desk"], "clarifying_questions": ["q1"], "domain": "career"}'
+            '{"primary_goal": "workspace upgrade", "confidence": 0.9, '
+            '"context_signals": ["desk"], "underlying_needs": ["comfort"], "domain": "career"}'
         )
 
     monkeypatch.setattr("modules.intent.llm_classifier.generate", fake_generate)
@@ -75,24 +75,25 @@ def test_hybrid_intent_prefers_llm_response(monkeypatch):
 
     result = classifier.classify("Need a better desk setup")
 
-    assert result.label == "workspace_upgrade"
+    assert result.primary_goal == "workspace upgrade"
     assert result.source == "gemini"
     assert result.confidence == pytest.approx(0.9)
-    assert "desk" in result.evidence
+    assert "desk" in result.context_signals
 
 
 def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
     def fake_generate(
         prompt: str, system_instruction: str | None = None, provider: str | None = None
     ) -> str:
-        return '{"intent": "unknown", "confidence": 0.2, "evidence": [], "clarifying_questions": []}'
+        return '{"primary_goal": "unknown", "confidence": 0.2, "context_signals": []}'
 
     fallback_intent = KeywordIntent(
-        label="workspace_upgrade",
+        primary_goal="workspace upgrade",
+        secondary_goals=[],
+        underlying_needs=["What triggers this need?"],
+        context_signals=["workspace"],
         confidence=0.85,
-        evidence=["workspace"],
         domain="career",
-        clarifying_questions=["What triggers this need?"],
     )
 
     monkeypatch.setattr("modules.intent.llm_classifier.generate", fake_generate)
@@ -107,10 +108,10 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
     classifier = HybridIntentClassifier()
     result = classifier.classify("Need help")
 
-    assert result.label == "workspace_upgrade"
-    assert result.source == "keyword"
+    assert result.primary_goal == "workspace upgrade"
+    assert result.source == "keyword_fallback"
     assert result.confidence == pytest.approx(0.85)
-    assert "workspace" in result.evidence
+    assert "workspace" in result.context_signals
 
 
 def test_values_agent_start_records_turns(monkeypatch):

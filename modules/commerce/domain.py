@@ -66,6 +66,7 @@ class Product:
     description: str = ""
     intent_scores: Dict[str, float] = field(default_factory=dict)
     capabilities_enabled: List[str] = field(default_factory=list)
+    intentionality_profile: Dict[str, Any] | None = None
     capability_embedding: List[float] | None = None
     brand: str | None = None
     category: str | None = None

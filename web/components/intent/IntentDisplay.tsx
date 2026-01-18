@@ -5,13 +5,18 @@ type Props = {
 };
 
 export function IntentDisplay({ intent }: Props) {
-  if (!intent?.label) return null;
+  if (!intent?.primary_goal) return null;
   const confidence =
     intent.confidence !== undefined ? (intent.confidence * 100).toFixed(0) : "—";
   return (
     <div className="intent-card">
       <div className="intent-card__title">Inferred Intent</div>
-      <div className="intent-card__label">{intent.label}</div>
+      <div className="intent-card__label">{intent.primary_goal}</div>
+      {intent.underlying_needs?.length ? (
+        <div className="intent-card__meta">
+          Needs: {intent.underlying_needs.slice(0, 2).join(", ")}
+        </div>
+      ) : null}
       <div className="intent-card__meta">Confidence: {confidence}%</div>
     </div>
   );

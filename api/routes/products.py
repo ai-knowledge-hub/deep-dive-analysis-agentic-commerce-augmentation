@@ -9,6 +9,7 @@ from modules.commerce import search as product_search
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.intentionality.profiling import build_profile
 from modules.alignment.goal_alignment import assess as assess_alignment
+from modules.alignment.goal_alignment import score_products as score_alignment
 from pydantic import BaseModel, Field
 
 if APIRouter:
@@ -46,18 +47,23 @@ if APIRouter:
         product_ids = payload.product_ids or []
         classifier = HybridIntentClassifier()
         intent = classifier.classify(query).to_dict()
+        goal_signals = _intent_goals(intent)
         candidates = []
         if product_ids:
             for pid in product_ids:
                 candidates.extend(product_search.search(pid))
         else:
             candidates = product_search.search(query)
-        alignment = assess_alignment([intent.get("label", "")], candidates)
+        alignment = assess_alignment(goal_signals, candidates)
         baseline = assess_alignment(
-            [intent.get("label", "")], candidates, use_semantic=False
+            goal_signals, candidates, use_semantic=False
         )
+        per_product = [
+            score.__dict__ for score in score_alignment(goal_signals, candidates)
+        ]
         alignment_payload = alignment.__dict__
         alignment_payload["baseline_score"] = baseline.score
+        alignment_payload["per_product"] = per_product
         return {"intent": intent, "alignment": alignment_payload}
 
     @router.post("/enrich")
@@ -74,16 +80,36 @@ if APIRouter:
         if query:
             classifier = HybridIntentClassifier()
             intent = classifier.classify(query).to_dict()
-            alignment = assess_alignment([intent.get("label", "")], [product])
+            goal_signals = _intent_goals(intent)
+            alignment = assess_alignment(goal_signals, [product])
             baseline = assess_alignment(
-                [intent.get("label", "")], [product], use_semantic=False
+                goal_signals, [product], use_semantic=False
             )
             alignment = alignment.__dict__
             alignment["baseline_score"] = baseline.score
+            alignment["per_product"] = [
+                score.__dict__
+                for score in score_alignment(goal_signals, [product])
+            ]
         return {
             "product": product.__dict__,
             "profile": profile,
             "alignment": alignment,
         }
+
+    def _intent_goals(intent: dict) -> list[str]:
+        goals: list[str] = []
+        primary = intent.get("primary_goal") or intent.get("label")
+        if primary and primary != "unknown":
+            goals.append(primary)
+        goals.extend(intent.get("secondary_goals") or [])
+        goals.extend(intent.get("underlying_needs") or [])
+        seen = set()
+        deduped = []
+        for goal in goals:
+            if goal and goal != "unknown" and goal not in seen:
+                seen.add(goal)
+                deduped.append(goal)
+        return deduped
 else:  # pragma: no cover
     router = None

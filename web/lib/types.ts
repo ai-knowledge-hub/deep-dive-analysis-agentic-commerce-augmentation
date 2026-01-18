@@ -15,6 +15,7 @@ export type Product = {
   merchant_name?: string;
   offer_url?: string;
   capabilities_enabled?: string[];
+  alignment_score?: number;
   intentionality_profile?: {
     product_id?: string;
     capabilities_enabled?: string[];
@@ -30,10 +31,12 @@ export type ConversationResponse = {
   session_id: string;
   user_id: string;
   intent?: {
-    label?: string;
+    primary_goal?: string;
+    secondary_goals?: string[];
+    underlying_needs?: string[];
+    context_signals?: string[];
     confidence?: number;
-    evidence?: string[];
-    clarifying_questions?: string[];
+    domain?: string;
   };
   baseline_alignment?: number;
   plan?: {

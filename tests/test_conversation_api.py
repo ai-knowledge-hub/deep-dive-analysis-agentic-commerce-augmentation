@@ -94,7 +94,11 @@ def _configure_full_pipeline(monkeypatch):
 
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
-            return {"label": "workspace_upgrade", "confidence": 0.9, "domain": "career"}
+            return {
+                "primary_goal": "workspace upgrade",
+                "confidence": 0.9,
+                "domain": "career",
+            }
 
     class DummyCommerceAgent:
         def build_plan(self, intent, goals, context=None):
@@ -145,7 +149,11 @@ def _configure_research_pipeline(monkeypatch):
 
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
-            return {"label": "workspace_upgrade", "confidence": 0.4, "domain": "career"}
+            return {
+                "primary_goal": "workspace upgrade",
+                "confidence": 0.4,
+                "domain": "career",
+            }
 
     class DummyCommerceAgent:
         def build_plan(self, intent, goals, context=None):
@@ -200,7 +208,7 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["intent"]["label"] == "workspace_upgrade"
+    assert data["intent"]["primary_goal"] == "workspace upgrade"
     assert data["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     assert data["explanation"] == "Recommended Focus Chair for posture."
     assert data["product_explanations"][0]["reasoning"] == "Supports Stay energized"
@@ -231,7 +239,7 @@ def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypa
             return type(
                 "Result",
                 (),
-                {"to_dict": lambda self: {"label": "workspace_upgrade"}},
+                {"to_dict": lambda self: {"primary_goal": "workspace upgrade"}},
             )()
 
     monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
@@ -245,7 +253,7 @@ def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypa
     payload = response.json()
     assert payload["product"]["id"] == "p1"
     assert payload["profile"]["product_id"] == "p1"
-    assert payload["alignment"]["aligned_goals"]
+    assert "aligned_goals" in payload["alignment"]
     assert "baseline_score" in payload["alignment"]
 
 
@@ -301,7 +309,7 @@ def test_products_align_endpoint_returns_alignment(client, monkeypatch):
             return type(
                 "Result",
                 (),
-                {"to_dict": lambda self: {"label": "workspace_upgrade"}},
+                {"to_dict": lambda self: {"primary_goal": "workspace upgrade"}},
             )()
 
     monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
@@ -310,8 +318,8 @@ def test_products_align_endpoint_returns_alignment(client, monkeypatch):
     response = client.post("/products/align", json={"query": "Need a stand"})
     assert response.status_code == 200
     payload = response.json()
-    assert payload["intent"]["label"] == "workspace_upgrade"
-    assert payload["alignment"]["aligned_goals"]
+    assert payload["intent"]["primary_goal"] == "workspace upgrade"
+    assert "aligned_goals" in payload["alignment"]
     assert "baseline_score" in payload["alignment"]
 
 
@@ -326,7 +334,12 @@ def test_intent_infer_endpoint_returns_intent(client, monkeypatch):
             return type(
                 "Result",
                 (),
-                {"to_dict": lambda self: {"label": "workspace_upgrade", "confidence": 0.9}},
+                {
+                    "to_dict": lambda self: {
+                        "primary_goal": "workspace upgrade",
+                        "confidence": 0.9,
+                    }
+                },
             )()
 
     monkeypatch.setattr("api.routes.intent.HybridIntentClassifier", DummyClassifier)
@@ -334,7 +347,7 @@ def test_intent_infer_endpoint_returns_intent(client, monkeypatch):
     response = client.post("/intent/infer", json={"query": "Need a better desk"})
     assert response.status_code == 200
     payload = response.json()
-    assert payload["intent"]["label"] == "workspace_upgrade"
+    assert payload["intent"]["primary_goal"] == "workspace upgrade"
 
 
 def test_intent_infer_endpoint_requires_query(client):

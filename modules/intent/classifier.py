@@ -1,10 +1,10 @@
-"""Keyword-based intent classifier."""
+"""Keyword-based intent inference with optional LLM fallback."""
 
 from __future__ import annotations
 
 from typing import Any, Callable, List, Mapping, Tuple
 
-from modules.intent.domain import Intent, IntentDefinition
+from modules.intent.domain import InferredIntent, IntentDefinition
 from modules.intent.taxonomy import INTENT_TAXONOMY
 
 
@@ -12,13 +12,13 @@ LLMClassifier = Callable[[str], Mapping[str, Any]]
 
 
 class KeywordClassifier:
-    """Lightweight intent classifier using keyword matching."""
+    """Lightweight intent inference using keyword matching."""
 
     def __init__(self, taxonomy: List[IntentDefinition] | None = None) -> None:
         self.taxonomy = taxonomy or INTENT_TAXONOMY
 
-    def classify(self, text: str) -> Intent:
-        """Classify intent using keyword matching."""
+    def classify(self, text: str) -> InferredIntent:
+        """Infer intent using keyword matching."""
         return _keyword_intent(text.lower(), self.taxonomy)
 
 
@@ -26,8 +26,8 @@ def classify(
     user_text: str,
     llm_fallback: LLMClassifier | None = None,
     llm_threshold: float = 0.55,
-) -> Intent:
-    """Return an intent via keyword matching, with optional LLM fallback."""
+) -> InferredIntent:
+    """Return inferred intent via keyword matching, with optional LLM fallback."""
     keyword_result = _keyword_intent(user_text.lower(), INTENT_TAXONOMY)
 
     if not llm_fallback:
@@ -38,31 +38,34 @@ def classify(
     except Exception:
         return keyword_result
 
-    llm_label = _get_str(llm_data, ["label", "intent"], keyword_result.label)
-    llm_confidence = _get_float(llm_data, ["confidence", "score"], 0.0)
-    llm_domain = _get_str(llm_data, ["domain"], keyword_result.domain)
-    llm_evidence = _get_list(llm_data, ["evidence"], keyword_result.evidence)
-    llm_questions = _get_list(
-        llm_data, ["clarifying_questions"], keyword_result.clarifying_questions
+    llm_primary = _get_str(
+        llm_data, ["primary_goal", "goal", "intent", "label"], keyword_result.primary_goal
     )
+    llm_confidence = _get_float(llm_data, ["confidence", "score"], 0.0)
+    llm_domain = _get_str(llm_data, ["domain"], keyword_result.domain or "")
+    llm_secondary = _get_list(llm_data, ["secondary_goals"], keyword_result.secondary_goals)
+    llm_needs = _get_list(llm_data, ["underlying_needs"], keyword_result.underlying_needs)
+    llm_signals = _get_list(llm_data, ["context_signals", "evidence"], keyword_result.context_signals)
     llm_source = _get_str(llm_data, ["source"], "gemini")
 
-    if llm_label not in {"", "unknown"} and llm_confidence >= llm_threshold:
-        return Intent(
-            label=llm_label,
+    if llm_primary and llm_primary not in {"unknown"} and llm_confidence >= llm_threshold:
+        return InferredIntent(
+            primary_goal=llm_primary,
+            secondary_goals=llm_secondary,
+            underlying_needs=llm_needs,
+            context_signals=llm_signals,
             confidence=llm_confidence,
-            evidence=llm_evidence,
-            domain=llm_domain,
-            clarifying_questions=llm_questions,
+            domain=llm_domain or None,
             source=llm_source,
         )
 
-    return Intent(
-        label=keyword_result.label,
+    return InferredIntent(
+        primary_goal=keyword_result.primary_goal,
+        secondary_goals=llm_secondary or keyword_result.secondary_goals,
+        underlying_needs=llm_needs or keyword_result.underlying_needs,
+        context_signals=llm_signals or keyword_result.context_signals,
         confidence=max(keyword_result.confidence, llm_confidence),
-        evidence=llm_evidence or keyword_result.evidence,
         domain=llm_domain or keyword_result.domain,
-        clarifying_questions=llm_questions or keyword_result.clarifying_questions,
         source="keyword_fallback",
     )
 
@@ -80,7 +83,9 @@ def _score_definition(
     return confidence, hits
 
 
-def _keyword_intent(user_text_lower: str, taxonomy: List[IntentDefinition]) -> Intent:
+def _keyword_intent(
+    user_text_lower: str, taxonomy: List[IntentDefinition]
+) -> InferredIntent:
     """Determine intent from keywords."""
     ranked = [
         (definition, *_score_definition(user_text_lower, definition))
@@ -91,21 +96,23 @@ def _keyword_intent(user_text_lower: str, taxonomy: List[IntentDefinition]) -> I
     if ranked:
         ranked.sort(key=lambda item: item[1], reverse=True)
         top_definition, confidence, evidence = ranked[0]
-        return Intent(
-            label=top_definition.label,
+        return InferredIntent(
+            primary_goal=top_definition.label.replace("_", " "),
+            secondary_goals=[],
+            underlying_needs=[],
+            context_signals=evidence,
             confidence=confidence,
-            evidence=evidence,
             domain=top_definition.domain,
-            clarifying_questions=top_definition.questions,
             source="keyword",
         )
 
-    return Intent(
-        label="unknown",
+    return InferredIntent(
+        primary_goal="unknown",
+        secondary_goals=[],
+        underlying_needs=[],
+        context_signals=["insufficient context"],
         confidence=0.1,
-        evidence=["insufficient context"],
         domain="unknown",
-        clarifying_questions=["What goal are you working toward?", "How can we help?"],
         source="keyword",
     )
 

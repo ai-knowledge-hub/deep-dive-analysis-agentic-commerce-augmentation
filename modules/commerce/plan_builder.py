@@ -27,6 +27,7 @@ class PlanBuilder:
         context: str | None = None,
         reason_fn=None,
         assess_fn=None,
+        score_fn=None,
     ) -> dict:
         """Build a complete recommendation plan.
 
@@ -40,7 +41,8 @@ class PlanBuilder:
         Returns:
             Complete plan dictionary with products, clarifications, alignment, etc.
         """
-        queries = self._derive_queries(intent)
+        goal_signals = self._intent_goals(intent, goals)
+        queries = self._derive_queries(intent, goal_signals)
         fallback_reason = None
         query = queries[0] if queries else "workspace"
         products = []
@@ -57,12 +59,19 @@ class PlanBuilder:
                 break
 
         selected_products, filtered_count = self._select_products(products)
-        enrichment = self._product_summaries(selected_products)
+        per_product_alignment = (
+            self._per_product_alignment(goal_signals, selected_products, score_fn)
+            if goal_signals
+            else {}
+        )
+        enrichment = self._product_summaries(
+            selected_products, per_product_alignment
+        )
 
         # Apply LLM reasoning if provided
         if reason_fn:
             annotated = (
-                reason_fn(goals or [], enrichment, context=context) or enrichment
+                reason_fn(goal_signals or [], enrichment, context=context) or enrichment
             )
         else:
             annotated = enrichment
@@ -76,7 +85,7 @@ class PlanBuilder:
 
         # Compute alignment snapshot
         alignment = self._alignment_snapshot(
-            goals or [], selected_products, assess_fn
+            goal_signals, selected_products, assess_fn
         )
 
         return {
@@ -89,17 +98,37 @@ class PlanBuilder:
             "alignment": alignment,
         }
 
-    def _derive_queries(self, intent: dict) -> List[str]:
+    def _derive_queries(self, intent: dict, goals: List[str]) -> List[str]:
         """Derive search queries from intent."""
-        label = intent.get("label", "")
+        label = intent.get("primary_goal") or intent.get("label", "")
         domain = intent.get("domain", "")
         candidates = []
-        if label:
+        if label and label != "unknown":
             candidates.append(label.replace("_", " "))
+        if goals:
+            candidates.extend([goal for goal in goals[:2] if goal != "unknown"])
         if domain and domain not in candidates:
             candidates.append(domain)
         candidates.append("workspace")
         return [candidate for candidate in candidates if candidate]
+
+    def _intent_goals(self, intent: dict, goals: Optional[List[str]]) -> List[str]:
+        """Merge inferred intent signals with explicit goals."""
+        merged: List[str] = []
+        if goals:
+            merged.extend(goals)
+        primary = intent.get("primary_goal") or intent.get("label")
+        if primary and primary != "unknown":
+            merged.append(primary)
+        merged.extend(intent.get("secondary_goals") or [])
+        merged.extend(intent.get("underlying_needs") or [])
+        seen = set()
+        deduped = []
+        for goal in merged:
+            if goal and goal != "unknown" and goal not in seen:
+                seen.add(goal)
+                deduped.append(goal)
+        return deduped
 
     def _select_products(self, products: List[Product]) -> Tuple[List[Product], int]:
         """Select products based on confidence threshold."""
@@ -117,7 +146,9 @@ class PlanBuilder:
             filtered_count = 0
         return filtered_products, max(filtered_count, 0)
 
-    def _product_summaries(self, products: List[Product]) -> List[dict]:
+    def _product_summaries(
+        self, products: List[Product], alignment_scores: dict[str, dict]
+    ) -> List[dict]:
         """Create summary dictionaries for products."""
         return [
             {
@@ -129,7 +160,9 @@ class PlanBuilder:
                 "merchant_name": product.merchant_name,
                 "offer_url": product.offer_url,
                 "capabilities_enabled": product.capabilities_enabled,
-                "intentionality_profile": build_profile(product).to_dict(),
+                "alignment_score": alignment_scores.get(product.id, {}).get("score"),
+                "intentionality_profile": product.intentionality_profile
+                or build_profile(product).to_dict(),
             }
             for product in products
         ]
@@ -247,3 +280,11 @@ class PlanBuilder:
                 }
             )
         return explanations
+
+    def _per_product_alignment(
+        self, goals: List[str], products: List[Product], score_fn=None
+    ) -> dict[str, dict]:
+        if not score_fn:
+            return {}
+        scores = score_fn(goals, products)
+        return {score.product_id: score.__dict__ for score in scores}

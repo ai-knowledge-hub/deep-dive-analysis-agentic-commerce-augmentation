@@ -36,7 +36,7 @@ PRODUCT_SEARCH_TOOL = {
 PRODUCT_COMPARE_TOOL = {
     "name": "product_compare",
     "description": (
-        "Compare multiple products side-by-side on empowerment dimensions. "
+        "Compare multiple products side-by-side on intent alignment dimensions. "
         "Use this to help users understand tradeoffs between options. "
         "Requires product IDs from a previous search."
     ),

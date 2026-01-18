@@ -10,7 +10,7 @@
     "brand": "MindfulWork",
     "google_product_category": "Furniture > Office Furniture > Desks",
     "capabilities": ["Deep work", "Posture"],
-    "empowerment_scores": {"physical_agency": 0.78}
+    "intent_scores": {"physical_agency": 0.78}
   },
   {
     "id": "merchant_offer_002",
@@ -23,6 +23,6 @@
     "brand": "CalmGlow",
     "google_product_category": "Home & Garden > Lighting",
     "capabilities": ["Sleep hygiene"],
-    "empowerment_scores": {"wellbeing": 0.62}
+    "intent_scores": {"wellbeing": 0.62}
   }
 ]
