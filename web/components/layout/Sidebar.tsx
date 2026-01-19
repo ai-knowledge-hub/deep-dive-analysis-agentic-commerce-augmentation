@@ -51,7 +51,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: Props) {
       {!collapsed && (
         <div className="sidebar__footer">
           <div className="sidebar__info">
-            <span className="sidebar__info-label">World B Commerce</span>
+            <span className="sidebar__info-label">Discovery Commerce</span>
             <span className="sidebar__info-text">Values-first shopping</span>
           </div>
         </div>

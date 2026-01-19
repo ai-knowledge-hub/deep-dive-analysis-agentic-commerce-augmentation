@@ -1,13 +1,13 @@
 # Sequence Diagram
-## Agentic Commerce Interaction (CCO Runtime)
+## Intentionality Optimization Flow
 
-This diagram illustrates a **single end-to-end interaction** in the Agentic Commerce runtime.
+This diagram illustrates a single end-to-end interaction in the Intentionality Optimization runtime.
 
 The flow emphasizes:
-- intent clarification
-- capability-based reasoning
-- empowerment constraints
-- reflection-driven learning
+- intent inference
+- intentionality profiling
+- alignment scoring
+- explainable ranking
 
 ---
 
@@ -19,56 +19,48 @@ sequenceDiagram
     participant UI as UI / Chat
     participant IA as Intent Agent
     participant IM as Intent Module
-    participant EM as Empowerment Module
-    participant PM as Products Module
     participant MM as Memory Module
+    participant IP as Intentionality Profiler
+    participant PM as Products Module
+    participant AS as Alignment Scorer
 
     U->>UI: Expresses need / question
     UI->>IA: Forward input
 
-    IA->>IM: Clarify contextual intent (CCIA)
-    IM-->>IA: Structured goal + context
+    IA->>MM: Retrieve context (goals, preferences)
+    MM-->>IA: Context snapshot
 
-    IA->>MM: Retrieve user memory (goals, capabilities)
-    MM-->>IA: Memory state
+    IA->>IM: Infer intent from query + context
+    IM-->>IA: InferredIntent + signals
 
-    IA->>EM: Evaluate goal alignment constraints
-    EM-->>IA: Allowed optimization space
+    IA->>PM: Fetch candidate products
+    PM-->>IA: Raw products
 
-    IA->>PM: Search products by capability fit
-    PM-->>IA: Candidate products
+    IA->>IP: Transform specs -> intentionality profiles
+    IP-->>IA: IntentionalityProfile list
 
-    IA->>EM: Score empowerment & alienation risk
-    EM-->>IA: Ranked, filtered recommendations
+    IA->>AS: Score alignment (intent x profile)
+    AS-->>IA: AlignmentScore list
 
-    IA->>UI: Explainable options (with alternatives)
-    UI->>U: Present choices (no pressure)
-
-    U->>UI: Takes action (or declines)
-    UI->>MM: Store episodic reflection
-    MM-->>IA: Updated memory
-
-    IA->>EM: Update optimization signals
+    IA->>UI: Ranked products + explanations
+    UI->>U: Present intent-aligned options
 ```
 
 ---
 
 ## Key Properties of This Flow
 
-### 1. Intent Precedes Execution
-No product search occurs before goal clarification.
+### 1. Intent Precedes Ranking
+Products are ranked only after intent is inferred.
 
-### 2. Empowerment Constrains Optimization
-Recommendations are filtered by autonomy and alignment rules.
+### 2. Products Are Intent-Legible
+Specs are transformed into capability and outcome language for LLM reasoning.
 
-### 3. Products Are Optional, Not Mandatory
-Non-commercial alternatives may be presented.
+### 3. Alignment Is Explainable
+Each recommendation includes a human-readable rationale tied to intent.
 
-### 4. Reflection Is Mandatory
-Outcomes update memory, not just analytics.
-
-### 5. Behavior ≠ Success
-Success is defined by empowerment metrics, not clicks.
+### 4. Memory Improves Inference
+Stored goals and preferences make intent inference more accurate over time.
 
 ---
 
@@ -76,56 +68,20 @@ Success is defined by empowerment metrics, not clicks.
 
 | Sequence Step | Implementation |
 |---------------|----------------|
-| Clarify contextual intent | `modules/intent/classifier.py` |
-| Retrieve user memory | `modules/memory/semantic.py`, `modules/memory/working.py` |
-| Evaluate goal alignment | `modules/empowerment/goal_alignment.py` |
+| Infer intent | `modules/intent/` |
+| Retrieve memory | `modules/memory/` |
+| Profile intentionality | `modules/intentionality/` |
 | Search products | `modules/commerce/search.py` |
-| Score empowerment | `modules/empowerment/optimizer.py` |
-| Check alienation risk | `modules/empowerment/alienation.py` |
-| Store reflection | `modules/memory/episodic.py` |
-| Generate explanation | `modules/conversation/agents.py` (`ExplainAgent`) |
-
----
-
-## Why This Diagram Matters
-
-Traditional commerce flows optimize for **action**.
-
-This flow optimizes for **human outcome**.
-
-The difference is not UI — it is the **order of reasoning and constraints**.
-
-```
-Traditional Flow:
-User → Search → Rank by conversion probability → Push → Track click
-
-CCO Flow:
-User → Clarify goal → Check memory → Constrain by empowerment →
-Search by capability → Filter by alienation risk → Present with alternatives →
-Reflect on outcome → Update memory
-```
-
----
-
-## Architectural Invariants Enforced
-
-This sequence enforces the [five architectural invariants](./architecture.md#7-architectural-invariants-non-negotiable-rules):
-
-| Invariant | Where Enforced |
-|-----------|----------------|
-| Empowerment outranks commerce | Empowerment scoring before product ranking |
-| Memory must exist | Memory retrieval and update steps |
-| Agents orchestrate, modules decide | Intent Agent coordinates, modules execute |
-| Products are instruments | Capability-fit search, not persuasion |
-| Reflection is mandatory | Episodic memory update after action |
+| Score alignment | `modules/alignment/` |
+| Generate explanations | `modules/conversation/agents.py` |
 
 ---
 
 ## References
 
 - [architecture.md](./architecture.md) — System architecture overview
-- [agency-layer.md](./agency-layer.md) — The four guardrails
-- [terminology.md](./terminology.md) — Precise definitions
+- [terminology.md](./terminology.md) — Definitions and naming conventions
+- [strategic-positioning.md](./strategic-positioning.md) — Market positioning
 
 ---
 

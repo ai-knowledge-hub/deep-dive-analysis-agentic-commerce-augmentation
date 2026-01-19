@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from api.routes import products as products_route
 from api.routes import conversation as conversation_route
+from api.routes import intent as intent_route
 
 if FastAPI:
     app = FastAPI(title="Contextual Commerce Optimization API")
@@ -29,5 +30,6 @@ if FastAPI:
         )
     app.include_router(products_route.router)
     app.include_router(conversation_route.router)
+    app.include_router(intent_route.router)
 else:
     app = None

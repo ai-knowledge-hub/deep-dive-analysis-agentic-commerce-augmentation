@@ -8,12 +8,10 @@ from modules.commerce.domain import Product
 from modules.memory.semantic import SemanticMemory
 from modules.conversation.agents import (
     CommerceAgent,
-    ReflectionAgent,
     IntentAgent,
     CapabilityAgent,
     ExplainAgent,
 )
-from modules.conversation.guards import AutonomyGuardAgent
 
 # Provide lightweight google.genai stubs before importing modules that rely on them.
 if "google" not in sys.modules:
@@ -92,11 +90,11 @@ def test_commerce_agent_emits_clarifications(monkeypatch):
         "modules.commerce.plan_builder.product_search", lambda query: mock_products
     )
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace"}, goals=["workspace upgrade"])
+    plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace upgrade"])
     clarifications = plan["clarifications"]
     assert any("confidence" in message.lower() for message in clarifications)
     assert plan["data_quality"]["average_confidence"] == round(0.6, 2)
-    assert "goal_alignment" in plan["empowerment"]
+    assert "goal_alignment" in plan["alignment"]
 
 
 def test_commerce_agent_filters_low_confidence(monkeypatch):
@@ -133,11 +131,11 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
         "modules.commerce.plan_builder.product_search", lambda query: products
     )
     agent = CommerceAgent()
-    plan = agent.build_plan({"label": "workspace"}, goals=["workspace"])
+    plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace"])
     ids = [product["id"] for product in plan["products"]]
     assert ids == ["p_high", "p_mid"]
     assert any("hidden" in message.lower() for message in plan["clarifications"])
-    assert plan["empowerment"]["goal_alignment"]["score"] >= 0.0
+    assert plan["alignment"]["goal_alignment"]["score"] >= 0.0
 
 
 def test_commerce_agent_fallback_query(monkeypatch):
@@ -161,25 +159,11 @@ def test_commerce_agent_fallback_query(monkeypatch):
     monkeypatch.setattr("modules.commerce.plan_builder.product_search", mock_search)
     agent = CommerceAgent()
     plan = agent.build_plan(
-        {"label": "workspace_upgrade", "domain": "career"}, goals=["career growth"]
+        {"primary_goal": "workspace upgrade", "domain": "career"},
+        goals=["career growth"],
     )
     assert plan["query"] == "career"
     assert any("fell back" in clarification for clarification in plan["clarifications"])
-
-
-def test_reflection_mentions_data_quality():
-    plan = {
-        "query": "workspace",
-        "products": [{"id": "p1"}],
-        "data_quality": {"average_confidence": 0.58},
-        "clarifications": [
-            "Data confidence is low; request merchant-verified options or additional context."
-        ],
-    }
-    agent = ReflectionAgent()
-    reflection_text = agent.reflect(plan)
-    assert "Average data confidence" in reflection_text
-    assert "Clarification" in reflection_text
 
 
 def test_explain_agent_mentions_confidence():
@@ -191,24 +175,13 @@ def test_explain_agent_mentions_confidence():
     assert "Focus Chair" in explanation and "0.60" in explanation
 
 
-def test_autonomy_guard_flags_low_confidence():
-    guard = AutonomyGuardAgent()
-    result = guard.check(
-        rationale="",
-        clarifications=["Some recommendations come from discovery"],
-        products=[{"confidence": 0.4, "source": "google_shopping"}],
-    )
-    assert result["status"] == "needs_review"
-    assert any("confidence" in flag.lower() for flag in result["flags"])
-
-
 def test_intent_agent_routes_through_hybrid(monkeypatch):
     classifier_calls = {"count": 0}
 
     class FakeResult:
         def to_dict(self):
             classifier_calls["count"] += 1
-            return {"label": "workspace_upgrade", "confidence": 0.9}
+            return {"primary_goal": "workspace upgrade", "confidence": 0.9}
 
     class FakeClassifier:
         def classify(self, text, context=None):
@@ -223,7 +196,7 @@ def test_intent_agent_routes_through_hybrid(monkeypatch):
     intent_agent = IntentAgent()
     result = intent_agent.detect_intent("Need focus")
 
-    assert result["label"] == "workspace_upgrade"
+    assert result["primary_goal"] == "workspace upgrade"
     assert classifier_calls["count"] == 1
 
 

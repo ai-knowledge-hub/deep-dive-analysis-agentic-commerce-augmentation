@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from config import env as _env  # noqa: F401  # ensure dotenv loaded for CLI runs
-from modules.conversation.agents import IntentAgent, CommerceAgent, ReflectionAgent
+from modules.conversation.agents import IntentAgent, CommerceAgent
 
 Surface = Literal["hackathon", "gpt", "gemini"]
 
@@ -26,7 +26,6 @@ class DemoRuntime:
         print(f"Launching {self.surface} demo surface...")
         intent_agent = IntentAgent()
         commerce_agent = CommerceAgent()
-        reflection_agent = ReflectionAgent()
 
         intent = intent_agent.detect_intent("Need a better workspace setup")
         print("Intent:", intent)
@@ -35,8 +34,6 @@ class DemoRuntime:
         )
         plan = commerce_agent.build_plan(intent, goals=initial_goals)
         print("Plan:", plan)
-        reflection = reflection_agent.reflect(plan)
-        print("Reflection:", reflection)
 
 
 def main(surface: Surface = "hackathon") -> None:

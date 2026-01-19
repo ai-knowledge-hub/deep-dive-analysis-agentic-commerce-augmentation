@@ -1,303 +1,385 @@
-# Architecture Overview  
-## Agentic Commerce as Contextual Commerce Optimization (CCO)
+# Architecture v2: Intentionality Optimization Layer
+
+## Purpose
+
+This system makes products **legible to LLM intent inference**.
+
+When an AI agent recommends products, it doesn't match keywords — it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
+
+We help brands become **discoverable by reasoning agents**.
 
 ---
 
-## 1. Purpose of This Architecture
+## The Problem We Solve
 
-This repository implements **Agentic Commerce as a Contextual Commerce Optimization (CCO) system**, designed from first principles around the **Augmented Intentionality System (AIS)**.
+Google's Direct Offers lets retailers pay to appear in AI Mode recommendations. But paid placement doesn't make the AI *trust* your product — it just puts you in the auction.
 
-Rather than building a generic commerce platform first and layering ethics or empowerment later, this codebase **starts with empowerment as the objective function** and directly optimizes commerce around it.
+Organic discovery in LLM commerce requires something different: **alignment between product attributes and inferred user intent**.
 
-The architecture demonstrates that:
-
-> AI-driven commerce can be optimized for **human capability, autonomy, and goal alignment** — not just conversion.
-
-This repository is intentionally designed to:
-- Treat **Contextual Commerce Optimization (CCO)** as an *optimization paradigm*, not a pre-existing platform
-- Preserve **memory and empowerment** as first-class architectural concepts
-- Remain **hackathon-friendly, demo-ready, and extensible** to future runtimes (GPT apps, Gemini apps, search, programmatic, social)
-
-### Research Basis
-
-This architecture operationalizes the thesis from [*The Empowerment Imperative: Rewriting Agentic Marketing from Extraction to Human Flourishing*](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) (Performics Labs, 2026). That paper frames agentic marketing as a fork between extraction loops (World A) and empowerment-oriented trajectories (World B), calls for a minimal “agency layer” (explicit goals, consent gates, constraint checks, agency reward signals), and declares that agentic marketing inevitably converges into agentic commerce. The code in this repo is the embodiment of that manifesto: a first concrete CCO system where empowerment logic, constraint enforcement, and agency metrics are the optimization targets rather than afterthoughts.
-
-This repo is also the first applied use case of the forthcoming foundational research *From Computable to Desirable: Redesigning AI Advertising as an Engine for Intentional Human Development*. That broader work introduces **Computational Intentionality Theory (CIT)**—a framework that treats AI advertising like a Turing-class machine whose objective function determines whether it becomes an alienation engine or an Augmented Intentionality System (AIS). While the general CIT platform is still under development, this commerce implementation serves as its proof-of-concept: values clarification, capability scaffolding, autonomy-preserving nudges, wellbeing-aligned metrics, and participatory governance are all implemented here in miniature so we can validate the theory before publishing the full paper and generalized runtime.
+This is SEO for reasoning agents.
 
 ---
 
-## 2. Layered Architecture (Mental Model)
+## Core Thesis
 
-The repository now implements a **modular monolith** with clear separation of concerns:
+LLMs trained on human text have learned to model:
+- What humans want (goals, preferences)
+- Why they want it (underlying needs, capabilities sought)
+- What satisfies those wants (products as means to ends)
+
+This is a form of **intent inference** — the model predicts what would satisfy the user based on contextual signals.
+
+Products that are structured to be legible to this inference process get recommended. Products that aren't get overlooked — regardless of quality or ad spend.
+
+**We operationalize this insight.**
+
+---
+
+## Theoretical Foundation
+
+The system is grounded in:
+
+1. **Bayesian Intent Inference** — User goals are latent variables inferred from observable signals (queries, context, history). Products are scored on posterior probability of serving those goals.
+
+2. **Active Inference / Free Energy** — LLMs can be modeled as agents minimizing predictive surprise (ref. Karl Friston). Recommendations that align with inferred intent reduce uncertainty. Products that "make sense" given user context are low-surprise options.
+
+3. **Theory of Mind in LLMs** — Research suggests large language models develop emergent ability to model beliefs, desires, and intentions. We leverage this by structuring products in terms of human-centric attributes.
+
+This foundation informs architecture but does not dominate user-facing messaging. The theory explains *why* it works; the demo shows *that* it works.
+
+---
+
+## System Architecture
 
 ```
-┌──────────────────────────────────────────┐
-│ Experience Layer                         │
-│ (web/, demos/, api/ routes)              │
-└──────────────────────────────────────────┘
-↓
-┌──────────────────────────────────────────┐
-│ Conversation / Agent Layer               │
-│ (modules.conversation.*, values agent)   │
-└──────────────────────────────────────────┘
-↓
-┌──────────────────────────────────────────┐
-│ Core Modules (modules/* + shared/)       │
-│ Commerce · Intent · Memory · Empowerment │
-│ MCP · Attribution · Evaluation           │
-└──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     Brand / Merchant                         │
+│              Product catalog, offers, content                │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              INTENTIONALITY OPTIMIZATION LAYER               │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Product Intentionality Mapping                       │    │
+│  │ Transform specs → capabilities → outcomes            │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Intent Inference Engine                              │    │
+│  │ Model user goals from query + context + memory       │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Alignment Scoring                                    │    │
+│  │ Score products against inferred intent               │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Context Memory                                       │    │
+│  │ Persist goals, preferences, history for inference    │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              LLM Commerce Surfaces                           │
+│     Google AI Mode │ ChatGPT Shopping │ Claude │ Others     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Only the core modules define system behavior.**  
-UI surfaces and conversation orchestration can change without rewriting empowerment logic or objective functions.
+---
+
+## Core Modules
+
+### 1. Intent Module (`modules/intent/`)
+
+**Purpose**: Infer user goals from observable signals.
+
+**Inputs**:
+- User query (natural language)
+- Session context (previous turns, stated preferences)
+- Memory (historical goals, past purchases, reflections)
+
+**Outputs**:
+- `InferredIntent`: Structured representation of what user is trying to achieve
+- `IntentConfidence`: Uncertainty estimate
+- `IntentSignals`: Evidence used for inference
+
+**Key insight**: Intent is not stated, it's inferred. "I need a laptop" doesn't tell you the intent. "I'm transitioning to freelance design work" does.
+
+```python
+@dataclass
+class InferredIntent:
+    primary_goal: str           # "Enable portable creative work"
+    underlying_needs: List[str] # ["professional credibility", "mobility", "creative software support"]
+    context_signals: List[str]  # Evidence from query/session
+    confidence: float           # 0.0-1.0
+```
 
 ---
 
-## 2.1 Implementation Directories (Feature Modules + Shared Infrastructure)
+### 2. Product Intentionality Module (`modules/intentionality/`)
 
-To keep empowerment-first principles portable, the repo mirrors the mental model above:
+**Purpose**: Transform product data into intent-legible format.
 
-- `modules/` — feature modules that own their domain models, services, and adapters. Each subfolder (e.g., `modules/commerce`, `modules/intent`, `modules/memory`, `modules/empowerment`, `modules/values`, `modules/conversation`, `modules/mcp`, `modules/attribution`, `modules/evaluation`) contains the canonical implementation for that concern.
-- `shared/` — infrastructure shared by all modules: configuration loading, database connection management, LLM gateway + clients, and catalog transformers.
-- `api/` — thin FastAPI bindings that proxy requests to the conversation module.
-- `web/`, `demos/` — experience layers that consume the API.
-- `tests/` — module- and integration-level verification.
+**The transformation**:
+```
+Raw Product Data          →    Intent-Legible Product
+─────────────────────────────────────────────────────
+"4K, 65-inch, QLED"       →    "Combat glare in bright rooms"
+"16GB RAM, M3 chip"       →    "Run professional creative software"
+"Ergonomic lumbar"        →    "Reduce back pain during long sessions"
+```
 
-Legacy directories (`src/`, `core/`, `orchestration/`, `adapters/`, `gemini/`) have been removed now that every concern lives in `modules/` or `shared/`.
+**Key concept**: Products are **means to ends**. Specs describe the means. Capabilities describe the ends. LLMs reason about ends.
 
----
+```python
+@dataclass
+class IntentionalityProfile:
+    product_id: str
+    capabilities_enabled: List[str]    # What human capabilities this enables
+    goals_served: List[str]            # What goals this helps achieve
+    prerequisites: List[str]           # What user needs to benefit
+    outcomes_expected: List[str]       # What changes after purchase
+    context_fit: Dict[str, float]      # Fit scores for different contexts
+```
 
-## 3. Core Modules (`modules/`) — Source of Truth
-
-The `modules/` package defines the **canonical Contextual Commerce Optimization core**.
-
-Any logic that affects:
-- decisions
-- scoring
-- constraints
-- outcomes
-
-**must live here**.
-
-This layer is framework-agnostic and portable to future production systems.
-
----
-
-### 3.1 Intent Module (`modules/intent/`)
-
-**Responsibility**
-Understand *what the user is trying to achieve*, not just what they are searching for.
-
-**Key concepts**
-- Contextual intent (CCIA)
-- Intent taxonomies
-- Intent grounding before commerce execution
-
-This module ensures that **commerce is always downstream of clarified human goals**.
-
-**Critical Design Note: Intent ≠ Objective Function**
-
-The intent taxonomy (`data/intent_taxonomy.json`) provides **routing signals**, not optimization targets. It helps the system understand the domain of a request (workspace, health, career) to ask better clarifying questions.
-
-The **actual objective function** operates on user-declared goals stored in semantic memory (`modules/memory/semantic.py`). These goals are:
-- Free-form strings in the user's own words
-- Explicitly stated, not inferred from behavior
-- The target against which all recommendations are scored
-
-This distinction is critical:
-- **World A** would infer intent from clicks and optimize toward platform-defined categories
-- **World B** asks the user what they want and optimizes toward their stated goals
-
-The intent classifier is a heuristic helper. The goal alignment engine (`modules/empowerment/goal_alignment.py`) is the objective function.
+**This module replaces**: `modules/empowerment/` (reframed from "user protection" to "intent legibility")
 
 ---
 
-### 3.2 Memory Module (`modules/memory/`)
+### 3. Alignment Scoring Module (`modules/alignment/`)
 
-**Responsibility**  
-Preserve continuity, learning, and agency over time.
+**Purpose**: Score products against inferred intent.
 
-| Memory Type | Purpose |
-|------------|--------|
-| `working.py` | In-session state |
-| `episodic.py` | Post-action reflection (“Did this help?”) |
-| `semantic.py` | Long-term goals, values, and capabilities |
+**Method**:
+1. Embed user intent and product intentionality profiles
+2. Compute alignment via semantic similarity + structured matching
+3. Adjust for context (user history, stated preferences)
+4. Return ranked products with alignment explanations
 
-Without memory, the system is a chatbot.  
-With memory, the system becomes **agentic**.
+```python
+@dataclass
+class AlignmentScore:
+    product_id: str
+    score: float                    # 0.0-1.0
+    matched_capabilities: List[str] # Which capabilities match intent
+    alignment_reasoning: str        # Human-readable explanation
+    confidence: float               # Certainty of the match
+```
 
-Hackathon implementations are lightweight but **structurally correct**.
-
----
-
-### 3.3 Commerce Module (`modules/commerce/`)
-
-**Responsibility**  
-Provide agentic access to catalogs **without embedding persuasion logic**.
-
-Products are treated as **capability-enabling tools**, not desire objects.
-
-Schemas emphasize:
-- capabilities enabled
-- prerequisites
-- effort required
-- alternatives
-
-They explicitly avoid:
-- urgency
-- popularity
-- social proof
-- manipulation signals
-
-#### Ingestion Surfaces (RawOffer → RawProduct → Product)
-
-LLM-mediated commerce spans merchant-owned catalogs (e.g., Shopify) and third-party discovery graphs (e.g., Google Shopping). To prevent any source from leaking platform semantics upstream, adapters emit **RawOffer** objects that describe:
-
-- `source` (shopify, google_shopping, amazon, etc.)
-- `confidence` and `completeness` scores
-- merchant metadata (offer URL, merchant name)
-- asserted vs. inferred attributes
-
-These offers are converted into **RawProduct** entries (variant-level truth) and finally into canonical **Product** models that power reasoning. This layered pipeline lets the empowerment objective function reason about uncertainty:
-
-- First-party feeds (Shopify) → high confidence, precise variants
-- Aggregated feeds (Google Shopping) → lower confidence, explicit caveats
-
-The agent can therefore say “this is a strong candidate” vs. “this is a hunch,” preserving autonomy even when data quality varies.
+**Key insight**: High alignment = LLM will recommend. Low alignment = LLM will skip. We make this predictable.
 
 ---
 
-### 3.4 Empowerment Module (`modules/empowerment/`) — AIS Core
+### 4. Context Memory Module (`modules/memory/`)
 
-This module implements the **Augmented Intentionality System**.
+**Purpose**: Persist context that improves intent inference over time.
 
-It defines **what the system is allowed to optimize for**.
+**What we store**:
+- Declared goals (user's own words)
+- Inferred preferences (from behavior)
+- Purchase history (what they've bought)
+- Outcome data (did it work? — optional reflection)
 
-| File | Responsibility |
-|----|---------------|
-| `goal_alignment.py` | Aligns actions with user-stated goals |
-| `alienation.py` | Detects manipulation & autonomy erosion |
-| `optimizer.py` | Optimizes for agency, not CTR |
-| `reflection.py` | Closes the learning loop |
-| `domain.py` | Shared empowerment ontology |
-| `llm_reasoner.py` | Gemini/OpenRouter-powered product reasoning |
+**What we don't store**:
+- Behavioral tracking for manipulation
+- Signals used for urgency/scarcity
+- Data without clear inference value
 
-This module **replaces traditional engagement optimization**.
+**Architecture**:
+- `working.py` — Session-scoped context
+- `semantic.py` — Long-term goals and preferences
+- `episodic.py` — Specific interactions and outcomes (optional)
 
-It is:
-- P0
-- invariant
-- non-optional
-
----
-
-### 3.5 MCP Module (`modules/mcp/`)
-
-**Responsibility**  
-Expose system capabilities as **LLM-callable tools**.
-
-This enables:
-- Gemini integration
-- GPT App portability
-- tool-based reasoning instead of prompt-only systems
-
-No business logic lives here — **only interfaces**.
+Memory enables **better inference**, not surveillance. The distinction matters.
 
 ---
 
-## 4. Conversation / Orchestration Layer (`modules/conversation/`)
+### 5. Commerce Adapters (`modules/commerce/adapters/`)
 
-These modules are **thin orchestration wrappers** that live entirely under `modules/conversation/`.
+**Purpose**: Ingest product data from any source, transform to our schema.
 
-They:
-- coordinate calls across the core modules (`intent`, `memory`, `commerce`, `values`, `empowerment`)
-- manage execution order and context windows (`context.py`)
-- adapt to UI / LLM constraints via façade agents (`agents.py`) and autonomy guards (`guards.py`)
+**Adapters**:
+- `mock.py` — Testing
+- `shopify.py` — Shopify Storefront API
+- `google_merchant.py` — Merchant Center feeds
+- `ucp.py` — Google Universal Commerce Protocol (future)
 
-They do **not**:
-- define objectives
-- score outcomes
-- override empowerment logic
+**Pipeline**:
+```
+External Feed → RawOffer → IntentionalityProfile → Aligned Product
+```
 
-If business logic appears here, it belongs in the relevant core module instead.
-
----
-
-## 5. Experience Layer (`web/`, `app.py`)
-
-- `web/` hosts the Next.js chat + empowerment dashboard
-- `app.py` documents how to orchestrate the services from a CLI/demo context
-
-This layer can be replaced without changing platform semantics.
+Each adapter normalizes source data; the intentionality module enriches it.
 
 ---
 
-## 6. Data & Demos
+## What's Removed
 
-- `data/` contains **explicit schemas**, not scraped behavior
-- `demos/` provide **goal-driven scenarios**, not funnels
+The following modules/concepts are **deprecated** in this architecture:
 
-All demos follow the same pattern:
+| Removed | Reason |
+|---------|--------|
+| `empowerment/alienation.py` | "Manipulation detection" is user-protection framing; doesn't serve brand discovery |
+| `empowerment/reflection.py` | Post-purchase follow-up is nice-to-have, not core |
+| `conversation/guards.py` | Constraint enforcement is user-protection framing |
+| World A vs World B comparison | Ethical framing; distracts from value prop |
+| Impulse interception | User-protection feature; not core to intent legibility |
+| Dual dashboard (agency metrics) | Measures user outcomes; we measure brand discoverability |
+| "No purchase needed" path | User-protection feature |
+| Consent gates | GDPR-style framing; orthogonal to core value |
 
-goal → capability → choice → reflection
-
----
-
-## 7. Architectural Invariants (Non-Negotiable Rules)
-
-These rules apply to this repository and all future CCO implementations:
-
-1. Empowerment logic always outranks commerce logic  
-2. Memory must exist (even if minimal)  
-3. Agents orchestrate, modules decide  
-4. Products are instruments, not objectives  
-5. Reflection is mandatory feedback, not optional UX  
-
-If any of these are violated, the system collapses back into persuasive AI.
+These may return as features later, but they're not the core product.
 
 ---
 
-## 8. Relationship to Contextual Commerce Optimization (CCO)
+## What's Renamed/Reframed
 
-Contextual Commerce Optimization (CCO) is **not a separate system implemented elsewhere**.
-
-CCO is the **optimization paradigm embodied by this architecture**:
-- commerce decisions are evaluated in human context
-- intent is clarified before execution
-- empowerment, not conversion, is the objective function
-
-This repository represents the **first concrete CCO implementation**, directly optimized around:
-- Augmented Intentionality
-- memory-preserving agency
-- autonomy-constrained recommendations
-
-Future expansions (search, programmatic, social, conversational agents) are **additional CCO runtimes**, not prerequisites.
-
-> **CCO is defined by its objective function, not by a platform boundary.**
+| Old Name | New Name | Why |
+|----------|----------|-----|
+| Empowerment scoring | Alignment scoring | Describes what it does, not why |
+| Goal alignment | Intent alignment | "Intent" is the core concept |
+| Agency metrics | Discovery metrics | We measure brand visibility, not user agency |
+| World B | (removed) | Ethical framing; now implicit |
+| Capability expansion | Capability mapping | Describes the function |
 
 ---
 
-## 9. Why This Architecture Matters
+## Demo Flow
 
-This architecture demonstrates a critical point:
+The system should support this demo in 60 seconds:
 
-> AI systems can be both **commercially useful** and **human-aligned**  
-> if the objective function is designed correctly.
+1. **Show a user query**: "I need a TV for my bright living room"
 
-Agentic Commerce is not rejected —  
-it is **subordinated to human intent**.
+2. **Show intent inference**:
+   - Primary goal: "Enjoyable viewing despite ambient light"
+   - Underlying needs: ["glare reduction", "brightness", "daytime usability"]
+
+3. **Show two products**:
+   - Product A: "65-inch 4K QLED, 3000 nits, anti-reflective coating"
+   - Product B: "65-inch 4K QLED, 3000 nits" (same specs, no intent language)
+
+4. **Show alignment scores**:
+   - Product A: 0.89 (capabilities match intent)
+   - Product B: 0.52 (specs present, but not intent-legible)
+
+5. **Show the result**: "Product A gets recommended. Product B doesn't. Same product, different framing."
+
+6. **The pitch**: "We help brands structure their products to be legible to intent inference. That's organic discovery for AI commerce."
 
 ---
 
-## 10. Summary
+## API Surface
 
-- `modules/intent`, `modules/memory`, `modules/commerce`, `modules/empowerment`, `modules/values`, `modules/mcp`, `modules/attribution`, and `modules/evaluation` define the cognition and measurement core.
-- `shared/` provides infrastructure (config, db, LLM clients, transformers).
-- `modules/conversation` orchestrates the core via thin agents and guards.
-- `api/` + `web/` + `demos/` demonstrate the system without redefining objectives.
+### Core Endpoints
 
-Everything else is implementation detail.
+```
+POST /intent/infer
+  Input: { query, session_context, user_id? }
+  Output: { inferred_intent, confidence, signals }
+
+POST /products/align
+  Input: { inferred_intent, product_ids?, limit? }
+  Output: { aligned_products: [{ product, alignment_score, reasoning }] }
+
+POST /products/profile
+  Input: { product_id }
+  Output: { intentionality_profile }
+
+POST /products/enrich
+  Input: { raw_product }
+  Output: { enriched_product_with_intentionality }
+```
+
+### For Brands (Future)
+
+```
+POST /catalog/analyze
+  Input: { catalog_url or feed }
+  Output: { products_analyzed, intent_legibility_scores, recommendations }
+
+GET /catalog/{catalog_id}/report
+  Output: { discoverability_report }
+```
 
 ---
 
-**End of Architecture Overview**
+## Success Metrics
+
+### Primary: Intent Alignment Accuracy
+
+"When we predict a product will be recommended by an LLM, is it?"
+
+- Test against AI Mode, ChatGPT, Claude
+- Measure correlation between our alignment scores and actual LLM recommendations
+
+### Secondary: Brand Discoverability Lift
+
+"Do brands using our system get recommended more often?"
+
+- A/B test: same products with/without intentionality enrichment
+- Measure recommendation frequency across LLM surfaces
+
+### Tertiary: Inference Quality
+
+"Do we correctly infer user intent?"
+
+- Human evaluation of inferred intents
+- Downstream alignment accuracy as proxy
+
+---
+
+## Implementation Priorities
+
+### P0 — Hackathon Critical
+
+1. Intent inference from query + context
+2. Product intentionality profiling (manual + LLM-assisted)
+3. Alignment scoring with explanations
+4. Demo UI showing the full flow
+5. 3-5 compelling product examples
+
+### P1 — Strategic Value
+
+1. Automated catalog enrichment
+2. Multi-LLM testing harness (AI Mode, ChatGPT, Claude)
+3. Brand dashboard showing discoverability metrics
+
+### P2 — Scale
+
+1. Batch catalog processing
+2. Real-time feed integration
+3. Historical discoverability tracking
+
+---
+
+## Relationship to External Systems
+
+### Google Direct Offers
+
+We are **complementary**, not competitive:
+- Direct Offers = paid placement (auction)
+- Our system = organic discoverability (alignment)
+
+Brands need both. We're the organic path.
+
+### UCP / ACP
+
+We sit **above** the protocol layer:
+- UCP/ACP define how transactions flow
+- We define how products become recommendable
+
+Protocol-agnostic. Works with any commerce infrastructure.
+
+### LLM Providers
+
+We are **LLM-agnostic**:
+- Our scoring predicts what *any* reasoning LLM will recommend
+- We test against multiple providers
+- No dependency on specific model internals
+
+

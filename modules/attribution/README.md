@@ -9,5 +9,5 @@ introduces:
   surfaces
 - Export hooks for GA4/Looker or custom dashboards
 
-Future work will connect these models to webhook receivers so empowerment-driven
+Future work will connect these models to webhook receivers so discovery-driven
 recommendations can be measured alongside traditional conversion metrics.

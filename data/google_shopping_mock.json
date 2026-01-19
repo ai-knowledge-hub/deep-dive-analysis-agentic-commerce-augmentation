@@ -32,10 +32,10 @@
     "attributes": {
       "tags": ["lighting", "wellbeing"],
       "capabilities": ["Sleep hygiene"],
-      "empowerment_scores": {"wellbeing": 0.6}
+      "intent_scores": {"wellbeing": 0.6}
     },
     "confidence": 0.6,
     "completeness": 0.6,
-    "inferred_fields": ["empowerment_scores"]
+    "inferred_fields": ["intent_scores"]
   }
 ]

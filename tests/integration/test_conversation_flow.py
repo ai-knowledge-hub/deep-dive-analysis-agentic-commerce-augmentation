@@ -69,7 +69,11 @@ def integration_client(tmp_path, monkeypatch):
 
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
-            return {"label": "workspace_upgrade", "confidence": 0.9, "domain": "career"}
+            return {
+                "primary_goal": "workspace upgrade",
+                "confidence": 0.9,
+                "domain": "career",
+            }
 
     class DummyCommerceAgent:
         def build_plan(self, intent, goals, context=None):
@@ -88,28 +92,18 @@ def integration_client(tmp_path, monkeypatch):
                     }
                 ],
                 "clarifications": ["We prioritized posture support."],
-                "empowerment": {"goal_alignment": {"score": 0.75}},
+                "alignment": {"goal_alignment": {"score": 0.75}},
                 "data_quality": {"average_confidence": 0.8},
             }
-
-    class DummyGuard:
-        def check(self, rationale, clarifications, products):
-            return {"status": "ok", "flags": []}
 
     class DummyExplain:
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
-    class DummyReflection:
-        def reflect(self, plan):
-            return "Captured empowerment metrics."
-
     monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
-    monkeypatch.setattr("api.routes.conversation.AUTONOMY_GUARD", DummyGuard())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
-    monkeypatch.setattr("api.routes.conversation.REFLECTION_AGENT", DummyReflection())
 
     return TestClient(app)
 
@@ -122,10 +116,10 @@ def test_full_conversation_flow(integration_client):
     assert start_response.status_code == 200
     start_payload = start_response.json()
     session_id = start_payload["session_id"]
-    assert start_payload["guardrails"]["status"] == "ok"
     assert (
         start_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     )
+    assert start_payload["intentionality_profiles"]
 
     message_response = integration_client.post(
         f"/conversation/{session_id}/message",
@@ -134,9 +128,7 @@ def test_full_conversation_flow(integration_client):
     assert message_response.status_code == 200
     message_payload = message_response.json()
 
-    assert message_payload["intent"]["label"] == "workspace_upgrade"
+    assert message_payload["intent"]["primary_goal"] == "workspace upgrade"
     assert (
         message_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     )
-    assert message_payload["reflection"] == "Captured empowerment metrics."
-    assert message_payload["guardrails"]["status"] == "ok"

@@ -1,106 +1,231 @@
-# Production Upgrade Plan – Gemini 3 Hackathon
+# Hackathon Plan – Gemini 3 Competition
 
 ## 1. Overview
-- **Goal:** Transform the agentic commerce platform into a production-grade Gemini-powered experience before **Feb 9 2026**.
-- **Core Innovation:** “AI shopping that optimizes empowerment, not addiction.” Every surface must demonstrate values clarification before recommendations.
-- **Judging Criteria:** Technical Execution (40 %), Innovation (30 %), Impact (20 %), Presentation (10 %).
 
-## 2. Architecture Delta
+- **Goal:** Demo-ready intentionality optimization system before **Feb 9, 2026**
+- **Core Innovation:** "SEO for reasoning agents" — help brands become discoverable by LLMs through intent alignment
+- **Judging Criteria:** Technical Execution (40%), Innovation (30%), Impact (20%), Presentation (10%)
 
-| Current Stack | Target Stack |
-| --- | --- |
-| Keywords → Products | Gemini values dialogue (multi-turn) |
-| JSON file memory | SQLite (sessions, users, goals, episodes) + vector sidecars |
-| Static scoring | Gemini product reasoning + empowerment scoring |
-| Legacy forms | Next.js chat UI + empowerment dashboard |
+## 2. The Demo (60 Seconds)
 
-## 3. Phase Plan
+The demo must show the core insight in under a minute:
 
-### Phase 1 – Gemini Foundation (Week 1)
-1. **Client Module**
-   - `shared/llm/clients/gemini.py` uses the Google GenAI SDK with ADC or `GEMINI_API_KEY`.
-   - `shared/llm/gateway.py` exposes provider-agnostic helpers with retry + model priority (`GEMINI_MODEL`, fallback list).
-   - `shared/llm/clients/openrouter.py` routes to OpenRouter for cost-sensitive work.
-2. **Prompts & Tools (model-agnostic)**
-   - `shared/llm/prompts.py`: values clarification, product reasoning, impulse guardian, reflection, intent classifier.
-   - `shared/llm/tools.py`: MCP-aligned tool schemas + execution helpers (now backed by `modules/mcp/`).
-3. **SQLite Data Layer**
-   - `shared/db/schema.sql`, `shared/db/connection.py`, and repositories in `modules/memory/repositories/` for sessions/goals/turns/episodes/recommendations/semantic memory.
-   - Semantic memory moves from JSON to SQLite; add future-ready `embedding` columns.
-4. **Dependencies & Config**
-   - `requirements.txt` / `pyproject.toml`: add `google-genai`, `google-auth`.
-   - `.env.example`: `LLM_PROVIDER`, Gemini keys/models, DB path, `FRONTEND_URL`.
+1. **User Query**: "I need a TV for my bright living room"
 
-### Phase 2 – Values Agent & Intelligence (Week 2)
-1. `modules/values/agent.py`: WOW feature for goal clarification.
-2. `modules/intent/llm_classifier.py`: hybrid keywords + Gemini semantic fallback (wraps `modules/intent/classifier.py`).
-3. `modules/empowerment/llm_reasoner.py`: explains alignment/tradeoffs/confidence.
-4. `api/routes/conversation.py` + `modules/conversation/*`: start/continue/goal/recommend/reflect endpoints, CORS for Next.js.
-5. **LLM Gateway:** expose `shared.llm.gateway` so orchestration depends on protocol, not provider (DONE).
+2. **Intent Inference**:
+   - Primary goal: "Enjoyable viewing despite ambient light"
+   - Underlying needs: ["glare reduction", "brightness", "daytime usability"]
+   - Show this visually
 
-### Phase 3 – Experience Layer (Week 3)
-1. **Next.js App (`web/`)**
-   - Layout/landing + chat page.
-   - Components: chat window, message bubbles, goal summary, product cards, alignment badges.
-   - Empowerment UI: World A vs World B comparison, empowerment gauge, reflection panel.
-   - Client libs (`lib/api.ts`, `types.ts`).
-2. **Frontend Strategy**
-   - Prioritize Next.js chat/dashboard and keep scope tight (no secondary UI).
+3. **Two Products** (same underlying specs):
+   - Product A: Intent-legible ("Combat glare in bright rooms, clear picture without closing blinds")
+   - Product B: Spec-only ("65-inch 4K QLED, 3000 nits, anti-reflective coating")
 
-### Phase 4 – Polish & Demo (Week 4)
-1. **Demo Scenarios**
-   - Workspace upgrade.
-   - “No purchase necessary” impulse interception.
-   - Career pivot / learning goals.
-2. **Deployment**
-   - Backend on Railway (`uvicorn api.main:app`).
-   - Frontend on Vercel (set `NEXT_PUBLIC_API_URL`).
-   - (Removed) HF Spaces fallback; focus energy on the Next.js experience.
+4. **Alignment Scores**:
+   - Product A: 0.89 (capabilities match inferred intent)
+   - Product B: 0.52 (specs present, not intent-legible)
 
-### Phase 5 – Submission (Week 5)
-1. 3-minute demo video walking through scenarios.
-2. Devpost entry with Gemini integration description, public demo link, GitHub repo.
+5. **The Result**: "Product A gets recommended. Product B doesn't. Same product, different framing."
 
-## 4. Deliverables Matrix
+6. **The Pitch**: "We help brands structure their products to be legible to intent inference. That's organic discovery for AI commerce."
 
-| File / Directory | Purpose | Status |
-| --- | --- | --- |
-| `shared/llm/clients/gemini.py` | Gemini gateway implementation | ✅ |
-| `shared/llm/prompts.py` & `shared/llm/tools.py` | Model-agnostic prompts + tools | ✅ |
-| `modules/values/agent.py` & `modules/values/domain.py` | Values dialogue | ✅ |
-| `modules/empowerment/llm_reasoner.py` | Alignment explanations | ✅ |
-| `modules/intent/llm_classifier.py` | Semantic classification | ✅ |
-| `shared/db/schema.sql`, `shared/db/connection.py`, `modules/memory/repositories/*` | SQLite backbone | ✅ |
-| `modules/conversation/*`, `api/routes/conversation.py` | Conversation orchestration & endpoints | ✅ |
-| `modules/mcp/*` & `shared/llm/tools.py` | MCP tooling | ✅ |
-| `web/` Next.js app | Frontend | ✅ (chat + empowerment UI) |
-| `.env.example` | Gemini/OpenRouter config, DB path | ✅ |
-| `requirements.txt` | Add `google-genai`, `google-auth`, `openrouter` deps | ✅ |
+## 3. Architecture
 
-## 5. Risk Mitigation
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     User Query                               │
+│              "I need a TV for my bright living room"         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              INTENT INFERENCE ENGINE                         │
+│                                                              │
+│   Query + Context + Memory → InferredIntent                 │
+│   • primary_goal: "Enjoyable viewing despite ambient light" │
+│   • underlying_needs: ["glare reduction", "brightness"]     │
+│   • confidence: 0.92                                         │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              INTENTIONALITY PROFILER                         │
+│                                                              │
+│   Product specs → IntentionalityProfile                     │
+│   • capabilities_enabled: ["glare reduction", "brightness"] │
+│   • goals_served: ["daytime viewing", "bright room use"]    │
+│   • outcomes_expected: ["clear picture without blinds"]     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              ALIGNMENT SCORER                                │
+│                                                              │
+│   Intent × Profile → AlignmentScore                         │
+│   • score: 0.89                                              │
+│   • matched_capabilities: ["glare reduction", "brightness"] │
+│   • reasoning: "Capabilities directly address user needs"   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              RANKED RECOMMENDATIONS                          │
+│                                                              │
+│   Products sorted by alignment, with explanations           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 4. Current Stack → Target Stack
+
+| Current | Target |
+|---------|--------|
+| Empowerment-focused modules | Intentionality optimization modules |
+| Goal alignment (user protection) | Alignment scoring (brand discovery) |
+| Legacy framing | Aligned vs unaligned product comparison |
+| Agency metrics | Discovery metrics |
+| Reflection loops | (Removed — not core to demo) |
+
+## 5. Phase Plan
+
+### Phase 1 — Core Modules (Week 1-2)
+
+**Intent Inference Engine**
+- `modules/intent/inference.py`: Deep goal extraction from queries
+- `modules/intent/domain.py`: InferredIntent dataclass
+- Gemini-powered intent inference prompts
+- Embedding support for semantic matching
+
+**Intentionality Profiler**
+- `modules/intentionality/profiler.py`: Spec → capability transformation
+- `modules/intentionality/domain.py`: IntentionalityProfile dataclass
+- `modules/intentionality/transforms.py`: Common spec mappings
+- LLM-assisted capability extraction
+
+**Alignment Scorer**
+- `modules/alignment/scoring.py`: Score products against intent
+- `modules/alignment/ranker.py`: Rank and explain recommendations
+- `modules/alignment/domain.py`: AlignmentScore dataclass
+
+### Phase 2 — API & Integration (Week 2-3)
+
+**New Endpoints**
+- `POST /intent/infer`: Infer intent from query + context
+- `POST /products/align`: Score products against intent
+- `POST /products/profile`: Generate intentionality profile
+
+**Module Updates**
+- Simplify `modules/memory/`: Context for inference only
+- Simplify `modules/conversation/`: Demo flow only
+- Update `modules/commerce/`: Add intentionality to products
+
+### Phase 3 — Demo UI (Week 3)
+
+**New Components**
+- `IntentDisplay.tsx`: Show inferred intent visually
+- `AlignmentScore.tsx`: Show score with explanation
+- `DiscoveryDemo.tsx`: Side-by-side product comparison
+
+**Polish**
+- Product cards with alignment scores
+- Clean demo flow
+- Loading states, animations
+
+### Phase 4 — Demo & Submission (Week 4)
+
+**Demo Video**
+- Record 3-minute walkthrough
+- Cover: intent inference → alignment → recommendation
+- Clear "aha moment" with product comparison
+
+**Submission**
+- Devpost entry
+- Gemini integration description
+- Screenshots and demo link
+
+## 6. Deliverables Matrix
+
+| Component | Purpose | Priority |
+|-----------|---------|----------|
+| `modules/intent/inference.py` | Infer user goals | P0 |
+| `modules/intentionality/profiler.py` | Transform product specs | P0 |
+| `modules/alignment/scoring.py` | Score alignment | P0 |
+| Demo product data | Show the difference | P0 |
+| API endpoints | Enable demo | P0 |
+| Demo UI components | Visual impact | P0 |
+| Demo video | Submission | P1 |
+| Discovery metrics | Prove it works | P1 |
+
+## 7. Demo Scenarios
+
+### Scenario 1: TV for Bright Room
+- Query: "I need a TV for my bright living room"
+- Intent: Glare reduction, daytime viewing
+- Show: Intent-legible product wins over spec-only
+
+### Scenario 2: Laptop for Freelance Design
+- Query: "I'm transitioning to freelance design work"
+- Intent: Portable creative capability, professional credibility
+- Show: Career-focused framing wins over raw specs
+
+### Scenario 3: Chair for Back Pain
+- Query: "I work from home and my back hurts"
+- Intent: Pain reduction, sustained comfort, posture support
+- Show: Outcome-focused product wins over feature list
+
+## 8. Risk Mitigation
 
 | Risk | Mitigation |
-| --- | --- |
-| Gemini rate limits | Exponential backoff, caching classifiers, hybrid routing with cheaper models. |
-| Next.js timeline | Single-track delivery (no alternate UI pivot). |
-| SQLite concurrency | `check_same_thread=False`, WAL mode. |
-| Free-tier limits | HF Spaces fallback, OpenRouter for low-cost tasks. |
+|------|------------|
+| Gemini rate limits | Exponential backoff, caching, hybrid routing |
+| Demo data quality | Carefully crafted product pairs |
+| Alignment scoring accuracy | Test against expected LLM behavior |
+| UI polish timeline | Focus on demo flow, skip non-essential features |
 
-## 6. Success Criteria
-- **Technical:** Gemini powers values clarification, intent classification, product reasoning.
-- **Innovation:** World A vs World B comparison visible; “no purchase needed” scenario works.
-- **Impact:** Demonstrated improvement over traditional commerce.
-- **Presentation:** Video clearly explains empowerment-first optimization.
+## 9. Success Criteria
 
-## 7. Research-Driven Enhancements
-1. **Context Intelligence:** Hierarchical context packets (session summary → goals → “why this matters” embeddings). Pull from Phenomenology Search + Geometry of Intention research.
-2. **Memory Agency:** Long-term semantic + episodic memory with vector sidecars (`sqlite-vec`, pgvector) to recall reflections/lessons.
-3. **Hybrid Model Strategy:** Gemini 3 for deep reasoning; OpenRouter or other free models for classification, embeddings, safety reranks.
-4. **Multimodal Empowerment:** Gemini vision workflow for catalog imagery (ergonomics, posture, etc.).
-5. **Empowerment Imperative Alignment:** Balance freedom of choice with practical guidance—offer reflection, don’t force it.
+### Technical
+- [ ] Intent inference produces meaningful goals from diverse queries
+- [ ] Alignment scores predict which product LLMs recommend
+- [ ] API response time < 2s for full flow
+- [ ] Zero crashes during demo
 
-## 8. Outstanding Questions / Next Steps
-- Additional MCP tools (`web_fetch`, `image_analyze`, `memory_write`) with empowerment telemetry.
-- Streaming/SSE support for Next.js chat.
-- OpenRouter client + routing logic.
-- Embedding tables (`semantic_embeddings`, `episode_embeddings`) + vector search integration.
+### Innovation
+- [ ] Clear differentiation: "organic discovery" vs "paid placement"
+- [ ] Novel insight: LLMs do intent inference, not keyword matching
+- [ ] Practical application: help brands, not just theory
+
+### Impact
+- [ ] Solves real problem: brands want LLM discoverability
+- [ ] Complementary to existing systems (Google, OpenAI)
+- [ ] Clear business model potential
+
+### Presentation
+- [ ] 60-second "aha moment" demo
+- [ ] Clear pitch: "SEO for reasoning agents"
+- [ ] Professional UI for demo
+
+## 10. Pitch Variations
+
+**For Google judges**:
+"Direct Offers handles paid placement. We handle organic discovery. Brands need both."
+
+**For OpenAI judges**:
+"Your 'answer independence' means the best product wins. We help brands become the best product for the user's intent."
+
+**For investors**:
+"The intentionality layer — protocol-agnostic, LLM-native, inevitable."
+
+**For developers**:
+"Open-source intent inference for any commerce API."
+
+**One-liner**:
+"SEO for reasoning agents — help brands become discoverable by AI."
+
+---
+
+*Document Version: 2026-01-17*
+*Status: Active*

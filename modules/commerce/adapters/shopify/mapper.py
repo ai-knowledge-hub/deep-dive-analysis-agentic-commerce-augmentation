@@ -25,7 +25,7 @@ def shopify_product_to_offers(product: Dict) -> List[RawOffer]:
             "tags": [
                 tag.strip() for tag in product.get("tags", "").split(",") if tag.strip()
             ],
-            "empowerment_scores": _collect_empowerment_scores(metafields),
+            "intent_scores": _collect_intent_scores(metafields),
         }
         variant_attributes = {
             "sku": variant.get("sku"),
@@ -84,7 +84,7 @@ def _availability_from_variant(variant: Dict) -> str:
     return "in_stock" if quantity > 0 else "out_of_stock"
 
 
-def _collect_empowerment_scores(attrs: Dict[str, str]) -> Dict[str, float]:
+def _collect_intent_scores(attrs: Dict[str, str]) -> Dict[str, float]:
     scores: Dict[str, float] = {}
     for key, value in attrs.items():
         if not key.endswith("_score"):

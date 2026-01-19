@@ -5,7 +5,7 @@
 | Environment | Catalog | LLM Provider | DB Path | Notes |
 |-------------|---------|--------------|---------|-------|
 | **Local** | `mock` | `openrouter` | `./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
-| **Dev / Preview** | `google_merchant` | `gemini` | `./db/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
+| **Dev / Preview** | `google_merchant` | `gemini` | `./db/discovery.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
 | **Production** | `google_merchant` | `gemini` | `/var/lib/app/prod.db` | Real feeds, full telemetry, rate-limit logging. |
 
 Copy the relevant section from `.env.example` into `.env.local` (local) or configure as platform secrets (dev/prod).
@@ -21,10 +21,8 @@ Copy the relevant section from `.env.example` into `.env.local` (local) or confi
 cp .env.example .env.local
 # Edit .env.local: set OPENROUTER_API_KEY, OPENROUTER_MODEL
 
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# 2. Install dependencies
+uv sync
 
 # 3. Start server
 uvicorn api.main:app --reload --port 8000

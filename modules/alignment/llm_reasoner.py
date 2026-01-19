@@ -1,4 +1,4 @@
-"""Product reasoning agent that explains empowerment alignment."""
+"""Product reasoning agent that explains intent alignment."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from shared.llm.prompts import PRODUCT_REASONING_PROMPT
 def reason_about_products(
     goals: List[str], products: List[dict], context: str | None = None
 ) -> List[dict]:
-    """Annotate product entries with empowerment reasoning."""
+    """Annotate product entries with alignment reasoning."""
     if not products:
         return []
 

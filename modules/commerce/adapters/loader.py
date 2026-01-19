@@ -34,6 +34,10 @@ def load_catalog(source: str | None = None) -> List[Product]:
             from modules.commerce.adapters.google_shopping import load_merchant_catalog
 
             _SOURCE_MAP[source_name] = load_merchant_catalog
+        elif source_name in {"ucp"}:
+            from modules.commerce.adapters.ucp import load_catalog as load_ucp
+
+            _SOURCE_MAP[source_name] = load_ucp
         else:
             raise ValueError(f"Unknown catalog source: {source_name}")
     loader = _SOURCE_MAP[source_name]

@@ -1,36 +1,16 @@
-# World B: The Empowerment Commerce Engine
+# Intentionality Optimization Layer for LLM Commerce
 
-**AI shopping that optimizes for human flourishing, not clicks.**
+**Make products legible to reasoning agents.**
 
-> Google built the roads (UCP). OpenAI built the cars (Shopping Research). We built the compass that ensures you arrive where you actually want to go.
-
----
-
-## The Fork
-
-The same AI machinery that can maximize compulsion can maximize empowerment. The technology doesn't choose. **The objective function does.**
-
-This codebase builds **World B**: where AI commerce becomes genuine service, where systems that help you buy things are aligned with your interests, not just your impulses.
-
-| World A (Current Paradigm) | World B (What We Build) |
-|---------------------------|------------------------|
-| Optimize for clicks/conversion | Optimize for goal alignment |
-| Infer intent from behavior | Ask users what they want |
-| Products as desire objects | Products as capability tools |
-| Urgency, scarcity, FOMO | Honest tradeoffs, alternatives |
-| Track engagement | Measure empowerment |
-| Silent data collection | Explicit consent gates |
-| Funnel to purchase | Support "no purchase needed" |
-
-Read the full thesis: [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing)
+> Google built the roads (UCP). OpenAI built the cars (Shopping Research). We built the compass that helps products get discovered.
 
 ---
 
 ## What This Is
 
-This repository implements **Contextual Commerce Optimization (CCO)** — a paradigm where AI-driven commerce is subordinated to human intent.
+This repository implements an **Intentionality Optimization Layer** that turns product catalogs into intent‑legible data structures so LLMs can reliably infer when a product matches a user’s goal.
 
-We provide **the intelligence layer that transaction protocols don't define**:
+We provide **the discovery layer that transaction protocols don't define**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,12 +19,11 @@ We provide **the intelligence layer that transaction protocols don't define**:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│           THIS REPO: World B Intelligence Layer             │
+│      THIS REPO: Intentionality Optimization Layer           │
 │                                                             │
-│   "Should this purchase happen?"                            │
-│   "Does it align with user's goals?"                        │
-│   "What alternatives exist?"                                │
-│   "Will they regret this?"                                  │
+│   "What is the user trying to achieve?"                     │
+│   "Which products enable that goal?"                        │
+│   "Why does this product align with intent?"                │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -53,22 +32,20 @@ We provide **the intelligence layer that transaction protocols don't define**:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**We are protocol-agnostic.** The empowerment layer works with Google's UCP, OpenAI's ACP, Shopify direct, or any future commerce protocol.
+**We are protocol-agnostic.** The discovery layer works with Google's UCP, OpenAI's ACP, Shopify direct, or any future commerce protocol.
 
 ---
 
-## Core Innovation: The Four Guardrails
+## Core Innovation: Intentionality + Alignment
 
-Every interaction passes through four checkpoints that distinguish World B from World A:
+We make products **intent‑legible** and rank them by alignment with inferred goals.
 
-| Guardrail | What It Does | Implementation |
+| Capability | What It Does | Implementation |
 |-----------|--------------|----------------|
-| **Explicit Goals** | Ask what users want, don't infer from clicks | `modules/intent/`, `modules/values/` |
-| **Consent Gates** | Personalization is off until opted in | `modules/memory/` |
-| **Constraint Checks** | Hard limits on manipulation patterns | `modules/empowerment/alienation.py` |
-| **Dual Reward Signal** | Optimize for agency AND performance | `modules/empowerment/optimizer.py` |
-
-See [docs/agency-layer.md](docs/agency-layer.md) for the complete specification.
+| **Intent Inference** | Model user goals from query + context | `modules/intent/` |
+| **Intentionality Profiling** | Transform specs → capabilities → outcomes | `modules/intentionality/` |
+| **Alignment Scoring** | Score products against inferred intent | `modules/alignment/` |
+| **Context Memory** | Persist goals and preferences for better inference | `modules/memory/` |
 
 ---
 
@@ -78,9 +55,9 @@ See [docs/agency-layer.md](docs/agency-layer.md) for the complete specification.
 ├── modules/                  # Core feature modules
 │   ├── commerce/            # Product adapters, search, catalog
 │   ├── intent/              # Goal clarification, intent classification
+│   ├── intentionality/      # Product intent profiling
+│   ├── alignment/           # Intent-product alignment scoring
 │   ├── memory/              # Working, episodic, semantic memory
-│   ├── empowerment/         # Goal alignment, alienation detection, optimizer
-│   ├── values/              # Values clarification agent
 │   ├── conversation/        # Orchestration, context management
 │   ├── mcp/                 # LLM-callable tools (MCP protocol)
 │   ├── attribution/         # Event tracking, conversion attribution
@@ -92,7 +69,7 @@ See [docs/agency-layer.md](docs/agency-layer.md) for the complete specification.
 │   └── config/             # Environment configuration
 │
 ├── api/                      # FastAPI routes
-├── web/                      # Next.js chat + empowerment dashboard
+├── web/                      # Next.js chat + discovery dashboard
 ├── data/                     # Product catalogs, intent taxonomy
 ├── docs/                     # Architecture & design documentation
 └── tests/                    # Module + integration tests
@@ -142,43 +119,28 @@ make test
 
 ## Documentation
 
-### Philosophy & Vision
-
 | Document | Purpose |
 |----------|---------|
-| [docs/manifesto.md](docs/manifesto.md) | Why this exists — World A vs World B philosophy |
-| [docs/strategic-positioning.md](docs/strategic-positioning.md) | Market position, UCP/ACP integration, hackathon pitch |
-
-### Architecture & Design
-
-| Document | Purpose |
-|----------|---------|
-| [docs/architecture.md](docs/architecture.md) | System architecture and module responsibilities |
-| [docs/agency-layer.md](docs/agency-layer.md) | The four guardrails specification |
-| [docs/terminology.md](docs/terminology.md) | Precise definitions (CCO, AIS, CCIA, etc.) |
+| [docs/architecture.md](docs/architecture.md) | Intentionality optimization architecture |
+| [docs/strategic-positioning.md](docs/strategic-positioning.md) | Market positioning, UCP/ACP integration |
+| [docs/build-plan.md](docs/build-plan.md) | Execution plan for the pivot |
+| [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
 | [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
-
-### Technical Reference
-
-| Document | Purpose |
-|----------|---------|
-| [docs/empowerment_metrics.md](docs/empowerment_metrics.md) | Dual dashboard — what we measure |
-| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product data pipeline |
 | [docs/adapters.md](docs/adapters.md) | Shopify, Google Merchant adapter setup |
-| [docs/attribution.md](docs/attribution.md) | AI-aware conversion attribution |
+| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product data pipeline |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
 ---
 
 ## Architectural Invariants
 
-These rules are **non-negotiable**. If any are violated, the system collapses back into persuasive AI:
+These rules keep the system grounded in intent legibility:
 
-1. **Empowerment logic always outranks commerce logic**
-2. **Memory must exist** (even if minimal)
-3. **Agents orchestrate, modules decide**
-4. **Products are instruments, not objectives**
-5. **Reflection is mandatory feedback, not optional UX**
+1. **Intent inference drives ranking**
+2. **Products are represented as capabilities, not specs**
+3. **Alignment scores are explainable**
+4. **Memory improves inference (not surveillance)**
+5. **Adapters stay protocol-agnostic**
 
 ---
 
@@ -186,11 +148,10 @@ These rules are **non-negotiable**. If any are violated, the system collapses ba
 
 | Term | Definition |
 |------|------------|
-| **CCO** | Contextual Commerce Optimization — the optimization paradigm |
-| **AIS** | Augmented Intentionality System — the governing constraints |
-| **CCIA** | Context-Conditioned Intent Activation — goal clarification |
-| **Empowerment** | The primary optimization objective |
-| **Alienation** | What we detect and prevent |
+| **Intentionality Profile** | Product representation in terms of capabilities and outcomes |
+| **Intent Inference** | Modeling user goals from query + context |
+| **Alignment Score** | Match confidence between intent and product |
+| **Discoverability Lift** | Improvement in organic LLM recommendations |
 
 See [docs/terminology.md](docs/terminology.md) for complete definitions.
 
@@ -235,34 +196,34 @@ make db-path   # print current DB path
 
 ## Strategic Position
 
-We are **the missing half of agentic commerce**.
+We are **the missing discovery layer for agentic commerce**.
 
-Google's UCP and OpenAI's ACP define *how* transactions flow. We define *whether* those transactions serve users.
+UCP and ACP define *how* transactions flow. We define *why* a product gets recommended by a reasoning agent.
 
 | What They Built | What We Built |
 |-----------------|---------------|
-| Transaction plumbing | **Objective function** |
-| Shopping Research | **Goal clarification** |
-| Checkout flow | **Empowerment scoring** |
-| Product discovery | **Alienation detection** |
-| Order management | **Reflection loops** |
+| Transaction plumbing | **Intent legibility layer** |
+| Shopping Research | **Alignment scoring** |
+| Checkout flow | **Product intentionality profiling** |
+| Catalog ingestion | **Discoverability metrics** |
 
-See [docs/strategic-positioning.md](docs/strategic-positioning.md) for complete competitive analysis and integration strategy.
+See [docs/strategic-positioning.md](docs/strategic-positioning.md) for the full positioning narrative.
 
 ---
 
 ## Research Foundation
 
-This implementation operationalizes:
+This implementation builds on:
 
-- [The Empowerment Imperative](https://ai-news-hub.performics-labs.com/analysis/empowerment-imperative-agentic-marketing-human-flourishing) — Manifesto for agentic marketing that serves human flourishing
-- **Computational Intentionality Theory (CIT)** — Framework treating AI advertising as a Turing-class machine whose objective function determines outcomes *(paper forthcoming)*
+- **Intent inference / theory of mind in LLMs** — LLMs model goals and can align products to those goals.
+- **Active inference / free energy** — recommendations that fit context reduce uncertainty.
+- **Computational Intentionality Theory (CIT)** — products become discoverable when mapped to human capabilities *(paper forthcoming)*.
 
 ---
 
 ## Contributing
 
-This is an open-source project exploring ethical AI commerce. Contributions welcome.
+This is an open-source project exploring LLM commerce discovery. Contributions welcome.
 
 ---
 
@@ -272,4 +233,4 @@ Apache 2.0
 
 ---
 
-> *Philosophy without code is commentary. This repo is the proof.*
+> *Discovery without intent legibility is noise. This repo makes it signal.*

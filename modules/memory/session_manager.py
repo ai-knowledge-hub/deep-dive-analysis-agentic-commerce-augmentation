@@ -104,7 +104,7 @@ class SessionManager:
 
     def ingest_intent_as_goal(self, intent: Dict[str, Any]) -> None:
         """Treat detected intent as an initial goal signal."""
-        goal = intent.get("label")
+        goal = intent.get("primary_goal") or intent.get("label")
         if not goal or goal == "unknown":
             return
         domain = intent.get("domain")
@@ -128,29 +128,27 @@ class SessionManager:
     def record_recommendation(
         self,
         product_ids: List[str],
-        empowering_score: float | None,
-        constraints_passed: bool = True,
+        alignment_score: float | None,
         context: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Record a product recommendation."""
         return recommendations_repo.create_recommendation(
             session_id=self.session_id,
             product_ids=product_ids,
-            empowering_score=empowering_score,
-            constraints_passed=constraints_passed,
+            alignment_score=alignment_score,
             context=context or {},
         )
 
     # ---------------------------------------------------------------- episodic memory
-    def record_reflection(
-        self, reflection_text: str, outcome: str | None = "reflection_summary"
+    def record_outcome(
+        self, outcome_text: str, outcome: str | None = "outcome_summary"
     ) -> Dict[str, Any]:
-        """Record a reflection as an episode."""
+        """Record an outcome note as an episode."""
         return episodes_repo.create_episode(
             user_id=self.user_id,
             session_id=self.session_id,
             outcome=outcome,
-            takeaways=[reflection_text],
+            takeaways=[outcome_text],
         )
 
     # ---------------------------------------------------------------- state helpers

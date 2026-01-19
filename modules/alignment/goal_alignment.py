@@ -2,8 +2,7 @@
 
 This module assesses how well products align with user-declared goals
 using semantic similarity (embeddings) rather than simple string matching.
-This is a core differentiator for World B — we understand what users
-actually mean, not just what words they use.
+This supports intent-alignment scoring for brand discovery.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from modules.commerce.domain import Product
-from modules.empowerment.domain import GoalAlignmentResult
+from modules.alignment.domain import AlignmentScore, AlignmentSummary
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ def assess(
     goals: List[str],
     products: List[Product],
     use_semantic: bool = True,
-) -> GoalAlignmentResult:
+) -> AlignmentSummary:
     """Assess how well products align with user goals.
 
     Args:
@@ -49,10 +48,10 @@ def assess(
         use_semantic: Whether to use semantic similarity (True) or fall back to keywords
 
     Returns:
-        GoalAlignmentResult with alignment scores and supporting products
+        AlignmentSummary with alignment scores and supporting products
     """
     if not goals:
-        return GoalAlignmentResult(
+        return AlignmentSummary(
             score=0.0,
             aligned_goals=[],
             misaligned_goals=[],
@@ -64,7 +63,7 @@ def assess(
         )
 
     if not products:
-        return GoalAlignmentResult(
+        return AlignmentSummary(
             score=0.0,
             aligned_goals=[],
             misaligned_goals=goals,
@@ -86,7 +85,26 @@ def assess(
         return _keyword_assess(goals, products)
 
 
-def _semantic_assess(goals: List[str], products: List[Product]) -> GoalAlignmentResult:
+def score_products(
+    goals: List[str],
+    products: List[Product],
+    use_semantic: bool = True,
+) -> List[AlignmentScore]:
+    """Score each product against the provided goals."""
+    if not goals or not products:
+        return []
+
+    if use_semantic:
+        try:
+            return _semantic_score_products(goals, products)
+        except Exception as e:
+            logger.warning(f"Semantic per-product scoring failed, falling back: {e}")
+            return _keyword_score_products(goals, products)
+
+    return _keyword_score_products(goals, products)
+
+
+def _semantic_assess(goals: List[str], products: List[Product]) -> AlignmentSummary:
     """Assess alignment using semantic similarity (embeddings)."""
     from shared.llm.embeddings import (
         get_embedding_provider,
@@ -169,7 +187,7 @@ def _semantic_assess(goals: List[str], products: List[Product]) -> GoalAlignment
         "alignment_method": "semantic",
     }
 
-    return GoalAlignmentResult(
+    return AlignmentSummary(
         score=weighted_score,
         aligned_goals=aligned_goals,
         misaligned_goals=misaligned_goals,
@@ -178,7 +196,7 @@ def _semantic_assess(goals: List[str], products: List[Product]) -> GoalAlignment
     )
 
 
-def _keyword_assess(goals: List[str], products: List[Product]) -> GoalAlignmentResult:
+def _keyword_assess(goals: List[str], products: List[Product]) -> AlignmentSummary:
     """Fallback: Assess alignment using keyword matching (original implementation)."""
     aligned: List[str] = []
     supporting_products: List[str] = []
@@ -219,13 +237,97 @@ def _keyword_assess(goals: List[str], products: List[Product]) -> GoalAlignmentR
         "alignment_method": "keyword",
     }
 
-    return GoalAlignmentResult(
+    return AlignmentSummary(
         score=weighted_score,
         aligned_goals=aligned,
         misaligned_goals=misaligned,
         supporting_products=list(dict.fromkeys(supporting_products)),
         confidence_summary=confidence_summary,
     )
+
+
+def _semantic_score_products(
+    goals: List[str], products: List[Product]
+) -> List[AlignmentScore]:
+    """Score products using semantic similarity (embeddings)."""
+    from shared.llm.embeddings import (
+        get_embedding_provider,
+        cosine_similarity,
+    )
+
+    provider = get_embedding_provider()
+
+    product_texts = [_build_product_semantic_text(product) for product in products]
+    all_texts = goals + product_texts
+    embeddings = provider.embed_batch(all_texts)
+
+    goal_embeddings = embeddings[: len(goals)]
+    product_embeddings = embeddings[len(goals) :]
+
+    scores: List[AlignmentScore] = []
+    for product, product_emb in zip(products, product_embeddings):
+        best_score = 0.0
+        best_goal = None
+        for goal, goal_emb in zip(goals, goal_embeddings):
+            similarity = cosine_similarity(goal_emb, product_emb)
+            if similarity > best_score:
+                best_score = similarity
+                best_goal = goal
+        best_capability = _get_best_capability(product, best_goal or "")
+        reasoning = (
+            get_alignment_explanation(best_goal, product, best_score)
+            if best_goal
+            else "No goal match found."
+        )
+        scores.append(
+            AlignmentScore(
+                product_id=product.id,
+                score=round(best_score, 3),
+                matched_capabilities=[cap for cap in [best_capability] if cap],
+                alignment_reasoning=reasoning,
+                confidence=round(product.confidence, 2),
+            )
+        )
+    return scores
+
+
+def _keyword_score_products(
+    goals: List[str], products: List[Product]
+) -> List[AlignmentScore]:
+    """Score products using keyword overlap heuristics."""
+    scores: List[AlignmentScore] = []
+    for product in products:
+        best_goal = None
+        best_score = 0.0
+        for goal in goals:
+            normalized = goal.lower()
+            goal_tokens = set(normalized.split())
+            capability_hits = any(
+                goal_tokens & set(capability.lower().split())
+                for capability in product.capabilities_enabled
+            )
+            tag_hits = any(
+                tag in normalized or normalized in tag for tag in product.tags
+            )
+            if capability_hits or tag_hits:
+                best_goal = goal
+                best_score = max(best_score, 0.5)
+        best_capability = _get_best_capability(product, best_goal or "")
+        reasoning = (
+            get_alignment_explanation(best_goal, product, best_score)
+            if best_goal
+            else "No goal match found."
+        )
+        scores.append(
+            AlignmentScore(
+                product_id=product.id,
+                score=round(best_score, 3),
+                matched_capabilities=[cap for cap in [best_capability] if cap],
+                alignment_reasoning=reasoning,
+                confidence=round(product.confidence, 2),
+            )
+        )
+    return scores
 
 
 def _build_product_semantic_text(product: Product) -> str:
@@ -319,6 +421,7 @@ def get_alignment_explanation(
 
 __all__ = [
     "assess",
+    "score_products",
     "get_alignment_explanation",
     "ProductAlignment",
     "HIGH_ALIGNMENT_THRESHOLD",

@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Iterable, List
 
 from modules.commerce.domain import Product, RawProduct
+from modules.intentionality.profiling import build_profile
 
 
 def raw_product_to_product(raw: RawProduct) -> Product:
-    return Product(
+    product = Product(
         id=raw.product_id,
         name=raw.title,
         price=raw.price,
@@ -18,7 +19,7 @@ def raw_product_to_product(raw: RawProduct) -> Product:
         category=raw.category,
         availability=raw.availability,
         media=raw.images,
-        empowerment_scores=_extract_empowerment_scores(raw),
+        intent_scores=_extract_intent_scores(raw),
         capabilities_enabled=raw.attributes.get("capabilities", []),
         source=raw.source,
         merchant_name=raw.merchant_name,
@@ -26,6 +27,8 @@ def raw_product_to_product(raw: RawProduct) -> Product:
         confidence=raw.confidence,
         metadata=raw.source_metadata,
     )
+    product.intentionality_profile = build_profile(product).to_dict()
+    return product
 
 
 def _derive_tags(raw: RawProduct) -> List[str]:
@@ -33,8 +36,8 @@ def _derive_tags(raw: RawProduct) -> List[str]:
     return [tag for tag in tags if tag]
 
 
-def _extract_empowerment_scores(raw: RawProduct) -> dict[str, float]:
-    scores = raw.attributes.get("empowerment_scores", {})
+def _extract_intent_scores(raw: RawProduct) -> dict[str, float]:
+    scores = raw.attributes.get("intent_scores", {})
     return {key: float(value) for key, value in scores.items()}
 
 

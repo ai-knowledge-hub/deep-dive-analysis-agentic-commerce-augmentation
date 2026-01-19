@@ -21,7 +21,7 @@ class RecommendationEvent:
     user_id: str
     platform: str
     product_ids: List[str]
-    empowering_score: float
+    alignment_score: float
     memory_snapshot: Dict[str, str]
     created_at: datetime
 

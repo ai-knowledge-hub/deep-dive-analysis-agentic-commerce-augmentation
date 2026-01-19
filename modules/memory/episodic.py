@@ -1,4 +1,4 @@
-"""Post-action reflection memory capturing lessons."""
+"""Post-action outcome memory capturing lessons."""
 
 from __future__ import annotations
 

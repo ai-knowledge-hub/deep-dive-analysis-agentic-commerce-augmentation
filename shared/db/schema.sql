@@ -1,6 +1,5 @@
--- SQLite schema for empowerment-first memory + session storage.
--- This schema mirrors the guardrails: explicit goals, consent gates,
--- constraint-aware recommendations, and reflection logging.
+-- SQLite schema for discovery-first memory + session storage.
+-- This schema supports intent inference, alignment, and catalog analytics.
 
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -58,8 +57,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     product_ids_json TEXT NOT NULL,
-    empowering_score REAL,
-    constraints_passed INTEGER DEFAULT 1,
+    alignment_score REAL,
     context_json TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE

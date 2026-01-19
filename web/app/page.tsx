@@ -5,28 +5,10 @@ import { startConversation, sendConversationMessage } from "../lib/api";
 import type { ConversationResponse } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
 import { ProductReasoning } from "../components/products/ProductReasoning";
-import { WorldAvsB } from "../components/empowerment/WorldAvsB";
 import { Sidebar } from "../components/layout/Sidebar";
 import { ValuesPanel } from "../components/values/ValuesPanel";
-
-const STATUS_QUO_KEYS = [
-  "world_a_example",
-  "status_quo_example",
-  "status_quo_prompt",
-  "world_a_pitch",
-  "baseline_prompt",
-];
-
-function extractStatusQuo(source?: Record<string, unknown>): string | undefined {
-  if (!source) return undefined;
-  for (const key of STATUS_QUO_KEYS) {
-    const candidate = source[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
+import { IntentionalityProfileCard } from "../components/products/IntentionalityProfileCard";
+import { IntentDisplay } from "../components/intent/IntentDisplay";
 
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -37,9 +19,9 @@ export default function HomePage() {
     ConversationResponse["product_explanations"]
   >([]);
   const [valuesState, setValuesState] = useState<ConversationResponse["values_state"]>();
+  const [intent, setIntent] = useState<ConversationResponse["intent"]>();
   const [loading, setLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [worldAExample, setWorldAExample] = useState<string>();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -50,7 +32,7 @@ export default function HomePage() {
     setClarifications([]);
     setProductReasoning([]);
     setValuesState(undefined);
-    setWorldAExample(undefined);
+    setIntent(undefined);
   }, []);
 
   const sendMessage = useCallback(
@@ -65,16 +47,6 @@ export default function HomePage() {
           setSessionId(response.session_id);
         } else {
           response = await sendConversationMessage(sessionId, text);
-        }
-
-        const guardrailStatusQuo = extractStatusQuo(response.guardrails);
-        const valuesMetadataStatusQuo = response.values_state
-          ? extractStatusQuo(response.values_state.metadata)
-          : undefined;
-        const nextWorldAExample =
-          response.plan?.world_a_example ?? guardrailStatusQuo ?? valuesMetadataStatusQuo;
-        if (nextWorldAExample) {
-          setWorldAExample(nextWorldAExample);
         }
 
         const clarification = response.clarification;
@@ -92,6 +64,7 @@ export default function HomePage() {
         setClarifications(response.plan?.clarifications ?? []);
         setProductReasoning(response.product_explanations ?? []);
         setValuesState(response.values_state);
+        setIntent(response.intent);
       } catch (error) {
         setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
       } finally {
@@ -113,7 +86,7 @@ export default function HomePage() {
     clarifications.length > 0 ||
     valuesState ||
     (plan?.products?.length ?? 0) > 0 ||
-    !!worldAExample;
+    intent?.primary_goal;
 
   useEffect(() => {
     const el = chatContainerRef.current;
@@ -172,10 +145,11 @@ export default function HomePage() {
 
         {hasInsights && (
           <aside className="insights">
-            <WorldAvsB
-              clarifications={clarifications}
-              empowermentScore={plan?.empowerment?.goal_alignment?.score}
-              worldAExample={worldAExample}
+            <IntentDisplay intent={intent} />
+            <IntentionalityProfileCard
+              product={plan?.products?.[0]}
+              alignmentScore={plan?.alignment?.goal_alignment?.score}
+              baselineScore={plan?.alignment?.goal_alignment?.baseline_score}
             />
             <ValuesPanel state={valuesState} />
             <ProductReasoning products={plan?.products} explanations={productReasoning} />

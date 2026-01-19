@@ -24,5 +24,22 @@ class RawOffer:
 ```
 
 These are converted into `RawProduct` and then canonical `Product` models. All
-metadata (confidence, merchant, offer URL) is preserved so empowerment scoring
-and agents can reason about data quality.
+metadata (confidence, merchant, offer URL) is preserved so alignment scoring
+and the intentionality profiler can reason about data quality.
+
+## Intentionality Enrichment
+
+After conversion to `Product`, products can be enriched with an `IntentionalityProfile`:
+
+```python
+@dataclass
+class IntentionalityProfile:
+    product_id: str
+    capabilities_enabled: List[str]    # What human capabilities this enables
+    goals_served: List[str]            # What goals this helps achieve
+    prerequisites: List[str]           # What user needs to benefit
+    outcomes_expected: List[str]       # What changes after purchase
+    context_fit: Dict[str, float]      # Fit scores for different contexts
+```
+
+This transformation makes products legible to LLM intent inference.
