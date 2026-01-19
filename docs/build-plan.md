@@ -88,6 +88,7 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
   - Query → inferred intent → aligned products → explanations
 - Add “discoverability delta” visualization (before/after enrichment).
 - Add dual-stream discovery display (catalog + research) with alignment scores.
+- Disable catalog stream for `CATALOG_SOURCE=mock` to avoid misleading recommendations.
 
 ---
 
@@ -101,6 +102,7 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - [x] Wire “discoverability delta” panel (before/after comparison)
 - [x] Surface per-product alignment explanations in UI cards
 - [ ] Show catalog + research streams side-by-side with alignment scores
+- [x] Disable catalog stream for `CATALOG_SOURCE=mock`
 
 ### Phase 3 — Protocol & Catalog Integration
 - [x] Add UCP adapter stub + loader registration

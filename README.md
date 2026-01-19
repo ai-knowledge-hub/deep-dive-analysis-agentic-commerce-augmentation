@@ -61,7 +61,7 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 │   ├── conversation/        # Orchestration, context management
 │   ├── mcp/                 # LLM-callable tools (MCP protocol)
 │   ├── attribution/         # Event tracking, conversion attribution
-│   └── evaluation/          # Empowerment metrics, A/B testing
+│   └── evaluation/          # Discovery metrics, A/B testing
 │
 ├── shared/                   # Cross-cutting infrastructure
 │   ├── llm/                 # Gemini, OpenRouter clients + prompts
@@ -166,6 +166,7 @@ See [docs/terminology.md](docs/terminology.md) for complete definitions.
 | **Prod** | `google_merchant` | `gemini` | Production with full telemetry |
 
 Set `CATALOG_SOURCE` to choose: `mock`, `shopify`, `google_shopping`, or `google_merchant`.
+When `CATALOG_SOURCE=mock`, the catalog stream is disabled and the UI shows research insights only to avoid misleading recommendations.
 
 Copy `.env.example` to `.env.local` and adjust for your environment.
 

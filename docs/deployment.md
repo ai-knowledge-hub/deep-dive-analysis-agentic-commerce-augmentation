@@ -68,7 +68,7 @@ Set `CATALOG_SOURCE` to choose the product adapter:
 
 | Source | Environment Variables | Use Case |
 |--------|----------------------|----------|
-| `mock` | None | Local development, testing |
+| `mock` | None | Local development; catalog stream disabled (research-only UI) |
 | `shopify` | `SHOPIFY_DOMAIN`, `SHOPIFY_TOKEN` | Live Shopify store |
 | `google_shopping` | None | Deterministic mock data |
 | `google_merchant` | `GOOGLE_MERCHANT_FEED_PATH` | Google Merchant Center feed |
