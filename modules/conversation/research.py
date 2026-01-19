@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from shared.llm.gateway import generate_with_tools
+from shared.config.env import settings
 from llm.tools import get_llm_tools, execute_tool
 
 
@@ -31,7 +32,13 @@ def run_research(query: str, goals: List[str], context: str | None = None) -> di
     )
 
     tool_schema = get_llm_tools()
-    response = generate_with_tools(prompt=prompt, tools=tool_schema)
+    response = None
+    try:
+        if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
+            raise RuntimeError("OpenRouter API key missing")
+        response = generate_with_tools(prompt=prompt, tools=tool_schema)
+    except Exception as exc:
+        response = {"text": "", "error": str(exc)}
 
     tool_calls = response.get("tool_calls", []) if isinstance(response, dict) else []
     tool_outputs = []
