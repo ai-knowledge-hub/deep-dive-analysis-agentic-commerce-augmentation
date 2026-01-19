@@ -264,6 +264,17 @@ def _semantic_score_products(
     goal_embeddings = embeddings[: len(goals)]
     product_embeddings = embeddings[len(goals) :]
 
+    try:
+        from modules.intent.embeddings import upsert_intent_embedding
+        from modules.commerce.embeddings import upsert_product_embedding
+
+        for goal, embedding in zip(goals, goal_embeddings):
+            upsert_intent_embedding(goal, embedding)
+        for product, embedding in zip(products, product_embeddings):
+            upsert_product_embedding(product.id, embedding)
+    except Exception:
+        pass
+
     scores: List[AlignmentScore] = []
     for product, product_emb in zip(products, product_embeddings):
         best_score = 0.0
