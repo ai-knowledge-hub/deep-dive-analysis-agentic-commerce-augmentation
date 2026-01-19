@@ -39,11 +39,6 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - Conversation flow still uses legacy clarification + “autonomy” phrasing (`modules/conversation/*`, `modules/values/*`).
 - Memory schema still needs alignment-first fields (was using empowerment naming).
 
-### App Hygiene (Blocking) — resolved in cleanup
-- [x] Fix broken import: `llm/agents/product_reasoner.py` → alignment reasoner
-- [x] Remove `empowering_score` + `constraints_passed` from schema + repos
-- [x] Remove empowerment artifacts from adapters, tooling, data, and UI
-
 ---
 
 ## Phase 1 — Core Discovery Engine (P0)

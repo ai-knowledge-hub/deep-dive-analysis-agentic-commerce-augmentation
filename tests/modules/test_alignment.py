@@ -14,4 +14,3 @@ def test_goal_alignment_scores_supporting_products():
     avg_conf = result.confidence_summary["average_confidence"]
     assert isinstance(avg_conf, (int, float))
     assert avg_conf >= 0
-

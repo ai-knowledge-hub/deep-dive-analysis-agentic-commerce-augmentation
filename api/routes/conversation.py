@@ -19,6 +19,8 @@ from modules.values.domain import ClarificationState
 from modules.conversation.context import context_for
 from modules.conversation.research import run_research
 from modules.intentionality.profiling import build_profile_with_llm
+from modules.intentionality.domain import IntentionalityProfile
+from modules.commerce.domain import Product
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
@@ -100,7 +102,10 @@ def _process_message(
         manager.record_turn(
             "agent",
             f"Intent inferred: {intent_signal}",
-            metadata={"type": "intent_inference", "confidence": intent.get("confidence")},
+            metadata={
+                "type": "intent_inference",
+                "confidence": intent.get("confidence"),
+            },
         )
     plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
     product_explanations = plan.get("product_explanations")
@@ -115,9 +120,9 @@ def _process_message(
     )
     manager.record_recommendation(
         product_ids=[product["id"] for product in plan.get("products", [])],
-        alignment_score=(
-            plan.get("alignment", {}).get("goal_alignment", {}) or {}
-        ).get("score"),
+        alignment_score=(plan.get("alignment", {}).get("goal_alignment", {}) or {}).get(
+            "score"
+        ),
         context={
             "query": plan.get("query"),
             "goal_alignment": plan.get("alignment", {}).get("goal_alignment"),
@@ -137,11 +142,10 @@ def _process_message(
         intent=intent,
         plan=plan,
         research=research,
-        baseline_alignment=plan.get("alignment", {}).get("goal_alignment", {}).get("baseline_score"),
-        intentionality_profiles=[
-            build_profile_with_llm(product).to_dict()
-            for product in (plan.get("products") or [])
-        ],
+        baseline_alignment=plan.get("alignment", {})
+        .get("goal_alignment", {})
+        .get("baseline_score", 0.0),
+        intentionality_profiles=_intentionality_profiles(plan.get("products") or []),
         explanation=explanation,
         product_explanations=product_explanations,
         values_state=clarification_state.to_dict()
@@ -195,6 +199,31 @@ def _format_reasoning(products: List[dict]) -> List[dict]:
             }
         )
     return explanations
+
+
+def _intentionality_profiles(products: List[object]) -> List[dict]:
+    profiles: List[dict] = []
+    for product in products or []:
+        if isinstance(product, Product):
+            profiles.append(build_profile_with_llm(product).to_dict())
+            continue
+        if isinstance(product, dict):
+            profile = product.get("intentionality_profile")
+            if profile:
+                profiles.append(profile)
+                continue
+            capabilities = list(product.get("capabilities_enabled") or [])
+            profile = IntentionalityProfile(
+                product_id=str(product.get("id") or ""),
+                capabilities_enabled=capabilities,
+                goals_served=list(dict.fromkeys(capabilities)),
+                prerequisites=[],
+                outcomes_expected=[],
+                context_fit={},
+            )
+            profiles.append(profile.to_dict())
+            continue
+    return profiles
 
 
 def _maybe_run_research(

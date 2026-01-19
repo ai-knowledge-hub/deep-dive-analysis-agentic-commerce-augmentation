@@ -39,16 +39,28 @@ def classify(
         return keyword_result
 
     llm_primary = _get_str(
-        llm_data, ["primary_goal", "goal", "intent", "label"], keyword_result.primary_goal
+        llm_data,
+        ["primary_goal", "goal", "intent", "label"],
+        keyword_result.primary_goal,
     )
     llm_confidence = _get_float(llm_data, ["confidence", "score"], 0.0)
     llm_domain = _get_str(llm_data, ["domain"], keyword_result.domain or "")
-    llm_secondary = _get_list(llm_data, ["secondary_goals"], keyword_result.secondary_goals)
-    llm_needs = _get_list(llm_data, ["underlying_needs"], keyword_result.underlying_needs)
-    llm_signals = _get_list(llm_data, ["context_signals", "evidence"], keyword_result.context_signals)
+    llm_secondary = _get_list(
+        llm_data, ["secondary_goals"], keyword_result.secondary_goals
+    )
+    llm_needs = _get_list(
+        llm_data, ["underlying_needs"], keyword_result.underlying_needs
+    )
+    llm_signals = _get_list(
+        llm_data, ["context_signals", "evidence"], keyword_result.context_signals
+    )
     llm_source = _get_str(llm_data, ["source"], "gemini")
 
-    if llm_primary and llm_primary not in {"unknown"} and llm_confidence >= llm_threshold:
+    if (
+        llm_primary
+        and llm_primary not in {"unknown"}
+        and llm_confidence >= llm_threshold
+    ):
         return InferredIntent(
             primary_goal=llm_primary,
             secondary_goals=llm_secondary,

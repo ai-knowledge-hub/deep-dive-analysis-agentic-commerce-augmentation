@@ -94,6 +94,7 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
         context_signals=["workspace"],
         confidence=0.85,
         domain="career",
+        source="keyword_fallback",
     )
 
     monkeypatch.setattr("modules.intent.llm_classifier.generate", fake_generate)

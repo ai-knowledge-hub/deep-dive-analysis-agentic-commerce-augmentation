@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import importlib
+
 try:
     from fastapi import APIRouter, Query
 except ImportError:  # pragma: no cover - optional dependency
     APIRouter = None  # type: ignore
 
-from modules.commerce import search as product_search
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.intentionality.profiling import build_profile
 from modules.alignment.goal_alignment import assess as assess_alignment
 from modules.alignment.goal_alignment import score_products as score_alignment
 from pydantic import BaseModel, Field
+
+product_search = importlib.import_module("modules.commerce.search")
 
 if APIRouter:
     router = APIRouter(prefix="/products", tags=["products"])
@@ -55,9 +58,7 @@ if APIRouter:
         else:
             candidates = product_search.search(query)
         alignment = assess_alignment(goal_signals, candidates)
-        baseline = assess_alignment(
-            goal_signals, candidates, use_semantic=False
-        )
+        baseline = assess_alignment(goal_signals, candidates, use_semantic=False)
         per_product = [
             score.__dict__ for score in score_alignment(goal_signals, candidates)
         ]
@@ -82,14 +83,11 @@ if APIRouter:
             intent = classifier.classify(query).to_dict()
             goal_signals = _intent_goals(intent)
             alignment = assess_alignment(goal_signals, [product])
-            baseline = assess_alignment(
-                goal_signals, [product], use_semantic=False
-            )
+            baseline = assess_alignment(goal_signals, [product], use_semantic=False)
             alignment = alignment.__dict__
             alignment["baseline_score"] = baseline.score
             alignment["per_product"] = [
-                score.__dict__
-                for score in score_alignment(goal_signals, [product])
+                score.__dict__ for score in score_alignment(goal_signals, [product])
             ]
         return {
             "product": product.__dict__,

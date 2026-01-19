@@ -64,9 +64,7 @@ class PlanBuilder:
             if goal_signals
             else {}
         )
-        enrichment = self._product_summaries(
-            selected_products, per_product_alignment
-        )
+        enrichment = self._product_summaries(selected_products, per_product_alignment)
 
         # Apply LLM reasoning if provided
         if reason_fn:
@@ -84,9 +82,7 @@ class PlanBuilder:
         )
 
         # Compute alignment snapshot
-        alignment = self._alignment_snapshot(
-            goal_signals, selected_products, assess_fn
-        )
+        alignment = self._alignment_snapshot(goal_signals, selected_products, assess_fn)
 
         return {
             "query": query,

@@ -257,9 +257,7 @@ def _semantic_score_products(
 
     provider = get_embedding_provider()
 
-    product_texts = [
-        _build_product_semantic_text(product) for product in products
-    ]
+    product_texts = [_build_product_semantic_text(product) for product in products]
     all_texts = goals + product_texts
     embeddings = provider.embed_batch(all_texts)
 
@@ -308,7 +306,9 @@ def _keyword_score_products(
                 goal_tokens & set(capability.lower().split())
                 for capability in product.capabilities_enabled
             )
-            tag_hits = any(tag in normalized or normalized in tag for tag in product.tags)
+            tag_hits = any(
+                tag in normalized or normalized in tag for tag in product.tags
+            )
             if capability_hits or tag_hits:
                 best_goal = goal
                 best_score = max(best_score, 0.5)

@@ -63,4 +63,5 @@ class HybridIntentClassifier:
         except json.JSONDecodeError:
             return {}
 
+
 __all__ = ["HybridIntentClassifier"]
