@@ -18,6 +18,9 @@ export default function HomePage() {
   const [productReasoning, setProductReasoning] = useState<
     ConversationResponse["product_explanations"]
   >([]);
+  const [researchResults, setResearchResults] = useState<
+    ConversationResponse["plan"]["research_results"]
+  >([]);
   const [valuesState, setValuesState] = useState<ConversationResponse["values_state"]>();
   const [intent, setIntent] = useState<ConversationResponse["intent"]>();
   const [loading, setLoading] = useState(false);
@@ -33,6 +36,7 @@ export default function HomePage() {
     setProductReasoning([]);
     setValuesState(undefined);
     setIntent(undefined);
+    setResearchResults([]);
   }, []);
 
   const sendMessage = useCallback(
@@ -65,6 +69,7 @@ export default function HomePage() {
         setProductReasoning(response.product_explanations ?? []);
         setValuesState(response.values_state);
         setIntent(response.intent);
+        setResearchResults(response.plan?.research_results ?? []);
       } catch (error) {
         setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
       } finally {
@@ -152,7 +157,17 @@ export default function HomePage() {
               baselineScore={plan?.alignment?.goal_alignment?.baseline_score}
             />
             <ValuesPanel state={valuesState} />
-            <ProductReasoning products={plan?.products} explanations={productReasoning} />
+            <ProductReasoning
+              title="Catalog Recommendations"
+              products={plan?.catalog_results ?? plan?.products}
+              explanations={productReasoning}
+            />
+            <ProductReasoning
+              title="Research Insights"
+              badge="Research"
+              products={researchResults}
+              disclaimer="Synthesized findings from external sources; verify details before purchasing."
+            />
           </aside>
         )}
       </main>

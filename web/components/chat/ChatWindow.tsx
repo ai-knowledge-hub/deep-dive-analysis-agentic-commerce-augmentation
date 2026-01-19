@@ -31,7 +31,7 @@ export function ChatWindow({ messages }: { messages: Message[] }) {
           </div>
           <div className="message__content">
             <span className="message__role">
-              {message.role === "user" ? "You" : "Empowerment Agent"}
+              {message.role === "user" ? "You" : "Intentionality Agent"}
             </span>
             <p className="message__text">{message.content}</p>
           </div>

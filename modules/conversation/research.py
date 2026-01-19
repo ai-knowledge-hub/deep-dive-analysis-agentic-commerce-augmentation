@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from shared.llm.gateway import generate_with_tools
-from llm.tools import get_function_declarations, execute_tool
+from llm.tools import get_llm_tools, execute_tool
 
 
-RESEARCH_PROMPT = """You are a shopping research agent.
+RESEARCH_PROMPT = """You are a catalog gap research agent.
 
 Goal: Provide neutral discovery research when catalog data is thin.
 Return a concise bullet summary with citations, plus risks and uncertainty.
@@ -30,7 +30,7 @@ def run_research(query: str, goals: List[str], context: str | None = None) -> di
         "3) Suggested next clarifying question"
     )
 
-    tool_schema = get_function_declarations()
+    tool_schema = get_llm_tools()
     response = generate_with_tools(prompt=prompt, tools=tool_schema)
 
     tool_calls = response.get("tool_calls", []) if isinstance(response, dict) else []
@@ -47,7 +47,29 @@ def run_research(query: str, goals: List[str], context: str | None = None) -> di
         "model_response": response,
         "tool_calls": tool_calls,
         "tool_outputs": tool_outputs,
+        "insights": _build_insights(response),
     }
+
+
+def _build_insights(response: Dict[str, object] | str) -> List[dict]:
+    if isinstance(response, dict):
+        text = str(response.get("content") or response.get("text") or "")
+    else:
+        text = str(response or "")
+
+    lines = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
+    insights = []
+    for idx, line in enumerate(lines):
+        insights.append(
+            {
+                "id": f"research-{idx + 1}",
+                "title": line if line else "Research insight",
+                "summary": line,
+                "confidence": 0.35,
+                "source": "research",
+            }
+        )
+    return insights
 
 
 __all__ = ["run_research"]

@@ -27,17 +27,19 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 
 ### In Place
 - Intentionality profiling module exists with LLM prompt + profile builder (`modules/intentionality/*`).
-- Alignment summary via embeddings + keyword fallback exists (`modules/alignment/goal_alignment.py`).
+- Inferred intent model supports multi-goal + signals and is wired through API/UI (`modules/intent/*`, `api/routes/*`, `web/*`).
+- Alignment summary + per-product alignment scores + reasoning are live (`modules/alignment/goal_alignment.py`, `api/routes/products.py`, `web/components/products/ProductReasoning.tsx`).
 - Discovery endpoints live: `/intent/infer`, `/products/align`, `/products/profile`, `/products/enrich` (`api/routes/*`).
 - UI shows inferred intent + discoverability delta (`web/components/intent/IntentDisplay.tsx`, `web/components/products/IntentionalityProfileCard.tsx`).
 - UCP adapter stub exists (`modules/commerce/adapters/ucp/loader.py`).
+- Legacy empowerment artifacts removed from schema/data/tools/UI (`shared/db/schema.sql`, `db/schema.sql`, `llm/tools.py`, `data/*.json`, `web/components/empowerment/ValuesPanel.tsx`).
 
 ### Still Partial
-- Intent model is taxonomy/keyword-based; no `InferredIntent` with signals/multi-goal output yet (`modules/intent/*`).
-- Intentionality enrichment is computed ad-hoc; not wired into adapter pipeline (`modules/commerce/plan_builder.py`, `modules/commerce/adapters/*`).
-- Per-product alignment scores + explanations are not first-class in API/UI (alignment summary only).
+- Intentionality enrichment still missing in Shopify + Google Merchant adapter paths and batch pipeline (`modules/commerce/adapters/*`).
 - Conversation flow still uses legacy clarification + “autonomy” phrasing (`modules/conversation/*`, `modules/values/*`).
-- Memory schema still needs alignment-first fields (was using empowerment naming).
+- Embedding persistence + retrieval helpers are still missing (DB + repos + tests).
+- Deterministic intent-output parsing tests still missing.
+- Product model still carries `capabilities_enabled` + `intent_scores` directly (optional cleanup if you want strict IntentionalityProfile-only).
 
 ---
 
@@ -85,6 +87,8 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - Replace World‑B UI with intent‑alignment demo flow:
   - Query → inferred intent → aligned products → explanations
 - Add “discoverability delta” visualization (before/after enrichment).
+- Add dual-stream discovery display (catalog + research) with alignment scores.
+- Disable catalog stream for `CATALOG_SOURCE=mock` to avoid misleading recommendations.
 
 ---
 
@@ -96,6 +100,9 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - [x] Show intent label + confidence in UI
 - [x] Show alignment score alongside intentionality profile
 - [x] Wire “discoverability delta” panel (before/after comparison)
+- [x] Surface per-product alignment explanations in UI cards
+- [ ] Show catalog + research streams side-by-side with alignment scores
+- [x] Disable catalog stream for `CATALOG_SOURCE=mock`
 
 ### Phase 3 — Protocol & Catalog Integration
 - [x] Add UCP adapter stub + loader registration

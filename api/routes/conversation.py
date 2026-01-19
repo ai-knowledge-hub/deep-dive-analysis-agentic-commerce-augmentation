@@ -18,6 +18,7 @@ from modules.values.agent import ValuesAgent
 from modules.values.domain import ClarificationState
 from modules.conversation.context import context_for
 from modules.conversation.research import run_research
+from modules.alignment.goal_alignment import score_products as score_alignment
 from modules.intentionality.profiling import build_profile_with_llm
 from modules.intentionality.domain import IntentionalityProfile
 from modules.commerce.domain import Product
@@ -108,6 +109,7 @@ def _process_message(
             },
         )
     plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
+    goal_signals = _goal_signals(intent, goals)
     product_explanations = plan.get("product_explanations")
     if not product_explanations:
         product_explanations = _format_reasoning(plan.get("products", []))
@@ -136,11 +138,12 @@ def _process_message(
     )
 
     research = _maybe_run_research(plan, goals, context_snapshot)
+    research_stream = _build_research_stream(research, goal_signals)
 
     return _session_response(
         manager,
         intent=intent,
-        plan=plan,
+        plan=_merge_plan_streams(plan, research_stream),
         research=research,
         baseline_alignment=plan.get("alignment", {})
         .get("goal_alignment", {})
@@ -230,13 +233,77 @@ def _intentionality_profiles(products: List[object]) -> List[dict]:
 def _maybe_run_research(
     plan: dict, goals: List[str], context_snapshot: str | None
 ) -> dict | None:
-    products = plan.get("products", []) or []
-    data_quality = plan.get("data_quality", {})
-    avg_conf = float(data_quality.get("average_confidence", 0.0) or 0.0)
-    if products and avg_conf >= 0.6:
-        return None
     query = plan.get("query") or "catalog research"
     return run_research(query=query, goals=goals, context=context_snapshot)
+
+
+def _goal_signals(intent: dict, goals: List[str]) -> List[str]:
+    merged: List[str] = []
+    if goals:
+        merged.extend(goals)
+    primary = intent.get("primary_goal") or intent.get("label")
+    if primary and primary != "unknown":
+        merged.append(primary)
+    merged.extend(intent.get("secondary_goals") or [])
+    merged.extend(intent.get("underlying_needs") or [])
+    seen = set()
+    deduped = []
+    for goal in merged:
+        if goal and goal != "unknown" and goal not in seen:
+            seen.add(goal)
+            deduped.append(goal)
+    return deduped
+
+
+def _build_research_stream(research: dict | None, goals: List[str]) -> dict | None:
+    if not research:
+        return None
+    insights = research.get("insights", []) or []
+    if not insights:
+        return {"items": [], "alignment": {"per_item": []}}
+
+    items = []
+    for insight in insights:
+        title = insight.get("title") or insight.get("summary") or "Research insight"
+        summary = insight.get("summary") or title
+        items.append(
+            {
+                "id": insight.get("id") or title,
+                "name": title,
+                "price": 0.0,
+                "description": summary,
+                "confidence": insight.get("confidence", 0.35),
+                "source": "research",
+                "capabilities_enabled": [],
+                "tags": ["research"],
+            }
+        )
+
+    products = [Product(**item) for item in items]
+    scores = score_alignment(goals, products) if goals else []
+    per_item = {score.product_id: score.__dict__ for score in scores}
+    enriched = []
+    for item in items:
+        score = per_item.get(item["id"], {})
+        enriched.append(
+            {
+                **item,
+                "alignment_score": score.get("score"),
+                "alignment_reasoning": score.get("alignment_reasoning"),
+            }
+        )
+    return {"items": enriched, "alignment": {"per_item": list(per_item.values())}}
+
+
+def _merge_plan_streams(plan: dict, research_stream: dict | None) -> dict:
+    merged = dict(plan)
+    merged["catalog_results"] = plan.get("products", [])
+    merged["research_results"] = research_stream.get("items") if research_stream else []
+    merged["alignment"] = merged.get("alignment") or {}
+    merged["alignment"]["research"] = (
+        research_stream.get("alignment") if research_stream else {}
+    )
+    return merged
 
 
 @router.post("/start")

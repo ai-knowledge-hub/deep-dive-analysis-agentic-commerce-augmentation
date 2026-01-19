@@ -7,6 +7,9 @@ type ProductExplanation = NonNullable<ConversationResponse["product_explanations
 type Props = {
   products?: Product[];
   explanations?: ProductExplanation[];
+  title?: string;
+  badge?: string;
+  disclaimer?: string;
 };
 
 function mergeProducts(products?: Product[], explanations?: ProductExplanation[]) {
@@ -56,16 +59,25 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
   return [...merged, ...remaining];
 }
 
-export function ProductReasoning({ products, explanations }: Props) {
+export function ProductReasoning({
+  products,
+  explanations,
+  title = "Recommendations",
+  badge,
+  disclaimer,
+}: Props) {
   const merged = mergeProducts(products, explanations);
 
   return (
     <div className="panel__card">
       <div className="panel__header">
-        <h3>Recommendations</h3>
-        {merged.length > 0 && (
-          <span className="panel__badge">{merged.length}</span>
-        )}
+        <h3>{title}</h3>
+        <div className="panel__meta">
+          {badge && <span className="panel__badge panel__badge--info">{badge}</span>}
+          {merged.length > 0 && (
+            <span className="panel__badge">{merged.length}</span>
+          )}
+        </div>
       </div>
 
       {merged.length === 0 ? (
@@ -108,6 +120,7 @@ export function ProductReasoning({ products, explanations }: Props) {
           ))}
         </div>
       )}
+      {disclaimer ? <p className="panel__disclaimer">{disclaimer}</p> : null}
     </div>
   );
 }

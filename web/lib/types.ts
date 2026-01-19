@@ -43,6 +43,8 @@ export type ConversationResponse = {
   plan?: {
     query?: string;
     products?: Product[];
+    catalog_results?: Product[];
+    research_results?: Product[];
     clarifications?: string[];
     alignment?: {
       goal_alignment?: {
@@ -50,6 +52,13 @@ export type ConversationResponse = {
         baseline_score?: number;
         aligned_goals?: string[];
         misaligned_goals?: string[];
+      };
+      research?: {
+        per_item?: {
+          product_id?: string;
+          score?: number;
+          alignment_reasoning?: string;
+        }[];
       };
     };
   };

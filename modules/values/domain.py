@@ -1,4 +1,4 @@
-"""Domain models for values clarification."""
+"""Domain models for goal clarification."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class ClarificationTurn:
 
 @dataclass
 class ClarificationState:
-    """State of the values clarification dialogue."""
+    """State of the goal clarification dialogue."""
 
     query: str
     turns: List[ClarificationTurn] = field(default_factory=list)

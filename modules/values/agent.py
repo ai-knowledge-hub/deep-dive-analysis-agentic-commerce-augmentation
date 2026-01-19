@@ -1,4 +1,4 @@
-"""Multi-turn values clarification agent."""
+"""Multi-turn goal clarification agent."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from modules.values.domain import ClarificationState
 
 
 class ValuesAgent:
-    """Guides the user through intent clarification before commerce."""
+    """Guides the user through goal clarification before commerce."""
 
     min_questions: int = 2
 

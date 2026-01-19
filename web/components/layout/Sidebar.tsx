@@ -24,7 +24,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: Props) {
         >
           {collapsed ? ">" : "<"}
         </button>
-        {!collapsed && <span className="sidebar__brand">Empowerment</span>}
+        {!collapsed && <span className="sidebar__brand">Intentionality</span>}
         {mobileOpen && (
           <button
             type="button"

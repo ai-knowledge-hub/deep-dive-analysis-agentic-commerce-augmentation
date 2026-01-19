@@ -91,7 +91,9 @@ class OpenRouterLLMClient(LLMClient):
         system_instruction: str | None = None,
     ) -> dict:
         tool_descriptions = "\n".join(
-            f"{tool['name']}: {tool.get('description', '')}" for tool in tools
+            f"{tool['name']}: {tool.get('description', '')}"
+            for tool in tools
+            if "name" in tool
         )
         full_prompt = (
             f"{tool_descriptions}\n\n{prompt}" if tool_descriptions else prompt

@@ -23,7 +23,7 @@ For local development and testing.
 CATALOG_SOURCE=mock
 ```
 
-No additional configuration required. Returns deterministic product data for consistent testing.
+No additional configuration required. When `CATALOG_SOURCE=mock`, the catalog stream is disabled and the UI shows research insights only to avoid misleading recommendations.
 
 ---
 

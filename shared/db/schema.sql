@@ -75,7 +75,22 @@ CREATE TABLE IF NOT EXISTS semantic_memory (
     UNIQUE (user_id, key)
 );
 
+CREATE TABLE IF NOT EXISTS intent_embeddings (
+    id TEXT PRIMARY KEY,
+    intent_text TEXT NOT NULL,
+    embedding BLOB,
+    payload_json TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS product_embeddings (
+    product_id TEXT PRIMARY KEY,
+    embedding BLOB,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_user_key ON semantic_memory(user_id, key);
+CREATE INDEX IF NOT EXISTS idx_intent_embeddings_text ON intent_embeddings(intent_text);

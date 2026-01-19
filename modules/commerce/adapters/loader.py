@@ -19,6 +19,8 @@ def register_source(name: str, loader):
 
 def load_catalog(source: str | None = None) -> List[Product]:
     source_name = (source or os.getenv("CATALOG_SOURCE", "mock")).lower()
+    if source_name == "mock":
+        return []
     if source_name not in _SOURCE_MAP:
         if source_name == "shopify":
             from modules.commerce.adapters.shopify import load_catalog as load_shopify
