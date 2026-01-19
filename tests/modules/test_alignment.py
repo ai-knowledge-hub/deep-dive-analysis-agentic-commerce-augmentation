@@ -8,7 +8,7 @@ def test_goal_alignment_scores_supporting_products(monkeypatch):
     monkeypatch.setattr(search_module, "CATALOG", load_mock_catalog())
     products = search("workspace")
     goals = ["Improve posture", "Learn guitar"]
-    result = assess(goals, products)
+    result = assess(goals, products, use_semantic=False)
     assert "Improve posture" in result.aligned_goals
     assert "Learn guitar" in result.misaligned_goals
     assert result.score < 1
