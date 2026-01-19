@@ -16,6 +16,7 @@ export type Product = {
   offer_url?: string;
   capabilities_enabled?: string[];
   alignment_score?: number;
+  alignment_reasoning?: string;
   intentionality_profile?: {
     product_id?: string;
     capabilities_enabled?: string[];

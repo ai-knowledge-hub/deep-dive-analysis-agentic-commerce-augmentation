@@ -39,6 +39,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
       name: product.name ?? explanation?.name ?? "Recommendation",
       confidence: product.confidence ?? explanation?.confidence,
       alignment_score: product.alignment_score,
+      alignment_reasoning: product.alignment_reasoning,
       capabilities_enabled: product.capabilities_enabled ?? explanation?.capabilities_enabled,
       reasoning: product.reasoning ?? explanation?.reasoning,
     };
@@ -46,7 +47,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
 
   const remaining = Array.from(explanationEntries.values()).map((explanation, index) => ({
     id: explanation.id ?? `extra-${index}`,
-    name: explanation.name ?? "Empowerment action",
+    name: explanation.name ?? "Recommendation",
     confidence: explanation.confidence,
     capabilities_enabled: explanation.capabilities_enabled,
     reasoning: explanation.reasoning,
@@ -96,8 +97,13 @@ export function ProductReasoning({ products, explanations }: Props) {
                 </div>
               )}
               <p className="product__reasoning">
-                {product.reasoning ?? "Reasoning pending..."}
+                {product.reasoning ?? product.alignment_reasoning ?? "Reasoning pending..."}
               </p>
+              {product.alignment_reasoning && product.reasoning ? (
+                <p className="product__alignment">
+                  {product.alignment_reasoning}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>

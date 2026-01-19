@@ -670,6 +670,13 @@ ul { list-style: none; }
   line-height: 1.4;
 }
 
+.product__alignment {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 /* =============================================================================
    RESPONSIVE
    ============================================================================= */

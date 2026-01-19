@@ -161,6 +161,9 @@ class PlanBuilder:
                 "offer_url": product.offer_url,
                 "capabilities_enabled": product.capabilities_enabled,
                 "alignment_score": alignment_scores.get(product.id, {}).get("score"),
+                "alignment_reasoning": alignment_scores.get(product.id, {}).get(
+                    "alignment_reasoning"
+                ),
                 "intentionality_profile": product.intentionality_profile
                 or build_profile(product).to_dict(),
             }

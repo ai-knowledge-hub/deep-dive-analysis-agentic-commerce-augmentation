@@ -120,7 +120,7 @@ INTENT_CLASSIFICATION_PROMPT = """You are an intent inference agent for a discov
 Return a JSON object with:
 {
   "primary_goal": "short goal phrase in user terms",
-  "secondary_goals": ["optional supporting goals"],
+  "secondary_goals": ["optional supporting goals (0-3)"],
   "underlying_needs": ["why this matters to the user"],
   "context_signals": ["key phrases or signals used"],
   "confidence": 0.0-1.0,

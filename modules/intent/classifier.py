@@ -96,11 +96,19 @@ def _keyword_intent(
     if ranked:
         ranked.sort(key=lambda item: item[1], reverse=True)
         top_definition, confidence, evidence = ranked[0]
+        secondary = [
+            definition.label.replace("_", " ")
+            for definition, score, _ in ranked[1:3]
+            if score > 0
+        ]
+        context_signals: List[str] = []
+        for _, _, hits in ranked[:3]:
+            context_signals.extend(hits)
         return InferredIntent(
             primary_goal=top_definition.label.replace("_", " "),
-            secondary_goals=[],
+            secondary_goals=secondary,
             underlying_needs=[],
-            context_signals=evidence,
+            context_signals=list(dict.fromkeys(context_signals)) or evidence,
             confidence=confidence,
             domain=top_definition.domain,
             source="keyword",
