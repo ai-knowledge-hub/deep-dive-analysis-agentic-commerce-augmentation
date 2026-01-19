@@ -87,6 +87,7 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - Replace World‑B UI with intent‑alignment demo flow:
   - Query → inferred intent → aligned products → explanations
 - Add “discoverability delta” visualization (before/after enrichment).
+- Add dual-stream discovery display (catalog + research) with alignment scores.
 
 ---
 
@@ -99,6 +100,7 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - [x] Show alignment score alongside intentionality profile
 - [x] Wire “discoverability delta” panel (before/after comparison)
 - [x] Surface per-product alignment explanations in UI cards
+- [ ] Show catalog + research streams side-by-side with alignment scores
 
 ### Phase 3 — Protocol & Catalog Integration
 - [x] Add UCP adapter stub + loader registration

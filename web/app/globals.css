@@ -677,6 +677,23 @@ ul { list-style: none; }
   line-height: 1.4;
 }
 
+.panel__meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.panel__badge--info {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+.panel__disclaimer {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* =============================================================================
    RESPONSIVE
    ============================================================================= */

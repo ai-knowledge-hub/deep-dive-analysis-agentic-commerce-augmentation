@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from modules.intent.llm_classifier import HybridIntentClassifier
-from modules.conversation.context import build_context
+from modules.conversation.context import context_for
 from modules.memory.session_manager import SessionManager
 from modules.memory.semantic import SemanticMemory
 from modules.alignment import goal_alignment
@@ -26,7 +26,7 @@ class IntentAgent:
         """Detect intent from utterance with optional session context."""
         context: str | None = None
         if manager is not None:
-            _, context = build_context(manager)
+            _, context = context_for(manager)
         return self._classifier.classify(utterance, context=context).to_dict()
 
 
@@ -77,7 +77,7 @@ class ExplainAgent:
                 base += " — verify details before purchasing."
             explanations.append(base)
         joined = "; ".join(explanations)
-        return f"These items were selected because they reinforce autonomy: {joined}"
+        return f"These items were selected based on intent alignment: {joined}"
 
 
 class CapabilityAgent:

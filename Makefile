@@ -33,7 +33,7 @@ format:
 
 .PHONY: run-local
 run-local:
-	LLM_PROVIDER=openrouter CATALOG_SOURCE=mock DATABASE_PATH=./tmp/local.db uvicorn api.main:app --reload --port 8000
+	LLM_PROVIDER=openrouter CATALOG_SOURCE=mock DATABASE_PATH=./tmp/local.db EMBEDDING_PREFER_LOCAL=true uvicorn api.main:app --reload --port 8000
 
 .PHONY: run-dev
 run-dev:

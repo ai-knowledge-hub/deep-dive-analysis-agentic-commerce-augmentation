@@ -388,3 +388,4 @@ def test_research_fallback_returns_payload(client, monkeypatch):
     assert data["research"]
     assert data["research"]["query"] == "workspace chair"
     assert "Verify data" in data["research"]["goals"]
+    assert data["plan"]["research_results"] is not None

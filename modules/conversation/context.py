@@ -130,7 +130,7 @@ def values_context(
     state: "ClarificationState | None",
     include_turns: int = 10,
 ) -> Tuple[ContextPacket, str]:
-    """Build context for values clarification dialogue."""
+    """Build context for goal clarification dialogue."""
     state_metadata = {
         "clarification_progress": {
             "turns": len(state.turns) if state else 0,

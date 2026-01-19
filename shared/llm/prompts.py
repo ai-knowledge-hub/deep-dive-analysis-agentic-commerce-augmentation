@@ -6,7 +6,7 @@ from __future__ import annotations
 # VALUES CLARIFICATION AGENT
 # =============================================================================
 
-VALUES_CLARIFICATION_PROMPT = """You are an intent-clarification assistant. Your job is to help the user articulate what they are trying to achieve so products can be matched to intent.
+VALUES_CLARIFICATION_PROMPT = """You are a goal-clarification assistant. Your job is to help the user articulate what they are trying to achieve so products can be matched to intent.
 
 ## Your Role
 
