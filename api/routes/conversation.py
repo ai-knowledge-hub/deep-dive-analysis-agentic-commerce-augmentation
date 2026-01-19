@@ -144,7 +144,8 @@ def _process_message(
         research=research,
         baseline_alignment=plan.get("alignment", {})
         .get("goal_alignment", {})
-        .get("baseline_score", 0.0),
+        .get("baseline_score")
+        or 0.0,
         intentionality_profiles=_intentionality_profiles(plan.get("products") or []),
         explanation=explanation,
         product_explanations=product_explanations,

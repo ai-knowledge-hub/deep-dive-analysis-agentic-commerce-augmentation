@@ -15,6 +15,14 @@ from pydantic import BaseModel, Field
 
 product_search = importlib.import_module("modules.commerce.search")
 
+
+def _search_products(query: str):
+    search_fn = getattr(product_search, "search", None)
+    if callable(search_fn):
+        return search_fn(query)
+    return product_search(query)
+
+
 if APIRouter:
     router = APIRouter(prefix="/products", tags=["products"])
 
@@ -31,14 +39,14 @@ if APIRouter:
 
     @router.get("/search")
     def search_products(query: str = Query("", max_length=128)):
-        products = product_search.search(query)
+        products = _search_products(query)
         return [product.__dict__ for product in products]
 
     @router.post("/profile")
     def profile_product(payload: ProfileRequest):
         """Return an intentionality profile for a single product."""
         product_id = payload.product_id
-        products = product_search.search(product_id)
+        products = _search_products(product_id)
         if not products:
             return {"error": "product not found"}
         return {"profile": build_profile(products[0]).to_dict()}
@@ -54,9 +62,9 @@ if APIRouter:
         candidates = []
         if product_ids:
             for pid in product_ids:
-                candidates.extend(product_search.search(pid))
+                candidates.extend(_search_products(pid))
         else:
-            candidates = product_search.search(query)
+            candidates = _search_products(query)
         alignment = assess_alignment(goal_signals, candidates)
         baseline = assess_alignment(goal_signals, candidates, use_semantic=False)
         per_product = [
@@ -72,7 +80,7 @@ if APIRouter:
         """Return enriched product with intentionality profile and alignment."""
         product_id = payload.product_id
         query = payload.query or ""
-        products = product_search.search(product_id)
+        products = _search_products(product_id)
         if not products:
             return {"error": "product not found"}
         product = products[0]

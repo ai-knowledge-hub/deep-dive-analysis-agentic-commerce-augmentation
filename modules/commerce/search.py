@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import types
 from typing import Iterable, List, Sequence
 
 from modules.commerce.adapters import load_catalog
@@ -40,3 +41,21 @@ def list_intent_scores(products: Iterable[Product]) -> List[dict]:
     for product in products:
         summaries.append({"id": product.id, "scores": product.intent_scores})
     return summaries
+
+
+class _CallableModule(types.ModuleType):
+    """Allow calling the module to proxy search()."""
+
+    def __call__(self, *args, **kwargs):
+        return search(*args, **kwargs)
+
+
+def _patch_module_callable() -> None:
+    import sys
+
+    module = sys.modules.get(__name__)
+    if module and not isinstance(module, _CallableModule):
+        module.__class__ = _CallableModule
+
+
+_patch_module_callable()
