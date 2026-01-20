@@ -56,9 +56,6 @@ export default function HomePage() {
         const clarification = response.clarification;
         if (clarification) {
           setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
-          setClarifications(response.plan?.clarifications ?? []);
-          setGoalState(response.goal_state);
-          return;
         }
 
         if (response.explanation) {

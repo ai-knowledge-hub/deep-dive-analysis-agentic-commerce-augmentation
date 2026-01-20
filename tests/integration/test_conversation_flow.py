@@ -48,7 +48,6 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from modules.values.domain import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
@@ -58,14 +57,6 @@ def integration_client(tmp_path, monkeypatch):
     db_path = tmp_path / "integration.db"
     set_database_path(db_path)
     init_db()
-
-    def fake_handle(manager, message, metadata):
-        state = GoalClarificationState(
-            query=message, ready_for_products=True, extracted_goals=["Stay energized"]
-        )
-        manager.record_goal("Stay energized")
-        manager.update_state(clarification_state=state.to_dict())
-        return state, None
 
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
@@ -88,7 +79,7 @@ def integration_client(tmp_path, monkeypatch):
                         "source": "mock",
                         "reasoning": f"Supports {goals[0]}"
                         if goals
-                        else "Supports autonomy",
+                        else "Supports focus",
                     }
                 ],
                 "clarifications": ["We prioritized posture support."],
@@ -100,7 +91,6 @@ def integration_client(tmp_path, monkeypatch):
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
-    monkeypatch.setattr("api.routes.conversation._handle_goal_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
@@ -117,7 +107,8 @@ def test_full_conversation_flow(integration_client):
     start_payload = start_response.json()
     session_id = start_payload["session_id"]
     assert (
-        start_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
+        start_payload["plan"]["products"][0]["reasoning"]
+        == "Supports workspace upgrade"
     )
     assert start_payload["intentionality_profiles"]
 
@@ -130,5 +121,6 @@ def test_full_conversation_flow(integration_client):
 
     assert message_payload["intent"]["primary_goal"] == "workspace upgrade"
     assert (
-        message_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
+        message_payload["plan"]["products"][0]["reasoning"]
+        == "Supports workspace upgrade"
     )
