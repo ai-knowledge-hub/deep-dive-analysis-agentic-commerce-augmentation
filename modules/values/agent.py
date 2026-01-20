@@ -6,10 +6,10 @@ from typing import List, Optional
 
 from shared.llm.gateway import chat
 from shared.llm.prompts import VALUES_CLARIFICATION_PROMPT
-from modules.values.domain import ClarificationState
+from modules.values.domain import GoalClarificationState
 
 
-class ValuesAgent:
+class GoalClarificationAgent:
     """Guides the user through goal clarification before commerce."""
 
     min_questions: int = 2
@@ -19,9 +19,9 @@ class ValuesAgent:
         query: str,
         metadata: Optional[dict] = None,
         context: Optional[str] = None,
-    ) -> ClarificationState:
+    ) -> GoalClarificationState:
         """Start a new clarification dialogue."""
-        state = ClarificationState(query=query, metadata=metadata or {})
+        state = GoalClarificationState(query=query, metadata=metadata or {})
         prompt = f"User request: {query}\nRespond per instructions."
         response = chat(
             messages=[{"role": "user", "content": prompt}],
@@ -33,10 +33,10 @@ class ValuesAgent:
 
     def continue_dialogue(
         self,
-        state: ClarificationState,
+        state: GoalClarificationState,
         user_message: str,
         context: Optional[str] = None,
-    ) -> ClarificationState:
+    ) -> GoalClarificationState:
         """Continue an existing dialogue."""
         history = [
             {"role": turn.speaker, "content": turn.content} for turn in state.turns
@@ -80,4 +80,4 @@ class ValuesAgent:
         return goals or [agent_response.strip()]
 
 
-__all__ = ["ValuesAgent"]
+__all__ = ["GoalClarificationAgent"]

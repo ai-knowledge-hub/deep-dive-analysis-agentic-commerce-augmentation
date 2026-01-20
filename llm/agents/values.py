@@ -1,6 +1,10 @@
 """Backward compatibility: re-exports from modules.values."""
 
-from modules.values.domain import ClarificationState, ClarificationTurn
-from modules.values.agent import ValuesAgent
+from modules.values.domain import GoalClarificationState, GoalClarificationTurn
+from modules.values.agent import GoalClarificationAgent
 
-__all__ = ["ClarificationState", "ClarificationTurn", "ValuesAgent"]
+__all__ = [
+    "GoalClarificationState",
+    "GoalClarificationTurn",
+    "GoalClarificationAgent",
+]

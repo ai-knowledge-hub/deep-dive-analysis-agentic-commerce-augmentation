@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 from shared.db.connection import get_connection
 from modules.commerce.domain import Product
-from shared.llm.embeddings import embed
+from shared.llm.embeddings import embed, embedding_available
 
 
 def _serialize_embedding(embedding: List[float] | None) -> bytes | None:
@@ -84,7 +84,9 @@ def embed_and_store_product(
     product: Product, payload: Dict[str, Any] | None = None
 ) -> Dict[str, Any]:
     """Generate an embedding and store it for the product."""
-    embedding = embed(_product_semantic_text(product))
+    embedding = None
+    if embedding_available():
+        embedding = embed(_product_semantic_text(product))
     return upsert_product_embedding(product.id, embedding, payload=payload)
 
 

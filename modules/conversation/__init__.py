@@ -7,7 +7,7 @@ from modules.conversation.context import (
     default_metadata,
     render_context,
     context_for,
-    values_context,
+    goal_context,
 )
 from modules.conversation.agents import (
     IntentAgent,
@@ -25,7 +25,7 @@ __all__ = [
     "default_metadata",
     "render_context",
     "context_for",
-    "values_context",
+    "goal_context",
     # Agents
     "IntentAgent",
     "CommerceAgent",

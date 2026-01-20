@@ -16,6 +16,7 @@ from modules.memory.repositories import users as users_repo
 from modules.memory.domain import SessionSnapshot
 from modules.memory.semantic import SemanticMemory
 from shared.llm.gateway import embed
+from shared.llm.embeddings import embedding_available
 
 
 def _normalize_goal_text(goal: str | None) -> str | None:
@@ -85,10 +86,11 @@ class SessionManager:
         if not normalized_goal:
             raise ValueError("Goal text cannot be empty.")
         goal_embedding = None
-        try:
-            goal_embedding = embed(normalized_goal)
-        except Exception:
-            goal_embedding = None
+        if embedding_available():
+            try:
+                goal_embedding = embed(normalized_goal)
+            except Exception:
+                goal_embedding = None
         entry = goals_repo.create_goal(
             user_id=self.user_id,
             goal_text=normalized_goal,

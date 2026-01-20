@@ -70,6 +70,8 @@ class ExplainAgent:
 
     def explain(self, products: List[dict]) -> str:
         """Explain product recommendations."""
+        if not products:
+            return "No catalog recommendations yet."
         explanations = []
         for product in products:
             base = f"{product['name']} (confidence {product['confidence']:.2f}, source {product['source']})"

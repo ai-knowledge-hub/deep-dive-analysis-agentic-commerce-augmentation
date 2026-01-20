@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 
 from shared.db.connection import get_connection
 from modules.memory.repositories.base import from_json, to_json
-from shared.llm.embeddings import embed
+from shared.llm.embeddings import embed, embedding_available
 
 
 def _serialize_embedding(embedding: List[float] | None) -> bytes | None:
@@ -78,7 +78,9 @@ def embed_and_store_intent(
     intent_text: str, payload: Dict[str, Any] | None = None
 ) -> Dict[str, Any]:
     """Generate an embedding and store it for the intent text."""
-    embedding = embed(intent_text)
+    embedding = None
+    if embedding_available():
+        embedding = embed(intent_text)
     return upsert_intent_embedding(intent_text, embedding, payload=payload)
 
 

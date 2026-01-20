@@ -6,7 +6,7 @@ import type { ConversationResponse } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
 import { ProductReasoning } from "../components/products/ProductReasoning";
 import { Sidebar } from "../components/layout/Sidebar";
-import { ValuesPanel } from "../components/values/ValuesPanel";
+import { GoalClarificationPanel } from "../components/values/GoalClarificationPanel";
 import { IntentionalityProfileCard } from "../components/products/IntentionalityProfileCard";
 import { IntentDisplay } from "../components/intent/IntentDisplay";
 
@@ -21,7 +21,7 @@ export default function HomePage() {
   const [researchResults, setResearchResults] = useState<
     ConversationResponse["plan"]["research_results"]
   >([]);
-  const [valuesState, setValuesState] = useState<ConversationResponse["values_state"]>();
+  const [goalState, setGoalState] = useState<ConversationResponse["goal_state"]>();
   const [intent, setIntent] = useState<ConversationResponse["intent"]>();
   const [loading, setLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -34,7 +34,7 @@ export default function HomePage() {
     setPlan(undefined);
     setClarifications([]);
     setProductReasoning([]);
-    setValuesState(undefined);
+    setGoalState(undefined);
     setIntent(undefined);
     setResearchResults([]);
   }, []);
@@ -56,9 +56,6 @@ export default function HomePage() {
         const clarification = response.clarification;
         if (clarification) {
           setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
-          setClarifications(response.plan?.clarifications ?? []);
-          setValuesState(response.values_state);
-          return;
         }
 
         if (response.explanation) {
@@ -67,7 +64,7 @@ export default function HomePage() {
         setPlan(response.plan);
         setClarifications(response.plan?.clarifications ?? []);
         setProductReasoning(response.product_explanations ?? []);
-        setValuesState(response.values_state);
+        setGoalState(response.goal_state);
         setIntent(response.intent);
         setResearchResults(response.plan?.research_results ?? []);
       } catch (error) {
@@ -89,7 +86,7 @@ export default function HomePage() {
 
   const hasInsights =
     clarifications.length > 0 ||
-    valuesState ||
+    goalState ||
     (plan?.products?.length ?? 0) > 0 ||
     intent?.primary_goal;
 
@@ -156,7 +153,7 @@ export default function HomePage() {
               alignmentScore={plan?.alignment?.goal_alignment?.score}
               baselineScore={plan?.alignment?.goal_alignment?.baseline_score}
             />
-            <ValuesPanel state={valuesState} />
+            <GoalClarificationPanel state={goalState} />
             <ProductReasoning
               title="Catalog Recommendations"
               products={plan?.catalog_results ?? plan?.products}

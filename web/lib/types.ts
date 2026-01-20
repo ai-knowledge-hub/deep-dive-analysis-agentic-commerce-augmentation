@@ -1,4 +1,4 @@
-export type ClarificationState = {
+export type GoalClarificationState = {
   query: string;
   turns: { speaker: string; content: string }[];
   extracted_goals: string[];
@@ -63,7 +63,7 @@ export type ConversationResponse = {
     };
   };
   clarification?: string;
-  values_state?: ClarificationState;
+  goal_state?: GoalClarificationState;
   product_explanations?: {
     id?: string;
     name?: string;

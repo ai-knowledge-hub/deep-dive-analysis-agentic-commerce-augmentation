@@ -14,8 +14,8 @@ from modules.conversation.agents import (
     ExplainAgent,
 )
 from modules.memory.session_manager import SessionManager
-from modules.values.agent import ValuesAgent
-from modules.values.domain import ClarificationState
+from modules.values.agent import GoalClarificationAgent
+from modules.values.domain import GoalClarificationState
 from modules.conversation.context import context_for
 from modules.conversation.research import run_research
 from modules.alignment.goal_alignment import score_products as score_alignment
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/conversation", tags=["conversation"])
 INTENT_AGENT = IntentAgent()
 COMMERCE_AGENT = CommerceAgent()
 EXPLAIN_AGENT = ExplainAgent()
-VALUES_AGENT = ValuesAgent()
+GOAL_AGENT = GoalClarificationAgent()
 
 
 class ClarifiedGoal(BaseModel):
@@ -83,17 +83,15 @@ def _process_message(
 
     manager.record_turn("user", message, metadata=metadata or {})
 
-    clarification_state, clarification_reply = _handle_values_dialogue(
+    clarification_state, clarification_reply = _handle_goal_dialogue(
         manager, message, metadata
     )
     if clarification_reply:
         return _session_response(
             manager,
             clarification=clarification_reply,
-            values_state=clarification_state.to_dict() if clarification_state else None,
+            goal_state=clarification_state.to_dict() if clarification_state else None,
         )
-
-    _, context_snapshot = context_for(manager)
 
     intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
@@ -108,8 +106,8 @@ def _process_message(
                 "confidence": intent.get("confidence"),
             },
         )
+    _, context_snapshot = context_for(manager)
     plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
-    goal_signals = _goal_signals(intent, goals)
     product_explanations = plan.get("product_explanations")
     if not product_explanations:
         product_explanations = _format_reasoning(plan.get("products", []))
@@ -136,6 +134,7 @@ def _process_message(
         last_query=plan.get("query"),
         last_alignment=plan.get("alignment"),
     )
+    goal_signals = _goal_signals(intent, goals)
 
     research = _maybe_run_research(plan, goals, context_snapshot)
     research_stream = _build_research_stream(research, goal_signals)
@@ -152,26 +151,26 @@ def _process_message(
         intentionality_profiles=_intentionality_profiles(plan.get("products") or []),
         explanation=explanation,
         product_explanations=product_explanations,
-        values_state=clarification_state.to_dict()
+        goal_state=clarification_state.to_dict()
         if clarification_state
         else manager.get_state().get("clarification_state"),
     )
 
 
-def _handle_values_dialogue(
+def _handle_goal_dialogue(
     manager: SessionManager,
     message: str,
     metadata: Optional[Dict[str, Any]],
-) -> tuple[Optional[ClarificationState], Optional[str]]:
+) -> tuple[Optional[GoalClarificationState], Optional[str]]:
     state_payload = manager.get_state().get("clarification_state")
-    state = ClarificationState.from_dict(state_payload) if state_payload else None
+    state = GoalClarificationState.from_dict(state_payload) if state_payload else None
     if state and state.ready_for_products:
         return state, None
 
     if state:
-        state = VALUES_AGENT.continue_dialogue(state, message)
+        state = GOAL_AGENT.continue_dialogue(state, message)
     else:
-        state = VALUES_AGENT.start(message, metadata or {})
+        state = GOAL_AGENT.start(message, metadata or {})
 
     manager.update_state(clarification_state=state.to_dict())
     latest_turn = state.turns[-1] if state.turns else None
