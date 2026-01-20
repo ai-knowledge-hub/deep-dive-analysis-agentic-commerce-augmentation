@@ -75,7 +75,9 @@ def assess(
         )
 
     # Try semantic alignment first, fall back to keyword matching
-    if use_semantic:
+    from shared.llm.embeddings import embedding_available
+
+    if use_semantic and embedding_available():
         try:
             return _semantic_assess(goals, products)
         except Exception as e:
@@ -94,7 +96,9 @@ def score_products(
     if not goals or not products:
         return []
 
-    if use_semantic:
+    from shared.llm.embeddings import embedding_available
+
+    if use_semantic and embedding_available():
         try:
             return _semantic_score_products(goals, products)
         except Exception as e:

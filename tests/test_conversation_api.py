@@ -106,6 +106,15 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
 
 
 def _configure_full_pipeline(monkeypatch):
+    class DummyGoalAgent:
+        def start(self, query, metadata):
+            return GoalClarificationState(
+                query=query, ready_for_products=True, extracted_goals=["Stay energized"]
+            )
+
+        def continue_dialogue(self, state, message):
+            return state
+
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
             return {
@@ -147,12 +156,22 @@ def _configure_full_pipeline(monkeypatch):
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
+    monkeypatch.setattr("api.routes.conversation.GOAL_AGENT", DummyGoalAgent())
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
 
 
 def _configure_research_pipeline(monkeypatch):
+    class DummyGoalAgent:
+        def start(self, query, metadata):
+            return GoalClarificationState(
+                query=query, ready_for_products=True, extracted_goals=["Verify data"]
+            )
+
+        def continue_dialogue(self, state, message):
+            return state
+
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
             return {
@@ -197,6 +216,7 @@ def _configure_research_pipeline(monkeypatch):
     def fake_research(query, goals, context):
         return {"query": query, "goals": goals, "summary": "stub research"}
 
+    monkeypatch.setattr("api.routes.conversation.GOAL_AGENT", DummyGoalAgent())
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
@@ -214,10 +234,10 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
     data = response.json()
 
     assert data["intent"]["primary_goal"] == "workspace upgrade"
-    assert data["plan"]["products"][0]["reasoning"] == "Supports workspace upgrade"
+    assert data["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     assert data["explanation"] == "Recommended Focus Chair for posture."
-    assert data["product_explanations"][0]["reasoning"] == "Supports workspace upgrade"
-    assert data["goal_state"] is None
+    assert data["product_explanations"][0]["reasoning"] == "Supports Stay energized"
+    assert data["goal_state"]["ready_for_products"] is True
     assert data["intentionality_profiles"]
     assert data["baseline_alignment"] is not None
 
@@ -392,5 +412,5 @@ def test_research_fallback_returns_payload(client, monkeypatch):
     data = response.json()
     assert data["research"]
     assert data["research"]["query"] == "workspace chair"
-    assert "workspace upgrade" in data["research"]["goals"]
+    assert "Verify data" in data["research"]["goals"]
     assert data["plan"]["research_results"] is not None

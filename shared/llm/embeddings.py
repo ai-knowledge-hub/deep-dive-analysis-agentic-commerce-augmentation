@@ -7,6 +7,7 @@ Uses Gemini text-embedding-004 as primary, sentence-transformers as fallback.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -388,6 +389,13 @@ def similarity(text_a: str, text_b: str) -> float:
     return cosine_similarity(emb_a, emb_b)
 
 
+def embedding_available() -> bool:
+    """Return True if any embedding provider should be usable."""
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    local_available = importlib.util.find_spec("sentence_transformers") is not None
+    return bool(gemini_key) or local_available
+
+
 __all__ = [
     "EmbeddingConfig",
     "EmbeddingProvider",
@@ -400,4 +408,5 @@ __all__ = [
     "embed",
     "embed_batch",
     "similarity",
+    "embedding_available",
 ]

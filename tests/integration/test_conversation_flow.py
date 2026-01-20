@@ -48,6 +48,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
+from modules.values.domain import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
@@ -57,6 +58,15 @@ def integration_client(tmp_path, monkeypatch):
     db_path = tmp_path / "integration.db"
     set_database_path(db_path)
     init_db()
+
+    class DummyGoalAgent:
+        def start(self, query, metadata):
+            return GoalClarificationState(
+                query=query, ready_for_products=True, extracted_goals=["Stay energized"]
+            )
+
+        def continue_dialogue(self, state, message):
+            return state
 
     class DummyIntentAgent:
         def detect_intent(self, utterance, manager=None):
@@ -91,6 +101,7 @@ def integration_client(tmp_path, monkeypatch):
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
+    monkeypatch.setattr("api.routes.conversation.GOAL_AGENT", DummyGoalAgent())
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
@@ -107,8 +118,7 @@ def test_full_conversation_flow(integration_client):
     start_payload = start_response.json()
     session_id = start_payload["session_id"]
     assert (
-        start_payload["plan"]["products"][0]["reasoning"]
-        == "Supports workspace upgrade"
+        start_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     )
     assert start_payload["intentionality_profiles"]
 
@@ -121,6 +131,5 @@ def test_full_conversation_flow(integration_client):
 
     assert message_payload["intent"]["primary_goal"] == "workspace upgrade"
     assert (
-        message_payload["plan"]["products"][0]["reasoning"]
-        == "Supports workspace upgrade"
+        message_payload["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     )

@@ -83,6 +83,16 @@ def _process_message(
 
     manager.record_turn("user", message, metadata=metadata or {})
 
+    clarification_state, clarification_reply = _handle_goal_dialogue(
+        manager, message, metadata
+    )
+    if clarification_reply:
+        return _session_response(
+            manager,
+            clarification=clarification_reply,
+            goal_state=clarification_state.to_dict() if clarification_state else None,
+        )
+
     intent = INTENT_AGENT.detect_intent(message, manager=manager)
     manager.ingest_intent_as_goal(intent)
     goals = manager.goal_texts()
@@ -124,11 +134,6 @@ def _process_message(
         last_query=plan.get("query"),
         last_alignment=plan.get("alignment"),
     )
-
-    clarification_state, clarification_reply = _maybe_handle_goal_dialogue(
-        manager, message, metadata, intent
-    )
-    goals = manager.goal_texts()
     goal_signals = _goal_signals(intent, goals)
 
     research = _maybe_run_research(plan, goals, context_snapshot)
@@ -146,25 +151,10 @@ def _process_message(
         intentionality_profiles=_intentionality_profiles(plan.get("products") or []),
         explanation=explanation,
         product_explanations=product_explanations,
-        clarification=clarification_reply,
         goal_state=clarification_state.to_dict()
         if clarification_state
         else manager.get_state().get("clarification_state"),
     )
-
-
-def _maybe_handle_goal_dialogue(
-    manager: SessionManager,
-    message: str,
-    metadata: Optional[Dict[str, Any]],
-    intent: dict,
-) -> tuple[Optional[GoalClarificationState], Optional[str]]:
-    state_payload = manager.get_state().get("clarification_state")
-    state = GoalClarificationState.from_dict(state_payload) if state_payload else None
-    if not _needs_goal_clarification(intent, state):
-        return state, None
-
-    return _handle_goal_dialogue(manager, message, metadata)
 
 
 def _handle_goal_dialogue(
@@ -197,22 +187,6 @@ def _handle_goal_dialogue(
             except ValueError:
                 continue
     return state, None
-
-
-def _needs_goal_clarification(
-    intent: dict, state: GoalClarificationState | None
-) -> bool:
-    if state and state.ready_for_products:
-        return False
-    if state:
-        return True
-    primary = intent.get("primary_goal") or intent.get("label")
-    if not primary or primary == "unknown":
-        return True
-    confidence = intent.get("confidence")
-    if confidence is None:
-        confidence = 1.0
-    return confidence < 0.65
 
 
 def _format_reasoning(products: List[dict]) -> List[dict]:
