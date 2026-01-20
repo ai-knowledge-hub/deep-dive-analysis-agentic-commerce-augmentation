@@ -48,7 +48,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from modules.values.domain import ClarificationState
+from modules.values.domain import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
@@ -62,9 +62,9 @@ def client(tmp_path):
 
 
 def test_start_endpoint_returns_clarification(client, monkeypatch):
-    class DummyValuesAgent:
+    class DummyGoalAgent:
         def start(self, query, metadata):
-            state = ClarificationState(query=query)
+            state = GoalClarificationState(query=query)
             state.add_turn("user", query)
             state.add_turn("agent", "What matters most about this goal?")
             return state
@@ -72,7 +72,7 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
         def continue_dialogue(self, state, message):
             return state
 
-    monkeypatch.setattr("api.routes.conversation.VALUES_AGENT", DummyValuesAgent())
+    monkeypatch.setattr("api.routes.conversation.GOAL_AGENT", DummyGoalAgent())
 
     response = client.post(
         "/conversation/start", json={"opening_message": "Help me focus"}
@@ -80,13 +80,13 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["clarification"] == "What matters most about this goal?"
-    assert data["values_state"]["ready_for_products"] is False
-    assert data["values_state"]["turns"][-1]["speaker"] == "agent"
+    assert data["goal_state"]["ready_for_products"] is False
+    assert data["goal_state"]["turns"][-1]["speaker"] == "agent"
 
 
 def _configure_full_pipeline(monkeypatch):
     def fake_handle(manager, message, metadata):
-        state = ClarificationState(
+        state = GoalClarificationState(
             query=message, ready_for_products=True, extracted_goals=["Stay energized"]
         )
         manager.record_goal("Stay energized")
@@ -133,7 +133,7 @@ def _configure_full_pipeline(monkeypatch):
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
-    monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
+    monkeypatch.setattr("api.routes.conversation._handle_goal_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
@@ -141,7 +141,7 @@ def _configure_full_pipeline(monkeypatch):
 
 def _configure_research_pipeline(monkeypatch):
     def fake_handle(manager, message, metadata):
-        state = ClarificationState(
+        state = GoalClarificationState(
             query=message, ready_for_products=True, extracted_goals=["Verify data"]
         )
         manager.record_goal("Verify data")
@@ -191,7 +191,7 @@ def _configure_research_pipeline(monkeypatch):
     def fake_research(query, goals, context):
         return {"query": query, "goals": goals, "summary": "stub research"}
 
-    monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
+    monkeypatch.setattr("api.routes.conversation._handle_goal_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
@@ -212,7 +212,7 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
     assert data["plan"]["products"][0]["reasoning"] == "Supports Stay energized"
     assert data["explanation"] == "Recommended Focus Chair for posture."
     assert data["product_explanations"][0]["reasoning"] == "Supports Stay energized"
-    assert data["values_state"]["ready_for_products"] is True
+    assert data["goal_state"]["ready_for_products"] is True
     assert data["intentionality_profiles"]
     assert data["baseline_alignment"] is not None
 

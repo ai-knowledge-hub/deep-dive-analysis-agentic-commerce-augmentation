@@ -9,7 +9,7 @@ export function ChatWindow({ messages }: { messages: Message[] }) {
   if (messages.length === 0) {
     return (
       <div className="chat__empty">
-        <p>Start a conversation to begin the values dialogue.</p>
+        <p>Start a conversation to begin goal clarification.</p>
         <p className="chat__hint">
           Try: "I need a better desk" or "Help me find running shoes"
         </p>

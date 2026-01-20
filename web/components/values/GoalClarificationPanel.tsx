@@ -1,16 +1,16 @@
 "use client";
 
-import type { ClarificationState } from "../../lib/types";
+import type { GoalClarificationState } from "../../lib/types";
 
 type Props = {
-  state?: ClarificationState | null;
+  state?: GoalClarificationState | null;
 };
 
-export function ValuesPanel({ state }: Props) {
+export function GoalClarificationPanel({ state }: Props) {
   return (
     <div className="panel__card">
       <div className="panel__header">
-        <h3>Extracted Goals</h3>
+        <h3>Goal Clarification</h3>
         {state && (
           <span className="panel__badge panel__badge--secondary">
             {state.extracted_goals.length}
@@ -28,7 +28,7 @@ export function ValuesPanel({ state }: Props) {
           </ul>
         </>
       ) : (
-        <p className="panel__empty">No goals extracted yet.</p>
+        <p className="panel__empty">No goals clarified yet.</p>
       )}
     </div>
   );

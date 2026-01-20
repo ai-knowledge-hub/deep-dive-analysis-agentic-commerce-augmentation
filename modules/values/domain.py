@@ -7,7 +7,7 @@ from typing import List
 
 
 @dataclass
-class ClarificationTurn:
+class GoalClarificationTurn:
     """A single turn in the clarification dialogue."""
 
     speaker: str
@@ -18,24 +18,24 @@ class ClarificationTurn:
         return {"speaker": self.speaker, "content": self.content}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ClarificationTurn":
+    def from_dict(cls, data: dict) -> "GoalClarificationTurn":
         """Deserialize from dictionary."""
         return cls(speaker=data["speaker"], content=data["content"])
 
 
 @dataclass
-class ClarificationState:
+class GoalClarificationState:
     """State of the goal clarification dialogue."""
 
     query: str
-    turns: List[ClarificationTurn] = field(default_factory=list)
+    turns: List[GoalClarificationTurn] = field(default_factory=list)
     extracted_goals: List[str] = field(default_factory=list)
     ready_for_products: bool = False
     metadata: dict = field(default_factory=dict)
 
     def add_turn(self, speaker: str, content: str) -> None:
         """Add a turn to the dialogue."""
-        self.turns.append(ClarificationTurn(speaker=speaker, content=content))
+        self.turns.append(GoalClarificationTurn(speaker=speaker, content=content))
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -48,9 +48,11 @@ class ClarificationState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ClarificationState":
+    def from_dict(cls, data: dict) -> "GoalClarificationState":
         """Deserialize from dictionary."""
-        turns = [ClarificationTurn.from_dict(item) for item in data.get("turns", [])]
+        turns = [
+            GoalClarificationTurn.from_dict(item) for item in data.get("turns", [])
+        ]
         return cls(
             query=data["query"],
             turns=turns,
@@ -60,4 +62,4 @@ class ClarificationState:
         )
 
 
-__all__ = ["ClarificationTurn", "ClarificationState"]
+__all__ = ["GoalClarificationTurn", "GoalClarificationState"]

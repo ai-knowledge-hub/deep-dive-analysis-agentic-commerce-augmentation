@@ -7,7 +7,7 @@ from modules.conversation.context import (
     default_metadata,
     format_turns,
     render_context,
-    values_context,
+    goal_context,
 )
 
 __all__ = [
@@ -17,5 +17,5 @@ __all__ = [
     "default_metadata",
     "format_turns",
     "render_context",
-    "values_context",
+    "goal_context",
 ]

@@ -55,8 +55,8 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 from modules.intent.llm_classifier import HybridIntentClassifier
-from modules.values.domain import ClarificationState
-from modules.values.agent import ValuesAgent
+from modules.values.domain import GoalClarificationState
+from modules.values.agent import GoalClarificationAgent
 from modules.alignment.llm_reasoner import reason_about_products
 from modules.intent.domain import InferredIntent as KeywordIntent
 
@@ -122,7 +122,7 @@ def test_values_agent_start_records_turns(monkeypatch):
 
     monkeypatch.setattr("modules.values.agent.chat", fake_chat)
 
-    agent = ValuesAgent()
+    agent = GoalClarificationAgent()
     state = agent.start(
         "Help me design a calmer workspace", metadata={"channel": "test"}
     )
@@ -147,11 +147,11 @@ def test_values_agent_continue_marks_ready(monkeypatch):
 
     monkeypatch.setattr("modules.values.agent.chat", fake_chat)
 
-    state = ClarificationState(query="Need focus")
+    state = GoalClarificationState(query="Need focus")
     state.add_turn("user", "Need focus")
     state.add_turn("agent", "Tell me more.")
 
-    agent = ValuesAgent()
+    agent = GoalClarificationAgent()
     updated = agent.continue_dialogue(state, "Long calls drain me")
 
     assert updated.ready_for_products is True

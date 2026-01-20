@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple
 from modules.memory.session_manager import SessionManager
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
-    from modules.values.domain import ClarificationState
+    from modules.values.domain import GoalClarificationState
 
 
 @dataclass
@@ -125,9 +125,9 @@ def context_for(
     return packet, render_context(packet, include_turns=include_turns)
 
 
-def values_context(
+def goal_context(
     manager: SessionManager,
-    state: "ClarificationState | None",
+    state: "GoalClarificationState | None",
     include_turns: int = 10,
 ) -> Tuple[ContextPacket, str]:
     """Build context for goal clarification dialogue."""
@@ -150,5 +150,5 @@ __all__ = [
     "default_metadata",
     "render_context",
     "context_for",
-    "values_context",
+    "goal_context",
 ]

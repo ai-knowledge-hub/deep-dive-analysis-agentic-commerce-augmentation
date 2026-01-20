@@ -48,7 +48,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from modules.values.domain import ClarificationState
+from modules.values.domain import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
@@ -60,7 +60,7 @@ def integration_client(tmp_path, monkeypatch):
     init_db()
 
     def fake_handle(manager, message, metadata):
-        state = ClarificationState(
+        state = GoalClarificationState(
             query=message, ready_for_products=True, extracted_goals=["Stay energized"]
         )
         manager.record_goal("Stay energized")
@@ -100,7 +100,7 @@ def integration_client(tmp_path, monkeypatch):
         def explain(self, products):
             return "Recommended Focus Chair for posture."
 
-    monkeypatch.setattr("api.routes.conversation._handle_values_dialogue", fake_handle)
+    monkeypatch.setattr("api.routes.conversation._handle_goal_dialogue", fake_handle)
     monkeypatch.setattr("api.routes.conversation.INTENT_AGENT", DummyIntentAgent())
     monkeypatch.setattr("api.routes.conversation.COMMERCE_AGENT", DummyCommerceAgent())
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
