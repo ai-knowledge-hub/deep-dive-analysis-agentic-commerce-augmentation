@@ -71,6 +71,16 @@ export async function refreshResearch(
   });
 }
 
+export async function deleteConversationSession(
+  sessionId: string,
+  userId?: string | null,
+): Promise<{ status: string }> {
+  const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  return request<{ status: string }>(`/conversation/${sessionId}${query}`, {
+    method: "DELETE",
+  });
+}
+
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {
   return request<EvidenceAnalyzeResponse>("/evidence/analyze", {
     method: "POST",

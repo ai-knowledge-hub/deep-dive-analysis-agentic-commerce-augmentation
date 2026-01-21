@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   analyzeEvidence,
+  deleteConversationSession,
   getConversationSnapshot,
   listConversationSessions,
   optimizeRepresentation,
@@ -51,6 +52,7 @@ export default function HomePage() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [lastQuery, setLastQuery] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { user } = useUser();
@@ -251,6 +253,36 @@ export default function HomePage() {
     [userId],
   );
 
+  const handleDeleteSession = useCallback(
+    async (selectedId: string) => {
+      if (!selectedId) return;
+      setDeleteTargetId(selectedId);
+    },
+    [],
+  );
+
+  const confirmDeleteSession = useCallback(async () => {
+    if (!deleteTargetId) return;
+      try {
+        await deleteConversationSession(deleteTargetId, userId);
+        updateSessions((current) =>
+          current.filter((item) => item.id !== deleteTargetId),
+        );
+        if (deleteTargetId === sessionId) {
+          resetConversation();
+        }
+      } catch (error) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", content: `Error deleting conversation: ${(error as Error).message}` },
+        ]);
+      } finally {
+        setDeleteTargetId(null);
+      }
+    },
+    [deleteTargetId, resetConversation, sessionId, updateSessions, userId],
+  );
+
   const handleRefreshResearch = useCallback(async () => {
     if (!sessionId) return;
     setResearchLoading(true);
@@ -276,6 +308,7 @@ export default function HomePage() {
         sessions={sessions}
         activeSessionId={sessionId}
         onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
       />
       {isSidebarOpen && (
         <button
@@ -284,6 +317,30 @@ export default function HomePage() {
           onClick={() => setSidebarOpen(false)}
           aria-label="Close menu"
         />
+      )}
+      {deleteTargetId && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h4>Delete conversation?</h4>
+            <p>This will permanently remove the chat history.</p>
+            <div className="modal__actions">
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => setDeleteTargetId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={confirmDeleteSession}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <main className="main">
         <div className="main__content">

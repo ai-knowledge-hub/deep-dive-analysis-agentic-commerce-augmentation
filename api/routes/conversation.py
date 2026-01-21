@@ -180,7 +180,7 @@ def _handle_goal_dialogue(
 ) -> tuple[Optional[GoalClarificationState], Optional[str]]:
     state_payload = manager.get_state().get("clarification_state")
     state = GoalClarificationState.from_dict(state_payload) if state_payload else None
-    if state and state.ready_for_products:
+    if state and state.ready_for_products and state.metadata.get("summary_sent"):
         return state, None
 
     if state:
@@ -190,10 +190,18 @@ def _handle_goal_dialogue(
 
     manager.update_state(clarification_state=state.to_dict())
     latest_turn = state.turns[-1] if state.turns else None
-    if not state.ready_for_products and latest_turn and latest_turn.speaker == "agent":
+    if latest_turn and latest_turn.speaker == "agent":
         manager.record_turn(
             "agent", latest_turn.content, metadata={"type": "clarification"}
         )
+        if state.ready_for_products:
+            for goal in state.extracted_goals:
+                try:
+                    manager.record_goal(goal)
+                except ValueError:
+                    continue
+            state.metadata["summary_sent"] = True
+            manager.update_state(clarification_state=state.to_dict())
         return state, latest_turn.content
 
     if state.ready_for_products:
@@ -451,6 +459,16 @@ def list_sessions(user_id: Optional[str] = None, limit: int = 20) -> Dict[str, A
             }
         )
     return {"sessions": payload}
+
+
+@router.delete("/{session_id}")
+def delete_session(session_id: str, user_id: Optional[str] = None) -> Dict[str, str]:
+    if user_id:
+        session = sessions_repo.get_session(session_id)
+        if not session or session.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+    sessions_repo.delete_session(session_id)
+    return {"status": "deleted"}
 
 
 @router.post("/{session_id}/goals")
