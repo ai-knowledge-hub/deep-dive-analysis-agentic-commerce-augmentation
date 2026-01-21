@@ -1,14 +1,37 @@
 "use client";
 
 import { useState } from "react";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
+
+type SessionSummary = {
+  id: string;
+  preview?: string;
+  last_turn_at?: string;
+};
 
 type Props = {
   mobileOpen: boolean;
   onMobileClose: () => void;
   onNewConversation: () => void;
+  sessions: SessionSummary[];
+  activeSessionId?: string | null;
+  onSelectSession: (sessionId: string) => void;
 };
 
-export function Sidebar({ mobileOpen, onMobileClose, onNewConversation }: Props) {
+export function Sidebar({
+  mobileOpen,
+  onMobileClose,
+  onNewConversation,
+  sessions,
+  activeSessionId,
+  onSelectSession,
+}: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const classNames = ["sidebar"];
   if (collapsed) classNames.push("sidebar--collapsed");
@@ -50,10 +73,51 @@ export function Sidebar({ mobileOpen, onMobileClose, onNewConversation }: Props)
           {!collapsed && <span className="sidebar__label">New conversation</span>}
           {collapsed && <span className="sidebar__icon">+</span>}
         </button>
+
+        {!collapsed && sessions.length > 0 && (
+          <div className="sidebar__sessions">
+            <span className="sidebar__section-label">History</span>
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                className={`sidebar__session ${
+                  session.id === activeSessionId ? "is-active" : ""
+                }`}
+                onClick={() => {
+                  onSelectSession(session.id);
+                  if (mobileOpen) onMobileClose();
+                }}
+              >
+                <span className="sidebar__session-title">
+                  {session.preview || "Conversation"}
+                </span>
+                {session.last_turn_at && (
+                  <span className="sidebar__session-meta">
+                    {new Date(session.last_turn_at).toLocaleDateString()}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
 
       {!collapsed && (
         <div className="sidebar__footer">
+          <div className="sidebar__auth">
+            <SignedOut>
+              <SignInButton />
+              <SignUpButton>
+                <button type="button" className="sidebar__auth-button">
+                  Sign up
+                </button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <UserButton />
+            </SignedIn>
+          </div>
           <div className="sidebar__info">
             <span className="sidebar__info-label">Discovery Commerce</span>
             <span className="sidebar__info-text">Goal-aligned shopping</span>

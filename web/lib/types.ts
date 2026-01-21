@@ -101,6 +101,25 @@ export type RecommendationVerifyResponse = {
 export type ConversationResponse = {
   session_id: string;
   user_id: string;
+  snapshot?: {
+    session: {
+      id: string;
+      user_id?: string;
+      created_at?: string;
+      state?: Record<string, unknown>;
+    };
+    turns?: {
+      id?: number;
+      session_id?: string;
+      speaker: "user" | "agent";
+      content: string;
+      created_at?: string;
+      metadata?: Record<string, unknown>;
+    }[];
+    goals?: string[];
+    semantic_goals?: string[];
+    latest_episode?: Record<string, unknown> | null;
+  };
   intent?: {
     primary_goal?: string;
     secondary_goals?: string[];
@@ -150,4 +169,22 @@ export type ConversationResponse = {
     outcomes_expected?: string[];
     context_fit?: Record<string, number>;
   }[];
+};
+
+export type SessionSummary = {
+  id: string;
+  created_at?: string;
+  preview?: string;
+  last_turn_at?: string;
+};
+
+export type SessionListResponse = {
+  sessions: SessionSummary[];
+};
+
+export type ResearchRefreshResponse = {
+  query?: string;
+  goals?: string[];
+  research_results: Product[];
+  updated_at?: string;
 };

@@ -10,6 +10,9 @@ type Props = {
   title?: string;
   badge?: string;
   disclaimer?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
 };
 
 function mergeProducts(products?: Product[], explanations?: ProductExplanation[]) {
@@ -65,6 +68,9 @@ export function ProductReasoning({
   title = "Recommendations",
   badge,
   disclaimer,
+  actionLabel,
+  onAction,
+  actionDisabled,
 }: Props) {
   const merged = mergeProducts(products, explanations);
 
@@ -73,6 +79,16 @@ export function ProductReasoning({
       <div className="panel__header">
         <h3>{title}</h3>
         <div className="panel__meta">
+          {actionLabel && (
+            <button
+              type="button"
+              className="panel__action"
+              onClick={onAction}
+              disabled={actionDisabled}
+            >
+              {actionLabel}
+            </button>
+          )}
           {badge && <span className="panel__badge panel__badge--info">{badge}</span>}
           {merged.length > 0 && (
             <span className="panel__badge">{merged.length}</span>

@@ -33,6 +33,7 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - UI shows inferred intent + discoverability delta (`web/components/intent/IntentDisplay.tsx`, `web/components/products/IntentionalityProfileCard.tsx`).
 - UCP adapter stub exists (`modules/commerce/adapters/ucp/loader.py`).
 - Legacy empowerment artifacts removed from schema/data/tools/UI (`shared/db/schema.sql`, `db/schema.sql`, `llm/tools.py`, `data/*.json`, `web/components/empowerment/ValuesPanel.tsx`).
+- Clerk auth scaffolded with session history list endpoint + UI (`web/*`, `api/routes/conversation.py`).
 
 ### Still Partial
 - Evidence-first pipeline not implemented (no dynamic product representations for arbitrary queries).

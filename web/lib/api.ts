@@ -4,6 +4,8 @@ import {
   EvidenceProduct,
   RecommendationVerifyResponse,
   RepresentationOptimizeResponse,
+  SessionListResponse,
+  ResearchRefreshResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -21,20 +23,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
-export async function startConversation(message: string): Promise<ConversationResponse> {
+export async function startConversation(
+  message: string,
+  userId?: string | null,
+): Promise<ConversationResponse> {
   return request<ConversationResponse>("/conversation/start", {
     method: "POST",
-    body: JSON.stringify({ opening_message: message }),
+    body: JSON.stringify({ opening_message: message, user_id: userId ?? undefined }),
   });
 }
 
 export async function sendConversationMessage(
   sessionId: string,
   message: string,
+  userId?: string | null,
 ): Promise<ConversationResponse> {
   return request<ConversationResponse>(`/conversation/${sessionId}/message`, {
     method: "POST",
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, user_id: userId ?? undefined }),
+  });
+}
+
+export async function getConversationSnapshot(
+  sessionId: string,
+  userId?: string | null,
+): Promise<ConversationResponse> {
+  const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  return request<ConversationResponse>(`/conversation/${sessionId}${query}`);
+}
+
+export async function listConversationSessions(
+  userId: string,
+): Promise<SessionListResponse> {
+  return request<SessionListResponse>(
+    `/conversation/sessions?user_id=${encodeURIComponent(userId)}`,
+  );
+}
+
+export async function refreshResearch(
+  sessionId: string,
+  userId?: string | null,
+  query?: string,
+): Promise<ResearchRefreshResponse> {
+  return request<ResearchRefreshResponse>(`/conversation/${sessionId}/research`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId ?? undefined, query }),
   });
 }
 

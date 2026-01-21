@@ -111,6 +111,7 @@ Note: In production, evidence sources are replaced by brand catalogs and feeds
 - Session context (previous turns, stated preferences)
 - Memory (historical goals, past purchases, reflections)
 - Goal clarification state (when present)
+- User identity (optional; used to scope sessions and memory)
 
 **Outputs**:
 - `InferredIntent`: Structured representation of what user is trying to achieve
@@ -203,6 +204,11 @@ class AlignmentScore:
 - `working.py` — Session-scoped context
 - `semantic.py` — Long-term goals and preferences
 - `episodic.py` — Specific interactions and outcomes (optional)
+
+**Identity + sessions**:
+- Sessions are persisted in SQLite and scoped by `user_id`.
+- The demo uses Clerk for lightweight auth (free tier) to supply `user_id`.
+  If auth is disabled, a default user scope is used.
 
 Memory enables **better inference**, not surveillance. The distinction matters.
 

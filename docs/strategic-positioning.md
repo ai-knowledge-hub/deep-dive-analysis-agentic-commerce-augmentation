@@ -169,7 +169,7 @@ Now the LLM can reason: "User wants bright-room viewing. This product explicitly
 
 **We are an evidence-first optimization + verification platform, not middleware.**
 
-Brands are our customer. We help them optimize their product representations so LLMs recommend them organically. We don't require integration with LLM providers to deliver value—we start with open‑web evidence and later plug into brand catalogs (Shopify, Merchant Center, product feeds).
+Brands are our customer—specifically marketing managers, ecommerce growth teams, and agencies responsible for product visibility. We help them optimize their product representations so LLMs recommend them organically. We don't require integration with LLM providers to deliver value—we start with open‑web evidence and later plug into brand catalogs (Shopify, Merchant Center, product feeds).
 
 | Customer | Problem | Our Solution |
 |----------|---------|--------------|

@@ -81,6 +81,8 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 
 **Key principle:** Only `modules/` defines system behavior. Everything else can be replaced without changing what the system optimizes for.
 
+**Primary users:** Brand marketing managers, ecommerce growth teams, and agencies optimizing product visibility in AI discovery. Secondary users include commerce developers integrating intent alignment into their stacks.
+
 ---
 
 ## Quick Start
@@ -103,7 +105,9 @@ uv run uvicorn api.main:app --reload
 
 ```bash
 cd web
-cp .env.local.example .env.local
+cp ../.env.example .env.local
+# Edit web/.env.local: set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY
+# Optional: NEXT_PUBLIC_API_URL=http://localhost:8000
 pnpm install && pnpm dev
 ```
 
@@ -181,7 +185,8 @@ When `CATALOG_SOURCE=mock`, the catalog stream is disabled and the UI shows rese
 Evidence-first demo data loads from `data/evidence_demo.json` when `EVIDENCE_DEMO=true`
 (default). Override with `EVIDENCE_DEMO_PATH` if you want a different dataset.
 
-Copy `.env.example` to `.env.local` and adjust for your environment.
+Copy `.env.example` to `.env.local` for backend settings, and add Clerk keys to
+`web/.env.local` for the frontend.
 
 ---
 

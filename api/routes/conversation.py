@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from modules.conversation.agents import (
@@ -22,6 +26,8 @@ from modules.alignment.goal_alignment import score_products as score_alignment
 from modules.intentionality.profiling import build_profile_with_llm
 from modules.intentionality.domain import IntentionalityProfile
 from modules.commerce.domain import Product
+from modules.memory.repositories import sessions as sessions_repo
+from modules.memory.repositories import turns as turns_repo
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
@@ -54,6 +60,11 @@ class MessageRequest(BaseModel):
 class ClarifiedGoalsRequest(BaseModel):
     goals: List[ClarifiedGoal]
     user_id: Optional[str] = None
+
+
+class ResearchRequest(BaseModel):
+    user_id: Optional[str] = None
+    query: Optional[str] = None
 
 
 def _session_response(manager: SessionManager, **payload: Any) -> Dict[str, Any]:
@@ -138,6 +149,11 @@ def _process_message(
 
     research = _maybe_run_research(plan, goals, context_snapshot)
     research_stream = _build_research_stream(research, goal_signals)
+    _persist_research(
+        manager,
+        research_stream,
+        query=plan.get("query") or message,
+    )
 
     return _session_response(
         manager,
@@ -305,6 +321,25 @@ def _merge_plan_streams(plan: dict, research_stream: dict | None) -> dict:
     return merged
 
 
+def _persist_research(
+    manager: SessionManager, research_stream: dict | None, query: str
+) -> None:
+    if not research_stream:
+        return
+    manager.update_state(
+        last_research=research_stream,
+        last_research_query=query,
+        last_research_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _sse_event(data: Dict[str, Any], event: str | None = None) -> str:
+    payload = json.dumps(data)
+    if event:
+        return f"event: {event}\ndata: {payload}\n\n"
+    return f"data: {payload}\n\n"
+
+
 @router.post("/start")
 def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
     manager = SessionManager(user_id=request.user_id)
@@ -325,6 +360,34 @@ def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
     return _session_response(manager)
 
 
+@router.post("/start/stream")
+def start_conversation_stream(
+    request: ConversationStartRequest,
+) -> StreamingResponse:
+    manager = SessionManager(user_id=request.user_id)
+
+    def event_stream():
+        if request.opening_message:
+            payload = _process_message(
+                manager,
+                request.opening_message,
+                request.metadata,
+                clarified_goals=request.clarified_goals,
+            )
+        else:
+            if request.clarified_goals:
+                for clarified_goal in request.clarified_goals:
+                    manager.record_goal(
+                        clarified_goal.goal_text,
+                        domain=clarified_goal.domain,
+                        importance=clarified_goal.importance or 0.7,
+                    )
+            payload = _session_response(manager)
+        yield _sse_event(payload, event="conversation")
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/{session_id}/message")
 def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str, Any]:
     manager = SessionManager(session_id=session_id, user_id=request.user_id)
@@ -338,12 +401,56 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
     )
 
 
+@router.post("/{session_id}/stream")
+def continue_conversation_stream(
+    session_id: str, request: MessageRequest
+) -> StreamingResponse:
+    manager = SessionManager(session_id=session_id, user_id=request.user_id)
+    if not request.message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    def event_stream():
+        payload = _process_message(
+            manager,
+            request.message,
+            request.metadata,
+            clarified_goals=request.clarified_goals,
+        )
+        yield _sse_event(payload, event="conversation")
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.get("/{session_id}")
 def get_session_snapshot(
     session_id: str, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    if user_id:
+        session = sessions_repo.get_session(session_id)
+        if not session or session.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Session not found")
     manager = SessionManager(session_id=session_id, user_id=user_id)
     return _session_response(manager)
+
+
+@router.get("/sessions")
+def list_sessions(user_id: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+    sessions = sessions_repo.list_sessions(user_id=user_id, limit=limit)
+    payload = []
+    for session in sessions:
+        recent = turns_repo.list_recent_turns(session["id"], limit=1)
+        last_turn = recent[0] if recent else None
+        payload.append(
+            {
+                "id": session["id"],
+                "created_at": session.get("created_at"),
+                "preview": last_turn.get("content") if last_turn else None,
+                "last_turn_at": last_turn.get("created_at") if last_turn else None,
+            }
+        )
+    return {"sessions": payload}
 
 
 @router.post("/{session_id}/goals")
@@ -362,3 +469,25 @@ def ingest_clarified_goals(
         )
 
     return _session_response(manager, goals=manager.goal_texts())
+
+
+@router.post("/{session_id}/research")
+def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any]:
+    if request.user_id:
+        session = sessions_repo.get_session(session_id)
+        if not session or session.get("user_id") != request.user_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    manager = SessionManager(session_id=session_id, user_id=request.user_id)
+    query = request.query or manager.get_state().get("last_query") or "catalog research"
+    goals = manager.goal_texts()
+    _, context_snapshot = context_for(manager)
+    research = run_research(query=query, goals=goals, context=context_snapshot)
+    research_stream = _build_research_stream(research, goals)
+    _persist_research(manager, research_stream, query=query)
+    return {
+        "query": query,
+        "goals": goals,
+        "research_results": research_stream.get("items") if research_stream else [],
+        "updated_at": manager.get_state().get("last_research_at"),
+    }
