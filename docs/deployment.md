@@ -24,15 +24,17 @@ cp .env.example .env.local
 # 2. Install dependencies
 uv sync
 
-# 3. Start server
-uvicorn api.main:app --reload --port 8000
+# 3. Start server (use uv to ensure the venv is active)
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 ### Frontend (Next.js)
 
 ```bash
 cd web
-cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL if API is remote
+cp ../.env.example .env.local
+# Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY
+# Optional: set NEXT_PUBLIC_API_URL if API is remote
 pnpm install
 pnpm dev
 ```
@@ -58,7 +60,10 @@ Visit `http://localhost:3000` to interact with the assistant.
 
 1. Connect `web/` directory
 2. Set `NEXT_PUBLIC_API_URL` to your Railway backend URL
-3. Deploy automatically on push
+3. Set Clerk env vars (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
+   `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL`,
+   `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL`)
+4. Deploy automatically on push
 
 ---
 

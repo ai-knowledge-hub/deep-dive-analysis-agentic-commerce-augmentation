@@ -36,7 +36,8 @@ Intent inference:
 **In Code**
 
 ```
-modules/intent/inference.py
+modules/intent/llm_classifier.py
+modules/intent/domain.py
 ```
 
 **Example**
@@ -88,7 +89,8 @@ class IntentionalityProfile:
 **In Code**
 
 ```
-modules/intentionality/profiler.py
+modules/intentionality/profiling.py
+modules/intentionality/domain.py
 ```
 
 ---
@@ -134,7 +136,7 @@ class AlignmentScore:
 **In Code**
 
 ```
-modules/alignment/scoring.py
+modules/alignment/goal_alignment.py
 ```
 
 ---
@@ -188,9 +190,7 @@ Measurements of how well intentionality optimization works.
 
 **In Code**
 
-```
-modules/discovery/metrics.py
-```
+Planned (see `docs/build-plan.md` Phase 4).
 
 ---
 

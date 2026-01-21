@@ -1,4 +1,4 @@
-# Strategic Positioning: Organic Discovery for AI Commerce
+# Strategic Positioning: Evidence-First Organic Discovery for AI Commerce
 
 ## Executive Summary
 
@@ -165,27 +165,84 @@ Now the LLM can reason: "User wants bright-room viewing. This product explicitly
 
 ## 4. The Product
 
-### Core Offering: Intentionality Optimization
+### Who We Serve: Brands as Primary Customer
 
-1. **Catalog Analysis**
-   - Ingest product feeds (Shopify, Google Merchant, custom)
-   - Score current "intent legibility" of each product
-   - Identify discovery gaps
+**We are an evidence-first optimization + verification platform, not middleware.**
 
-2. **Intentionality Profiling**
-   - Transform specs → capabilities → outcomes
-   - Generate intent-legible product descriptions
-   - Map products to user goal categories
+Brands are our customer—specifically marketing managers, ecommerce growth teams, and agencies responsible for product visibility. We help them optimize their product representations so LLMs recommend them organically. We don't require integration with LLM providers to deliver value—we start with open‑web evidence and later plug into brand catalogs (Shopify, Merchant Center, product feeds).
 
-3. **Alignment Prediction**
-   - Predict which products LLMs will recommend for which intents
-   - Identify misalignments (good products that won't surface)
-   - Provide optimization recommendations
+| Customer | Problem | Our Solution |
+|----------|---------|--------------|
+| **Brands/Retailers** | "My products aren't appearing in AI shopping results" | Analyze → Optimize → Verify discoverability |
+| **E-commerce platforms** | "Our merchants need AI discoverability tools" | White-label optimization layer |
+| **Commerce developers** | "How do I match products to user intent?" | API access to intent + alignment scoring |
 
-4. **Discovery Metrics**
-   - Track recommendation frequency across LLM surfaces
-   - Measure alignment score accuracy
-   - Report discoverability trends
+### Core Offering: Evidence-First Optimization + Verification
+
+The brand workflow is a 5-step process:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. CONNECT                                                  │
+│     Brand connects their product data source                 │
+│     • Shopify store (OAuth)                                  │
+│     • Google Merchant Center (service account)               │
+│     • CSV/JSON feed upload                                   │
+│     • Website scrape                                         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  2. ANALYZE                                                  │
+│     Score current intent legibility                          │
+│     • Run each product through intentionality profiler       │
+│     • Generate "discoverability score" per product           │
+│     • Identify gaps: specs without outcome framing           │
+│     • Output: Catalog Health Report                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  3. OPTIMIZE                                                 │
+│     Transform product data for intent legibility             │
+│     • LLM-assisted enrichment of capabilities/outcomes       │
+│     • Generate intent-aligned descriptions                   │
+│     • Preview before/after alignment scores                  │
+│     • Brand reviews and approves changes                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  4. DEPLOY                                                   │
+│     Push optimized data back to source                       │
+│     • Write-back to Shopify product metafields               │
+│     • Update Merchant Center supplemental feed               │
+│     • Export enriched feed for manual upload                 │
+│     • Preserve original data, add intent layer               │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  5. VERIFY                                                   │
+│     Test actual LLM discoverability                          │
+│     • Query multiple LLMs with user scenarios                │
+│     • Track recommendation frequency                         │
+│     • Compare pre/post optimization results                  │
+│     • Output: Discoverability Lift Report                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Why This Works Without LLM Provider Integration
+
+We optimize at the source—the product data that LLMs crawl and consume:
+
+| Where Data Lives | How LLMs Access It | How We Help |
+|------------------|-------------------|-------------|
+| **Shopify stores** | Crawled, indexed, or via API | Optimize product descriptions + metafields |
+| **Google Merchant Center** | Feeds AI Mode directly | Enrich supplemental feeds |
+| **Brand websites** | Crawled by search + AI | Generate intent-legible content |
+
+The LLM doesn't know we exist. It just sees better product representations that match user intent. Verification proves the impact without platform deals.
 
 ### API Surface
 
@@ -201,6 +258,18 @@ POST /products/align
 POST /products/profile
   Input: { product_id }
   Output: { intentionality_profile }
+
+POST /evidence/analyze
+  Input: { query }
+  Output: { evidence_products, profiles, alignment_scores }
+
+POST /representation/optimize
+  Input: { evidence_products }
+  Output: { before_after_pairs, alignment_deltas }
+
+POST /recommendation/verify
+  Input: { query, evidence_products }
+  Output: { predicted_vs_actual, lift }
 
 POST /catalog/analyze
   Input: { catalog_url or feed }
@@ -268,28 +337,33 @@ We don't require platform integration to deliver value:
 
 ## 6. Business Model
 
+### Who Pays: Brands
+
+Brands pay us to make their products more discoverable by AI. This is analogous to traditional SEO services, but for reasoning agents instead of keyword search.
+
 ### Revenue Streams
 
-| Stream | Description |
-|--------|-------------|
-| **Catalog Analysis** | One-time or periodic analysis of brand's product data |
-| **Intentionality SaaS** | Ongoing optimization and monitoring |
-| **API Access** | Intent inference + alignment scoring for developers |
-| **Enterprise** | White-label for platforms, custom integrations |
+| Stream | What Brand Gets | Pricing Model |
+|--------|-----------------|---------------|
+| **Catalog Audit** | One-time discoverability report + recommendations | Per-catalog fee |
+| **Optimization SaaS** | Ongoing enrichment, monitoring, re-optimization | Monthly subscription |
+| **API Access** | Programmatic intent + alignment scoring | Usage-based |
+| **Enterprise** | White-label for platforms, custom integration | Contract |
 
-### Target Customers
+### Customer Tiers
 
-**Primary**: Brands/retailers who want LLM recommendations
-- Problem: "We're not showing up in AI shopping results"
-- Solution: Intentionality optimization for organic discovery
+| Tier | Customer | Problem | Solution |
+|------|----------|---------|----------|
+| **Primary** | D2C Brands & Retailers | "We're invisible to AI shopping" | Full catalog optimization + verification |
+| **Secondary** | E-commerce Platforms | "Our merchants need AI discoverability" | White-label tools, platform integration |
+| **Tertiary** | Commerce Developers | "How do I match products to intent?" | API access |
 
-**Secondary**: Commerce platforms who want better recommendations
-- Problem: "Our recommendations don't match user intent well"
-- Solution: Intent inference + alignment scoring layer
+### Why Brands Will Pay
 
-**Tertiary**: Developers building commerce agents
-- Problem: "How do I match products to what users actually want?"
-- Solution: Our APIs
+1. **Measurable lift**: We show before/after discoverability metrics
+2. **No ad spend required**: Organic discovery, not paid placement
+3. **Data ownership**: Brand keeps optimized content, can use anywhere
+4. **Competitive moat**: Early adopters gain discoverability advantage
 
 ---
 
@@ -299,9 +373,9 @@ We don't require platform integration to deliver value:
 
 | Asset | Why It's Defensible |
 |-------|---------------------|
-| **Intent inference models** | Trained on goal-product relationships, improves with usage |
 | **Intentionality taxonomy** | Structured mapping of specs → capabilities → outcomes |
-| **Alignment scoring** | Empirically validated against LLM recommendations |
+| **Legibility scoring** | Consistent, explainable scoring tied to catalog improvements |
+| **Before/after dataset** | Proprietary optimization + verification outcomes over time |
 | **Protocol-agnostic architecture** | Works with any commerce infrastructure |
 | **First-mover in organic LLM discovery** | New category, establishing standards |
 
@@ -352,8 +426,8 @@ We don't require platform integration to deliver value:
 
 ### Integration Scenarios
 
-1. **Platform integration**: Provide intentionality layer to Google AI Mode, ChatGPT Shopping
-2. **Merchant tools**: Shopify app for intentionality optimization
+1. **Merchant tools**: Shopify app for intentionality optimization
+2. **Platform integration**: Optional discovery layer if LLM providers want a neutral partner
 3. **API service**: Developers building commerce agents use our APIs
 4. **White-label**: Brands use our technology under their branding
 
@@ -367,7 +441,7 @@ We don't require platform integration to deliver value:
 - OpenAI built answer independence
 - **We built organic discovery**
 
-Products that genuinely serve user intent get recommended by reasoning agents. We make products legible to that reasoning. That's the intentionality advantage.
+Products that genuinely serve user intent get recommended by reasoning agents. We make products legible to that reasoning and prove the lift. That's the intentionality advantage.
 
 **One-line positioning**:
 
@@ -375,5 +449,5 @@ Products that genuinely serve user intent get recommended by reasoning agents. W
 
 ---
 
-*Document Version: 2026-01-17*
+*Document Version: 2026-01-20*
 *Status: Active*

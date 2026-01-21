@@ -17,6 +17,7 @@ export type Product = {
   capabilities_enabled?: string[];
   alignment_score?: number;
   alignment_reasoning?: string;
+  description?: string;
   intentionality_profile?: {
     product_id?: string;
     capabilities_enabled?: string[];
@@ -28,9 +29,97 @@ export type Product = {
   reasoning?: string;
 };
 
+export type EvidenceProduct = {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  url?: string;
+  price?: number;
+  confidence?: number;
+  raw_text?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type EvidenceAnalyzeResponse = {
+  intent?: ConversationResponse["intent"];
+  goals: string[];
+  evidence_products: EvidenceProduct[];
+  profiles: {
+    product_id?: string;
+    capabilities_enabled?: string[];
+    goals_served?: string[];
+    prerequisites?: string[];
+    outcomes_expected?: string[];
+    context_fit?: Record<string, number>;
+  }[];
+  alignment_scores: {
+    product_id: string;
+    score: number;
+    matched_capabilities?: string[];
+    alignment_reasoning?: string;
+    confidence?: number;
+  }[];
+};
+
+export type RepresentationOptimizeResponse = {
+  intent?: ConversationResponse["intent"];
+  goals: string[];
+  optimized: {
+    id: string;
+    name: string;
+    before: string;
+    after: string;
+    capabilities: string[];
+    outcomes: string[];
+    goals: string[];
+  }[];
+  alignment_deltas: {
+    product_id: string;
+    before: number;
+    after: number;
+    delta: number;
+  }[];
+};
+
+export type RecommendationVerifyResponse = {
+  intent?: ConversationResponse["intent"];
+  goals: string[];
+  predicted: string[];
+  actual: string[];
+  lift: number;
+  baseline_alignment: {
+    product_id: string;
+    score: number;
+  }[];
+  optimized_alignment: {
+    product_id: string;
+    score: number;
+  }[];
+};
+
 export type ConversationResponse = {
   session_id: string;
   user_id: string;
+  snapshot?: {
+    session: {
+      id: string;
+      user_id?: string;
+      created_at?: string;
+      state?: Record<string, unknown>;
+    };
+    turns?: {
+      id?: number;
+      session_id?: string;
+      speaker: "user" | "agent";
+      content: string;
+      created_at?: string;
+      metadata?: Record<string, unknown>;
+    }[];
+    goals?: string[];
+    semantic_goals?: string[];
+    latest_episode?: Record<string, unknown> | null;
+  };
   intent?: {
     primary_goal?: string;
     secondary_goals?: string[];
@@ -80,4 +169,22 @@ export type ConversationResponse = {
     outcomes_expected?: string[];
     context_fit?: Record<string, number>;
   }[];
+};
+
+export type SessionSummary = {
+  id: string;
+  created_at?: string;
+  preview?: string;
+  last_turn_at?: string;
+};
+
+export type SessionListResponse = {
+  sessions: SessionSummary[];
+};
+
+export type ResearchRefreshResponse = {
+  query?: string;
+  goals?: string[];
+  research_results: Product[];
+  updated_at?: string;
 };

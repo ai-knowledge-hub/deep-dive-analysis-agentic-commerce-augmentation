@@ -1,12 +1,12 @@
-# Architecture v2: Intentionality Optimization Layer
+# Architecture v2: Evidence-First Intentionality Optimization + Verification
 
 ## Purpose
 
-This system makes products **legible to LLM intent inference**.
+This system makes product representations **legible to LLM intent inference** and verifies discoverability lift.
 
 When an AI agent recommends products, it doesn't match keywords — it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
 
-We help brands become **discoverable by reasoning agents**.
+We help brands become **discoverable by reasoning agents**, then prove it with measurable lift. For the demo, we operate on open‑web product representations (evidence-first), then later connect to brand catalogs.
 
 ---
 
@@ -53,8 +53,8 @@ This foundation informs architecture but does not dominate user-facing messaging
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Brand / Merchant                         │
-│              Product catalog, offers, content                │
+│              Evidence Sources (web/product pages)            │
+│              Product representations, content                │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -80,6 +80,11 @@ This foundation informs architecture but does not dominate user-facing messaging
 │  │ Context Memory                                       │    │
 │  │ Persist goals, preferences, history for inference    │    │
 │  └─────────────────────────────────────────────────────┘    │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Verification + Reporting                             │    │
+│  │ Measure discoverability lift (pre/post)              │    │
+│  └─────────────────────────────────────────────────────┘    │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -88,6 +93,9 @@ This foundation informs architecture but does not dominate user-facing messaging
 │              LLM Commerce Surfaces                           │
 │     Google AI Mode │ ChatGPT Shopping │ Claude │ Others     │
 └─────────────────────────────────────────────────────────────┘
+
+Note: In production, evidence sources are replaced by brand catalogs and feeds
+(Shopify, Merchant Center, JSON-LD). The pipeline stays the same.
 ```
 
 ---
@@ -102,6 +110,8 @@ This foundation informs architecture but does not dominate user-facing messaging
 - User query (natural language)
 - Session context (previous turns, stated preferences)
 - Memory (historical goals, past purchases, reflections)
+- Goal clarification state (when present)
+- User identity (optional; used to scope sessions and memory)
 
 **Outputs**:
 - `InferredIntent`: Structured representation of what user is trying to achieve
@@ -195,6 +205,11 @@ class AlignmentScore:
 - `semantic.py` — Long-term goals and preferences
 - `episodic.py` — Specific interactions and outcomes (optional)
 
+**Identity + sessions**:
+- Sessions are persisted in SQLite and scoped by `user_id`.
+- The demo uses Clerk for lightweight auth (free tier) to supply `user_id`.
+  If auth is disabled, a default user scope is used.
+
 Memory enables **better inference**, not surveillance. The distinction matters.
 
 ---
@@ -269,7 +284,7 @@ The system should support this demo in 60 seconds:
 
 5. **Show the result**: "Product A gets recommended. Product B doesn't. Same product, different framing."
 
-6. **The pitch**: "We help brands structure their products to be legible to intent inference. That's organic discovery for AI commerce."
+6. **The pitch**: "We help brands structure their products to be intent-legible and prove lift in AI recommendations."
 
 ---
 
@@ -295,12 +310,36 @@ POST /products/enrich
   Output: { enriched_product_with_intentionality }
 ```
 
+### Evidence-First Demo (Current)
+
+```
+POST /evidence/analyze
+  Input: { query }
+  Output: { evidence_products, profiles, alignment_scores }
+
+POST /representation/optimize
+  Input: { evidence_products }
+  Output: { before_after_pairs, alignment_deltas }
+
+POST /recommendation/verify
+  Input: { query, evidence_products }
+  Output: { predicted_vs_actual, lift }
+```
+
 ### For Brands (Future)
 
 ```
 POST /catalog/analyze
   Input: { catalog_url or feed }
   Output: { products_analyzed, intent_legibility_scores, recommendations }
+
+POST /catalog/optimize
+  Input: { product_ids, optimization_types? }
+  Output: { suggestions, alignment_deltas }
+
+POST /catalog/verify
+  Input: { scenarios, baseline? }
+  Output: { recommendation_rates, lift }
 
 GET /catalog/{catalog_id}/report
   Output: { discoverability_report }
@@ -382,4 +421,176 @@ We are **LLM-agnostic**:
 - We test against multiple providers
 - No dependency on specific model internals
 
+---
 
+## Product: Brand Catalog Optimization
+
+### The Use Case
+
+**We are a brand-side optimization tool.** Brands pay us to make their products discoverable by AI.
+
+We don't sit in the runtime path between users and LLMs. We optimize the *source data* that LLMs eventually discover—through Merchant Center feeds, Shopify stores, website content, and structured data.
+
+Think of it as **SEO for LLMs**: just as SEO agencies optimize websites for Google Search, we optimize product catalogs for AI recommendations.
+
+### The Brand Workflow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. CONNECT                                                  │
+│     Brand connects their product data source                 │
+│     • Shopify store (OAuth)                                  │
+│     • Google Merchant Center (service account)               │
+│     • CSV/JSON feed upload                                   │
+│     • Website scrape                                         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  2. ANALYZE                                                  │
+│     Score current intent legibility of each product          │
+│     • Overall catalog legibility score                       │
+│     • Per-product breakdown                                  │
+│     • Gap analysis: what's missing for discoverability       │
+│     • Priority ranking: which products to optimize first     │
+│                                                              │
+│     Output: Catalog Legibility Report                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  3. OPTIMIZE                                                 │
+│     Generate intent-aligned product descriptions             │
+│     • Transform specs → capabilities → outcomes              │
+│     • Preserve brand voice and tone                          │
+│     • Generate A/B variants for testing                      │
+│     • Human review queue for approval                        │
+│                                                              │
+│     Input: "65-inch 4K QLED, 3000 nits"                     │
+│     Output: "Combat glare in bright living rooms.            │
+│              Clear picture without closing blinds.           │
+│              65-inch 4K QLED with 3000 nits brightness."    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  4. DEPLOY                                                   │
+│     Push optimized content back to brand's systems           │
+│     • Update Shopify product descriptions                    │
+│     • Update Merchant Center feeds                           │
+│     • Generate JSON-LD structured data for website           │
+│     • Version control for rollback                           │
+│                                                              │
+│     Result: Brand's live product data is now intent-legible  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  5. VERIFY                                                   │
+│     Test and monitor discoverability                         │
+│     • Run products against LLM recommendation queries        │
+│     • Track "did we get recommended?" over time              │
+│     • Compare against competitors                            │
+│     • Alert on discoverability changes                       │
+│                                                              │
+│     Output: Discoverability Dashboard                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### What Happens After Optimization
+
+Once we optimize a brand's product data, the improvement propagates everywhere:
+
+```
+                    Brand's Optimized Product Data
+                              │
+          ┌───────────────────┼───────────────────┐
+          │                   │                   │
+          ▼                   ▼                   ▼
+    ┌──────────┐        ┌──────────┐        ┌──────────┐
+    │ Shopify  │        │ Merchant │        │ Website  │
+    │ Store    │        │ Center   │        │ + JSON-LD│
+    └──────────┘        └──────────┘        └──────────┘
+          │                   │                   │
+          └───────────────────┼───────────────────┘
+                              │
+                    LLMs discover this data via:
+                    • Web browsing (AI Mode, Operator)
+                    • Product feeds (Shopping integrations)
+                    • Structured data (JSON-LD parsing)
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+    ┌──────────┐        ┌──────────┐        ┌──────────┐
+    │ Google   │        │ ChatGPT  │        │ Claude   │
+    │ AI Mode  │        │ Shopping │        │          │
+    └──────────┘        └──────────┘        └──────────┘
+                              │
+                              ▼
+                    User gets recommendation
+                    (Brand's product is now discoverable)
+```
+
+### Revenue Model
+
+| Tier | What Brand Gets | Pricing Model |
+|------|-----------------|---------------|
+| **Analysis** | One-time legibility report | Per-catalog fee |
+| **Optimization** | Rewritten product descriptions | Per-product or flat fee |
+| **SaaS** | Ongoing monitoring + re-optimization | Monthly subscription |
+| **Enterprise** | Custom integration + priority support | Annual contract |
+
+### Why This Works
+
+1. **No LLM partnership required.** We optimize source data that LLMs already access.
+
+2. **Brands control their data.** We're a tool they use, not a middleman.
+
+3. **Measurable ROI.** We can show before/after discoverability changes.
+
+4. **Protocol-agnostic.** Works regardless of which commerce protocols (UCP, ACP) win.
+
+5. **Complements paid placement.** Google Direct Offers is paid. We're organic. Brands need both.
+
+---
+
+## Hackathon vs. Production Scope
+
+### Hackathon Demo (Current)
+
+| Component | Status |
+|-----------|--------|
+| Intent inference | ✅ Live |
+| Intentionality profiling | ✅ Live |
+| Alignment scoring | ✅ Live |
+| API endpoints | ✅ Live |
+| Demo UI | ✅ Live |
+| Before/after comparison | ✅ Live |
+
+**Demo flow:** Upload product → Show legibility analysis → Show optimized version → Show alignment score improvement
+
+### Production (Post-Hackathon)
+
+| Component | Status | Priority |
+|-----------|--------|----------|
+| Shopify OAuth + write-back | Not built | P1 |
+| Merchant Center integration | Not built | P1 |
+| Batch catalog processing | Not built | P1 |
+| LLM testing harness | Not built | P1 |
+| Discoverability monitoring | Not built | P2 |
+| Brand dashboard | Not built | P2 |
+| Competitive analysis | Not built | P3 |
+
+---
+
+## Summary
+
+**What we are:** A brand-side catalog optimization tool for LLM discoverability.
+
+**What we do:** Transform product descriptions from spec-focused to intent-aligned.
+
+**Who pays:** Brands who want their products recommended by AI.
+
+**How it works:** We optimize source data. LLMs discover the improvement organically.
+
+**The pitch:** "SEO for reasoning agents. Help your products get recommended by AI."
