@@ -1,14 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { startConversation, sendConversationMessage } from "../lib/api";
-import type { ConversationResponse } from "../lib/types";
+import {
+  analyzeEvidence,
+  optimizeRepresentation,
+  sendConversationMessage,
+  startConversation,
+  verifyRecommendation,
+} from "../lib/api";
+import type {
+  ConversationResponse,
+  EvidenceAnalyzeResponse,
+  RepresentationOptimizeResponse,
+  RecommendationVerifyResponse,
+} from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
 import { ProductReasoning } from "../components/products/ProductReasoning";
 import { Sidebar } from "../components/layout/Sidebar";
 import { GoalClarificationPanel } from "../components/values/GoalClarificationPanel";
 import { IntentionalityProfileCard } from "../components/products/IntentionalityProfileCard";
 import { IntentDisplay } from "../components/intent/IntentDisplay";
+import { EvidencePanel } from "../components/evidence/EvidencePanel";
 
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -23,6 +35,11 @@ export default function HomePage() {
   >([]);
   const [goalState, setGoalState] = useState<ConversationResponse["goal_state"]>();
   const [intent, setIntent] = useState<ConversationResponse["intent"]>();
+  const [evidenceAnalysis, setEvidenceAnalysis] = useState<EvidenceAnalyzeResponse | null>(null);
+  const [evidenceOptimization, setEvidenceOptimization] =
+    useState<RepresentationOptimizeResponse | null>(null);
+  const [evidenceVerification, setEvidenceVerification] =
+    useState<RecommendationVerifyResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -37,6 +54,9 @@ export default function HomePage() {
     setGoalState(undefined);
     setIntent(undefined);
     setResearchResults([]);
+    setEvidenceAnalysis(null);
+    setEvidenceOptimization(null);
+    setEvidenceVerification(null);
   }, []);
 
   const sendMessage = useCallback(
@@ -67,6 +87,20 @@ export default function HomePage() {
         setGoalState(response.goal_state);
         setIntent(response.intent);
         setResearchResults(response.plan?.research_results ?? []);
+
+        const analysis = await analyzeEvidence(text);
+        setEvidenceAnalysis(analysis);
+        const optimization = await optimizeRepresentation(
+          analysis.evidence_products,
+          text,
+        );
+        setEvidenceOptimization(optimization);
+        const verification = await verifyRecommendation(
+          text,
+          analysis.evidence_products,
+          optimization.optimized,
+        );
+        setEvidenceVerification(verification);
       } catch (error) {
         setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
       } finally {
@@ -81,6 +115,16 @@ export default function HomePage() {
     if (inputValue.trim()) {
       void sendMessage(inputValue);
       setInputValue("");
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (inputValue.trim()) {
+        void sendMessage(inputValue);
+        setInputValue("");
+      }
     }
   };
 
@@ -99,7 +143,11 @@ export default function HomePage() {
 
   return (
     <div className="app">
-      <Sidebar mobileOpen={isSidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        mobileOpen={isSidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
+        onNewConversation={resetConversation}
+      />
       {isSidebarOpen && (
         <button
           type="button"
@@ -126,13 +174,14 @@ export default function HomePage() {
             </div>
 
             <form className="chat__input" onSubmit={handleSubmit}>
-              <input
-                type="text"
+              <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleInputKeyDown}
                 placeholder="What are you looking for?"
                 disabled={loading}
                 autoComplete="off"
+                rows={1}
               />
               <button
                 type="submit"
@@ -154,6 +203,11 @@ export default function HomePage() {
               baselineScore={plan?.alignment?.goal_alignment?.baseline_score}
             />
             <GoalClarificationPanel state={goalState} />
+            <EvidencePanel
+              analysis={evidenceAnalysis}
+              optimization={evidenceOptimization}
+              verification={evidenceVerification}
+            />
             <ProductReasoning
               title="Catalog Recommendations"
               products={plan?.catalog_results ?? plan?.products}

@@ -1,7 +1,7 @@
-# Build Plan: Intentionality Optimization Layer
+# Build Plan: Brand-Side Intentionality Optimization + Verification
 
 **Status:** Pivot in progress  
-**Goal:** Demo-ready brand‑discovery engine for LLM commerce
+**Goal:** Demo-ready intent-legible discovery + verification flow (evidence-first, organic AI discovery)
 
 This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 
@@ -12,14 +12,14 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 | Module | Status | Primary Gap |
 |--------|--------|-------------|
 | `intent/` | Partial | Single-intent only, limited intent signals |
-| `intentionality/` | Functional | Needs richer LLM enrichment + batch pipeline |
-| `alignment/` | Partial | Alignment summary in place; per-product scores still thin |
-| `commerce/` | Functional | Intentionality enrichment in plan only (not adapter pipeline) |
-| `memory/` | Partial | Still carries legacy naming + fields; needs intent-aware summaries |
-| `conversation/` | Partial | Demo flow still uses legacy framing + values agent |
-| `mcp/` | Partial | Tooling not aligned to discovery workflow |
-| `api/` | Functional | Alignment endpoints now exist; schemas present |
-| `web/` | Functional | Intent display + discoverability delta are live |
+| `intentionality/` | Functional | Needs legibility scoring + batch analysis |
+| `alignment/` | Functional | Per-product scoring live; need legibility score + report |
+| `commerce/` | Functional | Enrichment not wired into adapter pipeline |
+| `memory/` | Partial | Goal tracking ok; reporting layer missing |
+| `conversation/` | Functional | Goal clarification gate restored; needs brand-demo narrative |
+| `mcp/` | Partial | Tooling not aligned to evidence/verification workflow |
+| `api/` | Functional | Discovery endpoints live; no evidence or catalog analysis endpoints |
+| `web/` | Functional | Intent + alignment UI live; no evidence/optimization UI |
 
 ---
 
@@ -35,11 +35,11 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - Legacy empowerment artifacts removed from schema/data/tools/UI (`shared/db/schema.sql`, `db/schema.sql`, `llm/tools.py`, `data/*.json`, `web/components/empowerment/ValuesPanel.tsx`).
 
 ### Still Partial
-- Intentionality enrichment still missing in Shopify + Google Merchant adapter paths and batch pipeline (`modules/commerce/adapters/*`).
-- Conversation flow still uses legacy clarification + “autonomy” phrasing (`modules/conversation/*`, `modules/values/*`).
-- Embedding persistence + retrieval helpers are still missing (DB + repos + tests).
+- Evidence-first pipeline not implemented (no dynamic product representations for arbitrary queries).
+- No legibility scoring or report generation (brand-facing output).
+- No optimization suggestions pipeline (before/after framing comparisons).
+- No verification harness (even simulated) for “discoverability lift”.
 - Deterministic intent-output parsing tests still missing.
-- Product model still carries `capabilities_enabled` + `intent_scores` directly (optional cleanup if you want strict IntentionalityProfile-only).
 
 ---
 
@@ -101,8 +101,14 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - [x] Show alignment score alongside intentionality profile
 - [x] Wire “discoverability delta” panel (before/after comparison)
 - [x] Surface per-product alignment explanations in UI cards
-- [ ] Show catalog + research streams side-by-side with alignment scores
+- [x] Show catalog + research streams side-by-side with alignment scores
 - [x] Disable catalog stream for `CATALOG_SOURCE=mock`
+---
+### Phase 2.5 — Evidence-First Demo Layer (P0)
+- [x] Add evidence analysis endpoint (`POST /evidence/analyze`) for open-world queries
+- [x] Add representation optimization endpoint (`POST /representation/optimize`) for before/after framing
+- [x] Add verification endpoint (`POST /recommendation/verify`) with simulated results
+- [x] Create demo evidence sets (3–5 real products with before/after framing)
 
 ### Phase 3 — Protocol & Catalog Integration
 - [x] Add UCP adapter stub + loader registration
@@ -160,5 +166,5 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - Intentionality profiling module exists and is integrated.
 - Alignment scores + explanations appear in API + UI.
 - Discovery‑focused endpoints operational.
-- World‑B framing removed from README, UI, and API responses.
 - Demo story shows before/after discoverability impact.
+- Evidence-first demo layer exists (analyze → optimize → verify on real-world representations).

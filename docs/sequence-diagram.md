@@ -1,5 +1,5 @@
 # Sequence Diagram
-## Intentionality Optimization Flow
+## Intentionality Optimization Flow (Runtime)
 
 This diagram illustrates a single end-to-end interaction in the Intentionality Optimization runtime.
 
@@ -8,6 +8,7 @@ The flow emphasizes:
 - intentionality profiling
 - alignment scoring
 - explainable ranking
+- optional goal clarification
 
 ---
 
@@ -17,6 +18,7 @@ The flow emphasizes:
 sequenceDiagram
     participant U as User
     participant UI as UI / Chat
+    participant GC as Goal Clarification Agent
     participant IA as Intent Agent
     participant IM as Intent Module
     participant MM as Memory Module
@@ -26,6 +28,9 @@ sequenceDiagram
 
     U->>UI: Expresses need / question
     UI->>IA: Forward input
+
+    IA->>GC: Clarify goals (if needed)
+    GC-->>IA: Clarification state/goals (optional)
 
     IA->>MM: Retrieve context (goals, preferences)
     MM-->>IA: Context snapshot

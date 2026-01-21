@@ -5,9 +5,10 @@ import { useState } from "react";
 type Props = {
   mobileOpen: boolean;
   onMobileClose: () => void;
+  onNewConversation: () => void;
 };
 
-export function Sidebar({ mobileOpen, onMobileClose }: Props) {
+export function Sidebar({ mobileOpen, onMobileClose, onNewConversation }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const classNames = ["sidebar"];
   if (collapsed) classNames.push("sidebar--collapsed");
@@ -41,7 +42,10 @@ export function Sidebar({ mobileOpen, onMobileClose }: Props) {
         <button
           type="button"
           className="sidebar__item sidebar__item--active"
-          onClick={mobileOpen ? onMobileClose : undefined}
+          onClick={() => {
+            onNewConversation();
+            if (mobileOpen) onMobileClose();
+          }}
         >
           {!collapsed && <span className="sidebar__label">New conversation</span>}
           {collapsed && <span className="sidebar__icon">+</span>}

@@ -24,8 +24,8 @@ cp .env.example .env.local
 # 2. Install dependencies
 uv sync
 
-# 3. Start server
-uvicorn api.main:app --reload --port 8000
+# 3. Start server (use uv to ensure the venv is active)
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 ### Frontend (Next.js)

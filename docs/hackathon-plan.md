@@ -2,8 +2,8 @@
 
 ## 1. Overview
 
-- **Goal:** Demo-ready intentionality optimization system before **Feb 9, 2026**
-- **Core Innovation:** "SEO for reasoning agents" — help brands become discoverable by LLMs through intent alignment
+- **Goal:** Demo-ready brand-side optimization + verification system before **Feb 9, 2026**
+- **Core Innovation:** "SEO for reasoning agents" — help brands become discoverable by LLMs through intent alignment and verified lift
 - **Judging Criteria:** Technical Execution (40%), Innovation (30%), Impact (20%), Presentation (10%)
 
 ## 2. The Demo (60 Seconds)
@@ -27,7 +27,7 @@ The demo must show the core insight in under a minute:
 
 5. **The Result**: "Product A gets recommended. Product B doesn't. Same product, different framing."
 
-6. **The Pitch**: "We help brands structure their products to be legible to intent inference. That's organic discovery for AI commerce."
+6. **The Pitch**: "We help brands structure products to be intent-legible and prove lift in AI recommendations."
 
 ## 3. Architecture
 
@@ -94,20 +94,20 @@ The demo must show the core insight in under a minute:
 ### Phase 1 — Core Modules (Week 1-2)
 
 **Intent Inference Engine**
-- `modules/intent/inference.py`: Deep goal extraction from queries
+- `modules/intent/llm_classifier.py`: Deep goal extraction from queries
 - `modules/intent/domain.py`: InferredIntent dataclass
 - Gemini-powered intent inference prompts
 - Embedding support for semantic matching
 
 **Intentionality Profiler**
-- `modules/intentionality/profiler.py`: Spec → capability transformation
+- `modules/intentionality/profiling.py`: Spec → capability transformation
 - `modules/intentionality/domain.py`: IntentionalityProfile dataclass
 - `modules/intentionality/transforms.py`: Common spec mappings
 - LLM-assisted capability extraction
 
 **Alignment Scorer**
-- `modules/alignment/scoring.py`: Score products against intent
-- `modules/alignment/ranker.py`: Rank and explain recommendations
+- `modules/alignment/goal_alignment.py`: Score products against intent
+- `modules/alignment/llm_reasoner.py`: Explain recommendations
 - `modules/alignment/domain.py`: AlignmentScore dataclass
 
 ### Phase 2 — API & Integration (Week 2-3)
@@ -126,8 +126,8 @@ The demo must show the core insight in under a minute:
 
 **New Components**
 - `IntentDisplay.tsx`: Show inferred intent visually
-- `AlignmentScore.tsx`: Show score with explanation
-- `DiscoveryDemo.tsx`: Side-by-side product comparison
+- `ProductReasoning.tsx`: Show alignment score + explanations
+- `IntentionalityProfileCard.tsx`: Show profile + discoverability delta
 
 **Polish**
 - Product cards with alignment scores
@@ -150,9 +150,9 @@ The demo must show the core insight in under a minute:
 
 | Component | Purpose | Priority |
 |-----------|---------|----------|
-| `modules/intent/inference.py` | Infer user goals | P0 |
-| `modules/intentionality/profiler.py` | Transform product specs | P0 |
-| `modules/alignment/scoring.py` | Score alignment | P0 |
+| `modules/intent/llm_classifier.py` | Infer user goals | P0 |
+| `modules/intentionality/profiling.py` | Transform product specs | P0 |
+| `modules/alignment/goal_alignment.py` | Score alignment | P0 |
 | Demo product data | Show the difference | P0 |
 | API endpoints | Enable demo | P0 |
 | Demo UI components | Visual impact | P0 |
