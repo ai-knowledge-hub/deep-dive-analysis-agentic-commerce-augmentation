@@ -48,7 +48,7 @@ if APIRouter:
     def analyze(payload: EvidenceAnalyzeRequest):
         classifier = HybridIntentClassifier()
         intent = classifier.classify(payload.query).to_dict()
-        goals = _intent_goals(intent)
+        goals = _intent_goals(intent, fallback=payload.query)
 
         evidence_products = retrieve(payload.query, max_items=payload.max_items)
         products = [to_product(item) for item in evidence_products]
@@ -72,7 +72,7 @@ if APIRouter:
         if payload.query:
             classifier = HybridIntentClassifier()
             intent = classifier.classify(payload.query).to_dict()
-            goals = _intent_goals(intent)
+            goals = _intent_goals(intent, fallback=payload.query)
 
         evidence_products = [
             _evidence_from_payload(item) for item in payload.evidence_products
@@ -99,7 +99,7 @@ if APIRouter:
     def verify_recommendations(payload: RecommendationVerifyRequest):
         classifier = HybridIntentClassifier()
         intent = classifier.classify(payload.query).to_dict()
-        goals = _intent_goals(intent)
+        goals = _intent_goals(intent, fallback=payload.query)
 
         evidence_products = [
             _evidence_from_payload(item) for item in payload.evidence_products
@@ -137,14 +137,17 @@ else:  # pragma: no cover
     recommendation_router = None
 
 
-def _intent_goals(intent: dict) -> List[str]:
+def _intent_goals(intent: dict, fallback: str | None = None) -> List[str]:
     goals: List[str] = []
     primary = intent.get("primary_goal") or intent.get("label")
     if primary and primary != "unknown":
         goals.append(primary)
     goals.extend(intent.get("secondary_goals") or [])
     goals.extend(intent.get("underlying_needs") or [])
-    return list(dict.fromkeys([goal for goal in goals if goal]))
+    deduped = list(dict.fromkeys([goal for goal in goals if goal]))
+    if not deduped and fallback:
+        deduped = [fallback]
+    return deduped
 
 
 def _evidence_from_payload(item: "EvidenceItem") -> EvidenceProduct:
