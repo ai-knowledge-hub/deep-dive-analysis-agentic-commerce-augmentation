@@ -13,6 +13,7 @@ class GoalClarificationAgent:
     """Guides the user through goal clarification before commerce."""
 
     min_questions: int = 2
+    max_questions: int = 3
 
     def start(
         self,
@@ -48,8 +49,16 @@ class GoalClarificationAgent:
         )
         state.add_turn("user", user_message)
         state.add_turn("agent", response.strip())
-        if self._has_summary(response):
-            state.extracted_goals = self._extract_goals(response)
+        goals = self._extract_goals(response)
+        agent_turns = len([turn for turn in state.turns if turn.speaker == "agent"])
+        if (
+            self._has_summary(response)
+            or (agent_turns >= self.min_questions and goals)
+            or agent_turns >= self.max_questions
+        ):
+            if not goals:
+                goals = self._fallback_goals(state)
+            state.extracted_goals = goals
             state.ready_for_products = True
         return state
 
@@ -61,23 +70,64 @@ class GoalClarificationAgent:
 
     def _has_summary(self, agent_response: str) -> bool:
         """Check if the agent response contains a summary."""
-        return (
-            "does that capture" in agent_response.lower()
-            or "summary" in agent_response.lower()
-        )
+        lowered = agent_response.lower()
+        summary_phrases = [
+            "does that capture",
+            "does that sound",
+            "is that accurate",
+            "is this accurate",
+            "let me confirm",
+            "to confirm",
+            "here's what i'm hearing",
+            "here is what i'm hearing",
+            "recap",
+            "summary",
+        ]
+        if any(phrase in lowered for phrase in summary_phrases):
+            return True
+        # Treat numbered/bulleted lists as summary cues.
+        list_lines = [
+            line
+            for line in agent_response.splitlines()
+            if line.strip().startswith(("-", "*")) or line.strip()[:2].isdigit()
+        ]
+        return len(list_lines) >= 2
 
     def _extract_goals(self, agent_response: str) -> List[str]:
         """Extract goals from the agent's summary response."""
-        # Simple heuristic: collect bullet/numbered list lines.
+        # Collect bullet/numbered list lines and labeled goals.
         goals: List[str] = []
-        for line in agent_response.splitlines():
-            stripped = line.strip("- ").strip()
-            if stripped and any(
-                keyword in stripped.lower()
-                for keyword in ["goal", "reduce", "enable", "budget"]
-            ):
-                goals.append(stripped)
+        lines = agent_response.splitlines()
+        for line in lines:
+            raw = line.strip()
+            if not raw:
+                continue
+            if raw.startswith(("-", "*")):
+                candidate = raw.lstrip("-* ").strip()
+                if candidate:
+                    goals.append(candidate)
+                continue
+            if raw[0].isdigit() and "." in raw[:3]:
+                candidate = raw.split(".", 1)[1].strip()
+                if candidate:
+                    goals.append(candidate)
+                continue
+            lowered = raw.lower()
+            for prefix in ("goal:", "constraint:", "success:", "need:", "needs:"):
+                if lowered.startswith(prefix):
+                    goals.append(raw.split(":", 1)[1].strip())
+                    break
         return goals or [agent_response.strip()]
+
+    def _fallback_goals(self, state: GoalClarificationState) -> List[str]:
+        """Fallback goals when summary parsing fails."""
+        candidates: List[str] = []
+        if state.query:
+            candidates.append(state.query.strip())
+        user_turns = [turn.content for turn in state.turns if turn.speaker == "user"]
+        if user_turns:
+            candidates.append(user_turns[-1].strip())
+        return [candidate for candidate in candidates if candidate]
 
 
 __all__ = ["GoalClarificationAgent"]

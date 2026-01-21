@@ -22,6 +22,7 @@ type Props = {
   sessions: SessionSummary[];
   activeSessionId?: string | null;
   onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
 };
 
 export function Sidebar({
@@ -31,6 +32,7 @@ export function Sidebar({
   sessions,
   activeSessionId,
   onSelectSession,
+  onDeleteSession,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const classNames = ["sidebar"];
@@ -89,9 +91,25 @@ export function Sidebar({
                   if (mobileOpen) onMobileClose();
                 }}
               >
-                <span className="sidebar__session-title">
-                  {session.preview || "Conversation"}
-                </span>
+                <div className="sidebar__session-row">
+                  <span className="sidebar__session-title">
+                    {session.preview || "Conversation"}
+                  </span>
+                  <span className="sidebar__session-actions">
+                    <button
+                      type="button"
+                      className="sidebar__session-delete"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeleteSession(session.id);
+                      }}
+                      aria-label="Delete conversation"
+                      title="Delete conversation"
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
                 {session.last_turn_at && (
                   <span className="sidebar__session-meta">
                     {new Date(session.last_turn_at).toLocaleDateString()}

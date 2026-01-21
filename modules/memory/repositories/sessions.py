@@ -80,5 +80,17 @@ def list_sessions(user_id: str | None = None, limit: int = 20) -> List[Dict[str,
         ).fetchall()
     return [_row_to_dict(row) for row in rows]
 
+def delete_session(session_id: str) -> None:
+    """Hard delete a session (turns + recommendations cascade)."""
+    conn = get_connection()
+    conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    conn.commit()
 
-__all__ = ["create_session", "get_session", "update_state", "list_sessions"]
+
+__all__ = [
+    "create_session",
+    "get_session",
+    "update_state",
+    "list_sessions",
+    "delete_session",
+]
