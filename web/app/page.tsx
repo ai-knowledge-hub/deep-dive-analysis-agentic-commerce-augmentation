@@ -8,6 +8,11 @@ import {
   listConversationSessions,
   optimizeRepresentation,
   refreshResearch,
+  runSimulation,
+  optimizeSimulation,
+  retestSimulation,
+  listSimulationRuns,
+  getSimulationRun,
   sendConversationMessage,
   startConversation,
   verifyRecommendation,
@@ -18,6 +23,11 @@ import type {
   RepresentationOptimizeResponse,
   RecommendationVerifyResponse,
   SessionSummary,
+  SimulationProduct,
+  SimulationRunResponse,
+  SimulationOptimizeResponse,
+  SimulationRetestResponse,
+  SimulationRunSummary,
 } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
 import { ProductReasoning } from "../components/products/ProductReasoning";
@@ -26,6 +36,8 @@ import { GoalClarificationPanel } from "../components/values/GoalClarificationPa
 import { IntentionalityProfileCard } from "../components/products/IntentionalityProfileCard";
 import { IntentDisplay } from "../components/intent/IntentDisplay";
 import { EvidencePanel } from "../components/evidence/EvidencePanel";
+import { SimulationPanel } from "../components/simulation/SimulationPanel";
+import { SimulationHistory } from "../components/simulation/SimulationHistory";
 import { useUser } from "@clerk/nextjs";
 
 export default function HomePage() {
@@ -46,6 +58,18 @@ export default function HomePage() {
     useState<RepresentationOptimizeResponse | null>(null);
   const [evidenceVerification, setEvidenceVerification] =
     useState<RecommendationVerifyResponse | null>(null);
+  const [simulationRun, setSimulationRun] = useState<SimulationRunResponse | null>(null);
+  const [simulationOptimized, setSimulationOptimized] =
+    useState<SimulationOptimizeResponse | null>(null);
+  const [simulationRetest, setSimulationRetest] =
+    useState<SimulationRetestResponse | null>(null);
+  const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
+  const [selectedSimulationProductId, setSelectedSimulationProductId] =
+    useState<string | null>(null);
+  const [isHistoryOpen, setHistoryOpen] = useState(false);
+  const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [researchLoading, setResearchLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -75,6 +99,15 @@ export default function HomePage() {
     [storageKey, userId],
   );
 
+  const handleCloseHistory = useCallback(() => {
+    if (isHistoryClosing) return;
+    setHistoryClosing(true);
+    window.setTimeout(() => {
+      setHistoryOpen(false);
+      setHistoryClosing(false);
+    }, 200);
+  }, [isHistoryClosing]);
+
   const resetConversation = useCallback(() => {
     setSessionId(null);
     setMessages([]);
@@ -87,6 +120,11 @@ export default function HomePage() {
     setEvidenceAnalysis(null);
     setEvidenceOptimization(null);
     setEvidenceVerification(null);
+    setSimulationRun(null);
+    setSimulationOptimized(null);
+    setSimulationRetest(null);
+    setSimulationProducts([]);
+    setSelectedSimulationProductId(null);
   }, []);
 
   const upsertSession = useCallback(
@@ -154,6 +192,20 @@ export default function HomePage() {
           optimization.optimized,
         );
         setEvidenceVerification(verification);
+        const products = (analysis.evidence_products ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || item.raw_text || item.name,
+          source: item.source,
+          url: item.url,
+          price: item.price,
+          confidence: item.confidence,
+          metadata: item.metadata,
+        }));
+        setSimulationProducts(products);
+        if (products.length > 0) {
+          setSelectedSimulationProductId(products[0].id);
+        }
       } catch (error) {
         setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
       } finally {
@@ -195,6 +247,17 @@ export default function HomePage() {
   }, [messages]);
 
   useEffect(() => {
+    if (!isHistoryOpen) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleCloseHistory();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [handleCloseHistory, isHistoryOpen]);
+
+  useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
@@ -226,6 +289,12 @@ export default function HomePage() {
     });
   }, [storageKey, updateSessions, userId]);
 
+  useEffect(() => {
+    void listSimulationRuns(userId).then((response) => {
+      setSimulationRuns(response.runs ?? []);
+    });
+  }, [userId]);
+
   const handleSelectSession = useCallback(
     async (selectedId: string) => {
       if (!selectedId) return;
@@ -249,6 +318,11 @@ export default function HomePage() {
       setEvidenceAnalysis(null);
       setEvidenceOptimization(null);
       setEvidenceVerification(null);
+      setSimulationRun(null);
+      setSimulationOptimized(null);
+      setSimulationRetest(null);
+      setSimulationProducts([]);
+      setSelectedSimulationProductId(null);
     },
     [userId],
   );
@@ -299,6 +373,111 @@ export default function HomePage() {
     }
   }, [lastQuery, sessionId, userId]);
 
+  const handleRunSimulation = useCallback(async () => {
+    if (!lastQuery || simulationProducts.length === 0) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          content: "Add a scenario and evidence products before running a simulation.",
+        },
+      ]);
+      return;
+    }
+    setSimulationLoading(true);
+    try {
+      const response = await runSimulation(
+        lastQuery,
+        simulationProducts,
+        userId,
+        sessionId,
+      );
+      setSimulationRun(response);
+      setSimulationOptimized(null);
+      setSimulationRetest(null);
+      void listSimulationRuns(userId).then((runs) =>
+        setSimulationRuns(runs.runs ?? []),
+      );
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: `Error running simulation: ${(error as Error).message}` },
+      ]);
+    } finally {
+      setSimulationLoading(false);
+    }
+  }, [lastQuery, sessionId, simulationProducts, userId]);
+
+  const handleOptimizeSimulation = useCallback(async (productId?: string) => {
+    const runId = simulationRun?.run_id;
+    const gaps = simulationRun?.result?.gap_analysis ?? [];
+    if (!runId || gaps.length === 0) return;
+    const targetGap =
+      (productId && gaps.find((gap) => gap.product_id === productId)) ||
+      [...gaps].sort((a, b) => a.score - b.score)[0];
+    setSimulationLoading(true);
+    try {
+      const response = await optimizeSimulation(runId, targetGap.product_id, userId);
+      setSimulationOptimized(response);
+      setSelectedSimulationProductId(targetGap.product_id);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: `Error optimizing simulation: ${(error as Error).message}` },
+      ]);
+    } finally {
+      setSimulationLoading(false);
+    }
+  }, [simulationRun, userId]);
+
+  const handleRetestSimulation = useCallback(async () => {
+    if (!simulationRun || !simulationOptimized) return;
+    const optimizedId = simulationOptimized.optimized.id;
+    const updated = simulationProducts.map((product) =>
+      product.id === optimizedId
+        ? { ...product, description: simulationOptimized.optimized.after }
+        : product,
+    );
+    setSimulationLoading(true);
+    try {
+      const response = await retestSimulation(
+        simulationRun.run_id,
+        updated,
+        userId,
+      );
+      setSimulationRetest(response);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: `Error retesting simulation: ${(error as Error).message}` },
+      ]);
+    } finally {
+      setSimulationLoading(false);
+    }
+  }, [simulationOptimized, simulationProducts, simulationRun, userId]);
+
+  const handleSelectSimulationRun = useCallback(
+    async (runId: string) => {
+      try {
+        const response = await getSimulationRun(runId, userId);
+        const run = response.run;
+        setSimulationRun({ run_id: run.id, result: run.result });
+        setSimulationOptimized(null);
+        setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
+        setSimulationProducts(run.products ?? []);
+        if (run.products?.length) {
+          setSelectedSimulationProductId(run.products[0].id);
+        }
+      } catch (error) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", content: `Error loading simulation: ${(error as Error).message}` },
+        ]);
+      }
+    },
+    [userId],
+  );
+
   return (
     <div className="app">
       <Sidebar
@@ -309,6 +488,10 @@ export default function HomePage() {
         activeSessionId={sessionId}
         onSelectSession={handleSelectSession}
         onDeleteSession={handleDeleteSession}
+        onOpenHistory={() => {
+          setHistoryOpen(true);
+          setHistoryClosing(false);
+        }}
       />
       {isSidebarOpen && (
         <button
@@ -338,6 +521,85 @@ export default function HomePage() {
               >
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isHistoryOpen && (
+        <div
+          className={`history-overlay ${isHistoryClosing ? "is-closing" : ""}`}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => handleCloseHistory()}
+        >
+          <div
+            className={`history-panel ${isHistoryClosing ? "is-closing" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="history-panel__header">
+              <h4>History</h4>
+              <button
+                type="button"
+                className="history-panel__close"
+                onClick={() => handleCloseHistory()}
+                aria-label="Close history"
+              >
+                ×
+              </button>
+            </div>
+            <div className="history-panel__list">
+              {sessions.length === 0 ? (
+                <p className="panel__empty">No conversations yet.</p>
+              ) : (
+                sessions.map((session) => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    className={`history-panel__item ${
+                      session.id === sessionId ? "is-active" : ""
+                    }`}
+                    onClick={() => {
+                      void handleSelectSession(session.id);
+                      setHistoryOpen(false);
+                    }}
+                  >
+                    <div className="history-panel__row">
+                      <span
+                        className="history-panel__title"
+                        title={session.preview || "Conversation"}
+                      >
+                        {session.preview || "Conversation"}
+                      </span>
+                      <button
+                        type="button"
+                        className="history-panel__delete"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteSession(session.id);
+                        }}
+                        aria-label="Delete conversation"
+                        title="Delete conversation"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                          className="icon"
+                        >
+                          <path
+                            d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    {session.last_turn_at && (
+                      <span className="history-panel__meta">
+                        {new Date(session.last_turn_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -394,6 +656,27 @@ export default function HomePage() {
               analysis={evidenceAnalysis}
               optimization={evidenceOptimization}
               verification={evidenceVerification}
+            />
+            <SimulationPanel
+              query={lastQuery}
+              run={simulationRun}
+              optimized={simulationOptimized}
+              retest={simulationRetest}
+              products={simulationProducts}
+              selectedProductId={selectedSimulationProductId}
+              loading={simulationLoading}
+              canRun={Boolean(lastQuery) && simulationProducts.length > 0}
+              canOptimize={Boolean(simulationRun?.result?.gap_analysis?.length)}
+              canRetest={Boolean(simulationRun && simulationOptimized)}
+              onRun={handleRunSimulation}
+              onOptimize={handleOptimizeSimulation}
+              onRetest={handleRetestSimulation}
+              onSelectProduct={setSelectedSimulationProductId}
+            />
+            <SimulationHistory
+              runs={simulationRuns}
+              activeRunId={simulationRun?.run_id}
+              onSelect={handleSelectSimulationRun}
             />
             <ProductReasoning
               title="Catalog Recommendations"

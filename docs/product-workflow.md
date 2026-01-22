@@ -1,23 +1,179 @@
-# Product Workflow: Brand Catalog Optimization + Verification
+# Product Workflow: Simulation Sandbox + Catalog Optimization
 
-**Purpose**: Detailed specification of the brand journey from onboarding through verified discoverability lift.
+**Purpose**: Detailed specification of the user journey from initial testing through full catalog optimization.
 
 ---
 
 ## Overview
 
-The brand workflow is a 5-step process that transforms product catalogs from spec-heavy listings into intent-legible content and verifies lift in AI recommendations.
+The product has two modes, serving different stages of the user journey:
+
+### Mode 1: Simulation Sandbox (Hackathon Demo)
+
+The core experience: test products against queries, see who wins, understand why, optimize, re-test.
+
+```
+SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
+      ↑                                                  │
+      └──────────────────────────────────────────────────┘
+```
+
+This is the **closed feedback loop** that solves the user's core pain point: "I don't know why my product isn't showing up in AI results."
+
+### Mode 2: Full Catalog Workflow (Production)
+
+After proving value with the sandbox, brands connect their full catalogs:
 
 ```
 CONNECT → ANALYZE → OPTIMIZE → DEPLOY → VERIFY
 ```
 
-This document specifies each phase in detail, including:
-- User actions
-- System processes
-- Data models
-- API endpoints
-- UI components
+This document specifies both modes in detail.
+
+---
+
+## The Simulation Sandbox (Hackathon Focus)
+
+### Purpose
+
+Let users test their products against user queries and see what an LLM shopping agent would recommend—and why.
+
+### The Core Loop
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 1: SET UP SCENARIO                                     │
+│                                                              │
+│  Query: [I need a TV for my bright living room         ]    │
+│                                                              │
+│  Your Product:                                               │
+│  [Samsung QN90B - 65-inch 4K QLED, 3000 nits           ]    │
+│                                                              │
+│  Competitors (optional):                                     │
+│  [LG C3 - Bright room viewing, anti-glare              ]    │
+│  [Sony A80K - 4K OLED with anti-reflective coating     ]    │
+│                                                              │
+│  [Run Simulation]                                            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 2: SIMULATION RESULTS                                  │
+│                                                              │
+│  Inferred User Intent:                                       │
+│  Primary: "Enjoyable viewing despite ambient light"          │
+│  Needs: ["glare reduction", "brightness", "daytime usability"]│
+│                                                              │
+│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐│
+│  │ LG C3           │ │ Samsung QN90B   │ │ Sony A80K       ││
+│  │ Score: 0.78     │ │ Score: 0.52     │ │ Score: 0.61     ││
+│  │ ✅ RECOMMENDED  │ │ ❌ NOT PICKED   │ │ ❌ NOT PICKED   ││
+│  └─────────────────┘ └─────────────────┘ └─────────────────┘│
+│                                                              │
+│  WHY YOU LOST:                                               │
+│  • Missing: outcome framing ("Combat glare")                 │
+│  • Missing: context fit ("bright living room")               │
+│  • Present but hidden: 3000 nits (the actual differentiator) │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 3: OPTIMIZE                                            │
+│                                                              │
+│  Suggested Improvement:                                      │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Before: "65-inch 4K QLED, 3000 nits brightness"         ││
+│  │                                                          ││
+│  │ After:  "Combat glare in bright rooms. Clear picture    ││
+│  │          without closing blinds. 65-inch 4K, 3000 nits."││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+│  [Apply & Re-Test]                     [Edit Suggestion]     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 4: RE-TEST RESULTS                                     │
+│                                                              │
+│  Samsung QN90B: 0.52 → 0.85                                  │
+│  ✅ NOW RECOMMENDED                                          │
+│                                                              │
+│  Lift: +63% alignment score                                  │
+│                                                              │
+│  [Save Changes]  [Export Description]  [Try Another Query]   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Models
+
+```python
+@dataclass
+class SimulationScenario:
+    scenario_id: str
+    query: str  # User query to simulate
+    user_product: ProductInput  # The brand's product
+    competitors: List[ProductInput]  # Optional competitor products
+    created_at: datetime
+
+@dataclass
+class ProductInput:
+    name: str
+    description: str
+    url: str | None  # Optional: fetch from web
+
+@dataclass
+class SimulationResult:
+    scenario_id: str
+    inferred_intent: InferredIntent
+    product_scores: List[ProductScore]
+    winner: str  # product_id of recommended product
+    gap_analysis: GapAnalysis  # Why user's product lost (if it did)
+
+@dataclass
+class ProductScore:
+    product_id: str
+    name: str
+    score: float
+    matched_capabilities: List[str]
+    missing_capabilities: List[str]
+    is_recommended: bool
+
+@dataclass
+class GapAnalysis:
+    missing_elements: List[str]  # What's missing from user's product
+    hidden_strengths: List[str]  # Present but not highlighted
+    optimization_suggestions: List[str]  # Specific changes to make
+```
+
+### API Endpoints
+
+```
+POST /simulation/run
+  Input: { query, user_product, competitors? }
+  Output: { scenario_id, intent, scores, winner, gap_analysis }
+
+POST /simulation/optimize
+  Input: { scenario_id, product_id }
+  Output: { before, after, predicted_score_delta }
+
+POST /simulation/retest
+  Input: { scenario_id, optimized_description }
+  Output: { new_score, is_now_recommended, lift }
+```
+
+### UI Components
+
+- **Scenario Setup Form**: Query input, product description input, competitor inputs
+- **Results Dashboard**: Side-by-side product cards with scores
+- **Gap Analysis Panel**: Why you lost, what's missing
+- **Optimization Preview**: Before/after with score delta
+- **Re-test Button**: Immediate feedback on changes
+
+---
+
+## Full Catalog Workflow (Production)
+
+After users validate the approach with the sandbox, they can connect their full catalogs.
 
 ---
 
@@ -384,15 +540,42 @@ Key demo differentiator:
 
 ## Demo Flow Mapping
 
-The 60-second demo corresponds to phases:
+### Hackathon Demo (Simulation Sandbox)
 
-1. **"Here's a brand's catalog"** → CONNECT (show connected state)
-2. **"Most products score poorly"** → ANALYZE (show health report)
-3. **"We optimize with intent framing"** → OPTIMIZE (show before/after)
-4. **"Changes deploy to their store"** → DEPLOY (show confirmation)
-5. **"Now LLMs recommend them"** → VERIFY (show lift metrics)
+The 60-second demo shows the core feedback loop:
+
+1. **"Brand asks: why isn't my product in AI results?"** → THE PROBLEM
+2. **"Set up a test: query + product + competitors"** → SCENARIO SETUP
+3. **"Run simulation: see who wins"** → SIMULATE
+4. **"Understand why you lost"** → GAP ANALYSIS
+5. **"Apply suggested fix"** → OPTIMIZE
+6. **"Re-test: now you're recommended"** → VERIFY
+
+**The pitch**: "See what the LLM sees. Fix what's broken. Test until you win."
+
+### Production Demo (Full Workflow)
+
+The expanded demo for enterprise customers:
+
+1. **"Connect your catalog"** → CONNECT (Shopify, Merchant Center)
+2. **"See which products need work"** → ANALYZE (health report)
+3. **"We optimize at scale"** → OPTIMIZE (batch processing)
+4. **"Deploy to your store"** → DEPLOY (write-back)
+5. **"Verify lift over time"** → VERIFY (monitoring dashboard)
 
 ---
 
-*Document Version: 2026-01-20*
+## User Journey Summary
+
+| Stage | What User Does | What They Get |
+|-------|---------------|---------------|
+| **Discovery** | Tries sandbox with one product | "Aha! Now I understand why I'm not showing up" |
+| **Validation** | Tests multiple queries/products | Confidence that optimization works |
+| **Adoption** | Connects full catalog | Batch analysis, prioritized fixes |
+| **Integration** | Deploys to production | Live optimization in their store |
+| **Ongoing** | Monitors discoverability | Alerts when things change |
+
+---
+
+*Document Version: 2026-01-22*
 *Status: Active*

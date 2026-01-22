@@ -15,6 +15,17 @@ type Props = {
   actionDisabled?: boolean;
 };
 
+type MergedProduct = {
+  id: string;
+  name: string;
+  confidence?: number;
+  alignment_score?: number;
+  alignment_reasoning?: string;
+  low_confidence?: boolean;
+  capabilities_enabled?: string[];
+  reasoning?: string;
+};
+
 function mergeProducts(products?: Product[], explanations?: ProductExplanation[]) {
   const explanationEntries = new Map<string, ProductExplanation>();
   explanations?.forEach((item, index) => {
@@ -22,7 +33,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
     explanationEntries.set(key, item);
   });
 
-  const merged = (products ?? []).map((product, index) => {
+  const merged: MergedProduct[] = (products ?? []).map((product, index) => {
     let matchedKey: string | undefined;
     if (product.id && explanationEntries.has(product.id)) {
       matchedKey = product.id;
@@ -46,12 +57,13 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
       confidence: product.confidence ?? explanation?.confidence,
       alignment_score: product.alignment_score,
       alignment_reasoning: product.alignment_reasoning,
+      low_confidence: product.low_confidence,
       capabilities_enabled: product.capabilities_enabled ?? explanation?.capabilities_enabled,
       reasoning: product.reasoning ?? explanation?.reasoning,
     };
   });
 
-  const remaining = Array.from(explanationEntries.values()).map((explanation, index) => ({
+  const remaining: MergedProduct[] = Array.from(explanationEntries.values()).map((explanation, index) => ({
     id: explanation.id ?? `extra-${index}`,
     name: explanation.name ?? "Recommendation",
     confidence: explanation.confidence,
@@ -106,12 +118,21 @@ export function ProductReasoning({
                 <span className="product__name">{product.name}</span>
                 <div className="product__meta">
                   {product.alignment_score !== undefined && (
-                    <span className="product__confidence">
+                    <span
+                      className="product__confidence product__tooltip"
+                      data-tooltip="Alignment score: how well the product matches the inferred goals."
+                    >
                       Align {(product.alignment_score * 100).toFixed(0)}%
                     </span>
                   )}
+                  {product.low_confidence && (
+                    <span className="product__flag">Low confidence</span>
+                  )}
                   {product.confidence !== undefined && (
-                    <span className="product__confidence">
+                    <span
+                      className="product__confidence product__tooltip"
+                      data-tooltip="Confidence: quality/coverage of the product data source."
+                    >
                       {(product.confidence * 100).toFixed(0)}%
                     </span>
                   )}

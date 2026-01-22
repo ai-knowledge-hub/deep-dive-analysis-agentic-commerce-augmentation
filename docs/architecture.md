@@ -1,22 +1,74 @@
-# Architecture v2: Evidence-First Intentionality Optimization + Verification
+# Architecture v2: LLM Discoverability Simulation Sandbox
 
 ## Purpose
 
-This system makes product representations **legible to LLM intent inference** and verifies discoverability lift.
+This system is a **simulation sandbox for AI shopping discoverability**.
 
-When an AI agent recommends products, it doesn't match keywords — it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
+Brand marketers ask: "Why isn't my product showing up in ChatGPT or Google AI Mode?" We give them the answer—and a way to fix it.
 
-We help brands become **discoverable by reasoning agents**, then prove it with measurable lift. For the demo, we operate on open‑web product representations (evidence-first), then later connect to brand catalogs.
+When an AI agent recommends products, it doesn't match keywords—it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
+
+We let brands **see what the LLM sees**, understand why they're losing, and test changes until they win.
 
 ---
 
-## The Problem We Solve
+## The User Problem
 
-Google's Direct Offers lets retailers pay to appear in AI Mode recommendations. But paid placement doesn't make the AI *trust* your product — it just puts you in the auction.
+> "I don't know what the LLM 'sees' when it decides whether to recommend my product, and I have no way to test or improve it."
 
-Organic discovery in LLM commerce requires something different: **alignment between product attributes and inferred user intent**.
+See [user-problem.md](user-problem.md) for detailed user personas and pain points.
 
-This is SEO for reasoning agents.
+### Who We Serve
+
+| Role | Their Question |
+|------|----------------|
+| **Brand Marketing Manager** | "Why aren't my products showing up in AI results?" |
+| **E-commerce Growth Lead** | "I know SEO, but AI works differently—what are the rules?" |
+| **Agency Account Manager** | "Client asks why they're not in ChatGPT. I have no tools to answer." |
+| **Product Feed Manager** | "I write for keyword search. What should I change for LLMs?" |
+
+### The Missing Feedback Loop
+
+Today, brands have no visibility:
+
+```
+Product Data → ??? → LLM Recommendation (or not)
+```
+
+We provide the missing loop:
+
+```
+Product Data → Analyze → Simulate → See Who Wins → Understand Why → Optimize → Re-Test
+     ↑                                                                              │
+     └──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## The Solution: Simulation Sandbox
+
+Think of it as a **flight simulator for AI shopping**. Brands can:
+
+1. **Set up a test scenario**: query + their product + competitors
+2. **Run a simulation**: see which product the LLM would recommend
+3. **Understand the gap**: why did they lose? what's missing?
+4. **Optimize**: apply suggested changes to product description
+5. **Re-test**: verify the changes improved their score
+
+This is a closed feedback loop—the key differentiator from static "legibility reports."
+
+---
+
+## How OpenAI and Google Shopping Work
+
+Our simulation models how real LLM shopping agents behave:
+
+| Platform | Discovery Layer | Implication |
+|----------|-----------------|-------------|
+| **OpenAI Shopping** | Pure organic—model picks based on relevance, no paid boost | If you're not legible to intent reasoning, you're invisible |
+| **Google AI Mode + UCP** | Organic + ads—paid gets you in candidate pool, LLM picks winners | Even with ads, the LLM chooses based on intent alignment |
+
+**Key insight**: In both ecosystems, the LLM is the gatekeeper. Our simulation predicts what it will do.
 
 ---
 
@@ -264,27 +316,69 @@ These may return as features later, but they're not the core product.
 
 ---
 
-## Demo Flow
+## Demo Flow: The Simulation Sandbox
 
-The system should support this demo in 60 seconds:
+The demo shows the complete feedback loop in 60 seconds:
 
-1. **Show a user query**: "I need a TV for my bright living room"
+### Step 1: Set Up Scenario
 
-2. **Show intent inference**:
-   - Primary goal: "Enjoyable viewing despite ambient light"
-   - Underlying needs: ["glare reduction", "brightness", "daytime usability"]
+```
+Query: "I need a TV for my bright living room"
 
-3. **Show two products**:
-   - Product A: "65-inch 4K QLED, 3000 nits, anti-reflective coating"
-   - Product B: "65-inch 4K QLED, 3000 nits" (same specs, no intent language)
+Your Product: Samsung QN90B
+  "65-inch 4K QLED, 3000 nits brightness"
 
-4. **Show alignment scores**:
-   - Product A: 0.89 (capabilities match intent)
-   - Product B: 0.52 (specs present, but not intent-legible)
+Competitors:
+  - LG C3 OLED: "Bright room viewing, anti-glare technology"
+  - Sony A80K: "4K OLED with anti-reflective coating"
+```
 
-5. **Show the result**: "Product A gets recommended. Product B doesn't. Same product, different framing."
+### Step 2: Run Simulation
 
-6. **The pitch**: "We help brands structure their products to be intent-legible and prove lift in AI recommendations."
+```
+Inferred User Intent:
+  Primary goal: "Enjoyable viewing despite ambient light"
+  Underlying needs: ["glare reduction", "brightness", "daytime usability"]
+```
+
+### Step 3: See Results
+
+```
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ LG C3           │ │ Samsung QN90B   │ │ Sony A80K       │
+│ Score: 0.78     │ │ Score: 0.52     │ │ Score: 0.61     │
+│ ✅ RECOMMENDED  │ │ ❌ NOT PICKED   │ │ ❌ NOT PICKED   │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+
+WHY YOU LOST:
+• Missing: outcome framing ("Combat glare")
+• Missing: context fit ("bright living room")
+• Present but hidden: 3000 nits (the actual differentiator)
+```
+
+### Step 4: Optimize
+
+```
+Suggested Change:
+  Before: "65-inch 4K QLED, 3000 nits brightness"
+  After:  "Combat glare in bright rooms. Clear picture without
+           closing blinds. 65-inch 4K QLED with 3000 nits."
+
+[Apply & Re-Test]
+```
+
+### Step 5: Verify
+
+```
+Samsung QN90B: 0.52 → 0.85
+✅ NOW RECOMMENDED
+
+Lift: +63% alignment score
+```
+
+### The Pitch
+
+> "See what the LLM sees. Fix what's broken. Test until you win."
 
 ---
 
@@ -585,12 +679,16 @@ Once we optimize a brand's product data, the improvement propagates everywhere:
 
 ## Summary
 
-**What we are:** A brand-side catalog optimization tool for LLM discoverability.
+**What we are:** A simulation sandbox for AI shopping discoverability.
 
-**What we do:** Transform product descriptions from spec-focused to intent-aligned.
+**Who we serve:** Brand marketers, growth leads, and agencies who need to understand and improve AI recommendations.
+
+**The user problem:** "I don't know why my product isn't showing up in AI results."
+
+**The solution:** Test → See who wins → Understand why → Optimize → Re-test.
+
+**What we do:** Simulate LLM shopping behavior so brands can see what the AI sees and fix what's broken.
 
 **Who pays:** Brands who want their products recommended by AI.
 
-**How it works:** We optimize source data. LLMs discover the improvement organically.
-
-**The pitch:** "SEO for reasoning agents. Help your products get recommended by AI."
+**The pitch:** "See what the LLM sees. Fix what's broken. Test until you win."

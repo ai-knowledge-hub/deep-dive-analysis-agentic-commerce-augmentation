@@ -66,18 +66,37 @@ def run_research(query: str, goals: List[str], context: str | None = None) -> di
         "tool_outputs": tool_outputs,
         "confidence": confidence,
         "confidence_breakdown": breakdown,
-        "insights": _build_insights(response, confidence),
+        "insights": _build_insights(
+            response,
+            confidence,
+            query=query,
+            goals=goals,
+            tool_outputs=tool_outputs,
+        ),
     }
 
 
 def _build_insights(
-    response: Dict[str, object] | str, confidence: float | None
+    response: Dict[str, object] | str,
+    confidence: float | None,
+    query: str,
+    goals: List[str],
+    tool_outputs: List[dict],
 ) -> List[dict]:
     text = _extract_text(response)
 
     lines = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
     insights = []
     if not lines:
+        fallback = _fallback_insights(
+            response=response,
+            query=query,
+            goals=goals,
+            tool_outputs=tool_outputs,
+            confidence=confidence,
+        )
+        if fallback:
+            return fallback
         return [
             {
                 "id": "research-1",
@@ -118,6 +137,75 @@ def _sanitize_llm_text(text: str) -> str:
     cleaned = re.sub(r"</?channel[^>]*>", "", text)
     cleaned = cleaned.replace("<start>assistant", "").replace("</start>", "")
     return cleaned.strip()
+
+
+def _fallback_insights(
+    response: Dict[str, object] | str,
+    query: str,
+    goals: List[str],
+    tool_outputs: List[dict],
+    confidence: float | None,
+) -> List[dict]:
+    """Build lightweight insights from tool outputs or error context."""
+    inferred_conf = confidence if confidence is not None else 0.2
+    insights: List[dict] = []
+
+    for entry in tool_outputs:
+        output = entry.get("output") if isinstance(entry, dict) else None
+        if not isinstance(output, dict):
+            continue
+        results = output.get("results")
+        if isinstance(results, list) and results:
+            for idx, item in enumerate(results[:3]):
+                name = item.get("name") or "Research result"
+                source = item.get("source") or "catalog"
+                summary = f"{name} surfaced for intent matching (source: {source})."
+                insights.append(
+                    {
+                        "id": f"research-tool-{idx + 1}",
+                        "title": name,
+                        "summary": summary,
+                        "confidence": inferred_conf,
+                        "source": "tool",
+                    }
+                )
+            if insights:
+                return insights
+
+        text = output.get("text") or output.get("content")
+        url = output.get("url")
+        if isinstance(text, str) and text.strip():
+            snippet = text.strip().splitlines()[0][:160]
+            insights.append(
+                {
+                    "id": "research-web-1",
+                    "title": url or "Web source",
+                    "summary": snippet,
+                    "confidence": inferred_conf,
+                    "source": "web",
+                }
+            )
+            return insights
+
+    error = ""
+    if isinstance(response, dict):
+        error = str(response.get("error") or "").strip()
+    summary = (
+        f"Research unavailable: {error}"
+        if error
+        else "Research unavailable; no external sources were fetched."
+    )
+    goal_hint = ", ".join(goals) if goals else query
+    insights.append(
+        {
+            "id": "research-fallback-1",
+            "title": "Research summary unavailable",
+            "summary": f"{summary} Focus on: {goal_hint}.",
+            "confidence": inferred_conf,
+            "source": "fallback",
+        }
+    )
+    return insights
 
 
 def _estimate_confidence(

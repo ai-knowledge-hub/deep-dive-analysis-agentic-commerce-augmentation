@@ -1,46 +1,52 @@
-# Build Plan: Brand-Side Intentionality Optimization + Verification
+# Build Plan: AI Discoverability Simulation Sandbox
 
-**Status:** Pivot in progress  
-**Goal:** Demo-ready intent-legible discovery + verification flow (evidence-first, organic AI discovery)
+**Status:** Pivot in progress
+**Goal:** Demo-ready simulation sandbox where brands can test products, see who wins, understand why, and optimize until they win.
 
-This plan aligns the codebase to the new architecture in `docs/architecture.md`.
+**The user problem we solve:**
+> "I don't know what the LLM 'sees' when it decides whether to recommend my product, and I have no way to test or improve it."
+
+**The core loop:**
+```
+SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
+      ↑                                                  │
+      └──────────────────────────────────────────────────┘
+```
+
+This plan aligns the codebase to the simulation sandbox architecture in `docs/architecture.md`.
 
 ---
 
 ## Status Overview
 
-| Module | Status | Primary Gap |
-|--------|--------|-------------|
-| `intent/` | Partial | Single-intent only, limited intent signals |
-| `intentionality/` | Functional | Needs legibility scoring + batch analysis |
-| `alignment/` | Functional | Per-product scoring live; need legibility score + report |
-| `commerce/` | Functional | Enrichment not wired into adapter pipeline |
-| `memory/` | Partial | Goal tracking ok; reporting layer missing |
-| `conversation/` | Functional | Goal clarification gate restored; needs brand-demo narrative |
-| `mcp/` | Partial | Tooling not aligned to evidence/verification workflow |
-| `api/` | Functional | Discovery endpoints live; no evidence or catalog analysis endpoints |
-| `web/` | Functional | Intent + alignment UI live; no evidence/optimization UI |
+| Module | Status | Simulation Sandbox Gap |
+|--------|--------|------------------------|
+| `intent/` | Partial | Inference works; needs competitive scenario support |
+| `intentionality/` | Functional | Profiling works; needs gap analysis output |
+| `alignment/` | Functional | Scoring works; needs "why you lost" explanation |
+| `commerce/` | Functional | Adapters work; needs dynamic product input |
+| `api/` | Functional | Discovery endpoints live; needs simulation endpoints |
+| `web/` | Functional | Intent + alignment UI live; needs simulation sandbox UI |
 
 ---
 
-## Current Migration Findings (Code Scan → Plan Map)
+## Current State
 
 ### In Place
-- Intentionality profiling module exists with LLM prompt + profile builder (`modules/intentionality/*`).
-- Inferred intent model supports multi-goal + signals and is wired through API/UI (`modules/intent/*`, `api/routes/*`, `web/*`).
-- Alignment summary + per-product alignment scores + reasoning are live (`modules/alignment/goal_alignment.py`, `api/routes/products.py`, `web/components/products/ProductReasoning.tsx`).
-- Discovery endpoints live: `/intent/infer`, `/products/align`, `/products/profile`, `/products/enrich` (`api/routes/*`).
-- UI shows inferred intent + discoverability delta (`web/components/intent/IntentDisplay.tsx`, `web/components/products/IntentionalityProfileCard.tsx`).
-- UCP adapter stub exists (`modules/commerce/adapters/ucp/loader.py`).
-- Legacy empowerment artifacts removed from schema/data/tools/UI (`shared/db/schema.sql`, `db/schema.sql`, `llm/tools.py`, `data/*.json`, `web/components/empowerment/ValuesPanel.tsx`).
-- Clerk auth scaffolded with session history list endpoint + UI (`web/*`, `api/routes/conversation.py`).
+- Intentionality profiling module with LLM enrichment (`modules/intentionality/*`)
+- Intent inference with multi-goal support (`modules/intent/*`)
+- Alignment scoring with per-product explanations (`modules/alignment/*`)
+- Discovery endpoints: `/intent/infer`, `/products/align`, `/products/profile`, `/products/enrich`
+- Before/after discoverability comparison UI
+- Clerk auth scaffolded
 
-### Still Partial
-- Evidence-first pipeline not implemented (no dynamic product representations for arbitrary queries).
-- No legibility scoring or report generation (brand-facing output).
-- No optimization suggestions pipeline (before/after framing comparisons).
-- No verification harness (even simulated) for “discoverability lift”.
-- Deterministic intent-output parsing tests still missing.
+### Missing for Simulation Sandbox
+- **Scenario setup**: Let user input query + their product + competitors
+- **Competitive simulation**: Score multiple products, pick winner
+- **Gap analysis**: "Why you lost" explanation
+- **Optimization suggestions**: Specific changes to make
+- **Re-test loop**: Apply changes and immediately re-score
+- **Simulation sandbox UI**: The core user experience
 
 ---
 
@@ -105,26 +111,45 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 - [x] Show catalog + research streams side-by-side with alignment scores
 - [x] Disable catalog stream for `CATALOG_SOURCE=mock`
 ---
-### Phase 2.5 — Evidence-First Demo Layer (P0)
-- [x] Add evidence analysis endpoint (`POST /evidence/analyze`) for open-world queries
-- [x] Add representation optimization endpoint (`POST /representation/optimize`) for before/after framing
-- [x] Add verification endpoint (`POST /recommendation/verify`) with simulated results
-- [x] Create demo evidence sets (3–5 real products with before/after framing)
+### Phase 2.5 — Evidence-First Demo Layer (Done)
+- [x] Add evidence analysis endpoint (`POST /evidence/analyze`)
+- [x] Add representation optimization endpoint (`POST /representation/optimize`)
+- [x] Add verification endpoint (`POST /recommendation/verify`)
+- [x] Create demo evidence sets (3–5 real products)
 
-### Phase 3 — Protocol & Catalog Integration
-- [x] Add UCP adapter stub + loader registration
-- [ ] Enrich Shopify + Google Merchant adapters with intentionality profiles
-- [ ] Batch enrichment pipeline + report output
+### Phase 3 — Simulation Sandbox (P0 - HACKATHON CRITICAL)
 
-### Phase 4 — Evaluation & Benchmarking
-- [ ] Multi‑LLM evaluation harness (Gemini/OpenAI/Claude)
+**Goal:** The core user experience—test, see who wins, understand why, optimize, re-test.
+
+- [ ] Add simulation scenario endpoint (`POST /simulation/run`)
+  - Input: query + user product + competitors
+  - Output: intent, scores, winner, gap analysis
+- [ ] Add optimization suggestion endpoint (`POST /simulation/optimize`)
+  - Input: scenario_id, product_id
+  - Output: before/after with predicted score delta
+- [ ] Add re-test endpoint (`POST /simulation/retest`)
+  - Input: scenario_id, optimized description
+  - Output: new score, is_now_recommended, lift
+- [ ] Build gap analysis logic ("why you lost")
+  - Missing capabilities
+  - Hidden strengths
+  - Specific suggestions
+- [ ] Build simulation sandbox UI
+  - Scenario setup form
+  - Results dashboard with competitive view
+  - Gap analysis panel
+  - Optimization preview
+  - Re-test button with instant feedback
+
+### Phase 4 — Verification & Benchmarking
+- [ ] Multi‑LLM verification harness (Gemini required for hackathon)
 - [ ] Alignment score vs actual recommendation comparison
-- [ ] “Discoverability lift” metric tracker
+- [ ] "Discoverability lift" metric tracker
 
 ### Phase 5 — Hackathon Packaging
-- [ ] 60–90s demo script + storyboard
-- [ ] 3 before/after product examples
-- [ ] Showcase protocol‑agnostic positioning (UCP/ACP)
+- [ ] 60-second demo script showing simulation loop
+- [ ] 3 compelling before/after examples with clear lift
+- [ ] Pitch: "See what the LLM sees. Fix what's broken. Test until you win."
 
 ---
 
@@ -164,8 +189,20 @@ This plan aligns the codebase to the new architecture in `docs/architecture.md`.
 
 ## Completion Criteria
 
-- Intentionality profiling module exists and is integrated.
-- Alignment scores + explanations appear in API + UI.
-- Discovery‑focused endpoints operational.
-- Demo story shows before/after discoverability impact.
-- Evidence-first demo layer exists (analyze → optimize → verify on real-world representations).
+**The demo must show the complete simulation loop:**
+
+1. ✅ User sets up scenario (query + product + competitors)
+2. ✅ System shows who wins and why
+3. ✅ User sees "why I lost" gap analysis
+4. ✅ User applies suggested optimization
+5. ✅ User re-tests and sees improvement
+
+**Technical criteria:**
+- [ ] Simulation endpoints operational (`/simulation/run`, `/simulation/optimize`, `/simulation/retest`)
+- [ ] Gap analysis logic produces actionable "why you lost" output
+- [ ] Simulation sandbox UI complete
+- [ ] 3 compelling demo scenarios ready
+- [ ] 60-second demo script polished
+
+**The pitch must land:**
+> "See what the LLM sees. Fix what's broken. Test until you win."

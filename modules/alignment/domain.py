@@ -15,6 +15,7 @@ class AlignmentScore:
     matched_capabilities: List[str]
     alignment_reasoning: str
     confidence: float
+    low_confidence: bool = False
 
 
 @dataclass
