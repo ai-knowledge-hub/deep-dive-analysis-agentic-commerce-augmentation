@@ -23,6 +23,7 @@ type Props = {
   activeSessionId?: string | null;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onOpenHistory: () => void;
 };
 
 export function Sidebar({
@@ -33,6 +34,7 @@ export function Sidebar({
   activeSessionId,
   onSelectSession,
   onDeleteSession,
+  onOpenHistory,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const classNames = ["sidebar"];
@@ -76,47 +78,18 @@ export function Sidebar({
           {collapsed && <span className="sidebar__icon">+</span>}
         </button>
 
-        {!collapsed && sessions.length > 0 && (
-          <div className="sidebar__sessions">
-            <span className="sidebar__section-label">History</span>
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                className={`sidebar__session ${
-                  session.id === activeSessionId ? "is-active" : ""
-                }`}
-                onClick={() => {
-                  onSelectSession(session.id);
-                  if (mobileOpen) onMobileClose();
-                }}
-              >
-                <div className="sidebar__session-row">
-                  <span className="sidebar__session-title">
-                    {session.preview || "Conversation"}
-                  </span>
-                  <span className="sidebar__session-actions">
-                    <button
-                      type="button"
-                      className="sidebar__session-delete"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDeleteSession(session.id);
-                      }}
-                      aria-label="Delete conversation"
-                      title="Delete conversation"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-                {session.last_turn_at && (
-                  <span className="sidebar__session-meta">
-                    {new Date(session.last_turn_at).toLocaleDateString()}
-                  </span>
-                )}
-              </button>
-            ))}
+        {!collapsed && (
+          <div className="sidebar__nav-scroll">
+            <button
+              type="button"
+              className="sidebar__item"
+              onClick={() => {
+                onOpenHistory();
+                if (mobileOpen) onMobileClose();
+              }}
+            >
+              <span className="sidebar__label">History</span>
+            </button>
           </div>
         )}
       </nav>

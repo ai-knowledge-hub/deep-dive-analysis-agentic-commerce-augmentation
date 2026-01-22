@@ -6,6 +6,12 @@ import {
   RepresentationOptimizeResponse,
   SessionListResponse,
   ResearchRefreshResponse,
+  SimulationProduct,
+  SimulationRunResponse,
+  SimulationOptimizeResponse,
+  SimulationRetestResponse,
+  SimulationRunListResponse,
+  SimulationRunDetailResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -79,6 +85,72 @@ export async function deleteConversationSession(
   return request<{ status: string }>(`/conversation/${sessionId}${query}`, {
     method: "DELETE",
   });
+}
+
+export async function runSimulation(
+  query: string,
+  products: SimulationProduct[],
+  userId?: string | null,
+  sessionId?: string | null,
+): Promise<SimulationRunResponse> {
+  return request<SimulationRunResponse>("/simulation/run", {
+    method: "POST",
+    body: JSON.stringify({
+      query,
+      products,
+      user_id: userId ?? undefined,
+      session_id: sessionId ?? undefined,
+    }),
+  });
+}
+
+export async function optimizeSimulation(
+  runId: string,
+  productId: string,
+  userId?: string | null,
+): Promise<SimulationOptimizeResponse> {
+  return request<SimulationOptimizeResponse>("/simulation/optimize", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId,
+      product_id: productId,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function retestSimulation(
+  runId: string,
+  optimizedProducts: SimulationProduct[],
+  userId?: string | null,
+): Promise<SimulationRetestResponse> {
+  return request<SimulationRetestResponse>("/simulation/retest", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId,
+      optimized_products: optimizedProducts,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listSimulationRuns(
+  userId?: string | null,
+  limit: number = 20,
+): Promise<SimulationRunListResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  params.set("limit", String(limit));
+  const query = params.toString();
+  return request<SimulationRunListResponse>(`/simulation/runs?${query}`);
+}
+
+export async function getSimulationRun(
+  runId: string,
+  userId?: string | null,
+): Promise<SimulationRunDetailResponse> {
+  const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  return request<SimulationRunDetailResponse>(`/simulation/runs/${runId}${query}`);
 }
 
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {

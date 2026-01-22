@@ -2,32 +2,62 @@
 
 ## 1. Overview
 
-- **Goal:** Demo-ready brand-side optimization + verification system before **Feb 9, 2026**
-- **Core Innovation:** "SEO for reasoning agents" — help brands become discoverable by LLMs through intent alignment and verified lift
+- **Goal:** Demo-ready simulation sandbox before **Feb 9, 2026**
+- **Core Innovation:** A test environment for AI shopping discoverability—brands can see what LLMs see and fix what's broken
+- **The Pitch:** "See what the LLM sees. Fix what's broken. Test until you win."
 - **Judging Criteria:** Technical Execution (40%), Innovation (30%), Impact (20%), Presentation (10%)
 
-## 2. The Demo (60 Seconds)
+## 2. The User Problem We Solve
 
-The demo must show the core insight in under a minute:
+> "I don't know what the LLM 'sees' when it decides whether to recommend my product, and I have no way to test or improve it."
 
-1. **User Query**: "I need a TV for my bright living room"
+Brand marketers, e-commerce leads, and agency managers have no visibility into LLM shopping recommendations. They don't know:
+- Why their product isn't showing up
+- What to change to get recommended
+- Whether their changes actually worked
 
-2. **Intent Inference**:
-   - Primary goal: "Enjoyable viewing despite ambient light"
-   - Underlying needs: ["glare reduction", "brightness", "daytime usability"]
-   - Show this visually
+We give them a **simulation sandbox** to test, understand, and fix.
 
-3. **Two Products** (same underlying specs):
-   - Product A: Intent-legible ("Combat glare in bright rooms, clear picture without closing blinds")
-   - Product B: Spec-only ("65-inch 4K QLED, 3000 nits, anti-reflective coating")
+## 3. The Demo (60 Seconds)
 
-4. **Alignment Scores**:
-   - Product A: 0.89 (capabilities match inferred intent)
-   - Product B: 0.52 (specs present, not intent-legible)
+The demo shows the complete feedback loop:
 
-5. **The Result**: "Product A gets recommended. Product B doesn't. Same product, different framing."
+### Step 1: Set Up Scenario
+```
+Query: "I need a TV for my bright living room"
+Brand's Product: Samsung QN90B ("65-inch 4K QLED, 3000 nits")
+Competitors: LG C3 ("Bright room viewing, anti-glare"), Sony A80K
+```
 
-6. **The Pitch**: "We help brands structure products to be intent-legible and prove lift in AI recommendations."
+### Step 2: Run Simulation
+System infers user intent and scores all products.
+
+### Step 3: See Results
+```
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ LG C3           │ │ Samsung QN90B   │ │ Sony A80K       │
+│ Score: 0.78     │ │ Score: 0.52     │ │ Score: 0.61     │
+│ ✅ RECOMMENDED  │ │ ❌ NOT PICKED   │ │ ❌ NOT PICKED   │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+
+WHY YOU LOST:
+• Missing: outcome framing ("Combat glare")
+• Present but hidden: 3000 nits (the actual differentiator)
+```
+
+### Step 4: Optimize
+```
+Before: "65-inch 4K QLED, 3000 nits"
+After:  "Combat glare in bright rooms. Clear picture without closing blinds."
+```
+
+### Step 5: Re-Test
+```
+Samsung QN90B: 0.52 → 0.85 ✅ NOW RECOMMENDED
+```
+
+### The Pitch
+"See what the LLM sees. Fix what's broken. Test until you win."
 
 ## 3. Architecture
 
@@ -211,21 +241,24 @@ The demo must show the core insight in under a minute:
 ## 10. Pitch Variations
 
 **For Google judges**:
-"Direct Offers handles paid placement. We handle organic discovery. Brands need both."
+"Brands ask: 'Why isn't my product in AI Mode?' We give them the answer—and a way to fix it."
 
 **For OpenAI judges**:
-"Your 'answer independence' means the best product wins. We help brands become the best product for the user's intent."
+"Your 'answer independence' means the best product wins. We help brands test and optimize until they're the best."
 
 **For investors**:
-"The intentionality layer — protocol-agnostic, LLM-native, inevitable."
+"The first simulation sandbox for AI shopping discoverability. Brands need visibility into LLM recommendations."
 
 **For developers**:
-"Open-source intent inference for any commerce API."
+"Open-source intent inference and alignment scoring for any commerce API."
 
 **One-liner**:
-"SEO for reasoning agents — help brands become discoverable by AI."
+"See what the LLM sees. Fix what's broken. Test until you win."
+
+**Alternative one-liner**:
+"A flight simulator for AI shopping—test your products before they go live."
 
 ---
 
-*Document Version: 2026-01-17*
+*Document Version: 2026-01-22*
 *Status: Active*

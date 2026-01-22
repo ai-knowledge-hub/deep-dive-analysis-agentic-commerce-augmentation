@@ -13,13 +13,16 @@ except ImportError:  # pragma: no cover - optional dependency
     FastAPI = None  # type: ignore
     CORSMiddleware = None  # type: ignore
 
+from shared.db.connection import init_db
 from api.routes import products as products_route
 from api.routes import conversation as conversation_route
 from api.routes import intent as intent_route
 from api.routes import evidence as evidence_route
+from api.routes import simulation as simulation_route
 
 if FastAPI:
     app = FastAPI(title="Contextual Commerce Optimization API")
+    init_db()
     if CORSMiddleware:
         frontend_origin = os.getenv("FRONTEND_URL", "http://localhost:3000")
         app.add_middleware(
@@ -35,5 +38,6 @@ if FastAPI:
     app.include_router(evidence_route.router)
     app.include_router(evidence_route.representation_router)
     app.include_router(evidence_route.recommendation_router)
+    app.include_router(simulation_route.router)
 else:
     app = None

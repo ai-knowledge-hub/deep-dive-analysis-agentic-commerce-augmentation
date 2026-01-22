@@ -1,8 +1,46 @@
 # Terminology Glossary
 
-This document defines the core terms used across the Intentionality Optimization codebase.
+This document defines the core terms used across the AI Discoverability Simulation Sandbox codebase.
 
 The goal is to ensure **conceptual precision**, prevent semantic drift, and align architecture with implementation.
+
+---
+
+## Simulation Sandbox
+
+**Definition**
+A test environment where brand marketers can simulate LLM shopping behavior to understand why their products do or don't get recommended.
+
+**Core Loop**
+```
+SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
+```
+
+**Key Property**
+> The simulation sandbox solves the core user problem: "I don't know what the LLM sees when it decides whether to recommend my product."
+
+**In Code**
+```
+api/routes/simulation.py (planned)
+web/components/simulation/* (planned)
+```
+
+---
+
+## Gap Analysis
+
+**Definition**
+The explanation of why a product lost in a competitive simulation—what's missing, what's hidden, and what to fix.
+
+**Components**
+- Missing elements: capabilities the product doesn't express
+- Hidden strengths: features present but not highlighted in intent-legible form
+- Optimization suggestions: specific changes to make
+
+**In Code**
+```
+modules/alignment/gap_analysis.py (planned)
+```
 
 ---
 
@@ -303,13 +341,18 @@ The theory explains *why* it works. The demo shows *that* it works.
 
 ## Summary Statement
 
+> **Simulation Sandbox** lets brands test their products
 > **Intent Inference** determines what users want
 > **Intentionality Profiles** describe what products provide
 > **Alignment Scoring** predicts what LLMs recommend
-> **Discovery Metrics** prove it works
+> **Gap Analysis** explains why products lose
+> **Re-test Loop** verifies optimization works
 > **Organic Discovery** is the outcome
+
+**The pitch:**
+> "See what the LLM sees. Fix what's broken. Test until you win."
 
 ---
 
-*Document Version: 2026-01-17*
+*Document Version: 2026-01-22*
 *Status: Active*

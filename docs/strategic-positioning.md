@@ -1,18 +1,45 @@
-# Strategic Positioning: Evidence-First Organic Discovery for AI Commerce
+# Strategic Positioning: AI Discoverability Simulation Sandbox
 
 ## Executive Summary
 
-Google built paid placement (Direct Offers). OpenAI is building answer independence. **We built organic discovery.**
+Google built paid placement (Direct Offers). OpenAI is building answer independence. **We built the simulation sandbox.**
 
-When LLMs recommend products, they don't match keywords—they infer intent and select products that serve that intent. Products structured around human goals get recommended. Products described in pure specs don't.
+Brand marketers are asking: *"Why isn't my product showing up in ChatGPT or Google AI Mode?"* They have no tools to investigate, no way to test changes, and no visibility into how LLMs make recommendations.
 
-**We help brands become discoverable by reasoning agents.**
+**We give them the answer—and a way to fix it.**
 
-This document maps our strategic position in the evolving agentic commerce landscape:
-1. Competitive analysis: paid vs organic discovery
-2. Why our approach works (the intentionality thesis)
-3. Technical integration strategy
+Our simulation sandbox lets brands:
+1. Test their product against a user query
+2. See who wins (them or competitors)
+3. Understand WHY they lost
+4. Optimize and re-test until they win
+
+This document maps our strategic position:
+1. The user problem: who we serve and their pain
+2. Competitive analysis: paid vs organic discovery
+3. Why our approach works (the intentionality thesis)
 4. Business positioning
+
+---
+
+## 0. The User Problem
+
+> "I don't know what the LLM 'sees' when it decides whether to recommend my product, and I have no way to test or improve it."
+
+See [user-problem.md](user-problem.md) for full details.
+
+### Who We Serve
+
+| Role | Their Question |
+|------|----------------|
+| **Brand Marketing Manager** | "Why aren't my products showing up in AI results?" |
+| **E-commerce Growth Lead** | "I know SEO, but AI works differently—what are the rules?" |
+| **Agency Account Manager** | "Client asks why they're not in ChatGPT. I have no tools to answer." |
+| **Product Feed Manager** | "I write for keyword search. What should I change for LLMs?" |
+
+### Why Now
+
+LLMs don't match keywords—they **infer intent**. Existing SEO tools don't help because the ranking factors are completely different. Brands need new tools for this new channel.
 
 ---
 
@@ -163,23 +190,44 @@ Now the LLM can reason: "User wants bright-room viewing. This product explicitly
 
 ---
 
-## 4. The Product
+## 4. The Product: Simulation Sandbox
 
-### Who We Serve: Brands as Primary Customer
+### Core Concept
 
-**We are an evidence-first optimization + verification platform, not middleware.**
+**We are a simulation sandbox for AI shopping—like a flight simulator for LLM recommendations.**
 
-Brands are our customer—specifically marketing managers, ecommerce growth teams, and agencies responsible for product visibility. We help them optimize their product representations so LLMs recommend them organically. We don't require integration with LLM providers to deliver value—we start with open‑web evidence and later plug into brand catalogs (Shopify, Merchant Center, product feeds).
+Brands can test their products against user queries, see who wins, understand why, and optimize until they win. This closed feedback loop is what's missing from every other tool in the market.
+
+### The User Journey
+
+```
+1. SET UP SCENARIO
+   User defines: query + their product + competitors
+
+2. RUN SIMULATION
+   App simulates what an LLM shopping agent would do
+
+3. SEE RESULTS
+   Who won? Who lost? Why?
+
+4. OPTIMIZE
+   Apply suggested changes to product description
+
+5. RE-TEST
+   Verify the changes improved the score
+```
+
+### Who We Serve
 
 | Customer | Problem | Our Solution |
 |----------|---------|--------------|
-| **Brands/Retailers** | "My products aren't appearing in AI shopping results" | Analyze → Optimize → Verify discoverability |
-| **E-commerce platforms** | "Our merchants need AI discoverability tools" | White-label optimization layer |
+| **Brands/Retailers** | "My products aren't appearing in AI shopping results" | Simulation sandbox: test → understand → fix |
+| **E-commerce platforms** | "Our merchants need AI discoverability tools" | White-label simulation tools |
 | **Commerce developers** | "How do I match products to user intent?" | API access to intent + alignment scoring |
 
-### Core Offering: Evidence-First Optimization + Verification
+### Full Brand Workflow (Production)
 
-The brand workflow is a 5-step process:
+In production, the simulation sandbox expands to a full workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -391,25 +439,33 @@ Brands pay us to make their products more discoverable by AI. This is analogous 
 
 ## 8. Demo Flow (60 Seconds)
 
-### The Pitch
+### The Simulation Sandbox Demo
 
-1. **Show a user query**: "I need a TV for my bright living room"
+1. **Set up the scenario**:
+   - Query: "I need a TV for my bright living room"
+   - Brand's product: Samsung QN90B ("65-inch 4K QLED, 3000 nits")
+   - Competitors: LG C3 ("Bright room viewing, anti-glare"), Sony A80K
 
-2. **Show intent inference**:
-   - Primary goal: "Enjoyable viewing despite ambient light"
-   - Underlying needs: ["glare reduction", "brightness", "daytime usability"]
+2. **Run simulation**: App infers user intent and scores all products
 
-3. **Show two products**:
-   - Product A: Optimized for intent legibility ("Combat glare in bright rooms")
-   - Product B: Specs only ("65-inch 4K QLED, 3000 nits")
+3. **Show results**:
+   - LG C3: 0.78 ✅ RECOMMENDED
+   - Samsung QN90B: 0.52 ❌ NOT PICKED
+   - Sony A80K: 0.61 ❌ NOT PICKED
 
-4. **Show alignment scores**:
-   - Product A: 0.89 (capabilities match intent)
-   - Product B: 0.52 (specs present, but not intent-legible)
+4. **Explain why brand lost**:
+   - Missing: outcome framing ("Combat glare")
+   - Missing: context fit ("bright living room")
+   - Present but hidden: 3000 nits (the actual differentiator)
 
-5. **Show the result**: "Product A gets recommended. Product B doesn't. Same underlying product, different framing."
+5. **Show optimization**:
+   - Before: "65-inch 4K QLED, 3000 nits"
+   - After: "Combat glare in bright rooms. Clear picture without closing blinds."
 
-6. **The close**: "We help brands structure their products to be legible to intent inference. That's organic discovery for AI commerce."
+6. **Re-test and verify**:
+   - Samsung QN90B: 0.52 → 0.85 ✅ NOW RECOMMENDED
+
+7. **The pitch**: "See what the LLM sees. Fix what's broken. Test until you win."
 
 ---
 
@@ -439,15 +495,23 @@ Brands pay us to make their products more discoverable by AI. This is analogous 
 
 - Google built paid placement for AI commerce
 - OpenAI built answer independence
-- **We built organic discovery**
+- **We built the simulation sandbox**
 
-Products that genuinely serve user intent get recommended by reasoning agents. We make products legible to that reasoning and prove the lift. That's the intentionality advantage.
+Brands ask: "Why isn't my product showing up in AI results?" We give them the answer and a way to fix it.
 
 **One-line positioning**:
 
-*"SEO for reasoning agents—help brands become discoverable by AI."*
+*"See what the LLM sees. Fix what's broken. Test until you win."*
+
+**The user problem we solve**:
+
+> "I don't know what the LLM 'sees' when it decides whether to recommend my product, and I have no way to test or improve it."
+
+**The solution**:
+
+A simulation sandbox where brands can test products against queries, see who wins, understand why, and optimize until they win.
 
 ---
 
-*Document Version: 2026-01-20*
+*Document Version: 2026-01-22*
 *Status: Active*

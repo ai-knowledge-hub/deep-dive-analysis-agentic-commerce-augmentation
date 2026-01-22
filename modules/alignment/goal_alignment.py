@@ -8,6 +8,7 @@ This supports intent-alignment scoring for brand discovery.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -289,8 +290,15 @@ def _semantic_score_products(
                 best_score = similarity
                 best_goal = goal
         best_capability = _get_best_capability(product, best_goal or "")
+        missing_signals = _missing_signals(best_goal or "", product)
         reasoning = (
-            get_alignment_explanation(best_goal, product, best_score)
+            get_alignment_explanation(
+                best_goal,
+                product,
+                best_score,
+                [best_capability] if best_capability else [],
+                missing_signals,
+            )
             if best_goal
             else "No goal match found."
         )
@@ -301,6 +309,7 @@ def _semantic_score_products(
                 matched_capabilities=[cap for cap in [best_capability] if cap],
                 alignment_reasoning=reasoning,
                 confidence=round(product.confidence, 2),
+                low_confidence=best_score < MEDIUM_ALIGNMENT_THRESHOLD,
             )
         )
     return scores
@@ -314,22 +323,23 @@ def _keyword_score_products(
     for product in products:
         best_goal = None
         best_score = 0.0
+        matched_caps: List[str] = []
         for goal in goals:
-            normalized = goal.lower()
-            goal_tokens = set(normalized.split())
-            capability_hits = any(
-                goal_tokens & set(capability.lower().split())
-                for capability in product.capabilities_enabled
-            )
-            tag_hits = any(
-                tag in normalized or normalized in tag for tag in product.tags
-            )
-            if capability_hits or tag_hits:
+            goal_tokens = set(_tokenize(goal))
+            if not goal_tokens:
+                continue
+            match = _match_goal_to_product(goal_tokens, product)
+            if match["score"] > best_score:
+                best_score = match["score"]
                 best_goal = goal
-                best_score = max(best_score, 0.5)
+                matched_caps = match["capabilities"]
         best_capability = _get_best_capability(product, best_goal or "")
+        matched_caps = matched_caps or [cap for cap in [best_capability] if cap]
+        missing_signals = match["missing"] if best_goal else []
         reasoning = (
-            get_alignment_explanation(best_goal, product, best_score)
+            get_alignment_explanation(
+                best_goal, product, best_score, matched_caps, missing_signals
+            )
             if best_goal
             else "No goal match found."
         )
@@ -337,9 +347,10 @@ def _keyword_score_products(
             AlignmentScore(
                 product_id=product.id,
                 score=round(best_score, 3),
-                matched_capabilities=[cap for cap in [best_capability] if cap],
+                matched_capabilities=list(dict.fromkeys(matched_caps)),
                 alignment_reasoning=reasoning,
                 confidence=round(product.confidence, 2),
+                low_confidence=best_score < MEDIUM_ALIGNMENT_THRESHOLD,
             )
         )
     return scores
@@ -378,6 +389,91 @@ def _build_product_semantic_text(product: Product) -> str:
     return " ".join(parts)
 
 
+def _tokenize(text: str) -> List[str]:
+    tokens = [token.strip() for token in re.split(r"[^a-z0-9]+", text.lower())]
+    stopwords = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "that",
+        "this",
+        "your",
+        "you",
+        "from",
+        "into",
+        "when",
+        "what",
+        "how",
+        "need",
+        "needs",
+        "want",
+        "wants",
+        "help",
+        "best",
+        "better",
+        "more",
+        "less",
+        "not",
+        "no",
+        "new",
+        "find",
+        "get",
+    }
+    return [token for token in tokens if token and token not in stopwords]
+
+
+def _product_tokens(product: Product) -> set[str]:
+    text_sources = [
+        product.name,
+        product.description,
+        " ".join(product.tags or []),
+    ]
+    if product.capabilities_enabled:
+        text_sources.append(" ".join(product.capabilities_enabled))
+    if product.intentionality_profile:
+        goals_served = product.intentionality_profile.get("goals_served") or []
+        outcomes = product.intentionality_profile.get("outcomes_expected") or []
+        text_sources.append(" ".join(goals_served))
+        text_sources.append(" ".join(outcomes))
+
+    return set(_tokenize(" ".join(text_sources)))
+
+
+def _match_goal_to_product(goal_tokens: set[str], product: Product) -> dict:
+    tokens = _product_tokens(product)
+    overlap = goal_tokens & tokens
+    overlap_score = min(1.0, len(overlap) / max(len(goal_tokens), 1))
+
+    capability_hits = [
+        cap for cap in product.capabilities_enabled if goal_tokens & set(_tokenize(cap))
+    ]
+    tag_hits = [tag for tag in product.tags if tag in goal_tokens]
+
+    score = 0.2 + 0.6 * overlap_score
+    if capability_hits:
+        score += 0.15
+    if tag_hits:
+        score += 0.05
+    score = min(score, 0.95)
+
+    return {
+        "score": score if overlap else 0.0,
+        "capabilities": capability_hits,
+        "missing": sorted(goal_tokens - tokens),
+    }
+
+
+def _missing_signals(goal: str, product: Product) -> List[str]:
+    if not goal:
+        return []
+    goal_tokens = set(_tokenize(goal))
+    if not goal_tokens:
+        return []
+    tokens = _product_tokens(product)
+    return sorted(goal_tokens - tokens)
+
+
 def _get_best_capability(product: Product, goal: str) -> Optional[str]:
     """Find the capability that best matches the goal."""
     if not product.capabilities_enabled:
@@ -409,11 +505,16 @@ def get_alignment_explanation(
     goal: str,
     product: Product,
     similarity_score: float,
+    matched_caps: List[str] | None = None,
+    missing_signals: List[str] | None = None,
 ) -> str:
     """Generate a human-readable explanation of goal-product alignment.
 
     Used for transparency in recommendations.
     """
+    if not goal:
+        return "No goal match found."
+
     if similarity_score >= HIGH_ALIGNMENT_THRESHOLD:
         strength = "strongly"
     elif similarity_score >= MEDIUM_ALIGNMENT_THRESHOLD:
@@ -421,16 +522,29 @@ def get_alignment_explanation(
     else:
         strength = "weakly"
 
-    capabilities = (
-        ", ".join(product.capabilities_enabled[:3])
-        if product.capabilities_enabled
-        else "general use"
-    )
+    matched = matched_caps or []
+    if not matched:
+        matched = [
+            cap
+            for cap in product.capabilities_enabled
+            if _tokenize(goal)
+            and _tokenize(cap)
+            and set(_tokenize(goal)) & set(_tokenize(cap))
+        ]
+    capabilities = ", ".join(matched[:3] or product.capabilities_enabled[:3])
+    if not capabilities:
+        capabilities = "general use"
+
+    missing = missing_signals or []
+    missing_text = ""
+    if similarity_score < MEDIUM_ALIGNMENT_THRESHOLD and missing:
+        missing_text = f" Missing signals: {', '.join(missing[:2])}."
 
     return (
-        f"This {product.name} {strength} aligns with your goal to '{goal}'. "
-        f"It enables: {capabilities}. "
-        f"Alignment confidence: {similarity_score:.0%}"
+        f"This product {strength} matches '{goal}'. "
+        f"Signals: {capabilities}. "
+        f"Confidence: {similarity_score:.0%}."
+        f"{missing_text}"
     )
 
 
