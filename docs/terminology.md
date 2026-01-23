@@ -21,8 +21,8 @@ SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
 
 **In Code**
 ```
-api/routes/simulation.py (planned)
-web/components/simulation/* (planned)
+api/routes/simulation.py
+web/components/simulation/*
 ```
 
 ---
@@ -39,7 +39,7 @@ The explanation of why a product lost in a competitive simulation—what's missi
 
 **In Code**
 ```
-modules/alignment/gap_analysis.py (planned)
+modules/simulation/gap_analysis.py
 ```
 
 ---
@@ -175,6 +175,24 @@ class AlignmentScore:
 
 ```
 modules/alignment/goal_alignment.py
+```
+
+---
+
+## Brand Tone
+
+**Definition**
+The stylistic voice of a brand’s product copy (formality, sentence length, jargon level, adjective density).
+
+**How it’s used**
+- Auto-derived from product copy
+- Confirmed by the user via a tone card
+- Injected into optimization rewrites
+
+**In Code**
+```
+modules/simulation/tone.py
+shared/llm/prompts.py
 ```
 
 ---

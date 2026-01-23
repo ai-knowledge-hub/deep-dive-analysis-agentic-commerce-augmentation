@@ -50,6 +50,10 @@ if APIRouter:
         tone: Optional[str] = None
         user_id: Optional[str] = None
 
+    class SimulationToneFromBrandRequest(BaseModel):
+        run_id: Optional[str] = None
+        user_id: Optional[str] = None
+
     @router.get("/runs")
     def list_runs(user_id: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
         runs = simulation_repo.list_runs(user_id=user_id, limit=limit)
@@ -135,6 +139,18 @@ if APIRouter:
         scenario["confirmed_tone"] = tone or None
         simulation_repo.update_scenario(payload.run_id, scenario)
         return {"run_id": payload.run_id, "tone": scenario.get("confirmed_tone")}
+
+    @router.post("/tone/from-brand")
+    def tone_from_brand(payload: SimulationToneFromBrandRequest):
+        if payload.run_id:
+            run_record = _get_run(payload.run_id, payload.user_id)
+            scenario = run_record.get("scenario") or {}
+            scenario["tone_source"] = "brand_site"
+            simulation_repo.update_scenario(payload.run_id, scenario)
+        return {
+            "status": "coming_soon",
+            "message": "Brand tone import requires catalog integration.",
+        }
 else:  # pragma: no cover
     router = None
 

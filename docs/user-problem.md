@@ -76,7 +76,8 @@ A **closed-loop simulation sandbox** where users can:
 1. Test their product against a user query
 2. See who wins (their product vs competitors)
 3. Understand WHY they lost
-4. Optimize and re-test until they win
+4. Confirm brand tone (accept or edit the suggested voice)
+5. Optimize and re-test until they win
 
 ---
 
@@ -157,7 +158,15 @@ Our app is a **test environment for LLM discoverability**—like a flight simula
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  4. OPTIMIZE                                                 │
+│  4. CONFIRM TONE                                             │
+│                                                              │
+│  Suggested tone: "confident, concise, technical"             │
+│  [Use suggestion]  [Edit]  [Clear]                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  5. OPTIMIZE                                                 │
 │                                                              │
 │  Suggested change:                                           │
 │  Before: "65-inch 4K QLED, 3000 nits brightness"            │
@@ -169,7 +178,7 @@ Our app is a **test environment for LLM discoverability**—like a flight simula
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  5. RE-TEST                                                  │
+│  6. RE-TEST                                                  │
 │                                                              │
 │  Samsung QN90B: 0.52 → 0.85                                  │
 │  ✅ NOW RECOMMENDED                                          │

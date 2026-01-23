@@ -1298,6 +1298,15 @@ ul { list-style: none; }
   color: var(--text-secondary);
 }
 
+.simulation__notice {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--accent);
+  font-size: 11px;
+}
+
 .simulation__tone-suggestion {
   margin: 6px 0;
   color: var(--text-primary);

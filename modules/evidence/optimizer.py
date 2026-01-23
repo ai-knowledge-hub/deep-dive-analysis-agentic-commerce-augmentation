@@ -15,6 +15,7 @@ from shared.llm.prompts import build_optimization_prompt
 def optimize(
     evidence_products: List[EvidenceProduct],
     goals: List[str] | None = None,
+    tone: str | None = None,
 ) -> List[Dict[str, object]]:
     """Return before/after framing pairs for evidence products."""
     optimized: List[Dict[str, object]] = []
@@ -23,7 +24,7 @@ def optimize(
         profile = build_profile(product)
         optimized_text = evidence.metadata.get("optimized_description")
         after_text = optimized_text or _llm_optimize_description(
-            product, profile, goals
+            product, profile, goals, tone
         )
         optimized.append(
             {
@@ -53,7 +54,10 @@ def _format_intent_legible_description(product: Product, profile) -> str:
 
 
 def _llm_optimize_description(
-    product: Product, profile, goals: List[str] | None = None
+    product: Product,
+    profile,
+    goals: List[str] | None = None,
+    tone: str | None = None,
 ) -> str:
     signals: List[str] = []
     signals.extend(profile.capabilities_enabled or [])
@@ -66,6 +70,7 @@ def _llm_optimize_description(
         description=product.description or product.name,
         signals=signals_text,
         price=product.price,
+        tone=tone,
     )
     try:
         response = generate(prompt)

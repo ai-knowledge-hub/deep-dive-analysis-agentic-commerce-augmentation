@@ -25,8 +25,8 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 | `intentionality/` | Functional | Profiling works; needs gap analysis output |
 | `alignment/` | Functional | Scoring works; needs "why you lost" explanation |
 | `commerce/` | Functional | Adapters work; needs dynamic product input |
-| `api/` | Functional | Discovery endpoints live; needs simulation endpoints |
-| `web/` | Functional | Intent + alignment UI live; needs simulation sandbox UI |
+| `api/` | Functional | Simulation endpoints live; needs tone sourcing from brand catalogs |
+| `web/` | Functional | Simulation sandbox UI live; needs scenario presets + polish |
 
 ---
 
@@ -41,12 +41,9 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - Clerk auth scaffolded
 
 ### Missing for Simulation Sandbox
-- **Scenario setup**: Let user input query + their product + competitors
-- **Competitive simulation**: Score multiple products, pick winner
-- **Gap analysis**: "Why you lost" explanation
-- **Optimization suggestions**: Specific changes to make
-- **Re-test loop**: Apply changes and immediately re-score
-- **Simulation sandbox UI**: The core user experience
+- **Scenario presets**: One-click TV, shoes, workspace scenarios
+- **Tone from brand site**: Stubbed; needs catalog integration
+- **Demo copy polish**: Reinforce "See what the LLM sees"
 
 ---
 
@@ -121,25 +118,29 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 
 **Goal:** The core user experience—test, see who wins, understand why, optimize, re-test.
 
-- [ ] Add simulation scenario endpoint (`POST /simulation/run`)
+- [x] Add simulation scenario endpoint (`POST /simulation/run`)
   - Input: query + user product + competitors
   - Output: intent, scores, winner, gap analysis
-- [ ] Add optimization suggestion endpoint (`POST /simulation/optimize`)
+- [x] Add optimization suggestion endpoint (`POST /simulation/optimize`)
   - Input: scenario_id, product_id
   - Output: before/after with predicted score delta
-- [ ] Add re-test endpoint (`POST /simulation/retest`)
+- [x] Add re-test endpoint (`POST /simulation/retest`)
   - Input: scenario_id, optimized description
   - Output: new score, is_now_recommended, lift
-- [ ] Build gap analysis logic ("why you lost")
+- [x] Build gap analysis logic ("why you lost")
   - Missing capabilities
   - Hidden strengths
   - Specific suggestions
-- [ ] Build simulation sandbox UI
+- [x] Build simulation sandbox UI
   - Scenario setup form
   - Results dashboard with competitive view
   - Gap analysis panel
   - Optimization preview
   - Re-test button with instant feedback
+- [x] Add tone profiling + confirmation
+  - Suggested tone derived from product copy
+  - Tone card with accept/edit/clear
+  - Optional "Use tone from brand site" stub endpoint
 
 ### Phase 4 — Verification & Benchmarking
 - [ ] Multi‑LLM verification harness (Gemini required for hackathon)
@@ -198,9 +199,9 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 5. ✅ User re-tests and sees improvement
 
 **Technical criteria:**
-- [ ] Simulation endpoints operational (`/simulation/run`, `/simulation/optimize`, `/simulation/retest`)
-- [ ] Gap analysis logic produces actionable "why you lost" output
-- [ ] Simulation sandbox UI complete
+- [x] Simulation endpoints operational (`/simulation/run`, `/simulation/optimize`, `/simulation/retest`, `/simulation/tone`)
+- [x] Gap analysis logic produces actionable "why you lost" output
+- [x] Simulation sandbox UI complete
 - [ ] 3 compelling demo scenarios ready
 - [ ] 60-second demo script polished
 

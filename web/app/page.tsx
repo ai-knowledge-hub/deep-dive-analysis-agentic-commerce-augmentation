@@ -13,6 +13,7 @@ import {
   retestSimulation,
   listSimulationRuns,
   getSimulationRun,
+  requestBrandTone,
   updateSimulationTone,
   sendConversationMessage,
   startConversation,
@@ -67,6 +68,7 @@ export default function HomePage() {
   const [simulationScenario, setSimulationScenario] = useState("");
   const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
   const [simulationTone, setSimulationTone] = useState("");
+  const [simulationToneNotice, setSimulationToneNotice] = useState<string | null>(null);
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
@@ -192,6 +194,7 @@ export default function HomePage() {
         const optimization = await optimizeRepresentation(
           analysis.evidence_products,
           text,
+          simulationTone || undefined,
         );
         setEvidenceOptimization(optimization);
         const verification = await verifyRecommendation(
@@ -545,6 +548,16 @@ export default function HomePage() {
     }
   }, [simulationRun, userId]);
 
+  const handleToneFromBrand = useCallback(async () => {
+    try {
+      const response = await requestBrandTone(simulationRun?.run_id, userId);
+      setSimulationToneNotice(response.message);
+      window.setTimeout(() => setSimulationToneNotice(null), 2600);
+    } catch (error) {
+      setSimulationToneNotice("Brand tone import is not ready yet.");
+    }
+  }, [simulationRun, userId]);
+
   return (
     <div className="app">
       <Sidebar
@@ -730,12 +743,14 @@ export default function HomePage() {
               onScenarioChange={setSimulationScenario}
               toneSuggestion={simulationToneSuggestion}
               toneValue={simulationTone}
+              toneNotice={simulationToneNotice}
               onToneChange={setSimulationTone}
               onToneUseSuggestion={() =>
                 setSimulationTone(simulationToneSuggestion ?? "")
               }
               onToneSave={handleSaveTone}
               onToneClear={handleClearTone}
+              onToneFromBrand={handleToneFromBrand}
               run={simulationRun}
               optimized={simulationOptimized}
               retest={simulationRetest}

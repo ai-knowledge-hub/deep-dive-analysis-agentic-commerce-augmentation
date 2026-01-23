@@ -14,10 +14,12 @@ type Props = {
   onScenarioChange?: (value: string) => void;
   toneSuggestion?: string | null;
   toneValue?: string;
+  toneNotice?: string | null;
   onToneChange?: (value: string) => void;
   onToneUseSuggestion?: () => void;
   onToneSave?: () => void;
   onToneClear?: () => void;
+  onToneFromBrand?: () => void;
   run?: SimulationRunResponse | null;
   optimized?: SimulationOptimizeResponse | null;
   retest?: SimulationRetestResponse | null;
@@ -58,10 +60,12 @@ export function SimulationPanel({
   onScenarioChange,
   toneSuggestion,
   toneValue,
+  toneNotice,
   onToneChange,
   onToneUseSuggestion,
   onToneSave,
   onToneClear,
+  onToneFromBrand,
   run,
   optimized,
   retest,
@@ -151,6 +155,7 @@ export function SimulationPanel({
 
       <div className="simulation__tone">
         <span className="simulation__diff-label">Tone</span>
+        {toneNotice && <div className="simulation__notice">{toneNotice}</div>}
         <p className="simulation__tone-suggestion">
           {toneSuggestion || "No tone suggestion yet."}
         </p>
@@ -168,6 +173,14 @@ export function SimulationPanel({
             disabled={!toneSuggestion}
           >
             Use suggestion
+          </button>
+          <button
+            type="button"
+            className="button button--ghost"
+            title="Connect a brand catalog to pull tone from live product copy."
+            onClick={onToneFromBrand}
+          >
+            Use tone from brand site
           </button>
           <button
             type="button"

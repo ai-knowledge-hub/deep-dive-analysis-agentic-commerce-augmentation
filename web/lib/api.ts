@@ -170,6 +170,19 @@ export async function updateSimulationTone(
   });
 }
 
+export async function requestBrandTone(
+  runId?: string | null,
+  userId?: string | null,
+): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>("/simulation/tone/from-brand", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId ?? undefined,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {
   return request<EvidenceAnalyzeResponse>("/evidence/analyze", {
     method: "POST",
@@ -180,10 +193,11 @@ export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeRes
 export async function optimizeRepresentation(
   evidence_products: EvidenceProduct[],
   query?: string,
+  tone?: string | null,
 ): Promise<RepresentationOptimizeResponse> {
   return request<RepresentationOptimizeResponse>("/representation/optimize", {
     method: "POST",
-    body: JSON.stringify({ query, evidence_products }),
+    body: JSON.stringify({ query, evidence_products, tone: tone ?? undefined }),
   });
 }
 

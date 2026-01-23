@@ -38,6 +38,7 @@ if APIRouter:
     class RepresentationOptimizeRequest(BaseModel):
         query: Optional[str] = None
         evidence_products: List[EvidenceItem]
+        tone: Optional[str] = None
 
     class RecommendationVerifyRequest(BaseModel):
         query: str = Field(..., min_length=1)
@@ -77,7 +78,11 @@ if APIRouter:
         evidence_products = [
             _evidence_from_payload(item) for item in payload.evidence_products
         ]
-        optimized_pairs = optimize(evidence_products, goals=goals or None)
+        optimized_pairs = optimize(
+            evidence_products,
+            goals=goals or None,
+            tone=payload.tone,
+        )
 
         before_products = [to_product(item) for item in evidence_products]
         after_products = [
