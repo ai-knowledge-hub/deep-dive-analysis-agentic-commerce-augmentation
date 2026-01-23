@@ -107,6 +107,7 @@ export async function runSimulation(
 export async function optimizeSimulation(
   runId: string,
   productId: string,
+  tone?: string | null,
   userId?: string | null,
 ): Promise<SimulationOptimizeResponse> {
   return request<SimulationOptimizeResponse>("/simulation/optimize", {
@@ -114,6 +115,7 @@ export async function optimizeSimulation(
     body: JSON.stringify({
       run_id: runId,
       product_id: productId,
+      tone: tone ?? undefined,
       user_id: userId ?? undefined,
     }),
   });
@@ -151,6 +153,21 @@ export async function getSimulationRun(
 ): Promise<SimulationRunDetailResponse> {
   const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
   return request<SimulationRunDetailResponse>(`/simulation/runs/${runId}${query}`);
+}
+
+export async function updateSimulationTone(
+  runId: string,
+  tone: string,
+  userId?: string | null,
+): Promise<{ run_id: string; tone?: string | null }> {
+  return request<{ run_id: string; tone?: string | null }>("/simulation/tone", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId,
+      tone,
+      user_id: userId ?? undefined,
+    }),
+  });
 }
 
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {

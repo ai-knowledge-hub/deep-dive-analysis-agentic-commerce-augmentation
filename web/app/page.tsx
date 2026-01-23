@@ -13,6 +13,7 @@ import {
   retestSimulation,
   listSimulationRuns,
   getSimulationRun,
+  updateSimulationTone,
   sendConversationMessage,
   startConversation,
   verifyRecommendation,
@@ -63,6 +64,9 @@ export default function HomePage() {
     useState<SimulationOptimizeResponse | null>(null);
   const [simulationRetest, setSimulationRetest] =
     useState<SimulationRetestResponse | null>(null);
+  const [simulationScenario, setSimulationScenario] = useState("");
+  const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
+  const [simulationTone, setSimulationTone] = useState("");
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
@@ -125,6 +129,8 @@ export default function HomePage() {
     setSimulationRetest(null);
     setSimulationProducts([]);
     setSelectedSimulationProductId(null);
+    setSimulationToneSuggestion(null);
+    setSimulationTone("");
   }, []);
 
   const upsertSession = useCallback(
@@ -177,7 +183,9 @@ export default function HomePage() {
         setGoalState(response.goal_state);
         setIntent(response.intent);
         setResearchResults(response.plan?.research_results ?? []);
-        setLastQuery(response.plan?.query ?? text);
+        const nextQuery = response.plan?.query ?? text;
+        setLastQuery(nextQuery);
+        setSimulationScenario((prev) => (prev.trim() ? prev : nextQuery));
 
         const analysis = await analyzeEvidence(text);
         setEvidenceAnalysis(analysis);
@@ -295,6 +303,14 @@ export default function HomePage() {
     });
   }, [userId]);
 
+  useEffect(() => {
+    const suggestion = simulationRun?.result?.tone?.summary ?? null;
+    setSimulationToneSuggestion(suggestion);
+    if (suggestion && !simulationTone) {
+      setSimulationTone(suggestion);
+    }
+  }, [simulationRun, simulationTone]);
+
   const handleSelectSession = useCallback(
     async (selectedId: string) => {
       if (!selectedId) return;
@@ -312,6 +328,7 @@ export default function HomePage() {
       setIntent(state.last_intent as ConversationResponse["intent"]);
       setResearchResults(state.last_research?.items ?? []);
       setLastQuery(state.last_query ?? null);
+      setSimulationScenario(state.last_query ?? "");
       setPlan(undefined);
       setClarifications([]);
       setProductReasoning([]);
@@ -323,6 +340,8 @@ export default function HomePage() {
       setSimulationRetest(null);
       setSimulationProducts([]);
       setSelectedSimulationProductId(null);
+      setSimulationToneSuggestion(null);
+      setSimulationTone("");
     },
     [userId],
   );
@@ -374,7 +393,14 @@ export default function HomePage() {
   }, [lastQuery, sessionId, userId]);
 
   const handleRunSimulation = useCallback(async () => {
-    if (!lastQuery || simulationProducts.length === 0) {
+    if (!simulationScenario.trim() && !lastQuery) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: "Add a scenario before running a simulation." },
+      ]);
+      return;
+    }
+    if (simulationProducts.length === 0) {
       setMessages((prev) => [
         ...prev,
         {
@@ -386,8 +412,9 @@ export default function HomePage() {
     }
     setSimulationLoading(true);
     try {
+      const scenario = simulationScenario.trim() || lastQuery;
       const response = await runSimulation(
-        lastQuery,
+        scenario,
         simulationProducts,
         userId,
         sessionId,
@@ -395,6 +422,10 @@ export default function HomePage() {
       setSimulationRun(response);
       setSimulationOptimized(null);
       setSimulationRetest(null);
+      setSimulationToneSuggestion(response.result?.tone?.summary ?? null);
+      if (!simulationTone) {
+        setSimulationTone(response.result?.tone?.summary ?? "");
+      }
       void listSimulationRuns(userId).then((runs) =>
         setSimulationRuns(runs.runs ?? []),
       );
@@ -406,7 +437,7 @@ export default function HomePage() {
     } finally {
       setSimulationLoading(false);
     }
-  }, [lastQuery, sessionId, simulationProducts, userId]);
+  }, [lastQuery, sessionId, simulationProducts, simulationScenario, simulationTone, userId]);
 
   const handleOptimizeSimulation = useCallback(async (productId?: string) => {
     const runId = simulationRun?.run_id;
@@ -417,7 +448,12 @@ export default function HomePage() {
       [...gaps].sort((a, b) => a.score - b.score)[0];
     setSimulationLoading(true);
     try {
-      const response = await optimizeSimulation(runId, targetGap.product_id, userId);
+      const response = await optimizeSimulation(
+        runId,
+        targetGap.product_id,
+        simulationTone || undefined,
+        userId,
+      );
       setSimulationOptimized(response);
       setSelectedSimulationProductId(targetGap.product_id);
     } catch (error) {
@@ -428,7 +464,7 @@ export default function HomePage() {
     } finally {
       setSimulationLoading(false);
     }
-  }, [simulationRun, userId]);
+  }, [simulationRun, simulationTone, userId]);
 
   const handleRetestSimulation = useCallback(async () => {
     if (!simulationRun || !simulationOptimized) return;
@@ -465,6 +501,12 @@ export default function HomePage() {
         setSimulationOptimized(null);
         setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
         setSimulationProducts(run.products ?? []);
+        setSimulationScenario(run.query ?? "");
+        const scenario = (run.scenario as Record<string, unknown> | undefined) || {};
+        const confirmedTone = (scenario.confirmed_tone as string | undefined) ?? "";
+        const suggestedTone = (scenario.tone_suggestion as string | undefined) ?? null;
+        setSimulationToneSuggestion(run.result?.tone?.summary ?? suggestedTone ?? null);
+        setSimulationTone(confirmedTone || run.result?.tone?.summary || "");
         if (run.products?.length) {
           setSelectedSimulationProductId(run.products[0].id);
         }
@@ -477,6 +519,31 @@ export default function HomePage() {
     },
     [userId],
   );
+
+  const handleSaveTone = useCallback(async () => {
+    if (!simulationRun) return;
+    try {
+      await updateSimulationTone(simulationRun.run_id, simulationTone, userId);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: `Error saving tone: ${(error as Error).message}` },
+      ]);
+    }
+  }, [simulationRun, simulationTone, userId]);
+
+  const handleClearTone = useCallback(async () => {
+    setSimulationTone("");
+    if (!simulationRun) return;
+    try {
+      await updateSimulationTone(simulationRun.run_id, "", userId);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: `Error saving tone: ${(error as Error).message}` },
+      ]);
+    }
+  }, [simulationRun, userId]);
 
   return (
     <div className="app">
@@ -659,13 +726,23 @@ export default function HomePage() {
             />
             <SimulationPanel
               query={lastQuery}
+              scenarioValue={simulationScenario}
+              onScenarioChange={setSimulationScenario}
+              toneSuggestion={simulationToneSuggestion}
+              toneValue={simulationTone}
+              onToneChange={setSimulationTone}
+              onToneUseSuggestion={() =>
+                setSimulationTone(simulationToneSuggestion ?? "")
+              }
+              onToneSave={handleSaveTone}
+              onToneClear={handleClearTone}
               run={simulationRun}
               optimized={simulationOptimized}
               retest={simulationRetest}
               products={simulationProducts}
               selectedProductId={selectedSimulationProductId}
               loading={simulationLoading}
-              canRun={Boolean(lastQuery) && simulationProducts.length > 0}
+              canRun={Boolean((simulationScenario.trim() || lastQuery) && simulationProducts.length > 0)}
               canOptimize={Boolean(simulationRun?.result?.gap_analysis?.length)}
               canRetest={Boolean(simulationRun && simulationOptimized)}
               onRun={handleRunSimulation}

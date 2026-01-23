@@ -137,9 +137,40 @@ Return a JSON object with:
 - Low confidence is acceptable and should trigger clarification
 """
 
+OPTIMIZATION_REWRITE_INSTRUCTIONS = """Rewrite the product description to be intent-legible and natural.
+Rules:
+- 2-3 short sentences, no bullet points.
+- Lead with outcomes, then include concrete specs.
+- Do not add facts not present in the original text.
+- Avoid phrases like 'Designed to address' or 'This product'.
+- Do not mention intent signals explicitly.
+- Output only the rewritten description.
+"""
+
+
+def build_optimization_prompt(
+    name: str,
+    description: str,
+    signals: str,
+    price: float | None = None,
+    tone: str | None = None,
+) -> str:
+    price_line = f"Price: {price}\n" if price is not None else ""
+    tone_line = f"Brand tone: {tone}\n" if tone else ""
+    return (
+        f"{OPTIMIZATION_REWRITE_INSTRUCTIONS}\n"
+        f"Product name: {name}\n"
+        f"Original description: {description}\n"
+        f"Intent signals to address: {signals}\n"
+        f"{tone_line}"
+        f"{price_line}"
+    )
+
 
 __all__ = [
     "VALUES_CLARIFICATION_PROMPT",
     "PRODUCT_REASONING_PROMPT",
     "INTENT_CLASSIFICATION_PROMPT",
+    "OPTIMIZATION_REWRITE_INSTRUCTIONS",
+    "build_optimization_prompt",
 ]
