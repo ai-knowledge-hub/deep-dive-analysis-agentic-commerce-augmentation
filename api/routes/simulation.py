@@ -74,6 +74,10 @@ if APIRouter:
         run_record = _get_run(run_id, user_id)
         return {"run": run_record}
 
+    @router.get("/lessons")
+    def list_lessons(user_id: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
+        return {"lessons": simulation_repo.list_lessons(user_id=user_id, limit=limit)}
+
     @router.post("/run")
     def run(payload: SimulationRunRequest):
         products = [_to_simulation_product(item) for item in payload.products]
@@ -116,6 +120,7 @@ if APIRouter:
             _to_simulation_product(SimulationProductPayload(**target)),
             target_gap.get("missing_signals") or [],
             payload.tone,
+            (result.get("lessons") or []),
         )
         return {"run_id": payload.run_id, "optimized": optimized, "gap": target_gap}
 

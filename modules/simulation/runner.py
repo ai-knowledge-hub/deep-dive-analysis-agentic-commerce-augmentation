@@ -9,7 +9,7 @@ from modules.commerce.domain import Product
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.intentionality.profiling import build_profile
 from modules.simulation.domain import SimulationProduct
-from modules.simulation.gap_analysis import analyze_gap
+from modules.simulation.gap_analysis import analyze_gap, derive_lessons
 from modules.simulation.tone import derive_tone
 
 
@@ -22,17 +22,30 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
     scores = score_products(goals, normalized)
     score_map = {score.product_id: score for score in scores}
 
+    ranked = sorted(scores, key=lambda s: s.score, reverse=True)
+    winner_id = ranked[0].product_id if ranked else None
     gap_reports = []
+    winner_product = None
+    if winner_id:
+        winner_product = next(
+            (product for product in normalized if product.id == winner_id),
+            None,
+        )
     for product in normalized:
         score = score_map.get(product.id)
         if score:
             gap_reports.append(
-                analyze_gap(goal=goals[0], product=product, score=score.score)
+                analyze_gap(
+                    goal=goals[0],
+                    product=product,
+                    score=score.score,
+                    winner=winner_product,
+                )
             )
 
-    ranked = sorted(scores, key=lambda s: s.score, reverse=True)
-    winner_id = ranked[0].product_id if ranked else None
     tone = derive_tone(products)
+
+    lessons = derive_lessons(goals[0], gap_reports) if goals else []
 
     return {
         "intent": intent,
@@ -41,6 +54,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
         "winner_id": winner_id,
         "gap_analysis": gap_reports,
         "profiles": [build_profile(product).to_dict() for product in normalized],
+        "lessons": lessons,
         "tone": tone,
     }
 

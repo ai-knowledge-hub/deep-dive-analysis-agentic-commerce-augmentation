@@ -15,6 +15,10 @@ Our simulation sandbox lets brands:
 4. Confirm brand tone (accept or edit the suggested voice)
 5. Optimize and re-test until they win
 
+Gap analysis uses semantic matching (embeddings + keyword fallback), so brands get true intent coverage rather than literal token overlap.
+
+Each simulation run also yields a short "lesson learned" that becomes reusable guidance for future catalog optimization.
+
 This document maps our strategic position:
 1. The user problem: who we serve and their pain
 2. Competitive analysis: paid vs organic discovery

@@ -1392,6 +1392,58 @@ ul { list-style: none; }
   white-space: pre-wrap;
 }
 
+.simulation__comparison {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.simulation__comparison p {
+  margin: 6px 0 0;
+  color: var(--text-primary);
+}
+
+.simulation__lessons {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.08);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.simulation__lessons ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  color: var(--text-primary);
+}
+
+.simulation__lessons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.simulation__lesson-item {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  font-size: 11px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.simulation__lesson-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .simulation__diff-label {
   display: block;
   font-size: 10px;

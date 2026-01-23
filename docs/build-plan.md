@@ -131,6 +131,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
   - Missing capabilities
   - Hidden strengths
   - Specific suggestions
+- [x] Add semantic gap matching (embeddings + keyword fallback)
 - [x] Build simulation sandbox UI
   - Scenario setup form
   - Results dashboard with competitive view
@@ -141,6 +142,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
   - Suggested tone derived from product copy
   - Tone card with accept/edit/clear
   - Optional "Use tone from brand site" stub endpoint
+- [x] Add lessons learned per run (winner vs loser takeaways)
 
 ### Phase 4 — Verification & Benchmarking
 - [ ] Multi‑LLM verification harness (Gemini required for hackathon)

@@ -131,6 +131,9 @@ curl -X POST "http://localhost:8000/simulation/run" \
   -H "Content-Type: application/json" \
   -d '{"query": "running vest", "products": [{"id":"sim-1","name":"Trail Runner Vest","description":"Lightweight vest for long runs with breathable mesh.","source":"web"}]}'
 
+# List lessons learned (optional)
+curl "http://localhost:8000/simulation/lessons"
+
 # Run test suite
 make test
 ```

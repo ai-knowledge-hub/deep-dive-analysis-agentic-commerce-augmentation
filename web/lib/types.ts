@@ -119,6 +119,9 @@ export type SimulationGapReport = {
   missing_signals: string[];
   severity: string;
   summary: string;
+  winner_id?: string | null;
+  winner_signals?: string[];
+  competitor_summary?: string | null;
 };
 
 export type SimulationRunResponse = {
@@ -144,6 +147,7 @@ export type SimulationRunResponse = {
       outcomes_expected?: string[];
       context_fit?: Record<string, number>;
     }[];
+    lessons?: string[];
     tone?: {
       summary: string;
       markers?: Record<string, string | number>;
@@ -188,6 +192,18 @@ export type SimulationRunDetailResponse = {
     result: SimulationRunResponse["result"];
     retest?: SimulationRunResponse["result"] | null;
   };
+};
+
+export type SimulationLesson = {
+  id: number;
+  run_id: string;
+  user_id?: string | null;
+  lesson: string;
+  created_at?: string;
+};
+
+export type SimulationLessonListResponse = {
+  lessons: SimulationLesson[];
 };
 
 export type ConversationResponse = {

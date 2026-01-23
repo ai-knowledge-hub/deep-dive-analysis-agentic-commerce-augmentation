@@ -102,9 +102,20 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS simulation_lessons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    user_id TEXT,
+    lesson TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (run_id) REFERENCES simulation_runs(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_user_key ON semantic_memory(user_id, key);
 CREATE INDEX IF NOT EXISTS idx_intent_embeddings_text ON intent_embeddings(intent_text);
 CREATE INDEX IF NOT EXISTS idx_simulation_runs_user ON simulation_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_simulation_lessons_user ON simulation_lessons(user_id);

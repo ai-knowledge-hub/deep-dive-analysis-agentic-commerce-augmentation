@@ -14,6 +14,7 @@ def optimize_product(
     product: SimulationProduct,
     missing_signals: List[str],
     tone: str | None = None,
+    lessons: List[str] | None = None,
 ) -> Dict[str, str]:
     """Return an optimized representation suggestion."""
     before = product.description or product.name
@@ -32,6 +33,7 @@ def optimize_product(
         signals=signals,
         price=product.price,
         tone=tone,
+        lessons=lessons,
     )
     return {
         "id": product.id,
@@ -47,6 +49,7 @@ def _llm_optimize_description(
     signals: str,
     price: float | None = None,
     tone: str | None = None,
+    lessons: List[str] | None = None,
 ) -> str:
     prompt = build_optimization_prompt(
         name=name,
@@ -54,6 +57,7 @@ def _llm_optimize_description(
         signals=signals,
         price=price,
         tone=tone,
+        lessons=lessons,
     )
     try:
         response = generate(prompt)
