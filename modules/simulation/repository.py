@@ -37,6 +37,7 @@ def create_run(
         ),
     )
     conn.commit()
+    _store_lessons(run_id, user_id, (result.get("lessons") or []))
     return get_run(run_id) or {}
 
 
@@ -93,6 +94,39 @@ def update_scenario(run_id: str, scenario: dict) -> None:
     conn.commit()
 
 
+def list_lessons(user_id: str | None = None, limit: int = 50) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    if user_id:
+        rows = conn.execute(
+            """
+            SELECT * FROM simulation_lessons
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM simulation_lessons
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "run_id": row["run_id"],
+            "user_id": row["user_id"],
+            "lesson": row["lesson"],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
 def _row_to_dict(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -107,4 +141,22 @@ def _row_to_dict(row) -> Dict[str, Any]:
     }
 
 
-__all__ = ["create_run", "get_run", "list_runs", "update_retest", "update_scenario"]
+def _store_lessons(run_id: str, user_id: str | None, lessons: list) -> None:
+    if not lessons:
+        return
+    conn = get_connection()
+    conn.executemany(
+        "INSERT INTO simulation_lessons (run_id, user_id, lesson) VALUES (?, ?, ?)",
+        [(run_id, user_id, lesson) for lesson in lessons],
+    )
+    conn.commit()
+
+
+__all__ = [
+    "create_run",
+    "get_run",
+    "list_runs",
+    "update_retest",
+    "update_scenario",
+    "list_lessons",
+]

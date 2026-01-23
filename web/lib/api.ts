@@ -12,6 +12,7 @@ import {
   SimulationRetestResponse,
   SimulationRunListResponse,
   SimulationRunDetailResponse,
+  SimulationLessonListResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -153,6 +154,17 @@ export async function getSimulationRun(
 ): Promise<SimulationRunDetailResponse> {
   const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
   return request<SimulationRunDetailResponse>(`/simulation/runs/${runId}${query}`);
+}
+
+export async function listSimulationLessons(
+  userId?: string | null,
+  limit: number = 50,
+): Promise<SimulationLessonListResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  params.set("limit", String(limit));
+  const query = params.toString();
+  return request<SimulationLessonListResponse>(`/simulation/lessons?${query}`);
 }
 
 export async function updateSimulationTone(

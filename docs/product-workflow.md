@@ -13,7 +13,7 @@ The product has two modes, serving different stages of the user journey:
 The core experience: test products against queries, see who wins, understand why, optimize, re-test.
 
 ```
-SET UP SCENARIO → SIMULATE → SEE RESULTS → CONFIRM TONE → OPTIMIZE → RE-TEST
+SET UP SCENARIO → SIMULATE → SEE RESULTS → LESSONS → CONFIRM TONE → OPTIMIZE → RE-TEST
       ↑                                                  │
       └──────────────────────────────────────────────────┘
 ```
@@ -78,7 +78,15 @@ Let users test their products against user queries and see what an LLM shopping 
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  STEP 3: CONFIRM TONE                                        │
+│  STEP 3: LESSONS                                             │
+│                                                              │
+│  Lesson: "Highlight anti-glare explicitly for bright rooms"  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 4: CONFIRM TONE                                        │
 │                                                              │
 │  Suggested tone: "confident, concise, technical"             │
 │  [Use suggestion] [Edit] [Clear]                             │
@@ -86,7 +94,7 @@ Let users test their products against user queries and see what an LLM shopping 
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  STEP 4: OPTIMIZE                                            │
+│  STEP 5: OPTIMIZE                                            │
 │                                                              │
 │  Suggested Improvement:                                      │
 │  ┌─────────────────────────────────────────────────────────┐│
@@ -101,7 +109,7 @@ Let users test their products against user queries and see what an LLM shopping 
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  STEP 5: RE-TEST RESULTS                                     │
+│  STEP 6: RE-TEST RESULTS                                     │
 │                                                              │
 │  Samsung QN90B: 0.52 → 0.85                                  │
 │  ✅ NOW RECOMMENDED                                          │
@@ -137,6 +145,7 @@ class SimulationResult:
     winner: str  # product_id of recommended product
     gap_analysis: GapAnalysis  # Why user's product lost (if it did)
     tone: Dict[str, Any]  # Suggested brand tone summary
+    lessons: List[str]  # Winner vs loser takeaways
 
 @dataclass
 class ProductScore:

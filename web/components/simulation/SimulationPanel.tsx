@@ -82,7 +82,10 @@ export function SimulationPanel({
 }: Props) {
   const scores = run?.result?.scores ?? [];
   const winnerId = run?.result?.winner_id;
-  const primaryGap = run?.result?.gap_analysis?.[0] ?? null;
+  const primaryGap =
+    run?.result?.gap_analysis?.find((gap) => gap.product_id === selectedProductId) ??
+    run?.result?.gap_analysis?.[0] ??
+    null;
 
   return (
     <div className="panel__card">
@@ -138,6 +141,24 @@ export function SimulationPanel({
       )}
 
       {renderGap(primaryGap)}
+
+      {primaryGap?.competitor_summary && (
+        <div className="simulation__comparison">
+          <span className="simulation__diff-label">Why you lost</span>
+          <p>{primaryGap.competitor_summary}</p>
+        </div>
+      )}
+
+      {(run?.result?.lessons ?? []).length > 0 && (
+        <div className="simulation__lessons">
+          <span className="simulation__diff-label">Lessons learned</span>
+          <ul>
+            {run?.result?.lessons?.map((lesson) => (
+              <li key={lesson}>{lesson}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {run?.result?.gap_analysis?.length ? (
         <div className="simulation__gap-list">

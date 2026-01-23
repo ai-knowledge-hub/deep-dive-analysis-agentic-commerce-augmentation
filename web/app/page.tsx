@@ -12,6 +12,7 @@ import {
   optimizeSimulation,
   retestSimulation,
   listSimulationRuns,
+  listSimulationLessons,
   getSimulationRun,
   requestBrandTone,
   updateSimulationTone,
@@ -30,6 +31,7 @@ import type {
   SimulationOptimizeResponse,
   SimulationRetestResponse,
   SimulationRunSummary,
+  SimulationLesson,
 } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
 import { ProductReasoning } from "../components/products/ProductReasoning";
@@ -40,6 +42,7 @@ import { IntentDisplay } from "../components/intent/IntentDisplay";
 import { EvidencePanel } from "../components/evidence/EvidencePanel";
 import { SimulationPanel } from "../components/simulation/SimulationPanel";
 import { SimulationHistory } from "../components/simulation/SimulationHistory";
+import { SimulationLessons } from "../components/simulation/SimulationLessons";
 import { useUser } from "@clerk/nextjs";
 
 export default function HomePage() {
@@ -66,12 +69,14 @@ export default function HomePage() {
   const [simulationRetest, setSimulationRetest] =
     useState<SimulationRetestResponse | null>(null);
   const [simulationScenario, setSimulationScenario] = useState("");
+  const [simulationScenarioDirty, setSimulationScenarioDirty] = useState(false);
   const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
   const [simulationTone, setSimulationTone] = useState("");
   const [simulationToneNotice, setSimulationToneNotice] = useState<string | null>(null);
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
+  const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
   const [selectedSimulationProductId, setSelectedSimulationProductId] =
     useState<string | null>(null);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
@@ -131,6 +136,7 @@ export default function HomePage() {
     setSimulationRetest(null);
     setSimulationProducts([]);
     setSelectedSimulationProductId(null);
+    setSimulationScenarioDirty(false);
     setSimulationToneSuggestion(null);
     setSimulationTone("");
   }, []);
@@ -187,7 +193,9 @@ export default function HomePage() {
         setResearchResults(response.plan?.research_results ?? []);
         const nextQuery = response.plan?.query ?? text;
         setLastQuery(nextQuery);
-        setSimulationScenario((prev) => (prev.trim() ? prev : nextQuery));
+        if (!simulationScenarioDirty) {
+          setSimulationScenario(nextQuery);
+        }
 
         const analysis = await analyzeEvidence(text);
         setEvidenceAnalysis(analysis);
@@ -304,6 +312,9 @@ export default function HomePage() {
     void listSimulationRuns(userId).then((response) => {
       setSimulationRuns(response.runs ?? []);
     });
+    void listSimulationLessons(userId).then((response) => {
+      setSimulationLessons(response.lessons ?? []);
+    });
   }, [userId]);
 
   useEffect(() => {
@@ -332,6 +343,7 @@ export default function HomePage() {
       setResearchResults(state.last_research?.items ?? []);
       setLastQuery(state.last_query ?? null);
       setSimulationScenario(state.last_query ?? "");
+      setSimulationScenarioDirty(false);
       setPlan(undefined);
       setClarifications([]);
       setProductReasoning([]);
@@ -429,6 +441,9 @@ export default function HomePage() {
       if (!simulationTone) {
         setSimulationTone(response.result?.tone?.summary ?? "");
       }
+      void listSimulationLessons(userId).then((response) => {
+        setSimulationLessons(response.lessons ?? []);
+      });
       void listSimulationRuns(userId).then((runs) =>
         setSimulationRuns(runs.runs ?? []),
       );
@@ -502,10 +517,11 @@ export default function HomePage() {
         const run = response.run;
         setSimulationRun({ run_id: run.id, result: run.result });
         setSimulationOptimized(null);
-        setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
-        setSimulationProducts(run.products ?? []);
-        setSimulationScenario(run.query ?? "");
-        const scenario = (run.scenario as Record<string, unknown> | undefined) || {};
+      setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
+      setSimulationProducts(run.products ?? []);
+      setSimulationScenario(run.query ?? "");
+      setSimulationScenarioDirty(false);
+      const scenario = (run.scenario as Record<string, unknown> | undefined) || {};
         const confirmedTone = (scenario.confirmed_tone as string | undefined) ?? "";
         const suggestedTone = (scenario.tone_suggestion as string | undefined) ?? null;
         setSimulationToneSuggestion(run.result?.tone?.summary ?? suggestedTone ?? null);
@@ -513,6 +529,9 @@ export default function HomePage() {
         if (run.products?.length) {
           setSelectedSimulationProductId(run.products[0].id);
         }
+        void listSimulationLessons(userId).then((response) => {
+          setSimulationLessons(response.lessons ?? []);
+        });
       } catch (error) {
         setMessages((prev) => [
           ...prev,
@@ -740,7 +759,10 @@ export default function HomePage() {
             <SimulationPanel
               query={lastQuery}
               scenarioValue={simulationScenario}
-              onScenarioChange={setSimulationScenario}
+              onScenarioChange={(value) => {
+                setSimulationScenario(value);
+                setSimulationScenarioDirty(true);
+              }}
               toneSuggestion={simulationToneSuggestion}
               toneValue={simulationTone}
               toneNotice={simulationToneNotice}
@@ -765,6 +787,7 @@ export default function HomePage() {
               onRetest={handleRetestSimulation}
               onSelectProduct={setSelectedSimulationProductId}
             />
+            <SimulationLessons lessons={simulationLessons} />
             <SimulationHistory
               runs={simulationRuns}
               activeRunId={simulationRun?.run_id}

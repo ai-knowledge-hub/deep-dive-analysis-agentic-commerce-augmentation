@@ -38,7 +38,7 @@ Product Data → ??? → LLM Recommendation (or not)
 We provide the missing loop:
 
 ```
-Product Data → Analyze → Simulate → See Who Wins → Understand Why → Optimize → Re-Test
+Product Data → Analyze → Simulate → See Who Wins → Understand Why → Confirm Tone → Optimize → Re-Test
      ↑                                                                              │
      └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -252,6 +252,9 @@ class AlignmentScore:
 - Gap analysis (“why you lost”)
 - Suggested tone (auto-derived from product copy)
 - Optimization rewrite with confirmed tone
+- Semantic gap matching (embeddings + keyword fallback)
+- Lessons learned (winner vs loser takeaways)
+- Lessons persisted per user for reuse across runs
 
 ---
 

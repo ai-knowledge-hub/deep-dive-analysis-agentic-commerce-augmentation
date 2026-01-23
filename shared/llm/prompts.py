@@ -154,15 +154,18 @@ def build_optimization_prompt(
     signals: str,
     price: float | None = None,
     tone: str | None = None,
+    lessons: list[str] | None = None,
 ) -> str:
     price_line = f"Price: {price}\n" if price is not None else ""
     tone_line = f"Brand tone: {tone}\n" if tone else ""
+    lessons_line = f"Lessons to apply: {'; '.join(lessons[:3])}\n" if lessons else ""
     return (
         f"{OPTIMIZATION_REWRITE_INSTRUCTIONS}\n"
         f"Product name: {name}\n"
         f"Original description: {description}\n"
         f"Intent signals to address: {signals}\n"
         f"{tone_line}"
+        f"{lessons_line}"
         f"{price_line}"
     )
 
