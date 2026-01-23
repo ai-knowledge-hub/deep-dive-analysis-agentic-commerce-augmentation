@@ -10,6 +10,7 @@ from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.intentionality.profiling import build_profile
 from modules.simulation.domain import SimulationProduct
 from modules.simulation.gap_analysis import analyze_gap
+from modules.simulation.tone import derive_tone
 
 
 def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, object]:
@@ -31,6 +32,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
 
     ranked = sorted(scores, key=lambda s: s.score, reverse=True)
     winner_id = ranked[0].product_id if ranked else None
+    tone = derive_tone(products)
 
     return {
         "intent": intent,
@@ -39,6 +41,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
         "winner_id": winner_id,
         "gap_analysis": gap_reports,
         "profiles": [build_profile(product).to_dict() for product in normalized],
+        "tone": tone,
     }
 
 

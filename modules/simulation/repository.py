@@ -84,6 +84,15 @@ def update_retest(run_id: str, retest: dict) -> None:
     conn.commit()
 
 
+def update_scenario(run_id: str, scenario: dict) -> None:
+    conn = get_connection()
+    conn.execute(
+        "UPDATE simulation_runs SET scenario_json = ? WHERE id = ?",
+        (to_json(scenario), run_id),
+    )
+    conn.commit()
+
+
 def _row_to_dict(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -98,4 +107,4 @@ def _row_to_dict(row) -> Dict[str, Any]:
     }
 
 
-__all__ = ["create_run", "get_run", "list_runs", "update_retest"]
+__all__ = ["create_run", "get_run", "list_runs", "update_retest", "update_scenario"]

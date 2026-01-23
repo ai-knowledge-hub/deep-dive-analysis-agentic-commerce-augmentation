@@ -144,6 +144,10 @@ export type SimulationRunResponse = {
       outcomes_expected?: string[];
       context_fit?: Record<string, number>;
     }[];
+    tone?: {
+      summary: string;
+      markers?: Record<string, string | number>;
+    };
   };
 };
 
@@ -180,6 +184,7 @@ export type SimulationRunDetailResponse = {
     query: string;
     created_at?: string;
     products: SimulationProduct[];
+    scenario?: Record<string, unknown>;
     result: SimulationRunResponse["result"];
     retest?: SimulationRunResponse["result"] | null;
   };

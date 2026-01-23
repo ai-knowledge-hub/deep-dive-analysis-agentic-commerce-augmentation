@@ -37,11 +37,21 @@ if APIRouter:
     class SimulationOptimizeRequest(BaseModel):
         run_id: str
         product_id: str
+        tone: Optional[str] = None
         user_id: Optional[str] = None
 
     class SimulationRetestRequest(BaseModel):
         run_id: str
         optimized_products: List[SimulationProductPayload]
+        user_id: Optional[str] = None
+
+    class SimulationToneRequest(BaseModel):
+        run_id: str
+        tone: Optional[str] = None
+        user_id: Optional[str] = None
+
+    class SimulationToneFromBrandRequest(BaseModel):
+        run_id: Optional[str] = None
         user_id: Optional[str] = None
 
     @router.get("/runs")
@@ -68,9 +78,10 @@ if APIRouter:
     def run(payload: SimulationRunRequest):
         products = [_to_simulation_product(item) for item in payload.products]
         result = run_simulation(payload.query, products)
+        tone_summary = (result.get("tone") or {}).get("summary")
         stored = simulation_repo.create_run(
             query=payload.query,
-            scenario={"query": payload.query},
+            scenario={"query": payload.query, "tone_suggestion": tone_summary},
             products=[item.dict() for item in payload.products],
             result=result,
             user_id=payload.user_id,
@@ -104,6 +115,7 @@ if APIRouter:
         optimized = optimize_product(
             _to_simulation_product(SimulationProductPayload(**target)),
             target_gap.get("missing_signals") or [],
+            payload.tone,
         )
         return {"run_id": payload.run_id, "optimized": optimized, "gap": target_gap}
 
@@ -118,6 +130,27 @@ if APIRouter:
         result = run_simulation(query, products)
         simulation_repo.update_retest(payload.run_id, result)
         return {"run_id": payload.run_id, "result": result}
+
+    @router.post("/tone")
+    def update_tone(payload: SimulationToneRequest):
+        run_record = _get_run(payload.run_id, payload.user_id)
+        scenario = run_record.get("scenario") or {}
+        tone = (payload.tone or "").strip()
+        scenario["confirmed_tone"] = tone or None
+        simulation_repo.update_scenario(payload.run_id, scenario)
+        return {"run_id": payload.run_id, "tone": scenario.get("confirmed_tone")}
+
+    @router.post("/tone/from-brand")
+    def tone_from_brand(payload: SimulationToneFromBrandRequest):
+        if payload.run_id:
+            run_record = _get_run(payload.run_id, payload.user_id)
+            scenario = run_record.get("scenario") or {}
+            scenario["tone_source"] = "brand_site"
+            simulation_repo.update_scenario(payload.run_id, scenario)
+        return {
+            "status": "coming_soon",
+            "message": "Brand tone import requires catalog integration.",
+        }
 else:  # pragma: no cover
     router = None
 

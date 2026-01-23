@@ -48,6 +48,7 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 | **Alignment Scoring** | Score products against inferred intent | `modules/alignment/` |
 | **Evidence Discovery** | Analyze open-web representations for intent legibility | `modules/evidence/` |
 | **Verification (Lift)** | Show before/after discoverability impact | `modules/evidence/` |
+| **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `modules/simulation/` |
 | **Context Memory** | Persist goals and preferences for better inference | `modules/memory/` |
 
 ---
@@ -60,6 +61,7 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 │   ├── intent/              # Intent inference + classification
 │   ├── intentionality/      # Product intent profiling
 │   ├── alignment/           # Intent-product alignment scoring
+│   ├── simulation/          # Simulation sandbox loop + gap analysis
 │   ├── memory/              # Working, episodic, semantic memory
 │   ├── conversation/        # Orchestration, context management
 │   ├── values/              # Goal clarification dialogue
@@ -123,6 +125,11 @@ curl "http://localhost:8000/products/search?query=workspace"
 curl -X POST "http://localhost:8000/evidence/analyze" \
   -H "Content-Type: application/json" \
   -d '{"query": "TV for a bright living room"}'
+
+# Simulation sandbox
+curl -X POST "http://localhost:8000/simulation/run" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "running vest", "products": [{"id":"sim-1","name":"Trail Runner Vest","description":"Lightweight vest for long runs with breathable mesh.","source":"web"}]}'
 
 # Run test suite
 make test

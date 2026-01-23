@@ -52,8 +52,9 @@ Think of it as a **flight simulator for AI shopping**. Brands can:
 1. **Set up a test scenario**: query + their product + competitors
 2. **Run a simulation**: see which product the LLM would recommend
 3. **Understand the gap**: why did they lose? what's missing?
-4. **Optimize**: apply suggested changes to product description
-5. **Re-test**: verify the changes improved their score
+4. **Confirm brand tone**: accept or edit the suggested voice
+5. **Optimize**: apply suggested changes to product description
+6. **Re-test**: verify the changes improved their score
 
 This is a closed feedback loop—the key differentiator from static "legibility reports."
 
@@ -126,6 +127,11 @@ This foundation informs architecture but does not dominate user-facing messaging
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │ Alignment Scoring                                    │    │
 │  │ Score products against inferred intent               │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ Tone Profiling + Rewrite                             │    │
+│  │ Derive brand tone and rewrite intent-legible copy    │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                              │                               │
 │  ┌─────────────────────────────────────────────────────┐    │
@@ -237,7 +243,19 @@ class AlignmentScore:
 
 ---
 
-### 4. Context Memory Module (`modules/memory/`)
+### 4. Simulation Sandbox Module (`modules/simulation/`)
+
+**Purpose**: Run competitive scenarios, surface gaps, and drive the optimize → retest loop.
+
+**Key outputs**:
+- Ranked scores + winner
+- Gap analysis (“why you lost”)
+- Suggested tone (auto-derived from product copy)
+- Optimization rewrite with confirmed tone
+
+---
+
+### 5. Context Memory Module (`modules/memory/`)
 
 **Purpose**: Persist context that improves intent inference over time.
 

@@ -12,7 +12,8 @@ Our simulation sandbox lets brands:
 1. Test their product against a user query
 2. See who wins (them or competitors)
 3. Understand WHY they lost
-4. Optimize and re-test until they win
+4. Confirm brand tone (accept or edit the suggested voice)
+5. Optimize and re-test until they win
 
 This document maps our strategic position:
 1. The user problem: who we serve and their pain
@@ -197,6 +198,8 @@ Now the LLM can reason: "User wants bright-room viewing. This product explicitly
 **We are a simulation sandbox for AI shopping—like a flight simulator for LLM recommendations.**
 
 Brands can test their products against user queries, see who wins, understand why, and optimize until they win. This closed feedback loop is what's missing from every other tool in the market.
+
+Tone confirmation is a key step in the loop: we auto-derive brand voice from existing copy, let the user confirm it, and then use it in the optimization rewrite.
 
 ### The User Journey
 

@@ -45,7 +45,9 @@ WHY YOU LOST:
 • Present but hidden: 3000 nits (the actual differentiator)
 ```
 
-### Step 4: Optimize
+### Step 4: Confirm Tone + Optimize
+Confirm the brand tone (auto-suggested from product copy), then apply the rewrite so the optimized copy stays on-brand.
+
 ```
 Before: "65-inch 4K QLED, 3000 nits"
 After:  "Combat glare in bright rooms. Clear picture without closing blinds."

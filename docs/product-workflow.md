@@ -13,7 +13,7 @@ The product has two modes, serving different stages of the user journey:
 The core experience: test products against queries, see who wins, understand why, optimize, re-test.
 
 ```
-SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
+SET UP SCENARIO → SIMULATE → SEE RESULTS → CONFIRM TONE → OPTIMIZE → RE-TEST
       ↑                                                  │
       └──────────────────────────────────────────────────┘
 ```
@@ -78,7 +78,15 @@ Let users test their products against user queries and see what an LLM shopping 
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  STEP 3: OPTIMIZE                                            │
+│  STEP 3: CONFIRM TONE                                        │
+│                                                              │
+│  Suggested tone: "confident, concise, technical"             │
+│  [Use suggestion] [Edit] [Clear]                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 4: OPTIMIZE                                            │
 │                                                              │
 │  Suggested Improvement:                                      │
 │  ┌─────────────────────────────────────────────────────────┐│
@@ -93,7 +101,7 @@ Let users test their products against user queries and see what an LLM shopping 
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  STEP 4: RE-TEST RESULTS                                     │
+│  STEP 5: RE-TEST RESULTS                                     │
 │                                                              │
 │  Samsung QN90B: 0.52 → 0.85                                  │
 │  ✅ NOW RECOMMENDED                                          │
@@ -128,6 +136,7 @@ class SimulationResult:
     product_scores: List[ProductScore]
     winner: str  # product_id of recommended product
     gap_analysis: GapAnalysis  # Why user's product lost (if it did)
+    tone: Dict[str, Any]  # Suggested brand tone summary
 
 @dataclass
 class ProductScore:
@@ -149,16 +158,24 @@ class GapAnalysis:
 
 ```
 POST /simulation/run
-  Input: { query, user_product, competitors? }
-  Output: { scenario_id, intent, scores, winner, gap_analysis }
+  Input: { query, products[] }
+  Output: { run_id, result: { intent, scores, winner_id, gap_analysis, tone } }
 
 POST /simulation/optimize
-  Input: { scenario_id, product_id }
-  Output: { before, after, predicted_score_delta }
+  Input: { run_id, product_id, tone? }
+  Output: { optimized: { before, after }, gap }
 
 POST /simulation/retest
-  Input: { scenario_id, optimized_description }
-  Output: { new_score, is_now_recommended, lift }
+  Input: { run_id, optimized_products[] }
+  Output: { result: { scores, winner_id } }
+
+POST /simulation/tone
+  Input: { run_id, tone }
+  Output: { run_id, tone }
+
+POST /simulation/tone/from-brand
+  Input: { run_id? }
+  Output: { status, message }  # stub until catalog integration
 ```
 
 ### UI Components
@@ -166,6 +183,7 @@ POST /simulation/retest
 - **Scenario Setup Form**: Query input, product description input, competitor inputs
 - **Results Dashboard**: Side-by-side product cards with scores
 - **Gap Analysis Panel**: Why you lost, what's missing
+- **Tone Card**: Suggested brand voice with accept/edit/clear
 - **Optimization Preview**: Before/after with score delta
 - **Re-test Button**: Immediate feedback on changes
 

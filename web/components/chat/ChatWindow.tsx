@@ -11,7 +11,7 @@ export function ChatWindow({ messages }: { messages: Message[] }) {
       <div className="chat__empty">
         <p>Start a conversation to begin goal clarification.</p>
         <p className="chat__hint">
-          Try: "I need a better desk" or "Help me find running shoes"
+          Try: &quot;I need a better desk&quot; or &quot;Help me find running shoes&quot;
         </p>
       </div>
     );
