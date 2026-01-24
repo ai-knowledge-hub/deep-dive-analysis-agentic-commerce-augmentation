@@ -23,6 +23,7 @@ type MergedProduct = {
   alignment_reasoning?: string;
   low_confidence?: boolean;
   capabilities_enabled?: string[];
+  description?: string;
   reasoning?: string;
 };
 
@@ -59,6 +60,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
       alignment_reasoning: product.alignment_reasoning,
       low_confidence: product.low_confidence,
       capabilities_enabled: product.capabilities_enabled ?? explanation?.capabilities_enabled,
+      description: product.description,
       reasoning: product.reasoning ?? explanation?.reasoning,
     };
   });
@@ -146,7 +148,10 @@ export function ProductReasoning({
                 </div>
               )}
               <p className="product__reasoning">
-                {product.reasoning ?? product.alignment_reasoning ?? "Reasoning pending..."}
+                {product.reasoning ??
+                  product.alignment_reasoning ??
+                  product.description ??
+                  "Reasoning pending..."}
               </p>
               {product.alignment_reasoning && product.reasoning ? (
                 <p className="product__alignment">

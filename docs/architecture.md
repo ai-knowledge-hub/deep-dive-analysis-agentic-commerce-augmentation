@@ -4,9 +4,9 @@
 
 This system is a **simulation sandbox for AI shopping discoverability**.
 
-Brand marketers ask: "Why isn't my product showing up in ChatGPT or Google AI Mode?" We give them the answer—and a way to fix it.
+Brand marketers ask: "Why isn't my product showing up in ChatGPT or Google AI Mode?" We give them the answer and a way to fix it.
 
-When an AI agent recommends products, it doesn't match keywords—it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
+When an AI agent recommends products, it doesn't match keywords, it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
 
 We let brands **see what the LLM sees**, understand why they're losing, and test changes until they win.
 
@@ -23,7 +23,7 @@ See [user-problem.md](user-problem.md) for detailed user personas and pain point
 | Role | Their Question |
 |------|----------------|
 | **Brand Marketing Manager** | "Why aren't my products showing up in AI results?" |
-| **E-commerce Growth Lead** | "I know SEO, but AI works differently—what are the rules?" |
+| **E-commerce Growth Lead** | "I know SEO, but AI works differently, what are the rules?" |
 | **Agency Account Manager** | "Client asks why they're not in ChatGPT. I have no tools to answer." |
 | **Product Feed Manager** | "I write for keyword search. What should I change for LLMs?" |
 
