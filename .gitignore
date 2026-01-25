@@ -34,3 +34,7 @@ yarn-error.log*
 .env.test.local
 .vercel/
 
+# Local databases / scratch
+db/*.db
+db/*.db-*
+tmp/
