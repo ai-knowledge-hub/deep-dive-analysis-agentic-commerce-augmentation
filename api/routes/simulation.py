@@ -66,6 +66,13 @@ if APIRouter:
         client_id: Optional[str] = None
         brand_id: Optional[str] = None
 
+    class SimulationAttachRequest(BaseModel):
+        run_id: str
+        product_id: str
+        user_id: Optional[str] = None
+        client_id: Optional[str] = None
+        brand_id: Optional[str] = None
+
     @router.get("/runs")
     def list_runs(
         user_id: Optional[str] = None,
@@ -84,6 +91,8 @@ if APIRouter:
                     "query": run.get("query"),
                     "created_at": run.get("created_at"),
                     "winner_id": (run.get("result") or {}).get("winner_id"),
+                    "brand_id": run.get("brand_id"),
+                    "product_id": run.get("product_id"),
                 }
             )
         return {"runs": payload}
@@ -197,6 +206,24 @@ if APIRouter:
         return {
             "status": "coming_soon",
             "message": "Brand tone import requires catalog integration.",
+        }
+
+    @router.post("/attach")
+    def attach(payload: SimulationAttachRequest):
+        client_scope = require_client_id(payload.client_id, payload.user_id)
+        _get_run(payload.run_id, payload.user_id, client_scope)
+        updated = simulation_repo.update_run_linkage(
+            payload.run_id,
+            client_id=client_scope,
+            product_id=payload.product_id,
+            brand_id=payload.brand_id,
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="Simulation run not found")
+        return {
+            "run_id": payload.run_id,
+            "product_id": updated.get("product_id"),
+            "brand_id": updated.get("brand_id"),
         }
 else:  # pragma: no cover
     router = None

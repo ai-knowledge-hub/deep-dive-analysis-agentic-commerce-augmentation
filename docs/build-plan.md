@@ -86,6 +86,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
   - `POST /products/profile`
   - `POST /products/enrich`
 - Remove legacy response fields (empowerment/guardrails/World‑B wording).
+ - Enforce tenant scoping (`client_id` required on all requests; optional `brand_id`/`product_id` for simulation runs).
 
 ### 2.2 Demo UI
 - Replace World‑B UI with intent‑alignment demo flow:
@@ -138,6 +139,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
   - Gap analysis panel
   - Optimization preview
   - Re-test button with instant feedback
+  - Manual admin context picker (client/brand/product) + header banner
 - [x] Add tone profiling + confirmation
   - Suggested tone derived from product copy
   - Tone card with accept/edit/clear

@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     frontend_url: str = Field(
         default="http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL")
     )
+    clerk_webhook_secret: str | None = Field(
+        default=None, validation_alias=AliasChoices("CLERK_WEBHOOK_SECRET")
+    )
     admin_user_ids: str = Field(
         default="", validation_alias=AliasChoices("ADMIN_USER_IDS")
     )

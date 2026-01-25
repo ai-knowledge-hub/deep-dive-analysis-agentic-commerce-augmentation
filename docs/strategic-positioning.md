@@ -301,6 +301,8 @@ The LLM doesn't know we exist. It just sees better product representations that 
 
 ### API Surface
 
+**Multi-tenant requirement:** All API requests include `client_id`. `brand_id`/`product_id` are optional on simulation endpoints to bind runs to catalog records.
+
 ```
 POST /intent/infer
   Input: { query, session_context, user_id? }

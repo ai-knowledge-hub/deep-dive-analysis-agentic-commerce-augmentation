@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
+import { TenantProvider } from "../components/tenant/TenantProvider";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -13,7 +14,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             content="Intentionality optimization for AI commerce discovery"
           />
         </head>
-        <body>{children}</body>
+        <body>
+          <TenantProvider>{children}</TenantProvider>
+        </body>
       </html>
     </ClerkProvider>
   );

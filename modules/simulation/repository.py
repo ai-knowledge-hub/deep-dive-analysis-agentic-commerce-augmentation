@@ -107,6 +107,26 @@ def update_scenario(run_id: str, scenario: dict) -> None:
     conn.commit()
 
 
+def update_run_linkage(
+    run_id: str,
+    *,
+    client_id: str,
+    product_id: str,
+    brand_id: str | None = None,
+) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE simulation_runs
+        SET product_id = ?, brand_id = ?
+        WHERE id = ? AND client_id = ?
+        """,
+        (product_id, brand_id, run_id, client_id),
+    )
+    conn.commit()
+    return get_run(run_id)
+
+
 def list_lessons(
     user_id: str | None = None,
     limit: int = 50,
@@ -185,5 +205,6 @@ __all__ = [
     "list_runs",
     "update_retest",
     "update_scenario",
+    "update_run_linkage",
     "list_lessons",
 ]

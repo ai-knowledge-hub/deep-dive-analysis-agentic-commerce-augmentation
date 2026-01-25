@@ -176,6 +176,8 @@ export type SimulationRunSummary = {
   query: string;
   created_at?: string;
   winner_id?: string | null;
+  brand_id?: string | null;
+  product_id?: string | null;
 };
 
 export type SimulationRunListResponse = {
@@ -187,11 +189,19 @@ export type SimulationRunDetailResponse = {
     id: string;
     query: string;
     created_at?: string;
+    brand_id?: string | null;
+    product_id?: string | null;
     products: SimulationProduct[];
     scenario?: Record<string, unknown>;
     result: SimulationRunResponse["result"];
     retest?: SimulationRunResponse["result"] | null;
   };
+};
+
+export type SimulationAttachResponse = {
+  run_id: string;
+  product_id?: string | null;
+  brand_id?: string | null;
 };
 
 export type SimulationLesson = {

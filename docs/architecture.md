@@ -432,6 +432,8 @@ Lift: +63% alignment score
 
 ## API Surface
 
+**Multi-tenant requirement:** Every request includes `client_id` unless the caller is an admin user. `brand_id` and `product_id` are optional on simulation endpoints to link runs to catalog records.
+
 ### Core Endpoints
 
 ```

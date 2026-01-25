@@ -27,4 +27,9 @@ def require_client_id(client_id: str | None, user_id: str | None) -> str:
     raise HTTPException(status_code=400, detail="client_id is required")
 
 
-__all__ = ["require_client_id", "is_admin"]
+def require_admin(user_id: str | None) -> None:
+    if not is_admin(user_id):
+        raise HTTPException(status_code=403, detail="admin access required")
+
+
+__all__ = ["require_client_id", "is_admin", "require_admin"]

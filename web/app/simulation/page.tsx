@@ -21,6 +21,7 @@ import {
   getSimulationRun,
   requestBrandTone,
   updateSimulationTone,
+  attachSimulationProduct,
   listConversationSessions,
   deleteConversationSession,
 } from "../../lib/api";
@@ -30,11 +31,13 @@ import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { SimulationPanel } from "../../components/simulation/SimulationPanel";
 import { SimulationHistory } from "../../components/simulation/SimulationHistory";
 import { SimulationLessons } from "../../components/simulation/SimulationLessons";
+import { useTenant } from "../../components/tenant/TenantProvider";
 
 export default function SimulationPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
+  const { productId, productName, brandId } = useTenant();
   const storageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
     [userId],
@@ -232,6 +235,30 @@ export default function SimulationPage() {
     }
   }, [simulationRun, userId]);
 
+  const handleAttachRun = useCallback(
+    async (runId: string) => {
+      if (!productId) return;
+      const response = await attachSimulationProduct(
+        runId,
+        productId,
+        brandId ?? undefined,
+        userId,
+      );
+      setSimulationRuns((current) =>
+        current.map((run) =>
+          run.id === runId
+            ? {
+                ...run,
+                product_id: response.product_id ?? productId,
+                brand_id: response.brand_id ?? brandId ?? null,
+              }
+            : run,
+        ),
+      );
+    },
+    [brandId, productId, userId],
+  );
+
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
     setHistoryClosing(true);
@@ -353,6 +380,9 @@ export default function SimulationPage() {
             runs={simulationRuns}
             activeRunId={simulationRun?.run_id}
             onSelect={handleSelectSimulationRun}
+            onAttach={handleAttachRun}
+            attachLabel={productName}
+            attachDisabled={!productId}
           />
           {simulationScenarioDirty && (
             <div className="detail__note">

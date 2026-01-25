@@ -13,10 +13,13 @@ import {
   SimulationRunListResponse,
   SimulationRunDetailResponse,
   SimulationLessonListResponse,
+  SimulationAttachResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CLIENT_ID_STORAGE_KEY = "client_id";
+const BRAND_ID_STORAGE_KEY = "brand_id";
+const PRODUCT_ID_STORAGE_KEY = "product_id";
 
 function getClientId(): string | undefined {
   if (typeof window !== "undefined") {
@@ -26,6 +29,26 @@ function getClientId(): string | undefined {
     }
   }
   return process.env.NEXT_PUBLIC_CLIENT_ID ?? undefined;
+}
+
+function getBrandId(): string | undefined {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(BRAND_ID_STORAGE_KEY);
+    if (stored) {
+      return stored;
+    }
+  }
+  return undefined;
+}
+
+function getProductId(): string | undefined {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(PRODUCT_ID_STORAGE_KEY);
+    if (stored) {
+      return stored;
+    }
+  }
+  return undefined;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,12 +69,14 @@ export async function startConversation(
   userId?: string | null,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<ConversationResponse>("/conversation/start", {
     method: "POST",
     body: JSON.stringify({
       opening_message: message,
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }
@@ -62,12 +87,14 @@ export async function sendConversationMessage(
   userId?: string | null,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<ConversationResponse>(`/conversation/${sessionId}/message`, {
     method: "POST",
     body: JSON.stringify({
       message,
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }
@@ -101,12 +128,14 @@ export async function refreshResearch(
   query?: string,
 ): Promise<ResearchRefreshResponse> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<ResearchRefreshResponse>(`/conversation/${sessionId}/research`, {
     method: "POST",
     body: JSON.stringify({
       user_id: userId ?? undefined,
       query,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }
@@ -133,6 +162,8 @@ export async function runSimulation(
   sessionId?: string | null,
 ): Promise<SimulationRunResponse> {
   const clientId = getClientId();
+  const brandId = getBrandId();
+  const productId = getProductId();
   return request<SimulationRunResponse>("/simulation/run", {
     method: "POST",
     body: JSON.stringify({
@@ -141,6 +172,8 @@ export async function runSimulation(
       user_id: userId ?? undefined,
       session_id: sessionId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
+      product_id: productId ?? undefined,
     }),
   });
 }
@@ -152,6 +185,7 @@ export async function optimizeSimulation(
   userId?: string | null,
 ): Promise<SimulationOptimizeResponse> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<SimulationOptimizeResponse>("/simulation/optimize", {
     method: "POST",
     body: JSON.stringify({
@@ -160,6 +194,7 @@ export async function optimizeSimulation(
       tone: tone ?? undefined,
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }
@@ -170,6 +205,7 @@ export async function retestSimulation(
   userId?: string | null,
 ): Promise<SimulationRetestResponse> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<SimulationRetestResponse>("/simulation/retest", {
     method: "POST",
     body: JSON.stringify({
@@ -177,6 +213,7 @@ export async function retestSimulation(
       optimized_products: optimizedProducts,
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }
@@ -220,12 +257,32 @@ export async function listSimulationLessons(
   return request<SimulationLessonListResponse>(`/simulation/lessons?${query}`);
 }
 
+export async function attachSimulationProduct(
+  runId: string,
+  productId: string,
+  brandId?: string | null,
+  userId?: string | null,
+): Promise<SimulationAttachResponse> {
+  const clientId = getClientId();
+  return request<SimulationAttachResponse>("/simulation/attach", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId,
+      product_id: productId,
+      brand_id: brandId ?? undefined,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
 export async function updateSimulationTone(
   runId: string,
   tone: string,
   userId?: string | null,
 ): Promise<{ run_id: string; tone?: string | null }> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<{ run_id: string; tone?: string | null }>("/simulation/tone", {
     method: "POST",
     body: JSON.stringify({
@@ -233,6 +290,7 @@ export async function updateSimulationTone(
       tone,
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }
@@ -242,12 +300,14 @@ export async function requestBrandTone(
   userId?: string | null,
 ): Promise<{ status: string; message: string }> {
   const clientId = getClientId();
+  const brandId = getBrandId();
   return request<{ status: string; message: string }>("/simulation/tone/from-brand", {
     method: "POST",
     body: JSON.stringify({
       run_id: runId ?? undefined,
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
     }),
   });
 }

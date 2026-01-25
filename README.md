@@ -96,6 +96,7 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 cp .env.example .env.local
 # Edit .env.local: set OPENROUTER_API_KEY for local dev
 # Optional: ADMIN_USER_IDS=user_123,user_456 (bypass client_id requirement)
+# Optional: CLERK_WEBHOOK_SECRET=whsec_... (for Clerk user sync)
 
 # 2. Install dependencies
 uv sync
@@ -112,10 +113,24 @@ cp ../.env.example .env.local
 # Edit web/.env.local: set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY
 # Optional: NEXT_PUBLIC_API_URL=http://localhost:8000
 # Required: NEXT_PUBLIC_CLIENT_ID=default (or your tenant id)
+# Optional: NEXT_PUBLIC_ADMIN_MODE=true (shows manual client/brand/product pickers)
 pnpm install && pnpm dev
 ```
 
 Visit `http://localhost:3000` for the chat interface.
+
+### Multi-tenant scoping
+
+All API calls require `client_id` unless the caller is an admin user (see `ADMIN_USER_IDS`).
+`brand_id` and `product_id` are optional on simulation endpoints for tying runs to a catalog item.
+The UI exposes a manual admin context picker when `NEXT_PUBLIC_ADMIN_MODE=true` so you can
+switch client/brand/product without automated onboarding.
+
+### Clerk user sync (webhook)
+
+Set a Clerk webhook pointing to `POST /webhooks/clerk` with signing enabled, then store
+`CLERK_WEBHOOK_SECRET` in `.env.local`. We upsert the local `users` table with email/name
+metadata on `user.created` / `user.updated`, and mark as deleted on `user.deleted`.
 
 ### Verify
 

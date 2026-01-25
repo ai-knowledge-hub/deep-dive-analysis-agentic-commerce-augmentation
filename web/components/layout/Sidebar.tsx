@@ -10,6 +10,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
+import { useTenant } from "../tenant/TenantProvider";
 
 type SessionSummary = {
   id: string;
@@ -41,7 +42,22 @@ export function Sidebar({
   showHistoryButton = true,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
+  const [showTenantPanel, setShowTenantPanel] = useState(false);
   const pathname = usePathname();
+  const {
+    clients,
+    clientId,
+    brandId,
+    productId,
+    isAdminMode,
+    setClientId,
+    setBrandId,
+    setProductId,
+  } = useTenant();
+  const selectedClient = clients.find((client) => client.id === clientId);
+  const brands = selectedClient?.brands ?? [];
+  const selectedBrand = brands.find((brand) => brand.id === brandId) ?? null;
+  const products = selectedBrand?.products ?? [];
   const classNames = ["sidebar"];
   if (collapsed) classNames.push("sidebar--collapsed");
   if (mobileOpen) classNames.push("sidebar--open");
@@ -133,7 +149,26 @@ export function Sidebar({
         >
           {collapsed ? ">" : "<"}
         </button>
-        {!collapsed && <span className="sidebar__brand">Intentionality</span>}
+        {!collapsed && (
+          <div className="sidebar__brand">
+            {isAdminMode ? (
+              <button
+                type="button"
+                className={`sidebar__item sidebar__item--meta sidebar__tenant-trigger ${
+                  showTenantPanel ? "is-active" : ""
+                }`}
+                onClick={() => setShowTenantPanel((prev) => !prev)}
+              >
+                <span className="sidebar__label">
+                  {selectedClient?.name ?? clientId}
+                </span>
+                <span className="sidebar__caret">▾</span>
+              </button>
+            ) : (
+              <span>Intentionality</span>
+            )}
+          </div>
+        )}
         {mobileOpen && (
           <button
             type="button"
@@ -145,6 +180,79 @@ export function Sidebar({
           </button>
         )}
       </div>
+      {isAdminMode && !collapsed && (
+        <>
+          <button
+            type="button"
+            className={`tenant-overlay ${showTenantPanel ? "is-visible" : ""}`}
+            onClick={() => setShowTenantPanel(false)}
+            aria-label="Close tenant panel"
+          />
+          <div
+            className={`sidebar__tenant-panel ${
+              showTenantPanel ? "is-open" : ""
+            }`}
+          >
+          <label className="sidebar__tenant-label" htmlFor="tenant-client">
+            Client
+          </label>
+          <select
+            id="tenant-client"
+            className="sidebar__tenant-select"
+            value={clientId}
+            onChange={(event) => {
+              setClientId(event.target.value);
+              setShowTenantPanel(false);
+            }}
+          >
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+          <label className="sidebar__tenant-label" htmlFor="tenant-brand">
+            Brand
+          </label>
+          <select
+            id="tenant-brand"
+            className="sidebar__tenant-select"
+            value={brandId ?? ""}
+            onChange={(event) => {
+              setBrandId(event.target.value || null);
+              setShowTenantPanel(false);
+            }}
+          >
+            <option value="">None</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
+              </option>
+            ))}
+          </select>
+          <label className="sidebar__tenant-label" htmlFor="tenant-product">
+            Product
+          </label>
+          <select
+            id="tenant-product"
+            className="sidebar__tenant-select"
+            value={productId ?? ""}
+            onChange={(event) => {
+              setProductId(event.target.value || null);
+              setShowTenantPanel(false);
+            }}
+            disabled={!selectedBrand}
+          >
+            <option value="">None</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        </>
+      )}
 
       <nav className="sidebar__nav">
         <button
