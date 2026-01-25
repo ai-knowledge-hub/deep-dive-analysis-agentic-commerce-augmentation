@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from shared.db.connection import get_connection
 from modules.memory.repositories.base import from_json, to_json

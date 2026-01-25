@@ -226,7 +226,7 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [sessionId, upsertSession, userId],
+    [sessionId, simulationScenarioDirty, simulationTone, upsertSession, userId],
   );
 
   const handleSubmit = (e: React.FormEvent) => {

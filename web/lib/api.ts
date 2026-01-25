@@ -14,6 +14,14 @@ import {
   SimulationRunDetailResponse,
   SimulationLessonListResponse,
   SimulationAttachResponse,
+  AdminClientListResponse,
+  AdminBrandListResponse,
+  AdminProductListResponse,
+  AdminClientUserListResponse,
+  AdminClient,
+  AdminBrand,
+  AdminProduct,
+  AdminClientUser,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -308,6 +316,120 @@ export async function requestBrandTone(
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminClients(
+  userId?: string | null,
+): Promise<AdminClientListResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminClientListResponse>(`/clients${suffix}`);
+}
+
+export async function createAdminClient(
+  payload: {
+    id: string;
+    name: string;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<{ client: AdminClient }> {
+  return request<{ client: AdminClient }>("/clients", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminBrands(
+  clientId: string,
+  userId?: string | null,
+): Promise<AdminBrandListResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminBrandListResponse>(`/clients/${clientId}/brands${suffix}`);
+}
+
+export async function createAdminBrand(
+  clientId: string,
+  payload: {
+    id: string;
+    name: string;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<{ brand: AdminBrand }> {
+  return request<{ brand: AdminBrand }>(`/clients/${clientId}/brands`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminProducts(
+  brandId: string,
+  userId?: string | null,
+): Promise<AdminProductListResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminProductListResponse>(`/brands/${brandId}/products${suffix}`);
+}
+
+export async function createAdminProduct(
+  brandId: string,
+  payload: {
+    id: string;
+    name: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<{ product: AdminProduct }> {
+  return request<{ product: AdminProduct }>(`/brands/${brandId}/products`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminClientUsers(
+  clientId: string,
+  userId?: string | null,
+): Promise<AdminClientUserListResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminClientUserListResponse>(`/clients/${clientId}/users${suffix}`);
+}
+
+export async function addAdminClientUser(
+  clientId: string,
+  payload: {
+    member_user_id: string;
+    role?: string;
+  },
+  userId?: string | null,
+): Promise<{ user: AdminClientUser }> {
+  return request<{ user: AdminClientUser }>(`/clients/${clientId}/users`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
     }),
   });
 }

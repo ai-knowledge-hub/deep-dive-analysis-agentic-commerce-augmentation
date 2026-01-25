@@ -1783,6 +1783,141 @@ ul { list-style: none; }
   color: var(--text-muted);
 }
 
+.admin__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.admin__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin__selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin__selector select,
+.admin__form input,
+.admin__form textarea {
+  background: var(--bg-tertiary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.admin__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.admin__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+
+.admin__meta {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.admin__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clerk-card,
+.clerk-popover {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  color: var(--text-primary);
+}
+
+.clerk-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.clerk-subtitle,
+.clerk-divider-text {
+  color: var(--text-secondary);
+}
+
+.clerk-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.clerk-input {
+  background: var(--bg-tertiary);
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  border-radius: 8px;
+}
+
+.clerk-input:focus {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+
+.clerk-button-primary {
+  background: var(--accent);
+  color: #07130f;
+  border-radius: 8px;
+}
+
+.clerk-social {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 8px;
+}
+
+.clerk-popover-main {
+  background: transparent;
+}
+
+.clerk-popover-footer {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.clerk-action {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  color: var(--text-primary);
+}
+
+.clerk-action:hover {
+  background: var(--bg-hover);
+}
+
+.clerk-action-text {
+  color: inherit;
+}
+
+.clerk-action-icon {
+  color: var(--text-secondary);
+}
+
 .evidence__name {
   font-size: 12px;
   font-weight: 600;

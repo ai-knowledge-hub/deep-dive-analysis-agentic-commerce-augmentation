@@ -91,7 +91,9 @@ if APIRouter:
 
         users_repo.ensure_user(user_id)
         if event_type in {"user.created", "user.updated"}:
-            users_repo.update_metadata(user_id, metadata=_user_metadata(event_type, data))
+            users_repo.update_metadata(
+                user_id, metadata=_user_metadata(event_type, data)
+            )
         elif event_type == "user.deleted":
             users_repo.update_metadata(
                 user_id, metadata={"clerk_event": event_type, "clerk_deleted": True}

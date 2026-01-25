@@ -127,6 +127,23 @@ export function Sidebar({
         </svg>
       ),
     },
+    ...(isAdminMode
+      ? [
+          {
+            href: "/admin",
+            label: "Admin",
+            shortLabel: "AD",
+            icon: (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 4l7 3v5c0 4.4-3 7.9-7 9-4-1.1-7-4.6-7-9V7l7-3zm0 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 8c-2.2 0-4 1.1-4 2.5V20h8v-1.5c0-1.4-1.8-2.5-4-2.5z"
+                  fill="currentColor"
+                />
+              </svg>
+            ),
+          },
+        ]
+      : []),
   ];
 
   const historyIcon = (

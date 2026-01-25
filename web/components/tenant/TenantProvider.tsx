@@ -8,6 +8,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useUser } from "@clerk/nextjs";
+
+import { listAdminBrands, listAdminClients, listAdminProducts } from "../../lib/api";
 
 type TenantProduct = {
   id: string;
@@ -83,12 +86,14 @@ const DEFAULT_CLIENTS: TenantClient[] = [
 const TenantContext = createContext<TenantState | null>(null);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useUser();
+  const userId = user?.id ?? null;
   const [clientId, setClientIdState] = useState(
     process.env.NEXT_PUBLIC_CLIENT_ID ?? DEFAULT_CLIENTS[0]?.id ?? "client-samsung",
   );
   const [brandId, setBrandIdState] = useState<string | null>(null);
   const [productId, setProductIdState] = useState<string | null>(null);
-  const clients = DEFAULT_CLIENTS;
+  const [clients, setClients] = useState<TenantClient[]>(DEFAULT_CLIENTS);
   const isAdminMode = process.env.NEXT_PUBLIC_ADMIN_MODE === "true";
 
   useEffect(() => {
@@ -96,16 +101,73 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const storedClient = window.localStorage.getItem(CLIENT_STORAGE_KEY);
     const storedBrand = window.localStorage.getItem(BRAND_STORAGE_KEY);
     const storedProduct = window.localStorage.getItem(PRODUCT_STORAGE_KEY);
-    const fallbackClient = DEFAULT_CLIENTS[0]?.id ?? "client-samsung";
+    const fallbackClient = clients[0]?.id ?? "client-samsung";
     const nextClient =
-      storedClient && DEFAULT_CLIENTS.some((client) => client.id === storedClient)
+      storedClient && clients.some((client) => client.id === storedClient)
         ? storedClient
         : fallbackClient;
     setClientIdState(nextClient);
     if (storedBrand) setBrandIdState(storedBrand);
     if (storedProduct) setProductIdState(storedProduct);
     window.localStorage.setItem(CLIENT_STORAGE_KEY, nextClient);
-  }, []);
+  }, [clients]);
+
+  useEffect(() => {
+    if (!isAdminMode || !userId) return;
+    let isActive = true;
+    (async () => {
+      const response = await listAdminClients(userId);
+      const adminClients: TenantClient[] = (response.clients ?? []).map((client) => ({
+        id: client.id,
+        name: client.name,
+        brands: [],
+      }));
+      if (!isActive || adminClients.length === 0) return;
+      setClients(adminClients);
+      if (!adminClients.find((client) => client.id === clientId)) {
+        setClientIdState(adminClients[0].id);
+      }
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [clientId, isAdminMode, userId]);
+
+  useEffect(() => {
+    if (!isAdminMode || !userId || !clientId) return;
+    let isActive = true;
+    (async () => {
+      const response = await listAdminBrands(clientId, userId);
+      const brands = response.brands ?? [];
+      const hydrated = await Promise.all(
+        brands.map(async (brand) => {
+          const productResponse = await listAdminProducts(brand.id, userId);
+          const products = (productResponse.products ?? []).map((product) => ({
+            id: product.id,
+            name: product.name,
+          }));
+          return {
+            id: brand.id,
+            name: brand.name,
+            products,
+          };
+        }),
+      );
+      if (!isActive) return;
+      setClients((current) =>
+        current.map((client) =>
+          client.id === clientId ? { ...client, brands: hydrated } : client,
+        ),
+      );
+      if (!hydrated.find((brand) => brand.id === brandId)) {
+        setBrandIdState(hydrated[0]?.id ?? null);
+        setProductIdState(null);
+      }
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [brandId, clientId, isAdminMode, userId]);
 
   const setClientId = useCallback((nextClientId: string) => {
     setClientIdState(nextClientId);
@@ -146,6 +208,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const selectedBrand = selectedClient?.brands.find((brand) => brand.id === brandId) ?? null;
   const selectedProduct =
     selectedBrand?.products.find((product) => product.id === productId) ?? null;
+
+  useEffect(() => {
+    if (!selectedBrand) return;
+    if (productId && !selectedProduct) {
+      setProductId(null);
+    }
+  }, [productId, selectedBrand, selectedProduct, setProductId]);
 
   const value = useMemo<TenantState>(
     () => ({

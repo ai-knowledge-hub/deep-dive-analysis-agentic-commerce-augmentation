@@ -216,6 +216,54 @@ export type SimulationLessonListResponse = {
   lessons: SimulationLesson[];
 };
 
+export type AdminClient = {
+  id: string;
+  name: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type AdminBrand = {
+  id: string;
+  client_id: string;
+  name: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type AdminProduct = {
+  id: string;
+  brand_id: string;
+  name: string;
+  description?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type AdminClientUser = {
+  id: number;
+  client_id: string;
+  user_id: string;
+  role?: string | null;
+  created_at?: string;
+};
+
+export type AdminClientListResponse = {
+  clients: AdminClient[];
+};
+
+export type AdminBrandListResponse = {
+  brands: AdminBrand[];
+};
+
+export type AdminProductListResponse = {
+  products: AdminProduct[];
+};
+
+export type AdminClientUserListResponse = {
+  users: AdminClientUser[];
+};
+
 export type ConversationResponse = {
   session_id: string;
   user_id: string;
