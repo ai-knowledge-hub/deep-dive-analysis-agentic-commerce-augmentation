@@ -12,6 +12,7 @@ from modules.intentionality.profiling import build_profile
 from modules.alignment.goal_alignment import assess as assess_alignment
 from modules.alignment.goal_alignment import score_products as score_alignment
 from pydantic import BaseModel, Field
+from api.utils.tenancy import require_client_id
 
 product_search = importlib.import_module("modules.commerce.search")
 
@@ -28,23 +29,35 @@ if APIRouter:
 
     class ProfileRequest(BaseModel):
         product_id: str = Field(..., min_length=1)
+        user_id: str | None = None
+        client_id: str | None = None
 
     class AlignRequest(BaseModel):
         query: str = Field(..., min_length=1)
         product_ids: list[str] | None = None
+        user_id: str | None = None
+        client_id: str | None = None
 
     class EnrichRequest(BaseModel):
         product_id: str = Field(..., min_length=1)
         query: str | None = None
+        user_id: str | None = None
+        client_id: str | None = None
 
     @router.get("/search")
-    def search_products(query: str = Query("", max_length=128)):
+    def search_products(
+        query: str = Query("", max_length=128),
+        client_id: str | None = None,
+        user_id: str | None = None,
+    ):
+        require_client_id(client_id, user_id)
         products = _search_products(query)
         return [product.__dict__ for product in products]
 
     @router.post("/profile")
     def profile_product(payload: ProfileRequest):
         """Return an intentionality profile for a single product."""
+        require_client_id(payload.client_id, payload.user_id)
         product_id = payload.product_id
         products = _search_products(product_id)
         if not products:
@@ -54,6 +67,7 @@ if APIRouter:
     @router.post("/align")
     def align_products(payload: AlignRequest):
         """Score a list of products against inferred intent."""
+        require_client_id(payload.client_id, payload.user_id)
         query = payload.query
         product_ids = payload.product_ids or []
         classifier = HybridIntentClassifier()
@@ -78,6 +92,7 @@ if APIRouter:
     @router.post("/enrich")
     def enrich_product(payload: EnrichRequest):
         """Return enriched product with intentionality profile and alignment."""
+        require_client_id(payload.client_id, payload.user_id)
         product_id = payload.product_id
         query = payload.query or ""
         products = _search_products(product_id)

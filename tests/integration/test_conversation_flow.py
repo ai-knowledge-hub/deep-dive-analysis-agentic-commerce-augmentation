@@ -52,6 +52,8 @@ from modules.values.domain import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
+CLIENT_ID = "test-client"
+
 
 @pytest.fixture()
 def integration_client(tmp_path, monkeypatch):
@@ -112,7 +114,11 @@ def integration_client(tmp_path, monkeypatch):
 def test_full_conversation_flow(integration_client):
     start_response = integration_client.post(
         "/conversation/start",
-        json={"opening_message": "Need focus", "user_id": "integration-user"},
+        json={
+            "opening_message": "Need focus",
+            "user_id": "integration-user",
+            "client_id": CLIENT_ID,
+        },
     )
     assert start_response.status_code == 200
     start_payload = start_response.json()
@@ -124,7 +130,11 @@ def test_full_conversation_flow(integration_client):
 
     message_response = integration_client.post(
         f"/conversation/{session_id}/message",
-        json={"message": "continue", "user_id": "integration-user"},
+        json={
+            "message": "continue",
+            "user_id": "integration-user",
+            "client_id": CLIENT_ID,
+        },
     )
     assert message_response.status_code == 200
     message_payload = message_response.json()

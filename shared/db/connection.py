@@ -8,6 +8,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Callable, Iterator, Optional
 
+from shared.db.migrations import apply_migrations
+
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "./db/discovery.db")).resolve()
 
@@ -49,9 +51,17 @@ def init_db(schema_path: Path | None = None) -> None:
     """Initialize the database schema from schema.sql."""
     conn = get_connection()
     schema_file = schema_path or SCHEMA_PATH
-    with schema_file.open("r", encoding="utf-8") as f:
-        script = f.read()
-    conn.executescript(script)
+    has_sessions = (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+        ).fetchone()
+        is not None
+    )
+    if not has_sessions:
+        with schema_file.open("r", encoding="utf-8") as f:
+            script = f.read()
+        conn.executescript(script)
+    apply_migrations(conn)
     conn.commit()
 
 

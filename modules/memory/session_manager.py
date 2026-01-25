@@ -35,28 +35,37 @@ class SessionManager:
         session_id: str | None = None,
         state: Dict[str, Any] | None = None,
         db_path: Path | None = None,
+        client_id: str | None = None,
+        brand_id: str | None = None,
     ) -> None:
         if db_path:
             set_database_path(db_path)
         init_db()
 
         self.user_id = user_id or semantic_repo.DEFAULT_USER_ID
+        self.client_id = client_id or semantic_repo.DEFAULT_CLIENT_ID
+        self.brand_id = brand_id
         users_repo.ensure_user(self.user_id)
 
         self._session = self._resolve_session(session_id=session_id, state=state or {})
         self.session_id = self._session["id"]
         self._state = self._session.get("state") or {}
-        self._memory = SemanticMemory(user_id=self.user_id)
+        self._memory = SemanticMemory(user_id=self.user_id, client_id=self.client_id)
 
     def _resolve_session(
         self, session_id: str | None, state: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Find existing session or create new one."""
         if session_id:
-            existing = sessions_repo.get_session(session_id)
+            existing = sessions_repo.get_session(session_id, client_id=self.client_id)
             if existing:
                 return existing
-        return sessions_repo.create_session(user_id=self.user_id, state=state)
+        return sessions_repo.create_session(
+            user_id=self.user_id,
+            state=state,
+            client_id=self.client_id,
+            brand_id=self.brand_id,
+        )
 
     # ------------------------------------------------------------------ turns
     def record_turn(
@@ -98,6 +107,8 @@ class SessionManager:
             domain=domain,
             importance=importance,
             goal_embedding=goal_embedding,
+            client_id=self.client_id,
+            brand_id=self.brand_id,
         )
         existing_goals = self._memory.get("goals")
         if normalized_goal not in existing_goals:
@@ -117,7 +128,9 @@ class SessionManager:
         """Get deduplicated list of goal texts from session and semantic memory."""
         session_goals = [
             goal["goal_text"]
-            for goal in goals_repo.list_goals_for_session(self.session_id)
+            for goal in goals_repo.list_goals_for_session(
+                self.session_id, client_id=self.client_id
+            )
         ]
         semantic_goals = self._memory.get("goals")
         seen = []
@@ -139,6 +152,7 @@ class SessionManager:
             product_ids=product_ids,
             alignment_score=alignment_score,
             context=context or {},
+            client_id=self.client_id,
         )
 
     # ---------------------------------------------------------------- episodic memory
@@ -151,6 +165,7 @@ class SessionManager:
             session_id=self.session_id,
             outcome=outcome,
             takeaways=[outcome_text],
+            client_id=self.client_id,
         )
 
     # ---------------------------------------------------------------- state helpers
@@ -170,19 +185,28 @@ class SessionManager:
             turns=self.list_turns(limit=include_turn_limit),
             goals=[
                 goal["goal_text"]
-                for goal in goals_repo.list_goals_for_session(self.session_id)
+                for goal in goals_repo.list_goals_for_session(
+                    self.session_id, client_id=self.client_id
+                )
             ],
             semantic_goals=self._memory.get("goals"),
-            latest_episode=episodes_repo.get_latest(self.user_id),
+            latest_episode=episodes_repo.get_latest(
+                self.user_id, client_id=self.client_id
+            ),
         )
 
     def _session_info(self) -> Dict[str, Any]:
         """Get session info dictionary."""
-        refreshed = sessions_repo.get_session(self.session_id) or self._session
+        refreshed = (
+            sessions_repo.get_session(self.session_id, client_id=self.client_id)
+            or self._session
+        )
         state = refreshed.get("state") or {}
         return {
             "id": refreshed["id"],
             "user_id": refreshed["user_id"],
+            "client_id": refreshed["client_id"],
+            "brand_id": refreshed["brand_id"],
             "created_at": refreshed["created_at"],
             "state": state,
         }

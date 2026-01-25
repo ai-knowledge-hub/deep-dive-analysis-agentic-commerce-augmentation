@@ -27,6 +27,7 @@ from modules.intentionality.profiling import build_profile_with_llm
 from modules.intentionality.domain import IntentionalityProfile
 from modules.commerce.domain import Product
 from modules.memory.repositories import sessions as sessions_repo
+from api.utils.tenancy import require_client_id
 from modules.memory.repositories import turns as turns_repo
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
@@ -45,6 +46,8 @@ class ClarifiedGoal(BaseModel):
 
 class ConversationStartRequest(BaseModel):
     user_id: Optional[str] = Field(default=None)
+    client_id: Optional[str] = Field(default=None)
+    brand_id: Optional[str] = Field(default=None)
     opening_message: Optional[str] = Field(default=None)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
     clarified_goals: Optional[List[ClarifiedGoal]] = None
@@ -53,6 +56,8 @@ class ConversationStartRequest(BaseModel):
 class MessageRequest(BaseModel):
     message: str
     user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    brand_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     clarified_goals: Optional[List[ClarifiedGoal]] = None
 
@@ -60,11 +65,14 @@ class MessageRequest(BaseModel):
 class ClarifiedGoalsRequest(BaseModel):
     goals: List[ClarifiedGoal]
     user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    brand_id: Optional[str] = None
 
 
 class ResearchRequest(BaseModel):
     user_id: Optional[str] = None
     query: Optional[str] = None
+    client_id: Optional[str] = None
 
 
 def _session_response(manager: SessionManager, **payload: Any) -> Dict[str, Any]:
@@ -350,7 +358,12 @@ def _sse_event(data: Dict[str, Any], event: str | None = None) -> str:
 
 @router.post("/start")
 def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
-    manager = SessionManager(user_id=request.user_id)
+    client_id = require_client_id(request.client_id, request.user_id)
+    manager = SessionManager(
+        user_id=request.user_id,
+        client_id=client_id,
+        brand_id=request.brand_id,
+    )
     if request.opening_message:
         return _process_message(
             manager,
@@ -372,7 +385,12 @@ def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
 def start_conversation_stream(
     request: ConversationStartRequest,
 ) -> StreamingResponse:
-    manager = SessionManager(user_id=request.user_id)
+    client_id = require_client_id(request.client_id, request.user_id)
+    manager = SessionManager(
+        user_id=request.user_id,
+        client_id=client_id,
+        brand_id=request.brand_id,
+    )
 
     def event_stream():
         if request.opening_message:
@@ -398,7 +416,13 @@ def start_conversation_stream(
 
 @router.post("/{session_id}/message")
 def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str, Any]:
-    manager = SessionManager(session_id=session_id, user_id=request.user_id)
+    client_id = require_client_id(request.client_id, request.user_id)
+    manager = SessionManager(
+        session_id=session_id,
+        user_id=request.user_id,
+        client_id=client_id,
+        brand_id=request.brand_id,
+    )
     if not request.message:
         raise HTTPException(status_code=400, detail="message is required")
     return _process_message(
@@ -413,7 +437,13 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
 def continue_conversation_stream(
     session_id: str, request: MessageRequest
 ) -> StreamingResponse:
-    manager = SessionManager(session_id=session_id, user_id=request.user_id)
+    client_id = require_client_id(request.client_id, request.user_id)
+    manager = SessionManager(
+        session_id=session_id,
+        user_id=request.user_id,
+        client_id=client_id,
+        brand_id=request.brand_id,
+    )
     if not request.message:
         raise HTTPException(status_code=400, detail="message is required")
 
@@ -431,21 +461,35 @@ def continue_conversation_stream(
 
 @router.get("/{session_id}")
 def get_session_snapshot(
-    session_id: str, user_id: Optional[str] = None
+    session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    client_scope = require_client_id(client_id, user_id)
     if user_id:
-        session = sessions_repo.get_session(session_id)
-        if not session or session.get("user_id") != user_id:
+        session = sessions_repo.get_session(session_id, client_id=client_scope)
+        if (
+            not session
+            or session.get("user_id") != user_id
+            or session.get("client_id") != client_scope
+        ):
             raise HTTPException(status_code=404, detail="Session not found")
-    manager = SessionManager(session_id=session_id, user_id=user_id)
+    manager = SessionManager(
+        session_id=session_id, user_id=user_id, client_id=client_scope
+    )
     return _session_response(manager)
 
 
 @router.get("/sessions")
-def list_sessions(user_id: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
+def list_sessions(
+    user_id: Optional[str] = None,
+    limit: int = 20,
+    client_id: Optional[str] = None,
+) -> Dict[str, Any]:
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
-    sessions = sessions_repo.list_sessions(user_id=user_id, limit=limit)
+    client_scope = require_client_id(client_id, user_id)
+    sessions = sessions_repo.list_sessions(
+        user_id=user_id, limit=limit, client_id=client_scope
+    )
     payload = []
     for session in sessions:
         recent = turns_repo.list_recent_turns(session["id"], limit=1)
@@ -462,9 +506,12 @@ def list_sessions(user_id: Optional[str] = None, limit: int = 20) -> Dict[str, A
 
 
 @router.delete("/{session_id}")
-def delete_session(session_id: str, user_id: Optional[str] = None) -> Dict[str, str]:
+def delete_session(
+    session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
+) -> Dict[str, str]:
+    client_scope = require_client_id(client_id, user_id)
     if user_id:
-        session = sessions_repo.get_session(session_id)
+        session = sessions_repo.get_session(session_id, client_id=client_scope)
         if not session or session.get("user_id") != user_id:
             raise HTTPException(status_code=404, detail="Session not found")
     sessions_repo.delete_session(session_id)
@@ -478,7 +525,13 @@ def ingest_clarified_goals(
     if not request.goals:
         raise HTTPException(status_code=400, detail="At least one goal is required.")
 
-    manager = SessionManager(session_id=session_id, user_id=request.user_id)
+    client_id = require_client_id(request.client_id, request.user_id)
+    manager = SessionManager(
+        session_id=session_id,
+        user_id=request.user_id,
+        client_id=client_id,
+        brand_id=request.brand_id,
+    )
     for clarified_goal in request.goals:
         manager.record_goal(
             clarified_goal.goal_text,
@@ -492,11 +545,18 @@ def ingest_clarified_goals(
 @router.post("/{session_id}/research")
 def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any]:
     if request.user_id:
-        session = sessions_repo.get_session(session_id)
+        session = sessions_repo.get_session(
+            session_id, client_id=require_client_id(request.client_id, request.user_id)
+        )
         if not session or session.get("user_id") != request.user_id:
             raise HTTPException(status_code=404, detail="Session not found")
 
-    manager = SessionManager(session_id=session_id, user_id=request.user_id)
+    client_id = require_client_id(request.client_id, request.user_id)
+    manager = SessionManager(
+        session_id=session_id,
+        user_id=request.user_id,
+        client_id=client_id,
+    )
     query = request.query or manager.get_state().get("last_query") or "catalog research"
     goals = manager.goal_texts()
     _, context_snapshot = context_for(manager)

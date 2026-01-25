@@ -52,6 +52,8 @@ from modules.values.domain import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
+CLIENT_ID = "test-client"
+
 
 @pytest.fixture
 def client(tmp_path):
@@ -96,7 +98,8 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
     monkeypatch.setattr("api.routes.conversation.EXPLAIN_AGENT", DummyExplain())
 
     response = client.post(
-        "/conversation/start", json={"opening_message": "Help me focus"}
+        "/conversation/start",
+        json={"opening_message": "Help me focus", "client_id": CLIENT_ID},
     )
     assert response.status_code == 200
     data = response.json()
@@ -228,7 +231,11 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
 
     response = client.post(
         "/conversation/start",
-        json={"opening_message": "Focus setup", "user_id": "tester"},
+        json={
+            "opening_message": "Focus setup",
+            "user_id": "tester",
+            "client_id": CLIENT_ID,
+        },
     )
     assert response.status_code == 200
     data = response.json()
@@ -272,7 +279,11 @@ def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypa
 
     response = client.post(
         "/products/enrich",
-        json={"product_id": "p1", "query": "Need a better chair"},
+        json={
+            "product_id": "p1",
+            "query": "Need a better chair",
+            "client_id": CLIENT_ID,
+        },
     )
     assert response.status_code == 200
     payload = response.json()
@@ -301,7 +312,9 @@ def test_products_profile_endpoint_returns_profile(client, monkeypatch):
 
     monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
 
-    response = client.post("/products/profile", json={"product_id": "p2"})
+    response = client.post(
+        "/products/profile", json={"product_id": "p2", "client_id": CLIENT_ID}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["profile"]["product_id"] == "p2"
@@ -340,7 +353,9 @@ def test_products_align_endpoint_returns_alignment(client, monkeypatch):
     monkeypatch.setattr("api.routes.products.product_search.search", mock_search)
     monkeypatch.setattr("api.routes.products.HybridIntentClassifier", DummyClassifier)
 
-    response = client.post("/products/align", json={"query": "Need a stand"})
+    response = client.post(
+        "/products/align", json={"query": "Need a stand", "client_id": CLIENT_ID}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["intent"]["primary_goal"] == "workspace upgrade"
@@ -369,7 +384,9 @@ def test_intent_infer_endpoint_returns_intent(client, monkeypatch):
 
     monkeypatch.setattr("api.routes.intent.HybridIntentClassifier", DummyClassifier)
 
-    response = client.post("/intent/infer", json={"query": "Need a better desk"})
+    response = client.post(
+        "/intent/infer", json={"query": "Need a better desk", "client_id": CLIENT_ID}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["intent"]["primary_goal"] == "workspace upgrade"
@@ -385,13 +402,18 @@ def test_get_session_snapshot_returns_latest(client, monkeypatch):
 
     start = client.post(
         "/conversation/start",
-        json={"opening_message": "Need focus", "user_id": "snapshot-user"},
+        json={
+            "opening_message": "Need focus",
+            "user_id": "snapshot-user",
+            "client_id": CLIENT_ID,
+        },
     )
     assert start.status_code == 200
     session_id = start.json()["session_id"]
 
     snapshot = client.get(
-        f"/conversation/{session_id}", params={"user_id": "snapshot-user"}
+        f"/conversation/{session_id}",
+        params={"user_id": "snapshot-user", "client_id": CLIENT_ID},
     )
     assert snapshot.status_code == 200
     data = snapshot.json()
@@ -406,7 +428,11 @@ def test_research_fallback_returns_payload(client, monkeypatch):
 
     response = client.post(
         "/conversation/start",
-        json={"opening_message": "Need a chair", "user_id": "research-user"},
+        json={
+            "opening_message": "Need a chair",
+            "user_id": "research-user",
+            "client_id": CLIENT_ID,
+        },
     )
     assert response.status_code == 200
     data = response.json()

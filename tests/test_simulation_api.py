@@ -27,6 +27,8 @@ if "google" not in sys.modules:
 from db.connection import init_db, set_database_path
 from api.main import app
 
+CLIENT_ID = "test-client"
+
 
 @pytest.fixture
 def client(tmp_path):
@@ -39,6 +41,7 @@ def client(tmp_path):
 def test_simulation_run_returns_result(client: TestClient):
     payload = {
         "query": "running vest",
+        "client_id": CLIENT_ID,
         "products": [
             {
                 "id": "sim-1",
@@ -68,6 +71,7 @@ def test_simulation_run_returns_result(client: TestClient):
 def test_simulation_optimize_and_retest(client: TestClient):
     run_payload = {
         "query": "reduce back pain",
+        "client_id": CLIENT_ID,
         "products": [
             {
                 "id": "sim-3",
@@ -83,7 +87,7 @@ def test_simulation_optimize_and_retest(client: TestClient):
 
     optimize_response = client.post(
         "/simulation/optimize",
-        json={"run_id": run_id, "product_id": "sim-3"},
+        json={"run_id": run_id, "product_id": "sim-3", "client_id": CLIENT_ID},
     )
     assert optimize_response.status_code == 200
     optimized = optimize_response.json()["optimized"]
@@ -94,6 +98,7 @@ def test_simulation_optimize_and_retest(client: TestClient):
         "/simulation/retest",
         json={
             "run_id": run_id,
+            "client_id": CLIENT_ID,
             "optimized_products": [
                 {
                     "id": "sim-3",

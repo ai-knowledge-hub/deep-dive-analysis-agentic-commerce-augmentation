@@ -14,6 +14,7 @@ from modules.simulation.domain import SimulationProduct
 from modules.simulation import repository as simulation_repo
 from modules.simulation.runner import run_simulation
 from modules.simulation.optimizer import optimize_product
+from api.utils.tenancy import require_client_id
 
 if APIRouter:
     router = APIRouter(prefix="/simulation", tags=["simulation"])
@@ -33,30 +34,48 @@ if APIRouter:
         products: List[SimulationProductPayload]
         user_id: Optional[str] = None
         session_id: Optional[str] = None
+        client_id: Optional[str] = None
+        brand_id: Optional[str] = None
+        product_id: Optional[str] = None
 
     class SimulationOptimizeRequest(BaseModel):
         run_id: str
         product_id: str
         tone: Optional[str] = None
         user_id: Optional[str] = None
+        client_id: Optional[str] = None
+        brand_id: Optional[str] = None
 
     class SimulationRetestRequest(BaseModel):
         run_id: str
         optimized_products: List[SimulationProductPayload]
         user_id: Optional[str] = None
+        client_id: Optional[str] = None
+        brand_id: Optional[str] = None
 
     class SimulationToneRequest(BaseModel):
         run_id: str
         tone: Optional[str] = None
         user_id: Optional[str] = None
+        client_id: Optional[str] = None
+        brand_id: Optional[str] = None
 
     class SimulationToneFromBrandRequest(BaseModel):
         run_id: Optional[str] = None
         user_id: Optional[str] = None
+        client_id: Optional[str] = None
+        brand_id: Optional[str] = None
 
     @router.get("/runs")
-    def list_runs(user_id: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
-        runs = simulation_repo.list_runs(user_id=user_id, limit=limit)
+    def list_runs(
+        user_id: Optional[str] = None,
+        limit: int = 20,
+        client_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        client_scope = require_client_id(client_id, user_id)
+        runs = simulation_repo.list_runs(
+            user_id=user_id, limit=limit, client_id=client_scope
+        )
         payload = []
         for run in runs:
             payload.append(
@@ -70,19 +89,34 @@ if APIRouter:
         return {"runs": payload}
 
     @router.get("/runs/{run_id}")
-    def get_run(run_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        run_record = _get_run(run_id, user_id)
+    def get_run(
+        run_id: str,
+        user_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        client_scope = require_client_id(client_id, user_id)
+        run_record = _get_run(run_id, user_id, client_scope)
         return {"run": run_record}
 
     @router.get("/lessons")
-    def list_lessons(user_id: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
-        return {"lessons": simulation_repo.list_lessons(user_id=user_id, limit=limit)}
+    def list_lessons(
+        user_id: Optional[str] = None,
+        limit: int = 50,
+        client_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        client_scope = require_client_id(client_id, user_id)
+        return {
+            "lessons": simulation_repo.list_lessons(
+                user_id=user_id, limit=limit, client_id=client_scope
+            )
+        }
 
     @router.post("/run")
     def run(payload: SimulationRunRequest):
         products = [_to_simulation_product(item) for item in payload.products]
         result = run_simulation(payload.query, products)
         tone_summary = (result.get("tone") or {}).get("summary")
+        client_scope = require_client_id(payload.client_id, payload.user_id)
         stored = simulation_repo.create_run(
             query=payload.query,
             scenario={"query": payload.query, "tone_suggestion": tone_summary},
@@ -90,12 +124,16 @@ if APIRouter:
             result=result,
             user_id=payload.user_id,
             session_id=payload.session_id,
+            client_id=client_scope,
+            brand_id=payload.brand_id,
+            product_id=payload.product_id,
         )
         return {"run_id": stored["id"], "result": result}
 
     @router.post("/optimize")
     def optimize(payload: SimulationOptimizeRequest):
-        run_record = _get_run(payload.run_id, payload.user_id)
+        client_scope = require_client_id(payload.client_id, payload.user_id)
+        run_record = _get_run(payload.run_id, payload.user_id, client_scope)
         result = run_record.get("result") or {}
         gap_analysis = result.get("gap_analysis") or []
         target_gap = next(
@@ -126,7 +164,8 @@ if APIRouter:
 
     @router.post("/retest")
     def retest(payload: SimulationRetestRequest):
-        run_record = _get_run(payload.run_id, payload.user_id)
+        client_scope = require_client_id(payload.client_id, payload.user_id)
+        run_record = _get_run(payload.run_id, payload.user_id, client_scope)
         query = run_record.get("query") or run_record.get("scenario", {}).get("query")
         if not query:
             raise HTTPException(status_code=400, detail="Query missing for run")
@@ -138,7 +177,8 @@ if APIRouter:
 
     @router.post("/tone")
     def update_tone(payload: SimulationToneRequest):
-        run_record = _get_run(payload.run_id, payload.user_id)
+        client_scope = require_client_id(payload.client_id, payload.user_id)
+        run_record = _get_run(payload.run_id, payload.user_id, client_scope)
         scenario = run_record.get("scenario") or {}
         tone = (payload.tone or "").strip()
         scenario["confirmed_tone"] = tone or None
@@ -147,8 +187,10 @@ if APIRouter:
 
     @router.post("/tone/from-brand")
     def tone_from_brand(payload: SimulationToneFromBrandRequest):
+        require_client_id(payload.client_id, payload.user_id)
         if payload.run_id:
-            run_record = _get_run(payload.run_id, payload.user_id)
+            client_scope = require_client_id(payload.client_id, payload.user_id)
+            run_record = _get_run(payload.run_id, payload.user_id, client_scope)
             scenario = run_record.get("scenario") or {}
             scenario["tone_source"] = "brand_site"
             simulation_repo.update_scenario(payload.run_id, scenario)
@@ -173,9 +215,11 @@ def _to_simulation_product(item: "SimulationProductPayload") -> SimulationProduc
     )
 
 
-def _get_run(run_id: str, user_id: Optional[str]) -> Dict[str, Any]:
+def _get_run(run_id: str, user_id: Optional[str], client_id: str) -> Dict[str, Any]:
     run_record = simulation_repo.get_run(run_id)
     if not run_record:
+        raise HTTPException(status_code=404, detail="Simulation run not found")
+    if run_record.get("client_id") and run_record.get("client_id") != client_id:
         raise HTTPException(status_code=404, detail="Simulation run not found")
     if user_id and run_record.get("user_id") and run_record.get("user_id") != user_id:
         raise HTTPException(status_code=404, detail="Simulation run not found")

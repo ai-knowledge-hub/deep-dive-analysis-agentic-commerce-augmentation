@@ -14,6 +14,7 @@ from modules.evidence.verify import simulate_actual, average_alignment
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.intentionality.profiling import build_profile
 from modules.alignment import goal_alignment
+from api.utils.tenancy import require_client_id
 
 if APIRouter:
     router = APIRouter(prefix="/evidence", tags=["evidence"])
@@ -23,6 +24,8 @@ if APIRouter:
     class EvidenceAnalyzeRequest(BaseModel):
         query: str = Field(..., min_length=1)
         max_items: int = Field(default=5, ge=1, le=10)
+        user_id: Optional[str] = None
+        client_id: Optional[str] = None
 
     class EvidenceItem(BaseModel):
         id: str
@@ -39,14 +42,19 @@ if APIRouter:
         query: Optional[str] = None
         evidence_products: List[EvidenceItem]
         tone: Optional[str] = None
+        user_id: Optional[str] = None
+        client_id: Optional[str] = None
 
     class RecommendationVerifyRequest(BaseModel):
         query: str = Field(..., min_length=1)
         evidence_products: List[EvidenceItem]
         optimized: Optional[List[Dict[str, Any]]] = None
+        user_id: Optional[str] = None
+        client_id: Optional[str] = None
 
     @router.post("/analyze")
     def analyze(payload: EvidenceAnalyzeRequest):
+        require_client_id(payload.client_id, payload.user_id)
         classifier = HybridIntentClassifier()
         intent = classifier.classify(payload.query).to_dict()
         goals = _intent_goals(intent, fallback=payload.query)
@@ -68,6 +76,7 @@ if APIRouter:
 
     @representation_router.post("/optimize")
     def optimize_representation(payload: RepresentationOptimizeRequest):
+        require_client_id(payload.client_id, payload.user_id)
         intent = None
         goals: List[str] = []
         if payload.query:
@@ -102,6 +111,7 @@ if APIRouter:
 
     @recommendation_router.post("/verify")
     def verify_recommendations(payload: RecommendationVerifyRequest):
+        require_client_id(payload.client_id, payload.user_id)
         classifier = HybridIntentClassifier()
         intent = classifier.classify(payload.query).to_dict()
         goals = _intent_goals(intent, fallback=payload.query)

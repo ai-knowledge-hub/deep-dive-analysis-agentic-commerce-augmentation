@@ -158,6 +158,33 @@ Note: In production, evidence sources are replaced by brand catalogs and feeds
 
 ---
 
+## Database ERD (Multi-Tenant v1)
+
+```
+clients (id, name)
+  ├─< brands (id, client_id, name)
+  │     └─< products (id, brand_id, name, description)
+  └─< client_users (id, client_id, user_id, role)
+
+users (id, preferences_json, metadata_json)
+  ├─< sessions (id, user_id, client_id, brand_id, state_json)
+  │     ├─< turns (id, session_id, speaker, content)
+  │     ├─< goals (id, user_id, session_id, client_id, brand_id, goal_text)
+  │     └─< recommendations (id, session_id, client_id, product_ids_json)
+  ├─< episodes (id, user_id, session_id, client_id, outcome)
+  └─< semantic_memory (id, user_id, client_id, key, value_json, embedding)
+
+simulation_runs (id, user_id, session_id, client_id, brand_id, product_id, query, result_json)
+  └─< simulation_lessons (id, run_id, user_id, client_id, lesson)
+```
+
+Notes:
+- `client_id` scopes all data for tenant isolation.
+- `brand_id` is optional and only set when a chat/simulation is explicitly tied to a brand.
+- `product_id` is optional to allow simulations without product records.
+
+---
+
 ## Core Modules
 
 ### 1. Intent Module (`modules/intent/`)

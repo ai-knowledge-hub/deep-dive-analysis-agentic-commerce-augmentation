@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     frontend_url: str = Field(
         default="http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL")
     )
+    admin_user_ids: str = Field(
+        default="", validation_alias=AliasChoices("ADMIN_USER_IDS")
+    )
 
     class Config:
         env_file = ".env"
