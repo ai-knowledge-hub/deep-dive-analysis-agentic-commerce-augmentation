@@ -4,9 +4,9 @@
 
 This system is a **simulation sandbox for AI shopping discoverability**.
 
-Brand marketers ask: "Why isn't my product showing up in ChatGPT or Google AI Mode?" We give them the answer—and a way to fix it.
+Brand marketers ask: "Why isn't my product showing up in ChatGPT or Google AI Mode?" We give them the answer and a way to fix it.
 
-When an AI agent recommends products, it doesn't match keywords—it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
+When an AI agent recommends products, it doesn't match keywords, it infers what the user is trying to achieve and selects products that serve that goal. Products structured around human capabilities and outcomes get recommended. Products described in pure specs don't.
 
 We let brands **see what the LLM sees**, understand why they're losing, and test changes until they win.
 
@@ -23,7 +23,7 @@ See [user-problem.md](user-problem.md) for detailed user personas and pain point
 | Role | Their Question |
 |------|----------------|
 | **Brand Marketing Manager** | "Why aren't my products showing up in AI results?" |
-| **E-commerce Growth Lead** | "I know SEO, but AI works differently—what are the rules?" |
+| **E-commerce Growth Lead** | "I know SEO, but AI works differently, what are the rules?" |
 | **Agency Account Manager** | "Client asks why they're not in ChatGPT. I have no tools to answer." |
 | **Product Feed Manager** | "I write for keyword search. What should I change for LLMs?" |
 
@@ -155,6 +155,33 @@ This foundation informs architecture but does not dominate user-facing messaging
 Note: In production, evidence sources are replaced by brand catalogs and feeds
 (Shopify, Merchant Center, JSON-LD). The pipeline stays the same.
 ```
+
+---
+
+## Database ERD (Multi-Tenant v1)
+
+```
+clients (id, name)
+  ├─< brands (id, client_id, name)
+  │     └─< products (id, brand_id, name, description)
+  └─< client_users (id, client_id, user_id, role)
+
+users (id, preferences_json, metadata_json)
+  ├─< sessions (id, user_id, client_id, brand_id, state_json)
+  │     ├─< turns (id, session_id, speaker, content)
+  │     ├─< goals (id, user_id, session_id, client_id, brand_id, goal_text)
+  │     └─< recommendations (id, session_id, client_id, product_ids_json)
+  ├─< episodes (id, user_id, session_id, client_id, outcome)
+  └─< semantic_memory (id, user_id, client_id, key, value_json, embedding)
+
+simulation_runs (id, user_id, session_id, client_id, brand_id, product_id, query, result_json)
+  └─< simulation_lessons (id, run_id, user_id, client_id, lesson)
+```
+
+Notes:
+- `client_id` scopes all data for tenant isolation.
+- `brand_id` is optional and only set when a chat/simulation is explicitly tied to a brand.
+- `product_id` is optional to allow simulations without product records.
 
 ---
 
@@ -404,6 +431,8 @@ Lift: +63% alignment score
 ---
 
 ## API Surface
+
+**Multi-tenant requirement:** Every request includes `client_id` unless the caller is an admin user. `brand_id` and `product_id` are optional on simulation endpoints to link runs to catalog records.
 
 ### Core Endpoints
 

@@ -6,9 +6,19 @@ type Props = {
   runs: SimulationRunSummary[];
   activeRunId?: string | null;
   onSelect: (runId: string) => void;
+  onAttach?: (runId: string) => void;
+  attachLabel?: string | null;
+  attachDisabled?: boolean;
 };
 
-export function SimulationHistory({ runs, activeRunId, onSelect }: Props) {
+export function SimulationHistory({
+  runs,
+  activeRunId,
+  onSelect,
+  onAttach,
+  attachLabel,
+  attachDisabled,
+}: Props) {
   return (
     <div className="panel__card">
       <div className="panel__header">
@@ -22,28 +32,54 @@ export function SimulationHistory({ runs, activeRunId, onSelect }: Props) {
       ) : (
         <div className="simulation__history">
           {runs.map((run) => (
-            <button
+            <div
               key={run.id}
-              type="button"
               className={`simulation__history-item ${
                 activeRunId === run.id ? "is-active" : ""
               }`}
-              onClick={() => onSelect(run.id)}
             >
-              <div className="simulation__history-row">
-                <span className="simulation__history-query">{run.query}</span>
-                {run.winner_id && (
-                  <span className="simulation__history-winner">
-                    Winner: {run.winner_id}
+              <button
+                type="button"
+                className="simulation__history-main"
+                onClick={() => onSelect(run.id)}
+              >
+                <div className="simulation__history-row">
+                  <span className="simulation__history-query">{run.query}</span>
+                  {run.winner_id && (
+                    <span className="simulation__history-winner">
+                      Winner: {run.winner_id}
+                    </span>
+                  )}
+                </div>
+                {run.created_at && (
+                  <span className="simulation__history-meta">
+                    {new Date(run.created_at).toLocaleDateString()}
                   </span>
                 )}
-              </div>
-              {run.created_at && (
-                <span className="simulation__history-meta">
-                  {new Date(run.created_at).toLocaleDateString()}
-                </span>
+                {run.product_id && (
+                  <span className="simulation__history-meta">
+                    Linked product: {run.product_id}
+                  </span>
+                )}
+              </button>
+              {onAttach && attachLabel && (
+                <div className="simulation__history-actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--compact"
+                    onClick={() => onAttach(run.id)}
+                    disabled={attachDisabled}
+                    title={
+                      attachDisabled
+                        ? "Select a product to attach this run."
+                        : `Attach to ${attachLabel}`
+                    }
+                  >
+                    Attach
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
           ))}
         </div>
       )}

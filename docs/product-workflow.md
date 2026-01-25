@@ -165,6 +165,8 @@ class GapAnalysis:
 
 ### API Endpoints
 
+**Multi-tenant requirement:** Every request includes `client_id`. Simulation calls may include `brand_id`/`product_id`.
+
 ```
 POST /simulation/run
   Input: { query, products[] }

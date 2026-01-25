@@ -20,6 +20,8 @@ Copy the relevant section from `.env.example` into `.env.local` (local) or confi
 # 1. Configure environment
 cp .env.example .env.local
 # Edit .env.local: set OPENROUTER_API_KEY, OPENROUTER_MODEL
+# Optional: ADMIN_USER_IDS=user_123,user_456 (bypass client_id requirement)
+# Optional: CLERK_WEBHOOK_SECRET=whsec_... (for Clerk user sync)
 
 # 2. Install dependencies
 uv sync
@@ -35,6 +37,7 @@ cd web
 cp ../.env.example .env.local
 # Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY
 # Optional: set NEXT_PUBLIC_API_URL if API is remote
+# Required: NEXT_PUBLIC_CLIENT_ID=default (or your tenant id)
 pnpm install
 pnpm dev
 ```

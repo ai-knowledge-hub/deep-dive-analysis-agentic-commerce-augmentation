@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from shared.db.connection import get_connection
 from modules.memory.repositories.base import from_json, to_json
+from modules.memory.repositories.clients import DEFAULT_CLIENT_ID, ensure_client
 
 
 def _decode_embedding(value: bytes | str | None) -> List[float] | None:
@@ -28,6 +29,8 @@ def _row_to_dict(row) -> Dict[str, Any]:
         "id": row["id"],
         "user_id": row["user_id"],
         "session_id": row["session_id"],
+        "client_id": row["client_id"],
+        "brand_id": row["brand_id"],
         "goal_text": row["goal_text"],
         "goal_embedding": _decode_embedding(row["goal_embedding"]),
         "domain": row["domain"],
@@ -43,19 +46,34 @@ def create_goal(
     domain: str | None = None,
     importance: float = 0.5,
     goal_embedding: List[float] | None = None,
+    client_id: str = DEFAULT_CLIENT_ID,
+    brand_id: str | None = None,
 ) -> Dict[str, Any]:
     """Create a new goal."""
+    ensure_client(client_id)
     goal_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute(
         """
-        INSERT INTO goals (id, user_id, session_id, goal_text, goal_embedding, domain, importance)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO goals (
+            id,
+            user_id,
+            session_id,
+            client_id,
+            brand_id,
+            goal_text,
+            goal_embedding,
+            domain,
+            importance
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             goal_id,
             user_id,
             session_id,
+            client_id,
+            brand_id,
             goal_text,
             _encode_embedding(goal_embedding),
             domain,
@@ -67,31 +85,42 @@ def create_goal(
     return _row_to_dict(row)
 
 
-def list_goals(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+def list_goals(
+    user_id: str,
+    limit: int = 50,
+    client_id: str = DEFAULT_CLIENT_ID,
+) -> List[Dict[str, Any]]:
     """List goals for a user."""
     rows = (
         get_connection()
         .execute(
             """
         SELECT * FROM goals
-        WHERE user_id = ?
+        WHERE user_id = ? AND client_id = ?
         ORDER BY created_at DESC
         LIMIT ?
         """,
-            (user_id, limit),
+            (user_id, client_id, limit),
         )
         .fetchall()
     )
     return [_row_to_dict(row) for row in rows]
 
 
-def list_goals_for_session(session_id: str) -> List[Dict[str, Any]]:
+def list_goals_for_session(
+    session_id: str,
+    client_id: str = DEFAULT_CLIENT_ID,
+) -> List[Dict[str, Any]]:
     """List goals for a session."""
     rows = (
         get_connection()
         .execute(
-            "SELECT * FROM goals WHERE session_id = ? ORDER BY created_at ASC",
-            (session_id,),
+            """
+            SELECT * FROM goals
+            WHERE session_id = ? AND client_id = ?
+            ORDER BY created_at ASC
+            """,
+            (session_id, client_id),
         )
         .fetchall()
     )

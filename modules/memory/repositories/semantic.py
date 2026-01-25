@@ -7,8 +7,13 @@ from typing import Any, Dict, List, Optional
 
 from shared.db.connection import get_connection
 from modules.memory.repositories.base import from_json, to_json
+from modules.memory.repositories.clients import (
+    DEFAULT_CLIENT_ID as TENANT_DEFAULT_CLIENT_ID,
+    ensure_client,
+)
 
 DEFAULT_USER_ID = "__default__"
+DEFAULT_CLIENT_ID = TENANT_DEFAULT_CLIENT_ID
 
 
 def _ensure_user(user_id: str) -> None:
@@ -28,6 +33,7 @@ def _row_to_dict(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
         "user_id": row["user_id"],
+        "client_id": row["client_id"],
         "key": row["key"],
         "value": from_json(row["value_json"], default=None),
         "embedding": row["embedding"],
@@ -40,64 +46,77 @@ def upsert_entry(
     key: str,
     value: Any,
     user_id: str = DEFAULT_USER_ID,
+    client_id: str = DEFAULT_CLIENT_ID,
     embedding: bytes | None = None,
 ) -> Dict[str, Any]:
     """Create or update a semantic memory record."""
     conn = get_connection()
     _ensure_user(user_id)
+    ensure_client(client_id)
     conn.execute(
         """
-        INSERT INTO semantic_memory (id, user_id, key, value_json, embedding, updated_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(user_id, key)
+        INSERT INTO semantic_memory (id, user_id, client_id, key, value_json, embedding, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(client_id, user_id, key)
         DO UPDATE SET
             value_json = excluded.value_json,
             embedding = COALESCE(excluded.embedding, semantic_memory.embedding),
             updated_at = datetime('now')
         """,
-        (str(uuid.uuid4()), user_id, key, to_json(value), embedding),
+        (str(uuid.uuid4()), user_id, client_id, key, to_json(value), embedding),
     )
     conn.commit()
-    return get_entry(key, user_id) or {}
+    return get_entry(key, user_id, client_id) or {}
 
 
-def get_entry(key: str, user_id: str = DEFAULT_USER_ID) -> Optional[Dict[str, Any]]:
+def get_entry(
+    key: str,
+    user_id: str = DEFAULT_USER_ID,
+    client_id: str = DEFAULT_CLIENT_ID,
+) -> Optional[Dict[str, Any]]:
     """Get a semantic memory entry by key."""
     row = (
         get_connection()
         .execute(
             """
         SELECT * FROM semantic_memory
-        WHERE user_id = ? AND key = ?
+        WHERE user_id = ? AND client_id = ? AND key = ?
         """,
-            (user_id, key),
+            (user_id, client_id, key),
         )
         .fetchone()
     )
     return _row_to_dict(row) if row else None
 
 
-def delete_entry(key: str, user_id: str = DEFAULT_USER_ID) -> None:
+def delete_entry(
+    key: str,
+    user_id: str = DEFAULT_USER_ID,
+    client_id: str = DEFAULT_CLIENT_ID,
+) -> None:
     """Delete a semantic memory entry."""
     conn = get_connection()
     conn.execute(
-        "DELETE FROM semantic_memory WHERE user_id = ? AND key = ?",
-        (user_id, key),
+        "DELETE FROM semantic_memory WHERE user_id = ? AND client_id = ? AND key = ?",
+        (user_id, client_id, key),
     )
     conn.commit()
 
 
-def list_entries(user_id: str = DEFAULT_USER_ID) -> List[Dict[str, Any]]:
+def list_entries(
+    user_id: str = DEFAULT_USER_ID,
+    client_id: str = DEFAULT_CLIENT_ID,
+) -> List[Dict[str, Any]]:
     """List all semantic memory entries for a user."""
     rows = (
         get_connection()
         .execute(
             """
         SELECT * FROM semantic_memory
-        WHERE user_id = ?
+        WHERE user_id = ? AND client_id = ?
         ORDER BY updated_at DESC
         """,
-            (user_id,),
+            (user_id, client_id),
         )
         .fetchall()
     )
@@ -106,6 +125,7 @@ def list_entries(user_id: str = DEFAULT_USER_ID) -> List[Dict[str, Any]]:
 
 __all__ = [
     "DEFAULT_USER_ID",
+    "DEFAULT_CLIENT_ID",
     "upsert_entry",
     "get_entry",
     "delete_entry",

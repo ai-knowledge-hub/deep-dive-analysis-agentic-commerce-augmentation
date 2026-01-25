@@ -29,6 +29,8 @@ from db.connection import set_database_path, init_db
 from api.main import app
 from modules.evidence.domain import EvidenceProduct
 
+CLIENT_ID = "test-client"
+
 
 @pytest.fixture
 def client(tmp_path):
@@ -53,7 +55,9 @@ def test_evidence_analyze_returns_products(client, monkeypatch):
 
     monkeypatch.setattr("api.routes.evidence.retrieve", fake_retrieve)
 
-    response = client.post("/evidence/analyze", json={"query": "bright room TV"})
+    response = client.post(
+        "/evidence/analyze", json={"query": "bright room TV", "client_id": CLIENT_ID}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["evidence_products"][0]["id"] == "ev-1"
@@ -64,6 +68,7 @@ def test_evidence_analyze_returns_products(client, monkeypatch):
 def test_representation_optimize_returns_before_after(client):
     payload = {
         "query": "reduce back pain",
+        "client_id": CLIENT_ID,
         "evidence_products": [
             {
                 "id": "ev-2",
@@ -86,6 +91,7 @@ def test_representation_optimize_returns_before_after(client):
 def test_recommendation_verify_returns_lift(client):
     payload = {
         "query": "running shoes for joint pain",
+        "client_id": CLIENT_ID,
         "evidence_products": [
             {
                 "id": "ev-3",

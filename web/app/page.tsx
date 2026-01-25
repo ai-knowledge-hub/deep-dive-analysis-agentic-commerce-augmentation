@@ -1,21 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   analyzeEvidence,
   deleteConversationSession,
   getConversationSnapshot,
   listConversationSessions,
   optimizeRepresentation,
-  refreshResearch,
-  runSimulation,
-  optimizeSimulation,
-  retestSimulation,
   listSimulationRuns,
   listSimulationLessons,
-  getSimulationRun,
-  requestBrandTone,
-  updateSimulationTone,
   sendConversationMessage,
   startConversation,
   verifyRecommendation,
@@ -27,22 +21,17 @@ import type {
   RecommendationVerifyResponse,
   SessionSummary,
   SimulationProduct,
-  SimulationRunResponse,
-  SimulationOptimizeResponse,
-  SimulationRetestResponse,
   SimulationRunSummary,
   SimulationLesson,
 } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
-import { ProductReasoning } from "../components/products/ProductReasoning";
+import Link from "next/link";
 import { Sidebar } from "../components/layout/Sidebar";
 import { GoalClarificationPanel } from "../components/values/GoalClarificationPanel";
 import { IntentionalityProfileCard } from "../components/products/IntentionalityProfileCard";
 import { IntentDisplay } from "../components/intent/IntentDisplay";
-import { EvidencePanel } from "../components/evidence/EvidencePanel";
-import { SimulationPanel } from "../components/simulation/SimulationPanel";
-import { SimulationHistory } from "../components/simulation/SimulationHistory";
-import { SimulationLessons } from "../components/simulation/SimulationLessons";
+import { ProductReasoning } from "../components/products/ProductReasoning";
+import { HistoryDrawer } from "../components/layout/HistoryDrawer";
 import { useUser } from "@clerk/nextjs";
 
 export default function HomePage() {
@@ -63,18 +52,10 @@ export default function HomePage() {
     useState<RepresentationOptimizeResponse | null>(null);
   const [evidenceVerification, setEvidenceVerification] =
     useState<RecommendationVerifyResponse | null>(null);
-  const [simulationRun, setSimulationRun] = useState<SimulationRunResponse | null>(null);
-  const [simulationOptimized, setSimulationOptimized] =
-    useState<SimulationOptimizeResponse | null>(null);
-  const [simulationRetest, setSimulationRetest] =
-    useState<SimulationRetestResponse | null>(null);
   const [simulationScenario, setSimulationScenario] = useState("");
   const [simulationScenarioDirty, setSimulationScenarioDirty] = useState(false);
-  const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
   const [simulationTone, setSimulationTone] = useState("");
-  const [simulationToneNotice, setSimulationToneNotice] = useState<string | null>(null);
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
-  const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
   const [selectedSimulationProductId, setSelectedSimulationProductId] =
@@ -82,7 +63,6 @@ export default function HomePage() {
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [researchLoading, setResearchLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -91,9 +71,27 @@ export default function HomePage() {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { user } = useUser();
+  const searchParams = useSearchParams();
   const userId = user?.id ?? null;
   const storageKey = useMemo(
     () => (userId ? `intentionality.sessions.${userId}` : "intentionality.sessions.anonymous"),
+    [userId],
+  );
+  const lastSessionKey = useMemo(
+    () =>
+      userId ? `intentionality.last_session.${userId}` : "intentionality.last_session.anonymous",
+    [userId],
+  );
+  const simulationStorageKey = useMemo(
+    () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
+    [userId],
+  );
+  const evidenceStorageKey = useMemo(
+    () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
+    [userId],
+  );
+  const alignmentStorageKey = useMemo(
+    () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
     [userId],
   );
 
@@ -131,15 +129,12 @@ export default function HomePage() {
     setEvidenceAnalysis(null);
     setEvidenceOptimization(null);
     setEvidenceVerification(null);
-    setSimulationRun(null);
-    setSimulationOptimized(null);
-    setSimulationRetest(null);
     setSimulationProducts([]);
     setSelectedSimulationProductId(null);
     setSimulationScenarioDirty(false);
-    setSimulationToneSuggestion(null);
     setSimulationTone("");
-  }, []);
+    localStorage.removeItem(lastSessionKey);
+  }, [lastSessionKey]);
 
   const upsertSession = useCallback(
     (session: SessionSummary) => {
@@ -231,7 +226,7 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [sessionId, upsertSession, userId],
+    [sessionId, simulationScenarioDirty, simulationTone, upsertSession, userId],
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -264,6 +259,11 @@ export default function HomePage() {
       el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    localStorage.setItem(lastSessionKey, sessionId);
+  }, [lastSessionKey, sessionId]);
 
   useEffect(() => {
     if (!isHistoryOpen) return;
@@ -318,12 +318,55 @@ export default function HomePage() {
   }, [userId]);
 
   useEffect(() => {
-    const suggestion = simulationRun?.result?.tone?.summary ?? null;
-    setSimulationToneSuggestion(suggestion);
-    if (suggestion && !simulationTone) {
-      setSimulationTone(suggestion);
-    }
-  }, [simulationRun, simulationTone]);
+    if (typeof window === "undefined") return;
+    const payload = {
+      scenario: simulationScenario,
+      products: simulationProducts,
+      selected_product_id: selectedSimulationProductId,
+      tone: simulationTone,
+    };
+    localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
+  }, [
+    simulationProducts,
+    simulationScenario,
+    simulationStorageKey,
+    simulationTone,
+    selectedSimulationProductId,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const payload = {
+      analysis: evidenceAnalysis,
+      optimization: evidenceOptimization,
+      verification: evidenceVerification,
+    };
+    localStorage.setItem(evidenceStorageKey, JSON.stringify(payload));
+  }, [evidenceAnalysis, evidenceOptimization, evidenceStorageKey, evidenceVerification]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const payload = {
+      intent,
+      goal_state: goalState,
+      plan,
+      clarifications,
+      product_reasoning: productReasoning,
+      research_results: researchResults,
+      last_query: lastQuery,
+    };
+    localStorage.setItem(alignmentStorageKey, JSON.stringify(payload));
+  }, [
+    alignmentStorageKey,
+    clarifications,
+    goalState,
+    intent,
+    lastQuery,
+    plan,
+    productReasoning,
+    researchResults,
+  ]);
+
 
   const handleSelectSession = useCallback(
     async (selectedId: string) => {
@@ -350,16 +393,27 @@ export default function HomePage() {
       setEvidenceAnalysis(null);
       setEvidenceOptimization(null);
       setEvidenceVerification(null);
-      setSimulationRun(null);
-      setSimulationOptimized(null);
-      setSimulationRetest(null);
       setSimulationProducts([]);
       setSelectedSimulationProductId(null);
-      setSimulationToneSuggestion(null);
       setSimulationTone("");
     },
     [userId],
   );
+
+  useEffect(() => {
+    if (!userId) return;
+    const targetId = searchParams.get("session");
+    if (targetId && targetId !== sessionId) {
+      void handleSelectSession(targetId);
+      return;
+    }
+    if (!targetId && !sessionId) {
+      const lastId = localStorage.getItem(lastSessionKey);
+      if (lastId) {
+        void handleSelectSession(lastId);
+      }
+    }
+  }, [handleSelectSession, lastSessionKey, searchParams, sessionId, userId]);
 
   const handleDeleteSession = useCallback(
     async (selectedId: string) => {
@@ -391,191 +445,6 @@ export default function HomePage() {
     [deleteTargetId, resetConversation, sessionId, updateSessions, userId],
   );
 
-  const handleRefreshResearch = useCallback(async () => {
-    if (!sessionId) return;
-    setResearchLoading(true);
-    try {
-      const response = await refreshResearch(sessionId, userId, lastQuery ?? undefined);
-      setResearchResults(response.research_results ?? []);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error refreshing research: ${(error as Error).message}` },
-      ]);
-    } finally {
-      setResearchLoading(false);
-    }
-  }, [lastQuery, sessionId, userId]);
-
-  const handleRunSimulation = useCallback(async () => {
-    if (!simulationScenario.trim() && !lastQuery) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: "Add a scenario before running a simulation." },
-      ]);
-      return;
-    }
-    if (simulationProducts.length === 0) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "agent",
-          content: "Add a scenario and evidence products before running a simulation.",
-        },
-      ]);
-      return;
-    }
-    setSimulationLoading(true);
-    try {
-      const scenario = simulationScenario.trim() || lastQuery;
-      const response = await runSimulation(
-        scenario,
-        simulationProducts,
-        userId,
-        sessionId,
-      );
-      setSimulationRun(response);
-      setSimulationOptimized(null);
-      setSimulationRetest(null);
-      setSimulationToneSuggestion(response.result?.tone?.summary ?? null);
-      if (!simulationTone) {
-        setSimulationTone(response.result?.tone?.summary ?? "");
-      }
-      void listSimulationLessons(userId).then((response) => {
-        setSimulationLessons(response.lessons ?? []);
-      });
-      void listSimulationRuns(userId).then((runs) =>
-        setSimulationRuns(runs.runs ?? []),
-      );
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error running simulation: ${(error as Error).message}` },
-      ]);
-    } finally {
-      setSimulationLoading(false);
-    }
-  }, [lastQuery, sessionId, simulationProducts, simulationScenario, simulationTone, userId]);
-
-  const handleOptimizeSimulation = useCallback(async (productId?: string) => {
-    const runId = simulationRun?.run_id;
-    const gaps = simulationRun?.result?.gap_analysis ?? [];
-    if (!runId || gaps.length === 0) return;
-    const targetGap =
-      (productId && gaps.find((gap) => gap.product_id === productId)) ||
-      [...gaps].sort((a, b) => a.score - b.score)[0];
-    setSimulationLoading(true);
-    try {
-      const response = await optimizeSimulation(
-        runId,
-        targetGap.product_id,
-        simulationTone || undefined,
-        userId,
-      );
-      setSimulationOptimized(response);
-      setSelectedSimulationProductId(targetGap.product_id);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error optimizing simulation: ${(error as Error).message}` },
-      ]);
-    } finally {
-      setSimulationLoading(false);
-    }
-  }, [simulationRun, simulationTone, userId]);
-
-  const handleRetestSimulation = useCallback(async () => {
-    if (!simulationRun || !simulationOptimized) return;
-    const optimizedId = simulationOptimized.optimized.id;
-    const updated = simulationProducts.map((product) =>
-      product.id === optimizedId
-        ? { ...product, description: simulationOptimized.optimized.after }
-        : product,
-    );
-    setSimulationLoading(true);
-    try {
-      const response = await retestSimulation(
-        simulationRun.run_id,
-        updated,
-        userId,
-      );
-      setSimulationRetest(response);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error retesting simulation: ${(error as Error).message}` },
-      ]);
-    } finally {
-      setSimulationLoading(false);
-    }
-  }, [simulationOptimized, simulationProducts, simulationRun, userId]);
-
-  const handleSelectSimulationRun = useCallback(
-    async (runId: string) => {
-      try {
-        const response = await getSimulationRun(runId, userId);
-        const run = response.run;
-        setSimulationRun({ run_id: run.id, result: run.result });
-        setSimulationOptimized(null);
-      setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
-      setSimulationProducts(run.products ?? []);
-      setSimulationScenario(run.query ?? "");
-      setSimulationScenarioDirty(false);
-      const scenario = (run.scenario as Record<string, unknown> | undefined) || {};
-        const confirmedTone = (scenario.confirmed_tone as string | undefined) ?? "";
-        const suggestedTone = (scenario.tone_suggestion as string | undefined) ?? null;
-        setSimulationToneSuggestion(run.result?.tone?.summary ?? suggestedTone ?? null);
-        setSimulationTone(confirmedTone || run.result?.tone?.summary || "");
-        if (run.products?.length) {
-          setSelectedSimulationProductId(run.products[0].id);
-        }
-        void listSimulationLessons(userId).then((response) => {
-          setSimulationLessons(response.lessons ?? []);
-        });
-      } catch (error) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "agent", content: `Error loading simulation: ${(error as Error).message}` },
-        ]);
-      }
-    },
-    [userId],
-  );
-
-  const handleSaveTone = useCallback(async () => {
-    if (!simulationRun) return;
-    try {
-      await updateSimulationTone(simulationRun.run_id, simulationTone, userId);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error saving tone: ${(error as Error).message}` },
-      ]);
-    }
-  }, [simulationRun, simulationTone, userId]);
-
-  const handleClearTone = useCallback(async () => {
-    setSimulationTone("");
-    if (!simulationRun) return;
-    try {
-      await updateSimulationTone(simulationRun.run_id, "", userId);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error saving tone: ${(error as Error).message}` },
-      ]);
-    }
-  }, [simulationRun, userId]);
-
-  const handleToneFromBrand = useCallback(async () => {
-    try {
-      const response = await requestBrandTone(simulationRun?.run_id, userId);
-      setSimulationToneNotice(response.message);
-      window.setTimeout(() => setSimulationToneNotice(null), 2600);
-    } catch (error) {
-      setSimulationToneNotice("Brand tone import is not ready yet.");
-    }
-  }, [simulationRun, userId]);
 
   return (
     <div className="app">
@@ -624,85 +493,18 @@ export default function HomePage() {
           </div>
         </div>
       )}
-      {isHistoryOpen && (
-        <div
-          className={`history-overlay ${isHistoryClosing ? "is-closing" : ""}`}
-          role="dialog"
-          aria-modal="true"
-          onClick={() => handleCloseHistory()}
-        >
-          <div
-            className={`history-panel ${isHistoryClosing ? "is-closing" : ""}`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="history-panel__header">
-              <h4>History</h4>
-              <button
-                type="button"
-                className="history-panel__close"
-                onClick={() => handleCloseHistory()}
-                aria-label="Close history"
-              >
-                ×
-              </button>
-            </div>
-            <div className="history-panel__list">
-              {sessions.length === 0 ? (
-                <p className="panel__empty">No conversations yet.</p>
-              ) : (
-                sessions.map((session) => (
-                  <button
-                    key={session.id}
-                    type="button"
-                    className={`history-panel__item ${
-                      session.id === sessionId ? "is-active" : ""
-                    }`}
-                    onClick={() => {
-                      void handleSelectSession(session.id);
-                      setHistoryOpen(false);
-                    }}
-                  >
-                    <div className="history-panel__row">
-                      <span
-                        className="history-panel__title"
-                        title={session.preview || "Conversation"}
-                      >
-                        {session.preview || "Conversation"}
-                      </span>
-                      <button
-                        type="button"
-                        className="history-panel__delete"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleDeleteSession(session.id);
-                        }}
-                        aria-label="Delete conversation"
-                        title="Delete conversation"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
-                          className="icon"
-                        >
-                          <path
-                            d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    {session.last_turn_at && (
-                      <span className="history-panel__meta">
-                        {new Date(session.last_turn_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        isClosing={isHistoryClosing}
+        sessions={sessions}
+        activeSessionId={sessionId}
+        onClose={handleCloseHistory}
+        onSelect={(selectedId) => {
+          void handleSelectSession(selectedId);
+          setHistoryOpen(false);
+        }}
+        onRequestDelete={handleDeleteSession}
+      />
       <main className="main">
         <div className="main__content">
           <div className="main__toolbar">
@@ -751,62 +553,93 @@ export default function HomePage() {
               baselineScore={plan?.alignment?.goal_alignment?.baseline_score}
             />
             <GoalClarificationPanel state={goalState} />
-            <EvidencePanel
-              analysis={evidenceAnalysis}
-              optimization={evidenceOptimization}
-              verification={evidenceVerification}
-            />
-            <SimulationPanel
-              query={lastQuery}
-              scenarioValue={simulationScenario}
-              onScenarioChange={(value) => {
-                setSimulationScenario(value);
-                setSimulationScenarioDirty(true);
-              }}
-              toneSuggestion={simulationToneSuggestion}
-              toneValue={simulationTone}
-              toneNotice={simulationToneNotice}
-              onToneChange={setSimulationTone}
-              onToneUseSuggestion={() =>
-                setSimulationTone(simulationToneSuggestion ?? "")
-              }
-              onToneSave={handleSaveTone}
-              onToneClear={handleClearTone}
-              onToneFromBrand={handleToneFromBrand}
-              run={simulationRun}
-              optimized={simulationOptimized}
-              retest={simulationRetest}
-              products={simulationProducts}
-              selectedProductId={selectedSimulationProductId}
-              loading={simulationLoading}
-              canRun={Boolean((simulationScenario.trim() || lastQuery) && simulationProducts.length > 0)}
-              canOptimize={Boolean(simulationRun?.result?.gap_analysis?.length)}
-              canRetest={Boolean(simulationRun && simulationOptimized)}
-              onRun={handleRunSimulation}
-              onOptimize={handleOptimizeSimulation}
-              onRetest={handleRetestSimulation}
-              onSelectProduct={setSelectedSimulationProductId}
-            />
-            <SimulationLessons lessons={simulationLessons} />
-            <SimulationHistory
-              runs={simulationRuns}
-              activeRunId={simulationRun?.run_id}
-              onSelect={handleSelectSimulationRun}
-            />
             <ProductReasoning
-              title="Catalog Recommendations"
-              products={plan?.catalog_results ?? plan?.products}
-              explanations={productReasoning}
-            />
-            <ProductReasoning
-              title="Research Insights"
-              badge="Research"
+              title="Research insights"
               products={researchResults}
-              actionLabel="Refresh"
-              onAction={handleRefreshResearch}
-              actionDisabled={researchLoading}
-              disclaimer="Synthesized findings from external sources; verify details before purchasing."
+              badge="Research"
+              disclaimer="Research insights are synthesized from external sources; verify before purchase."
             />
+            <div className="insights__summary">
+              <div className="summary-card summary-card--header">
+                <div className="summary-card__header">
+                  <h4>Overview</h4>
+                  <Link href="/overview" className="summary-card__link">
+                    Open
+                  </Link>
+                </div>
+                <p className="summary-card__text">
+                  Jump to the full dashboard of simulation, evidence, and alignment signals.
+                </p>
+              </div>
+              <div className="summary-card">
+                <div className="summary-card__header">
+                  <h4>Simulation Sandbox</h4>
+                  <Link href="/simulation" className="summary-card__link">
+                    Open
+                  </Link>
+                </div>
+                <p className="summary-card__text">
+                  {simulationScenario.trim() || lastQuery
+                    ? `Scenario: ${simulationScenario.trim() || lastQuery}`
+                    : "No scenario yet."}
+                </p>
+                <div className="summary-card__meta">
+                  <span>Runs: {simulationRuns.length}</span>
+                  <span>Lessons: {simulationLessons.length}</span>
+                </div>
+              </div>
+
+              <div className="summary-card">
+              <div className="summary-card__header">
+                <h4>Evidence + Research</h4>
+                <Link href="/evidence" className="summary-card__link">
+                  Open
+                </Link>
+              </div>
+              <div className="summary-card__badges">
+                <Link href="/alignment#alignment-research" className="summary-card__badge">
+                  Research
+                </Link>
+              </div>
+              <p className="summary-card__text">
+                {evidenceAnalysis?.evidence_products?.length
+                  ? `${evidenceAnalysis.evidence_products.length} evidence items analyzed.`
+                  : "No evidence analysis yet."}
+                </p>
+                <div className="summary-card__meta">
+                  <span>
+                    Lift:{" "}
+                    {evidenceVerification?.lift !== undefined
+                      ? `${Math.round(evidenceVerification.lift * 100)}%`
+                      : "—"}
+                  </span>
+                  <span>Research: {researchResults?.length ?? 0}</span>
+                </div>
+              </div>
+
+              <div className="summary-card">
+                <div className="summary-card__header">
+                  <h4>Alignment</h4>
+                  <Link href="/alignment" className="summary-card__link">
+                    Open
+                  </Link>
+                </div>
+                <p className="summary-card__text">
+                  {plan?.products?.length
+                    ? `${plan.products.length} products scored.`
+                    : "No alignment results yet."}
+                </p>
+                <div className="summary-card__meta">
+                  <span>
+                    Score:{" "}
+                    {plan?.alignment?.goal_alignment?.score !== undefined
+                      ? `${Math.round(plan.alignment.goal_alignment.score * 100)}%`
+                      : "—"}
+                  </span>
+                  <span>Clarifications: {clarifications.length}</span>
+                </div>
+              </div>
+            </div>
           </aside>
         )}
       </main>

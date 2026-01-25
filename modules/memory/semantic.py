@@ -20,16 +20,20 @@ class SemanticMemory:
     """
 
     def __init__(
-        self, data_path: Path | None = None, user_id: str | None = None
+        self,
+        data_path: Path | None = None,
+        user_id: str | None = None,
+        client_id: str | None = None,
     ) -> None:
         if data_path:
             set_database_path(data_path)
         init_db()
         self._user_id = user_id or semantic_repo.DEFAULT_USER_ID
+        self._client_id = client_id or semantic_repo.DEFAULT_CLIENT_ID
 
     def get(self, key: str) -> List[str]:
         """Get a list value from semantic memory."""
-        entry = semantic_repo.get_entry(key, self._user_id)
+        entry = semantic_repo.get_entry(key, self._user_id, self._client_id)
         value = entry["value"] if entry else None
         if isinstance(value, list):
             return value
@@ -39,7 +43,9 @@ class SemanticMemory:
 
     def set(self, key: str, values: List[str]) -> None:
         """Set a list value in semantic memory."""
-        semantic_repo.upsert_entry(key, list(values), user_id=self._user_id)
+        semantic_repo.upsert_entry(
+            key, list(values), user_id=self._user_id, client_id=self._client_id
+        )
 
     def append(self, key: str, value: str) -> None:
         """Append a value to a list in semantic memory."""

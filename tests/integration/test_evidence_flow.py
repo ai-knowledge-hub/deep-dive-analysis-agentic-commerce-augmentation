@@ -29,6 +29,8 @@ from api.main import app
 from db.connection import init_db, set_database_path
 from modules.evidence.domain import EvidenceProduct
 
+CLIENT_ID = "test-client"
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -53,7 +55,10 @@ def client(tmp_path, monkeypatch):
 
 
 def test_evidence_flow_end_to_end(client):
-    analyze = client.post("/evidence/analyze", json={"query": "TV for bright room"})
+    analyze = client.post(
+        "/evidence/analyze",
+        json={"query": "TV for bright room", "client_id": CLIENT_ID},
+    )
     assert analyze.status_code == 200
     payload = analyze.json()
     assert payload["evidence_products"]
@@ -63,6 +68,7 @@ def test_evidence_flow_end_to_end(client):
         json={
             "query": "TV for bright room",
             "evidence_products": payload["evidence_products"],
+            "client_id": CLIENT_ID,
         },
     )
     assert optimize.status_code == 200
@@ -75,6 +81,7 @@ def test_evidence_flow_end_to_end(client):
             "query": "TV for bright room",
             "evidence_products": payload["evidence_products"],
             "optimized": optimized["optimized"],
+            "client_id": CLIENT_ID,
         },
     )
     assert verify.status_code == 200
