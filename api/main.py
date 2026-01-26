@@ -21,6 +21,7 @@ from api.routes import evidence as evidence_route
 from api.routes import simulation as simulation_route
 from api.routes import webhooks as webhooks_route
 from api.routes import admin as admin_route
+from api.routes import replay as replay_route
 
 if FastAPI:
     app = FastAPI(title="Contextual Commerce Optimization API")
@@ -41,6 +42,8 @@ if FastAPI:
     app.include_router(evidence_route.representation_router)
     app.include_router(evidence_route.recommendation_router)
     app.include_router(simulation_route.router)
+    if replay_route.router:
+        app.include_router(replay_route.router)
     if webhooks_route.router:
         app.include_router(webhooks_route.router)
     if admin_route.router:

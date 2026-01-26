@@ -53,14 +53,18 @@ if APIRouter:
 
     @router.post("/analyze")
     def analyze(payload: EvidenceAnalyzeRequest):
-        require_client_id(payload.client_id, payload.user_id)
+        client_scope = require_client_id(payload.client_id, payload.user_id)
         return evidence_service.analyze(
-            query=payload.query, max_items=payload.max_items, retrieve_fn=retrieve
+            query=payload.query,
+            max_items=payload.max_items,
+            retrieve_fn=retrieve,
+            client_id=client_scope,
+            user_id=payload.user_id,
         )
 
     @representation_router.post("/optimize")
     def optimize_representation(payload: RepresentationOptimizeRequest):
-        require_client_id(payload.client_id, payload.user_id)
+        client_scope = require_client_id(payload.client_id, payload.user_id)
         evidence_products = [
             _evidence_from_payload(item) for item in payload.evidence_products
         ]
@@ -68,11 +72,13 @@ if APIRouter:
             evidence_products=evidence_products,
             query=payload.query,
             tone=payload.tone,
+            client_id=client_scope,
+            user_id=payload.user_id,
         )
 
     @recommendation_router.post("/verify")
     def verify_recommendations(payload: RecommendationVerifyRequest):
-        require_client_id(payload.client_id, payload.user_id)
+        client_scope = require_client_id(payload.client_id, payload.user_id)
         evidence_products = [
             _evidence_from_payload(item) for item in payload.evidence_products
         ]
@@ -80,6 +86,8 @@ if APIRouter:
             query=payload.query,
             evidence_products=evidence_products,
             optimized=payload.optimized,
+            client_id=client_scope,
+            user_id=payload.user_id,
         )
 else:  # pragma: no cover
     router = None

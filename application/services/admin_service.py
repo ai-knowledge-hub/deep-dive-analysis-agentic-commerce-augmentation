@@ -22,7 +22,9 @@ class AdminService:
         name: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        return clients_repo.create_brand(brand_id, client_id, name, metadata=metadata or {})
+        return clients_repo.create_brand(
+            brand_id, client_id, name, metadata=metadata or {}
+        )
 
     def list_brands(self, *, client_id: str) -> list[Dict[str, Any]]:
         return clients_repo.list_brands(client_id)
@@ -54,4 +56,3 @@ class AdminService:
 
     def list_client_users(self, *, client_id: str) -> list[Dict[str, Any]]:
         return clients_repo.list_client_users(client_id)
-

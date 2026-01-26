@@ -6,4 +6,3 @@ layout. Services orchestrate use-cases using existing `modules/*` implementation
 Over time, pure domain logic can be moved into a dedicated `domain/` package and
 `modules/*` can become thin compatibility shims.
 """
-
