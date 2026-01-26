@@ -18,6 +18,17 @@ We let brands **see what the LLM sees**, understand why they're losing, and test
 
 See [user-problem.md](user-problem.md) for detailed user personas and pain points.
 
+## Architecture Evolution (Agentic + Clean)
+
+This codebase is transitioning from a monolithic module layout to a layered architecture that better supports:
+- Two-layer discovery (inference/web + protocol/feeds)
+- Replayable, observable runs (for calibration)
+- Incremental migration without breaking features (strangler pattern)
+
+Reference docs:
+- `docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md`
+- `docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md`
+
 ### Who We Serve
 
 | Role | Their Question |

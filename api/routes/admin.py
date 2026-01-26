@@ -10,10 +10,11 @@ except ImportError:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_admin
-from modules.memory.repositories import clients as clients_repo
+from application.services.admin_service import AdminService
 
 if APIRouter:
     router = APIRouter(prefix="", tags=["admin"])
+    admin_service = AdminService()
 
     class ClientCreateRequest(BaseModel):
         id: str = Field(..., min_length=1)
@@ -42,36 +43,39 @@ if APIRouter:
     @router.post("/clients")
     def create_client(payload: ClientCreateRequest) -> Dict[str, Any]:
         require_admin(payload.user_id)
-        client = clients_repo.create_client(
-            payload.id, payload.name, metadata=payload.metadata
+        client = admin_service.create_client(
+            client_id=payload.id, name=payload.name, metadata=payload.metadata
         )
         return {"client": client}
 
     @router.get("/clients")
     def list_clients(user_id: Optional[str] = None) -> Dict[str, Any]:
         require_admin(user_id)
-        return {"clients": clients_repo.list_clients()}
+        return {"clients": admin_service.list_clients()}
 
     @router.post("/clients/{client_id}/brands")
     def create_brand(client_id: str, payload: BrandCreateRequest) -> Dict[str, Any]:
         require_admin(payload.user_id)
-        brand = clients_repo.create_brand(
-            payload.id, client_id, payload.name, metadata=payload.metadata
+        brand = admin_service.create_brand(
+            brand_id=payload.id,
+            client_id=client_id,
+            name=payload.name,
+            metadata=payload.metadata,
         )
         return {"brand": brand}
 
     @router.get("/clients/{client_id}/brands")
     def list_brands(client_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         require_admin(user_id)
-        return {"brands": clients_repo.list_brands(client_id)}
+        return {"brands": admin_service.list_brands(client_id=client_id)}
 
     @router.post("/brands/{brand_id}/products")
     def create_product(brand_id: str, payload: ProductCreateRequest) -> Dict[str, Any]:
         require_admin(payload.user_id)
-        product = clients_repo.create_product(
-            payload.id,
-            brand_id,
-            payload.name,
+        product = admin_service.create_product(
+            product_id=payload.id,
+            brand_id=brand_id,
+            name=payload.name,
             description=payload.description,
             metadata=payload.metadata,
         )
@@ -80,15 +84,17 @@ if APIRouter:
     @router.get("/brands/{brand_id}/products")
     def list_products(brand_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         require_admin(user_id)
-        return {"products": clients_repo.list_products(brand_id)}
+        return {"products": admin_service.list_products(brand_id=brand_id)}
 
     @router.post("/clients/{client_id}/users")
     def add_client_user(
         client_id: str, payload: ClientUserCreateRequest
     ) -> Dict[str, Any]:
         require_admin(payload.user_id)
-        mapping = clients_repo.add_client_user(
-            client_id, payload.member_user_id, payload.role
+        mapping = admin_service.add_client_user(
+            client_id=client_id,
+            member_user_id=payload.member_user_id,
+            role=payload.role,
         )
         return {"user": mapping}
 
@@ -97,7 +103,7 @@ if APIRouter:
         client_id: str, user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         require_admin(user_id)
-        return {"users": clients_repo.list_client_users(client_id)}
+        return {"users": admin_service.list_client_users(client_id=client_id)}
 else:  # pragma: no cover
     router = None
 

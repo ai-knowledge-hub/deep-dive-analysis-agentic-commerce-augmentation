@@ -165,6 +165,9 @@ make test
 | [docs/strategic-positioning.md](docs/strategic-positioning.md) | Market positioning, UCP/ACP integration |
 | [docs/build-plan.md](docs/build-plan.md) | Execution plan for the pivot |
 | [docs/product-workflow.md](docs/product-workflow.md) | Brand workflow: connect → analyze → optimize → deploy → verify |
+| [docs/roadmap-protocol-layer.md](docs/roadmap-protocol-layer.md) | Protocol-layer roadmap (ACP/UCP) |
+| [docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md](docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md) | Why + what to change for agentic clean architecture |
+| [docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md](docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md) | Step-by-step execution plan (incremental) |
 | [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
 | [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
 | [docs/adapters.md](docs/adapters.md) | Shopify, Google Merchant adapter setup |
