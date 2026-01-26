@@ -155,7 +155,7 @@ def _process_message(
     )
     goal_signals = _goal_signals(intent, goals)
 
-    research = _maybe_run_research(plan, goals, context_snapshot)
+    research = _maybe_run_research(manager, plan, goals, context_snapshot)
     research_stream = _build_research_stream(research, goal_signals)
     _persist_research(
         manager,
@@ -262,10 +262,23 @@ def _intentionality_profiles(products: List[object]) -> List[dict]:
 
 
 def _maybe_run_research(
-    plan: dict, goals: List[str], context_snapshot: str | None
+    manager: SessionManager,
+    plan: dict,
+    goals: List[str],
+    context_snapshot: str | None,
 ) -> dict | None:
     query = plan.get("query") or "catalog research"
-    return run_research(query=query, goals=goals, context=context_snapshot)
+    try:
+        return run_research(
+            query=query,
+            goals=goals,
+            context=context_snapshot,
+            client_id=manager.client_id,
+            user_id=manager.user_id,
+            session_id=manager.session_id,
+        )
+    except TypeError:
+        return run_research(query=query, goals=goals, context=context_snapshot)
 
 
 def _goal_signals(intent: dict, goals: List[str]) -> List[str]:
@@ -291,7 +304,14 @@ def _build_research_stream(research: dict | None, goals: List[str]) -> dict | No
         return None
     insights = research.get("insights", []) or []
     if not insights:
-        return {"items": [], "alignment": {"per_item": []}}
+        return {
+            "items": [],
+            "alignment": {"per_item": []},
+            "meta": {
+                "confidence": research.get("confidence"),
+                "replay": research.get("replay"),
+            },
+        }
 
     items = []
     for insight in insights:
@@ -323,7 +343,14 @@ def _build_research_stream(research: dict | None, goals: List[str]) -> dict | No
                 "alignment_reasoning": score.get("alignment_reasoning"),
             }
         )
-    return {"items": enriched, "alignment": {"per_item": list(per_item.values())}}
+    return {
+        "items": enriched,
+        "alignment": {"per_item": list(per_item.values())},
+        "meta": {
+            "confidence": research.get("confidence"),
+            "replay": research.get("replay"),
+        },
+    }
 
 
 def _merge_plan_streams(plan: dict, research_stream: dict | None) -> dict:
@@ -560,7 +587,17 @@ def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any
     query = request.query or manager.get_state().get("last_query") or "catalog research"
     goals = manager.goal_texts()
     _, context_snapshot = context_for(manager)
-    research = run_research(query=query, goals=goals, context=context_snapshot)
+    try:
+        research = run_research(
+            query=query,
+            goals=goals,
+            context=context_snapshot,
+            client_id=manager.client_id,
+            user_id=manager.user_id,
+            session_id=manager.session_id,
+        )
+    except TypeError:
+        research = run_research(query=query, goals=goals, context=context_snapshot)
     research_stream = _build_research_stream(research, goals)
     _persist_research(manager, research_stream, query=query)
     return {

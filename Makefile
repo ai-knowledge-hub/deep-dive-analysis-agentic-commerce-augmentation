@@ -1,7 +1,10 @@
 UV_AVAILABLE := $(shell command -v uv >/dev/null 2>&1 && echo yes || echo no)
 ifeq ($(UV_AVAILABLE),yes)
-PYTHON := uv run python
-PIP := uv pip install
+UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
+UV_RUN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run
+UV_PIP := UV_CACHE_DIR=$(UV_CACHE_DIR) uv pip
+PYTHON := $(UV_RUN) python
+PIP := $(UV_PIP) install
 else
 PYTHON := python3
 PIP := pip install
@@ -25,11 +28,19 @@ run-frontend:
 
 .PHONY: lint
 lint:
-	$(PYTHON) -m ruff check .
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m ruff check . --force-exclude; \
+	else \
+		$(PYTHON) -m ruff check . --force-exclude; \
+	fi
 
 .PHONY: format
 format:
-	$(PYTHON) -m ruff format .
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m ruff format . --force-exclude; \
+	else \
+		$(PYTHON) -m ruff format . --force-exclude; \
+	fi
 
 .PHONY: run-local
 run-local:

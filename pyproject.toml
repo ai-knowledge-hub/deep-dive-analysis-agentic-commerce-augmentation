@@ -22,3 +22,21 @@ dev = [
 
 [tool.uv]
 managed = true
+
+[tool.ruff]
+respect-gitignore = true
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".uv-cache",
+    ".cache",
+    "node_modules",
+    "web/node_modules",
+    "web/.next",
+    "tmp",
+    "db",
+]

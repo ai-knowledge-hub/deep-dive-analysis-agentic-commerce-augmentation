@@ -6,6 +6,7 @@ import os
 import re
 from typing import Dict, List, Tuple
 
+from domain.simulation import gap_analysis as domain_gap
 from modules.commerce.domain import Product
 from shared.llm.embeddings import (
     batch_cosine_similarity,
@@ -23,64 +24,32 @@ def analyze_gap(
     score: float,
     winner: Product | None = None,
 ) -> Dict[str, object]:
-    tokens = _tokenize(goal)
+    tokens = domain_gap.tokenize(goal)
     product_text = _product_text(product)
-    product_tokens = _tokenize(product_text)
+    product_tokens = domain_gap.tokens_for_product_text(product_text)
 
-    matched: List[str]
-    missing: List[str]
+    matched, missing = _matched_and_missing(goal, tokens, product, list(product_tokens))
 
-    matched, missing = _matched_and_missing(goal, tokens, product, product_tokens)
-
-    winner_summary = None
-    winner_signals: List[str] = []
+    winner_matched: List[str] | None = None
     if winner and winner.id != product.id:
-        winner_tokens = _tokenize(_product_text(winner))
-        winner_matched, _ = _matched_and_missing(goal, tokens, winner, winner_tokens)
-        winner_signals = [signal for signal in winner_matched if signal not in matched][
-            :3
-        ]
-        if winner_signals:
-            winner_summary = (
-                f"Winner highlights {', '.join(winner_signals)} "
-                f"for '{goal}', while this product doesn't frame it that way."
-            )
+        winner_tokens = domain_gap.tokens_for_product_text(_product_text(winner))
+        winner_matched, _ = _matched_and_missing(
+            goal, tokens, winner, list(winner_tokens)
+        )
 
-    severity = "low"
-    if score < 0.35:
-        severity = "high"
-    elif score < 0.55:
-        severity = "medium"
-
-    return {
-        "product_id": product.id,
-        "goal": goal,
-        "score": round(score, 3),
-        "matched_signals": matched[:5],
-        "missing_signals": missing[:5],
-        "winner_id": winner.id if winner else None,
-        "winner_signals": winner_signals,
-        "competitor_summary": winner_summary,
-        "severity": severity,
-        "summary": _summary(goal, missing, severity),
-    }
+    return domain_gap.analyze_gap_tokens(
+        goal=goal,
+        product_id=product.id,
+        score=score,
+        product_text_tokens=product_tokens,
+        winner_id=winner.id if winner else None,
+        winner_matched_tokens=winner_matched,
+        matched_tokens=matched,
+    )
 
 
 def derive_lessons(goal: str, gaps: List[Dict[str, object]]) -> List[str]:
-    lessons: List[str] = []
-    for gap in gaps:
-        winner_signals = gap.get("winner_signals") or []
-        if winner_signals:
-            lessons.append(
-                f"For '{goal}', emphasize {', '.join(winner_signals[:2])} explicitly."
-            )
-        missing_signals = gap.get("missing_signals") or []
-        if missing_signals:
-            lessons.append(
-                f"Reframe specs into outcomes: {', '.join(missing_signals[:2])}."
-            )
-    deduped = list(dict.fromkeys([lesson for lesson in lessons if lesson]))
-    return deduped[:3]
+    return domain_gap.derive_lessons(goal, gaps)
 
 
 def _product_text(product: Product) -> str:
@@ -168,44 +137,11 @@ def _matched_and_missing(
 
 
 def _tokenize(text: str) -> List[str]:
-    tokens = [t for t in re.split(r"[^a-z0-9]+", text.lower()) if t]
-    stop = {
-        "the",
-        "and",
-        "for",
-        "with",
-        "that",
-        "this",
-        "your",
-        "you",
-        "from",
-        "into",
-        "when",
-        "what",
-        "how",
-        "need",
-        "needs",
-        "want",
-        "wants",
-        "help",
-        "best",
-        "better",
-        "more",
-        "less",
-        "not",
-        "no",
-        "new",
-        "find",
-        "get",
-    }
-    return [token for token in tokens if token not in stop]
+    return domain_gap.tokenize(text)
 
 
 def _summary(goal: str, missing: List[str], severity: str) -> str:
-    if not missing:
-        return f"Clear coverage of '{goal}'."
-    missing_list = ", ".join(missing[:3])
-    return f"{severity.title()} gap: missing signals for {missing_list}."
+    return domain_gap.summary(goal, missing, severity)
 
 
 __all__ = ["analyze_gap", "derive_lessons"]

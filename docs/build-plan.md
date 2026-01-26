@@ -15,6 +15,10 @@ SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
 
 This plan aligns the codebase to the simulation sandbox architecture in `docs/architecture.md`.
 
+**Architecture migration plan (agentic + clean):**
+- `docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md`
+- `docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md`
+
 ---
 
 ## Status Overview
@@ -147,14 +151,56 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - [x] Add lessons learned per run (winner vs loser takeaways)
 
 ### Phase 4 — Verification & Benchmarking
-- [ ] Multi‑LLM verification harness (Gemini required for hackathon)
-- [ ] Alignment score vs actual recommendation comparison
+- [ ] Multi‑LLM verification harness (start with 1 real surface)
+- [ ] Prediction vs reality tracking (simulation winner vs actual)
+- [ ] Calibration metrics (accuracy %, drift notes)
 - [ ] "Discoverability lift" metric tracker
 
 ### Phase 5 — Hackathon Packaging
 - [ ] 60-second demo script showing simulation loop
 - [ ] 3 compelling before/after examples with clear lift
 - [ ] Pitch: "See what the LLM sees. Fix what's broken. Test until you win."
+
+---
+
+## Phase 6 — Protocol Layer Simulation (P0/P1)
+
+**Goal:** Simulate ACP/UCP discovery alongside inference-based discovery.
+
+- [ ] Add protocol simulation module (mock ACP feed + UCP discovery)
+- [ ] Translate intent → protocol query filters
+- [ ] Protocol preview UI (show feed rows + missing fields)
+
+---
+
+## Phase 7 — Brand Voice & Authenticity Guard (P1)
+
+**Goal:** Preserve brand identity and prevent misleading alignment.
+
+- [ ] Brand DNA model (tone + vocab + value positioning)
+- [ ] Voice preservation validation
+- [ ] Authenticity checks (claims supported by specs)
+- [ ] Multiple brand-safe variants per optimization
+
+---
+
+## Phase 8 — Competitive Intelligence (P1)
+
+**Goal:** Provide automated competitor context.
+
+- [ ] Competitor auto-discovery from evidence + intent overlap
+- [ ] Share-of-voice tracking per intent cluster
+- [ ] "Why they win" pattern extraction dashboard
+
+---
+
+## Phase 9 — Meta-Learning & Gap Intelligence (P1/P2)
+
+**Goal:** Learn across runs to improve inference + reveal market gaps.
+
+- [ ] Cross-simulation pattern detection
+- [ ] Intent archetype library
+- [ ] Catalog gap analysis ("you don’t serve intent cluster X")
 
 ---
 
@@ -208,6 +254,9 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - [x] Simulation sandbox UI complete
 - [ ] 3 compelling demo scenarios ready
 - [ ] 60-second demo script polished
+- [ ] Protocol preview demo (ACP/UCP mock)
+- [ ] One real verification surface integrated
+- [ ] Prediction vs reality accuracy metric visible
 
 **The pitch must land:**
 > "See what the LLM sees. Fix what's broken. Test until you win."

@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
+import time
 from typing import Dict, List
 from urllib.parse import urlparse
 
 from shared.llm.gateway import generate, generate_with_tools
 from shared.config.env import settings
+from application.services.replay import default_versions
+from llm.agents.harness.context_manager import ContextManager, PromptBudget
+from llm.agents.harness.replay_logger import ReplayRecord, ToolCall
 from llm.tools import get_llm_tools, execute_tool
+from modules.memory.repositories import replays as replays_repo
 
 
 RESEARCH_PROMPT = """You are a catalog gap research agent.
@@ -20,35 +25,68 @@ Never fabricate sources. If data is unavailable, say so explicitly.
 """
 
 
-def run_research(query: str, goals: List[str], context: str | None = None) -> dict:
+def run_research(
+    query: str,
+    goals: List[str],
+    context: str | None = None,
+    *,
+    client_id: str | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
+) -> dict:
     """Generate a research bundle using MCP tools (web_fetch, etc.)."""
-    context_block = f"\n\nSession context:\n{context}" if context else ""
     goal_block = "\n".join(f"- {goal}" for goal in goals) or "- (no explicit goals)"
-    prompt = (
-        f"{RESEARCH_PROMPT}{context_block}\n\n"
-        f"User goals:\n{goal_block}\n\n"
-        f"Research query: {query}\n\n"
-        "Use tools if needed, then return:\n"
-        "1) Summary bullets with citations\n"
-        "2) Risks/uncertainties\n"
-        "3) Suggested next clarifying question"
+    context_manager = ContextManager(
+        budget=PromptBudget(max_context_chars=2200, max_prompt_chars=14000)
+    )
+    prompt = context_manager.research_prompt(
+        template=RESEARCH_PROMPT,
+        query=query,
+        goals_block=goal_block,
+        context=context,
     )
 
     tool_schema = get_llm_tools()
     response = None
+    llm_call_ms = None
     try:
         if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
             raise RuntimeError("OpenRouter API key missing")
+        start = time.perf_counter()
         response = generate_with_tools(prompt=prompt, tools=tool_schema)
+        llm_call_ms = int((time.perf_counter() - start) * 1000)
     except Exception as exc:
         response = {"text": "", "error": str(exc)}
 
     tool_calls = response.get("tool_calls", []) if isinstance(response, dict) else []
     tool_outputs = []
+    tool_call_records: List[ToolCall] = []
+    if llm_call_ms is not None:
+        tool_call_records.append(
+            ToolCall(
+                name="generate_with_tools",
+                arguments={"prompt_chars": len(prompt), "tool_count": len(tool_schema)},
+                result_summary=f"tool_calls={len(tool_calls)}",
+                elapsed_ms=llm_call_ms,
+            )
+        )
     for call in tool_calls:
         name = call.get("name")
         args = call.get("args", {})
-        tool_outputs.append({"name": name, "output": execute_tool(name, args)})
+        start = time.perf_counter()
+        output = execute_tool(name, args)
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        tool_outputs.append({"name": name, "output": output})
+        tool_call_records.append(
+            ToolCall(
+                name=name or "tool",
+                arguments=args if isinstance(args, dict) else {},
+                result_summary="ok"
+                if isinstance(output, dict) and not output.get("error")
+                else "error",
+                elapsed_ms=elapsed_ms,
+            )
+        )
 
     confidence, breakdown = _estimate_confidence(
         query=query,
@@ -57,7 +95,23 @@ def run_research(query: str, goals: List[str], context: str | None = None) -> di
         tool_outputs=tool_outputs,
     )
 
-    return {
+    insights = _build_insights(
+        response,
+        confidence,
+        query=query,
+        goals=goals,
+        tool_outputs=tool_outputs,
+    )
+
+    replay = ReplayRecord(
+        run_type="conversation.research",
+        inputs={"query": query, "goals": goals, "context_used": bool(context)},
+        outputs={"confidence": confidence, "insights_count": len(insights)},
+        tool_calls=tool_call_records,
+        versions=default_versions(),
+    )
+
+    payload = {
         "query": query,
         "goals": goals,
         "context_used": bool(context),
@@ -66,14 +120,32 @@ def run_research(query: str, goals: List[str], context: str | None = None) -> di
         "tool_outputs": tool_outputs,
         "confidence": confidence,
         "confidence_breakdown": breakdown,
-        "insights": _build_insights(
-            response,
-            confidence,
-            query=query,
-            goals=goals,
-            tool_outputs=tool_outputs,
-        ),
+        "insights": insights,
+        "replay": replay.to_dict(),
     }
+
+    if client_id:
+        record = {
+            "query": query,
+            "goals": goals,
+            "context_used": bool(context),
+            "confidence": confidence,
+            "confidence_breakdown": breakdown,
+            "insights": insights,
+            "replay": replay.to_dict(),
+        }
+        replay_row = replays_repo.create_replay_record(
+            run_type="conversation.research",
+            record=record,
+            client_id=client_id,
+            user_id=user_id,
+            session_id=session_id,
+            entity_type="conversation_session" if session_id else None,
+            entity_id=session_id,
+        )
+        payload["replay_id"] = replay_row.get("id")
+
+    return payload
 
 
 def _build_insights(

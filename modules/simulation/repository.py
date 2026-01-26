@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from shared.db.connection import get_connection
 from modules.memory.repositories.base import from_json, to_json
 from modules.memory.repositories.clients import DEFAULT_CLIENT_ID, ensure_client
+from modules.memory.repositories import users as users_repo
 
 
 def create_run(
@@ -25,6 +26,8 @@ def create_run(
     run_id = str(uuid.uuid4())
     conn = get_connection()
     ensure_client(client_id)
+    if user_id:
+        users_repo.ensure_user(user_id)
     conn.execute(
         """
         INSERT INTO simulation_runs
