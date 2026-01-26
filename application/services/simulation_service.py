@@ -13,7 +13,7 @@ from domain.simulation.ranking import lift_summary
 from modules.simulation.domain import SimulationProduct
 from modules.simulation.optimizer import optimize_product
 from modules.simulation.runner import run_simulation
-from modules.simulation import repository as simulation_repo
+from infrastructure.db import simulation_runs as simulation_repo
 
 
 class SimulationService:
