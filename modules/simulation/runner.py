@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from domain.simulation import ranking as domain_ranking
 from modules.alignment.goal_alignment import score_products
 from modules.commerce.domain import Product
 from modules.intent.llm_classifier import HybridIntentClassifier
@@ -22,8 +23,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
     scores = score_products(goals, normalized)
     score_map = {score.product_id: score for score in scores}
 
-    ranked = sorted(scores, key=lambda s: s.score, reverse=True)
-    winner_id = ranked[0].product_id if ranked else None
+    winner_id = domain_ranking.winner_id([score.__dict__ for score in scores])
     gap_reports = []
     winner_product = None
     if winner_id:

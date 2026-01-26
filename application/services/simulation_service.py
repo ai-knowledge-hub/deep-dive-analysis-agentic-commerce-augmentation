@@ -9,6 +9,7 @@ from application.services.replay import default_versions
 from llm.agents.harness.replay_logger import ReplayRecord, ToolCall
 from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
 from modules.memory.repositories import replays as replays_repo
+from domain.simulation.ranking import lift_summary
 from modules.simulation.domain import SimulationProduct
 from modules.simulation.optimizer import optimize_product
 from modules.simulation.runner import run_simulation
@@ -206,6 +207,19 @@ class SimulationService:
         start = time.perf_counter()
         result = run_simulation(query, optimized_products)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+        # Optional lift summary used by the UI (kept stable even if scores missing).
+        before_scores = (run_record.get("result") or {}).get("scores") or []
+        after_scores = (result or {}).get("scores") or []
+        optimized_product_id = None
+        if optimized_products:
+            optimized_product_id = optimized_products[0].id
+        if isinstance(result, dict):
+            result["lift_summary"] = lift_summary(
+                before_scores=before_scores,
+                after_scores=after_scores,
+                optimized_product_id=optimized_product_id,
+            )
 
         replay = ReplayRecord(
             run_type="simulation.retest",

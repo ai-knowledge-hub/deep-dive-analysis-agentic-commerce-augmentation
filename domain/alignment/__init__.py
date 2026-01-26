@@ -1,0 +1,1 @@
+"""Alignment domain logic (pure)."""

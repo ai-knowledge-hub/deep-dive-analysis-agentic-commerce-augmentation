@@ -8,10 +8,10 @@ This supports intent-alignment scoring for brand discovery.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+from domain.alignment import keyword as domain_keyword
 from modules.commerce.domain import Product
 from modules.alignment.domain import AlignmentScore, AlignmentSummary
 
@@ -325,7 +325,7 @@ def _keyword_score_products(
         best_score = 0.0
         matched_caps: List[str] = []
         for goal in goals:
-            goal_tokens = set(_tokenize(goal))
+            goal_tokens = set(domain_keyword.tokenize(goal))
             if not goal_tokens:
                 continue
             match = _match_goal_to_product(goal_tokens, product)
@@ -390,84 +390,38 @@ def _build_product_semantic_text(product: Product) -> str:
 
 
 def _tokenize(text: str) -> List[str]:
-    tokens = [token.strip() for token in re.split(r"[^a-z0-9]+", text.lower())]
-    stopwords = {
-        "the",
-        "and",
-        "for",
-        "with",
-        "that",
-        "this",
-        "your",
-        "you",
-        "from",
-        "into",
-        "when",
-        "what",
-        "how",
-        "need",
-        "needs",
-        "want",
-        "wants",
-        "help",
-        "best",
-        "better",
-        "more",
-        "less",
-        "not",
-        "no",
-        "new",
-        "find",
-        "get",
-    }
-    return [token for token in tokens if token and token not in stopwords]
+    return domain_keyword.tokenize(text)
 
 
 def _product_tokens(product: Product) -> set[str]:
-    text_sources = [
-        product.name,
-        product.description,
-        " ".join(product.tags or []),
-    ]
-    if product.capabilities_enabled:
-        text_sources.append(" ".join(product.capabilities_enabled))
-    if product.intentionality_profile:
-        goals_served = product.intentionality_profile.get("goals_served") or []
-        outcomes = product.intentionality_profile.get("outcomes_expected") or []
-        text_sources.append(" ".join(goals_served))
-        text_sources.append(" ".join(outcomes))
-
-    return set(_tokenize(" ".join(text_sources)))
+    return domain_keyword.product_tokens(
+        {
+            "name": product.name,
+            "description": product.description,
+            "tags": product.tags or [],
+            "capabilities_enabled": product.capabilities_enabled or [],
+            "intentionality_profile": product.intentionality_profile or {},
+        }
+    )
 
 
 def _match_goal_to_product(goal_tokens: set[str], product: Product) -> dict:
-    tokens = _product_tokens(product)
-    overlap = goal_tokens & tokens
-    overlap_score = min(1.0, len(overlap) / max(len(goal_tokens), 1))
-
-    capability_hits = [
-        cap for cap in product.capabilities_enabled if goal_tokens & set(_tokenize(cap))
-    ]
-    tag_hits = [tag for tag in product.tags if tag in goal_tokens]
-
-    score = 0.2 + 0.6 * overlap_score
-    if capability_hits:
-        score += 0.15
-    if tag_hits:
-        score += 0.05
-    score = min(score, 0.95)
-
-    return {
-        "score": score if overlap else 0.0,
-        "capabilities": capability_hits,
-        "missing": sorted(goal_tokens - tokens),
-    }
+    return domain_keyword.match_goal_to_product(
+        goal_tokens,
+        {
+            "name": product.name,
+            "description": product.description,
+            "tags": product.tags or [],
+            "capabilities_enabled": product.capabilities_enabled or [],
+            "intentionality_profile": product.intentionality_profile or {},
+        },
+    )
 
 
 def _missing_signals(goal: str, product: Product) -> List[str]:
     if not goal:
         return []
-    goal_tokens = set(_tokenize(goal))
+    goal_tokens = set(domain_keyword.tokenize(goal))
     if not goal_tokens:
         return []
     tokens = _product_tokens(product)
@@ -476,22 +430,9 @@ def _missing_signals(goal: str, product: Product) -> List[str]:
 
 def _get_best_capability(product: Product, goal: str) -> Optional[str]:
     """Find the capability that best matches the goal."""
-    if not product.capabilities_enabled:
-        return None
-
-    # Simple heuristic: find capability with most word overlap
-    goal_words = set(goal.lower().split())
-    best_capability = None
-    best_overlap = 0
-
-    for capability in product.capabilities_enabled:
-        cap_words = set(capability.lower().split())
-        overlap = len(goal_words & cap_words)
-        if overlap > best_overlap:
-            best_overlap = overlap
-            best_capability = capability
-
-    return best_capability or product.capabilities_enabled[0]
+    return domain_keyword.best_capability(
+        {"capabilities_enabled": product.capabilities_enabled or []}, goal
+    )
 
 
 def _average_confidence(products: List[Product]) -> float:
@@ -512,39 +453,14 @@ def get_alignment_explanation(
 
     Used for transparency in recommendations.
     """
-    if not goal:
-        return "No goal match found."
-
-    if similarity_score >= HIGH_ALIGNMENT_THRESHOLD:
-        strength = "strongly"
-    elif similarity_score >= MEDIUM_ALIGNMENT_THRESHOLD:
-        strength = "reasonably"
-    else:
-        strength = "weakly"
-
-    matched = matched_caps or []
-    if not matched:
-        matched = [
-            cap
-            for cap in product.capabilities_enabled
-            if _tokenize(goal)
-            and _tokenize(cap)
-            and set(_tokenize(goal)) & set(_tokenize(cap))
-        ]
-    capabilities = ", ".join(matched[:3] or product.capabilities_enabled[:3])
-    if not capabilities:
-        capabilities = "general use"
-
-    missing = missing_signals or []
-    missing_text = ""
-    if similarity_score < MEDIUM_ALIGNMENT_THRESHOLD and missing:
-        missing_text = f" Missing signals: {', '.join(missing[:2])}."
-
-    return (
-        f"This product {strength} matches '{goal}'. "
-        f"Signals: {capabilities}. "
-        f"Confidence: {similarity_score:.0%}."
-        f"{missing_text}"
+    return domain_keyword.alignment_explanation(
+        goal=goal,
+        similarity_score=similarity_score,
+        high_threshold=HIGH_ALIGNMENT_THRESHOLD,
+        medium_threshold=MEDIUM_ALIGNMENT_THRESHOLD,
+        capabilities_enabled=product.capabilities_enabled or [],
+        matched_caps=matched_caps,
+        missing_signals=missing_signals,
     )
 
 
