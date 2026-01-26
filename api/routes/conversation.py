@@ -2,34 +2,25 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from application.services.conversation_service import ConversationService
 from modules.conversation.agents import (
-    IntentAgent,
     CommerceAgent,
     ExplainAgent,
+    IntentAgent,
 )
-from modules.memory.session_manager import SessionManager
 from modules.values.agent import GoalClarificationAgent
-from modules.values.domain import GoalClarificationState
-from modules.conversation.context import context_for
 from modules.conversation.research import run_research
-from domain.intent.goals import extract_intent_goals
 from modules.alignment.goal_alignment import score_products as score_alignment
 from modules.intentionality.profiling import build_profile_with_llm
-from modules.intentionality.domain import IntentionalityProfile
-from modules.commerce.domain import Product
-from modules.memory.repositories import sessions as sessions_repo
 from api.utils.tenancy import require_client_id
-from modules.memory.repositories import turns as turns_repo
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
@@ -37,6 +28,7 @@ INTENT_AGENT = IntentAgent()
 COMMERCE_AGENT = CommerceAgent()
 EXPLAIN_AGENT = ExplainAgent()
 GOAL_AGENT = GoalClarificationAgent()
+SERVICE = ConversationService()
 
 
 class ClarifiedGoal(BaseModel):
@@ -76,293 +68,6 @@ class ResearchRequest(BaseModel):
     client_id: Optional[str] = None
 
 
-def _session_response(manager: SessionManager, **payload: Any) -> Dict[str, Any]:
-    snapshot = asdict(manager.summary())
-    response: Dict[str, Any] = {
-        "session_id": manager.session_id,
-        "user_id": manager.user_id,
-        "snapshot": snapshot,
-    }
-    response.update(payload)
-    return response
-
-
-def _process_message(
-    manager: SessionManager,
-    message: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    clarified_goals: Optional[List[ClarifiedGoal]] = None,
-) -> Dict[str, Any]:
-    if clarified_goals:
-        for clarified_goal in clarified_goals:
-            manager.record_goal(
-                clarified_goal.goal_text,
-                domain=clarified_goal.domain,
-                importance=clarified_goal.importance or 0.7,
-            )
-
-    manager.record_turn("user", message, metadata=metadata or {})
-
-    clarification_state, clarification_reply = _handle_goal_dialogue(
-        manager, message, metadata
-    )
-    if clarification_reply:
-        return _session_response(
-            manager,
-            clarification=clarification_reply,
-            goal_state=clarification_state.to_dict() if clarification_state else None,
-        )
-
-    intent = INTENT_AGENT.detect_intent(message, manager=manager)
-    manager.ingest_intent_as_goal(intent)
-    goals = manager.goal_texts()
-    intent_signal = intent.get("primary_goal") or intent.get("label") or ""
-    if intent_signal:
-        manager.record_turn(
-            "agent",
-            f"Intent inferred: {intent_signal}",
-            metadata={
-                "type": "intent_inference",
-                "confidence": intent.get("confidence"),
-            },
-        )
-    _, context_snapshot = context_for(manager)
-    plan = COMMERCE_AGENT.build_plan(intent, goals=goals, context=context_snapshot)
-    product_explanations = plan.get("product_explanations")
-    if not product_explanations:
-        product_explanations = _format_reasoning(plan.get("products", []))
-    clarifications = plan.get("clarifications", [])
-    explanation = EXPLAIN_AGENT.explain(plan.get("products", []))
-    manager.record_turn(
-        "agent",
-        explanation,
-        metadata={"type": "plan_explanation", "clarifications": clarifications},
-    )
-    manager.record_recommendation(
-        product_ids=[product["id"] for product in plan.get("products", [])],
-        alignment_score=(plan.get("alignment", {}).get("goal_alignment", {}) or {}).get(
-            "score"
-        ),
-        context={
-            "query": plan.get("query"),
-            "goal_alignment": plan.get("alignment", {}).get("goal_alignment"),
-            "data_quality": plan.get("data_quality"),
-        },
-    )
-    manager.update_state(
-        last_intent=intent,
-        last_query=plan.get("query"),
-        last_alignment=plan.get("alignment"),
-    )
-    goal_signals = _goal_signals(intent, goals)
-
-    research = _maybe_run_research(manager, plan, goals, context_snapshot)
-    research_stream = _build_research_stream(research, goal_signals)
-    _persist_research(
-        manager,
-        research_stream,
-        query=plan.get("query") or message,
-    )
-
-    return _session_response(
-        manager,
-        intent=intent,
-        plan=_merge_plan_streams(plan, research_stream),
-        research=research,
-        baseline_alignment=plan.get("alignment", {})
-        .get("goal_alignment", {})
-        .get("baseline_score")
-        or 0.0,
-        intentionality_profiles=_intentionality_profiles(plan.get("products") or []),
-        explanation=explanation,
-        product_explanations=product_explanations,
-        goal_state=clarification_state.to_dict()
-        if clarification_state
-        else manager.get_state().get("clarification_state"),
-    )
-
-
-def _handle_goal_dialogue(
-    manager: SessionManager,
-    message: str,
-    metadata: Optional[Dict[str, Any]],
-) -> tuple[Optional[GoalClarificationState], Optional[str]]:
-    state_payload = manager.get_state().get("clarification_state")
-    state = GoalClarificationState.from_dict(state_payload) if state_payload else None
-    if state and state.ready_for_products and state.metadata.get("summary_sent"):
-        return state, None
-
-    if state:
-        state = GOAL_AGENT.continue_dialogue(state, message)
-    else:
-        state = GOAL_AGENT.start(message, metadata or {})
-
-    manager.update_state(clarification_state=state.to_dict())
-    latest_turn = state.turns[-1] if state.turns else None
-    if latest_turn and latest_turn.speaker == "agent":
-        manager.record_turn(
-            "agent", latest_turn.content, metadata={"type": "clarification"}
-        )
-        if state.ready_for_products:
-            for goal in state.extracted_goals:
-                try:
-                    manager.record_goal(goal)
-                except ValueError:
-                    continue
-            state.metadata["summary_sent"] = True
-            manager.update_state(clarification_state=state.to_dict())
-        return state, latest_turn.content
-
-    if state.ready_for_products:
-        for goal in state.extracted_goals:
-            try:
-                manager.record_goal(goal)
-            except ValueError:
-                continue
-    return state, None
-
-
-def _format_reasoning(products: List[dict]) -> List[dict]:
-    explanations: List[dict] = []
-    for product in products or []:
-        explanations.append(
-            {
-                "id": product.get("id"),
-                "name": product.get("name"),
-                "reasoning": product.get("reasoning", ""),
-                "capabilities_enabled": product.get("capabilities_enabled", []),
-                "confidence": product.get("confidence"),
-            }
-        )
-    return explanations
-
-
-def _intentionality_profiles(products: List[object]) -> List[dict]:
-    profiles: List[dict] = []
-    for product in products or []:
-        if isinstance(product, Product):
-            profiles.append(build_profile_with_llm(product).to_dict())
-            continue
-        if isinstance(product, dict):
-            profile = product.get("intentionality_profile")
-            if profile:
-                profiles.append(profile)
-                continue
-            capabilities = list(product.get("capabilities_enabled") or [])
-            profile = IntentionalityProfile(
-                product_id=str(product.get("id") or ""),
-                capabilities_enabled=capabilities,
-                goals_served=list(dict.fromkeys(capabilities)),
-                prerequisites=[],
-                outcomes_expected=[],
-                context_fit={},
-            )
-            profiles.append(profile.to_dict())
-            continue
-    return profiles
-
-
-def _maybe_run_research(
-    manager: SessionManager,
-    plan: dict,
-    goals: List[str],
-    context_snapshot: str | None,
-) -> dict | None:
-    query = plan.get("query") or "catalog research"
-    try:
-        return run_research(
-            query=query,
-            goals=goals,
-            context=context_snapshot,
-            client_id=manager.client_id,
-            user_id=manager.user_id,
-            session_id=manager.session_id,
-        )
-    except TypeError:
-        return run_research(query=query, goals=goals, context=context_snapshot)
-
-
-def _goal_signals(intent: dict, goals: List[str]) -> List[str]:
-    return extract_intent_goals(intent, explicit_goals=goals)
-
-
-def _build_research_stream(research: dict | None, goals: List[str]) -> dict | None:
-    if not research:
-        return None
-    insights = research.get("insights", []) or []
-    if not insights:
-        return {
-            "items": [],
-            "alignment": {"per_item": []},
-            "meta": {
-                "confidence": research.get("confidence"),
-                "replay": research.get("replay"),
-            },
-        }
-
-    items = []
-    for insight in insights:
-        title = insight.get("title") or insight.get("summary") or "Research insight"
-        summary = insight.get("summary") or title
-        items.append(
-            {
-                "id": insight.get("id") or title,
-                "name": title,
-                "price": 0.0,
-                "description": summary,
-                "confidence": insight.get("confidence", 0.35),
-                "source": "research",
-                "capabilities_enabled": [],
-                "tags": ["research"],
-            }
-        )
-
-    products = [Product(**item) for item in items]
-    scores = score_alignment(goals, products) if goals else []
-    per_item = {score.product_id: score.__dict__ for score in scores}
-    enriched = []
-    for item in items:
-        score = per_item.get(item["id"], {})
-        enriched.append(
-            {
-                **item,
-                "alignment_score": score.get("score"),
-                "alignment_reasoning": score.get("alignment_reasoning"),
-            }
-        )
-    return {
-        "items": enriched,
-        "alignment": {"per_item": list(per_item.values())},
-        "meta": {
-            "confidence": research.get("confidence"),
-            "replay": research.get("replay"),
-        },
-    }
-
-
-def _merge_plan_streams(plan: dict, research_stream: dict | None) -> dict:
-    merged = dict(plan)
-    merged["catalog_results"] = plan.get("products", [])
-    merged["research_results"] = research_stream.get("items") if research_stream else []
-    merged["alignment"] = merged.get("alignment") or {}
-    merged["alignment"]["research"] = (
-        research_stream.get("alignment") if research_stream else {}
-    )
-    return merged
-
-
-def _persist_research(
-    manager: SessionManager, research_stream: dict | None, query: str
-) -> None:
-    if not research_stream:
-        return
-    manager.update_state(
-        last_research=research_stream,
-        last_research_query=query,
-        last_research_at=datetime.now(timezone.utc).isoformat(),
-    )
-
-
 def _sse_event(data: Dict[str, Any], event: str | None = None) -> str:
     payload = json.dumps(data)
     if event:
@@ -373,26 +78,21 @@ def _sse_event(data: Dict[str, Any], event: str | None = None) -> str:
 @router.post("/start")
 def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
     client_id = require_client_id(request.client_id, request.user_id)
-    manager = SessionManager(
+    return SERVICE.start(
         user_id=request.user_id,
         client_id=client_id,
         brand_id=request.brand_id,
+        opening_message=request.opening_message,
+        metadata=request.metadata,
+        clarified_goals=request.clarified_goals,
+        goal_agent=GOAL_AGENT,
+        intent_agent=INTENT_AGENT,
+        commerce_agent=COMMERCE_AGENT,
+        explain_agent=EXPLAIN_AGENT,
+        run_research_fn=run_research,
+        score_alignment_fn=score_alignment,
+        build_profile_with_llm_fn=build_profile_with_llm,
     )
-    if request.opening_message:
-        return _process_message(
-            manager,
-            request.opening_message,
-            request.metadata,
-            clarified_goals=request.clarified_goals,
-        )
-    if request.clarified_goals:
-        for clarified_goal in request.clarified_goals:
-            manager.record_goal(
-                clarified_goal.goal_text,
-                domain=clarified_goal.domain,
-                importance=clarified_goal.importance or 0.7,
-            )
-    return _session_response(manager)
 
 
 @router.post("/start/stream")
@@ -400,29 +100,23 @@ def start_conversation_stream(
     request: ConversationStartRequest,
 ) -> StreamingResponse:
     client_id = require_client_id(request.client_id, request.user_id)
-    manager = SessionManager(
-        user_id=request.user_id,
-        client_id=client_id,
-        brand_id=request.brand_id,
-    )
 
     def event_stream():
-        if request.opening_message:
-            payload = _process_message(
-                manager,
-                request.opening_message,
-                request.metadata,
-                clarified_goals=request.clarified_goals,
-            )
-        else:
-            if request.clarified_goals:
-                for clarified_goal in request.clarified_goals:
-                    manager.record_goal(
-                        clarified_goal.goal_text,
-                        domain=clarified_goal.domain,
-                        importance=clarified_goal.importance or 0.7,
-                    )
-            payload = _session_response(manager)
+        payload = SERVICE.start(
+            user_id=request.user_id,
+            client_id=client_id,
+            brand_id=request.brand_id,
+            opening_message=request.opening_message,
+            metadata=request.metadata,
+            clarified_goals=request.clarified_goals,
+            goal_agent=GOAL_AGENT,
+            intent_agent=INTENT_AGENT,
+            commerce_agent=COMMERCE_AGENT,
+            explain_agent=EXPLAIN_AGENT,
+            run_research_fn=run_research,
+            score_alignment_fn=score_alignment,
+            build_profile_with_llm_fn=build_profile_with_llm,
+        )
         yield _sse_event(payload, event="conversation")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -431,19 +125,21 @@ def start_conversation_stream(
 @router.post("/{session_id}/message")
 def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str, Any]:
     client_id = require_client_id(request.client_id, request.user_id)
-    manager = SessionManager(
+    return SERVICE.continue_message(
         session_id=session_id,
         user_id=request.user_id,
         client_id=client_id,
         brand_id=request.brand_id,
-    )
-    if not request.message:
-        raise HTTPException(status_code=400, detail="message is required")
-    return _process_message(
-        manager,
-        request.message,
-        request.metadata,
+        message=request.message,
+        metadata=request.metadata,
         clarified_goals=request.clarified_goals,
+        goal_agent=GOAL_AGENT,
+        intent_agent=INTENT_AGENT,
+        commerce_agent=COMMERCE_AGENT,
+        explain_agent=EXPLAIN_AGENT,
+        run_research_fn=run_research,
+        score_alignment_fn=score_alignment,
+        build_profile_with_llm_fn=build_profile_with_llm,
     )
 
 
@@ -452,21 +148,23 @@ def continue_conversation_stream(
     session_id: str, request: MessageRequest
 ) -> StreamingResponse:
     client_id = require_client_id(request.client_id, request.user_id)
-    manager = SessionManager(
-        session_id=session_id,
-        user_id=request.user_id,
-        client_id=client_id,
-        brand_id=request.brand_id,
-    )
-    if not request.message:
-        raise HTTPException(status_code=400, detail="message is required")
 
     def event_stream():
-        payload = _process_message(
-            manager,
-            request.message,
-            request.metadata,
+        payload = SERVICE.continue_message(
+            session_id=session_id,
+            user_id=request.user_id,
+            client_id=client_id,
+            brand_id=request.brand_id,
+            message=request.message,
+            metadata=request.metadata,
             clarified_goals=request.clarified_goals,
+            goal_agent=GOAL_AGENT,
+            intent_agent=INTENT_AGENT,
+            commerce_agent=COMMERCE_AGENT,
+            explain_agent=EXPLAIN_AGENT,
+            run_research_fn=run_research,
+            score_alignment_fn=score_alignment,
+            build_profile_with_llm_fn=build_profile_with_llm,
         )
         yield _sse_event(payload, event="conversation")
 
@@ -478,18 +176,7 @@ def get_session_snapshot(
     session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
 ) -> Dict[str, Any]:
     client_scope = require_client_id(client_id, user_id)
-    if user_id:
-        session = sessions_repo.get_session(session_id, client_id=client_scope)
-        if (
-            not session
-            or session.get("user_id") != user_id
-            or session.get("client_id") != client_scope
-        ):
-            raise HTTPException(status_code=404, detail="Session not found")
-    manager = SessionManager(
-        session_id=session_id, user_id=user_id, client_id=client_scope
-    )
-    return _session_response(manager)
+    return SERVICE.get_snapshot(session_id=session_id, user_id=user_id, client_id=client_scope)
 
 
 @router.get("/sessions")
@@ -498,25 +185,8 @@ def list_sessions(
     limit: int = 20,
     client_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id is required")
     client_scope = require_client_id(client_id, user_id)
-    sessions = sessions_repo.list_sessions(
-        user_id=user_id, limit=limit, client_id=client_scope
-    )
-    payload = []
-    for session in sessions:
-        recent = turns_repo.list_recent_turns(session["id"], limit=1)
-        last_turn = recent[0] if recent else None
-        payload.append(
-            {
-                "id": session["id"],
-                "created_at": session.get("created_at"),
-                "preview": last_turn.get("content") if last_turn else None,
-                "last_turn_at": last_turn.get("created_at") if last_turn else None,
-            }
-        )
-    return {"sessions": payload}
+    return SERVICE.list_sessions(user_id=user_id, limit=limit, client_id=client_scope)
 
 
 @router.delete("/{session_id}")
@@ -524,72 +194,33 @@ def delete_session(
     session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
 ) -> Dict[str, str]:
     client_scope = require_client_id(client_id, user_id)
-    if user_id:
-        session = sessions_repo.get_session(session_id, client_id=client_scope)
-        if not session or session.get("user_id") != user_id:
-            raise HTTPException(status_code=404, detail="Session not found")
-    sessions_repo.delete_session(session_id)
-    return {"status": "deleted"}
+    return SERVICE.delete_session(
+        session_id=session_id, user_id=user_id, client_id=client_scope
+    )
 
 
 @router.post("/{session_id}/goals")
 def ingest_clarified_goals(
     session_id: str, request: ClarifiedGoalsRequest
 ) -> Dict[str, Any]:
-    if not request.goals:
-        raise HTTPException(status_code=400, detail="At least one goal is required.")
-
     client_id = require_client_id(request.client_id, request.user_id)
-    manager = SessionManager(
+    return SERVICE.ingest_goals(
         session_id=session_id,
         user_id=request.user_id,
         client_id=client_id,
         brand_id=request.brand_id,
+        goals=request.goals,
     )
-    for clarified_goal in request.goals:
-        manager.record_goal(
-            clarified_goal.goal_text,
-            domain=clarified_goal.domain,
-            importance=clarified_goal.importance or 0.7,
-        )
-
-    return _session_response(manager, goals=manager.goal_texts())
 
 
 @router.post("/{session_id}/research")
 def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any]:
-    if request.user_id:
-        session = sessions_repo.get_session(
-            session_id, client_id=require_client_id(request.client_id, request.user_id)
-        )
-        if not session or session.get("user_id") != request.user_id:
-            raise HTTPException(status_code=404, detail="Session not found")
-
     client_id = require_client_id(request.client_id, request.user_id)
-    manager = SessionManager(
+    return SERVICE.refresh_research(
         session_id=session_id,
         user_id=request.user_id,
         client_id=client_id,
+        query=request.query,
+        run_research_fn=run_research,
+        score_alignment_fn=score_alignment,
     )
-    query = request.query or manager.get_state().get("last_query") or "catalog research"
-    goals = manager.goal_texts()
-    _, context_snapshot = context_for(manager)
-    try:
-        research = run_research(
-            query=query,
-            goals=goals,
-            context=context_snapshot,
-            client_id=manager.client_id,
-            user_id=manager.user_id,
-            session_id=manager.session_id,
-        )
-    except TypeError:
-        research = run_research(query=query, goals=goals, context=context_snapshot)
-    research_stream = _build_research_stream(research, goals)
-    _persist_research(manager, research_stream, query=query)
-    return {
-        "query": query,
-        "goals": goals,
-        "research_results": research_stream.get("items") if research_stream else [],
-        "updated_at": manager.get_state().get("last_research_at"),
-    }
