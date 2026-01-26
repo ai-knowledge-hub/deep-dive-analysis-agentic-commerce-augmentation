@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from application.services.replay import default_versions
 from llm.agents.harness.replay_logger import ReplayRecord, ToolCall
 from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
-from modules.memory.repositories import replays as replays_repo
+from infrastructure.db import replays as replays_repo
 from domain.simulation.ranking import lift_summary
 from modules.simulation.domain import SimulationProduct
 from modules.simulation.optimizer import optimize_product

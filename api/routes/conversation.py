@@ -22,6 +22,7 @@ from modules.values.agent import GoalClarificationAgent
 from modules.values.domain import GoalClarificationState
 from modules.conversation.context import context_for
 from modules.conversation.research import run_research
+from domain.intent.goals import extract_intent_goals
 from modules.alignment.goal_alignment import score_products as score_alignment
 from modules.intentionality.profiling import build_profile_with_llm
 from modules.intentionality.domain import IntentionalityProfile
@@ -282,21 +283,7 @@ def _maybe_run_research(
 
 
 def _goal_signals(intent: dict, goals: List[str]) -> List[str]:
-    merged: List[str] = []
-    if goals:
-        merged.extend(goals)
-    primary = intent.get("primary_goal") or intent.get("label")
-    if primary and primary != "unknown":
-        merged.append(primary)
-    merged.extend(intent.get("secondary_goals") or [])
-    merged.extend(intent.get("underlying_needs") or [])
-    seen = set()
-    deduped = []
-    for goal in merged:
-        if goal and goal != "unknown" and goal not in seen:
-            seen.add(goal)
-            deduped.append(goal)
-    return deduped
+    return extract_intent_goals(intent, explicit_goals=goals)
 
 
 def _build_research_stream(research: dict | None, goals: List[str]) -> dict | None:

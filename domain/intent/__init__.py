@@ -1,0 +1,2 @@
+"""Intent domain logic (pure)."""
+
