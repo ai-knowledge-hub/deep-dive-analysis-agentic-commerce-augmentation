@@ -1,5 +1,5 @@
-"""Backward compatibility: re-exports from modules.memory.repositories.users."""
+"""Backward compatibility: re-exports from infrastructure DB users."""
 
-from modules.memory.repositories.users import ensure_user, get_user, update_metadata
+from infrastructure.db.users import ensure_user, get_user, update_metadata
 
 __all__ = ["ensure_user", "get_user", "update_metadata"]

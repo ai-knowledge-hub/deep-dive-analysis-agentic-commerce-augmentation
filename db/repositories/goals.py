@@ -1,6 +1,6 @@
-"""Backward compatibility: re-exports from modules.memory.repositories.goals."""
+"""Backward compatibility: re-exports from infrastructure DB goals."""
 
-from modules.memory.repositories.goals import (
+from infrastructure.db.goals import (
     create_goal,
     delete_goal,
     get_goal,

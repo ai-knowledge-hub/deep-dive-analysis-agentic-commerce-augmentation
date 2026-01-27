@@ -1,5 +1,5 @@
-from modules.commerce.domain import Product
-from modules.intentionality.profiling import build_profile
+from domain.commerce.types import Product
+from application.services.intentionality_profiler import build_profile
 
 
 def test_build_profile_uses_capabilities_and_description():

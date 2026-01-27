@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from shared.config.env import settings
-from modules.memory.repositories.clients import DEFAULT_CLIENT_ID
+from infrastructure.db.tenancy import DEFAULT_CLIENT_ID
 
 
 def _admin_ids() -> set[str]:

@@ -1,6 +1,6 @@
-"""Backward compatibility: re-exports from modules.intent.llm_classifier."""
+"""Backward compatibility: intent inference primitives."""
 
-from modules.intent.domain import InferredIntent as IntentResult
-from modules.intent.llm_classifier import HybridIntentClassifier
+from domain.intent.types import InferredIntent as IntentResult
+from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier
 
 __all__ = ["IntentResult", "HybridIntentClassifier"]

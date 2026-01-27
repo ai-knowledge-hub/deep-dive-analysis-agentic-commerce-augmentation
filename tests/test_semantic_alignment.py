@@ -7,8 +7,8 @@ understands semantic relationships between goals and products.
 import pytest
 from unittest.mock import patch, MagicMock
 
-from modules.commerce.domain import Product
-from modules.alignment.goal_alignment import (
+from domain.commerce.types import Product
+from infrastructure.alignment.goal_alignment_gateway import (
     assess,
     get_alignment_explanation,
     _build_product_semantic_text,

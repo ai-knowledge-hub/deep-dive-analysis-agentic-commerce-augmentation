@@ -9,8 +9,8 @@ except ImportError:  # pragma: no cover
 
 from pydantic import BaseModel, Field
 
-from modules.evidence import EvidenceProduct
-from modules.evidence import retrieve as retrieve
+from domain.evidence.types import EvidenceProduct
+from application.services.evidence_retriever import retrieve as retrieve
 from application.services.evidence_service import EvidenceService
 from api.utils.tenancy import require_client_id
 

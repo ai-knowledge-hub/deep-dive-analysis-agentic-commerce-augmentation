@@ -34,7 +34,7 @@ class AgentLoop:
     ) -> None:
         self.tools = tools or ToolRegistry()
         if generate_with_tools_fn is None:
-            from shared.llm.gateway import (
+            from infrastructure.llm.gateway import (
                 generate_with_tools as default_generate_with_tools,
             )
 

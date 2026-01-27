@@ -7,10 +7,10 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from fastapi import HTTPException
 
 from domain.intent.goals import extract_intent_goals
+from application.services.context_builder import context_for
+from application.services.session_manager import SessionManager
 from infrastructure.db import sessions as sessions_store
 from infrastructure.db import turns as turns_store
-from modules.conversation.context import context_for
-from modules.memory.session_manager import SessionManager
 
 
 class _GoalAgent(Protocol):
@@ -385,7 +385,7 @@ class ConversationService:
         if state_payload and state is None:
             # Fallback to GoalClarificationState.from_dict without importing it in application layer.
             try:
-                from modules.values.domain import GoalClarificationState
+                from domain.values.types import GoalClarificationState
 
                 state = GoalClarificationState.from_dict(state_payload)
             except Exception:
@@ -444,8 +444,8 @@ class ConversationService:
     def _intentionality_profiles(
         self, products: List[object], *, build_profile_with_llm_fn: Callable[[Any], Any]
     ) -> List[dict]:
-        from modules.intentionality.domain import IntentionalityProfile
-        from modules.commerce.domain import Product
+        from domain.commerce.types import Product
+        from domain.intentionality.types import IntentionalityProfile
 
         profiles: List[dict] = []
         for product in products or []:
@@ -534,7 +534,7 @@ class ConversationService:
                 },
             }
 
-        from modules.commerce.domain import Product
+        from domain.commerce.types import Product
 
         items = []
         for insight in insights:

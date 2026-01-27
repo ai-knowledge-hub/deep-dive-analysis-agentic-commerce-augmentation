@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from modules.memory.session_manager import SessionManager
+from application.services.session_manager import SessionManager
 
 
 def test_session_manager_tracks_goals_and_turns(tmp_path: Path):

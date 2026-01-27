@@ -345,7 +345,7 @@ GET /catalog/{catalog_id}/report
 We work above the protocol layer:
 
 ```
-modules/commerce/adapters/
+infrastructure/commerce/adapters/
 ├── base.py           # Abstract adapter interface
 ├── shopify.py        # Shopify Storefront API
 ├── google_merchant.py # Merchant Center feeds

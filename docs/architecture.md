@@ -198,7 +198,7 @@ Notes:
 
 ## Core Modules
 
-### 1. Intent Module (`modules/intent/`)
+### 1. Intent Module (`domain/intent/` + `application/services/*`)
 
 **Purpose**: Infer user goals from observable signals.
 
@@ -227,7 +227,7 @@ class InferredIntent:
 
 ---
 
-### 2. Product Intentionality Module (`modules/intentionality/`)
+### 2. Product Intentionality Module (`domain/intentionality/`)
 
 **Purpose**: Transform product data into intent-legible format.
 
@@ -253,11 +253,11 @@ class IntentionalityProfile:
     context_fit: Dict[str, float]      # Fit scores for different contexts
 ```
 
-**This module replaces**: `modules/empowerment/` (reframed from "user protection" to "intent legibility")
+**Note:** The legacy “empowerment” framing has been removed; intentionality is now the core representation layer.
 
 ---
 
-### 3. Alignment Scoring Module (`modules/alignment/`)
+### 3. Alignment Scoring Module (`domain/alignment/` + `infrastructure/alignment/*`)
 
 **Purpose**: Score products against inferred intent.
 
@@ -281,7 +281,7 @@ class AlignmentScore:
 
 ---
 
-### 4. Simulation Sandbox Module (`modules/simulation/`)
+### 4. Simulation Sandbox Module (`domain/simulation/` + `application/services/simulation_service.py`)
 
 **Purpose**: Run competitive scenarios, surface gaps, and drive the optimize → retest loop.
 
@@ -296,7 +296,7 @@ class AlignmentScore:
 
 ---
 
-### 5. Context Memory Module (`modules/memory/`)
+### 5. Context Memory Module (`domain/memory/` + `infrastructure/db/*`)
 
 **Purpose**: Persist context that improves intent inference over time.
 
@@ -325,7 +325,7 @@ Memory enables **better inference**, not surveillance. The distinction matters.
 
 ---
 
-### 5. Commerce Adapters (`modules/commerce/adapters/`)
+### 6. Commerce Adapters (`infrastructure/commerce/adapters/`)
 
 **Purpose**: Ingest product data from any source, transform to our schema.
 
@@ -346,13 +346,13 @@ Each adapter normalizes source data; the intentionality module enriches it.
 
 ## What's Removed
 
-The following modules/concepts are **deprecated** in this architecture:
+The following legacy concepts are **deprecated** in this architecture:
 
 | Removed | Reason |
 |---------|--------|
-| `empowerment/alienation.py` | "Manipulation detection" is user-protection framing; doesn't serve brand discovery |
-| `empowerment/reflection.py` | Post-purchase follow-up is nice-to-have, not core |
-| `conversation/guards.py` | Constraint enforcement is user-protection framing |
+| Manipulation detection framing | User-protection framing; not core to brand discovery |
+| Post-purchase reflection loop | Nice-to-have; not core to the simulation sandbox |
+| Constraint enforcement gates | Not core to intent legibility / discovery simulation |
 | World A vs World B comparison | Ethical framing; distracts from value prop |
 | Impulse interception | User-protection feature; not core to intent legibility |
 | Dual dashboard (agency metrics) | Measures user outcomes; we measure brand discoverability |

@@ -27,7 +27,7 @@ if "google" not in sys.modules:
 
 from db.connection import set_database_path, init_db
 from api.main import app
-from modules.evidence.domain import EvidenceProduct
+from domain.evidence.types import EvidenceProduct
 
 CLIENT_ID = "test-client"
 

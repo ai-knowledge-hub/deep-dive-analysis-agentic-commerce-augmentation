@@ -126,21 +126,20 @@ Samsung QN90B: 0.52 → 0.85 ✅ NOW RECOMMENDED
 ### Phase 1 — Core Modules (Week 1-2)
 
 **Intent Inference Engine**
-- `modules/intent/llm_classifier.py`: Deep goal extraction from queries
-- `modules/intent/domain.py`: InferredIntent dataclass
+- `domain/intent/*`: Core intent types + parsing
+- `infrastructure/llm/intent_classifier.py`: LLM-backed intent extraction
 - Gemini-powered intent inference prompts
 - Embedding support for semantic matching
 
 **Intentionality Profiler**
-- `modules/intentionality/profiling.py`: Spec → capability transformation
-- `modules/intentionality/domain.py`: IntentionalityProfile dataclass
-- `modules/intentionality/transforms.py`: Common spec mappings
+- `domain/intentionality/profiling.py`: Spec → capability transformation
+- `domain/intentionality/types.py`: IntentionalityProfile dataclass
 - LLM-assisted capability extraction
 
 **Alignment Scorer**
-- `modules/alignment/goal_alignment.py`: Score products against intent
-- `modules/alignment/llm_reasoner.py`: Explain recommendations
-- `modules/alignment/domain.py`: AlignmentScore dataclass
+- `domain/alignment/scoring.py`: Score products against intent
+- `domain/alignment/keyword.py` + `domain/alignment/reasoning_prompt.py`: Explain recommendations
+- `infrastructure/alignment/goal_alignment_gateway.py`: Semantic scoring adapter
 
 ### Phase 2 — API & Integration (Week 2-3)
 
@@ -150,9 +149,9 @@ Samsung QN90B: 0.52 → 0.85 ✅ NOW RECOMMENDED
 - `POST /products/profile`: Generate intentionality profile
 
 **Module Updates**
-- Simplify `modules/memory/`: Context for inference only
-- Simplify `modules/conversation/`: Demo flow only
-- Update `modules/commerce/`: Add intentionality to products
+- `domain/memory/`: Context for inference only
+- `domain/conversation/` + `application/services/*`: Demo flow orchestration
+- `infrastructure/commerce/*`: Adapters + catalog-backed competitors
 
 ### Phase 3 — Demo UI (Week 3)
 
@@ -182,9 +181,9 @@ Samsung QN90B: 0.52 → 0.85 ✅ NOW RECOMMENDED
 
 | Component | Purpose | Priority |
 |-----------|---------|----------|
-| `modules/intent/llm_classifier.py` | Infer user goals | P0 |
-| `modules/intentionality/profiling.py` | Transform product specs | P0 |
-| `modules/alignment/goal_alignment.py` | Score alignment | P0 |
+| `infrastructure/llm/intent_classifier.py` | Infer user goals | P0 |
+| `domain/intentionality/profiling.py` | Transform product specs | P0 |
+| `domain/alignment/scoring.py` | Score alignment | P0 |
 | Demo product data | Show the difference | P0 |
 | API endpoints | Enable demo | P0 |
 | Demo UI components | Visual impact | P0 |

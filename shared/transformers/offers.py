@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
-from modules.commerce.domain import RawOffer, RawProduct
+from domain.commerce.types import RawOffer, RawProduct
 
 
 def raw_offer_to_raw_product(offer: RawOffer) -> RawProduct:

@@ -1,27 +1,36 @@
 from __future__ import annotations
 
-import importlib
+from types import SimpleNamespace
 
 try:
     from fastapi import APIRouter, Query
 except ImportError:  # pragma: no cover - optional dependency
     APIRouter = None  # type: ignore
 
-from modules.intent.llm_classifier import HybridIntentClassifier
-from modules.intentionality.profiling import build_profile
-from modules.alignment.goal_alignment import assess as assess_alignment
-from modules.alignment.goal_alignment import score_products as score_alignment
+from infrastructure.llm.intent_classifier import build_intent_classifier
+from application.services.intentionality_profiler import build_profile
+from application.services.alignment_service import alignment_service
 from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 
-product_search = importlib.import_module("modules.commerce.search")
+from infrastructure.commerce.search import search as search_products_fn
+
+
+class HybridIntentClassifier:
+    """Compatibility shim to keep API patch seams stable in tests."""
+
+    def __init__(self) -> None:
+        self._impl = build_intent_classifier()
+
+    def classify(self, text: str, context: str | None = None):
+        return self._impl.classify(text, context=context)
+
+
+product_search = SimpleNamespace(search=search_products_fn)
 
 
 def _search_products(query: str):
-    search_fn = getattr(product_search, "search", None)
-    if callable(search_fn):
-        return search_fn(query)
-    return product_search(query)
+    return product_search.search(query)
 
 
 if APIRouter:
@@ -79,10 +88,13 @@ if APIRouter:
                 candidates.extend(_search_products(pid))
         else:
             candidates = _search_products(query)
-        alignment = assess_alignment(goal_signals, candidates)
-        baseline = assess_alignment(goal_signals, candidates, use_semantic=False)
+        alignment = alignment_service.assess(goal_signals, candidates)
+        baseline = alignment_service.assess(
+            goal_signals, candidates, use_semantic=False
+        )
         per_product = [
-            score.__dict__ for score in score_alignment(goal_signals, candidates)
+            score.__dict__
+            for score in alignment_service.score_products(goal_signals, candidates)
         ]
         alignment_payload = alignment.__dict__
         alignment_payload["baseline_score"] = baseline.score
@@ -105,12 +117,15 @@ if APIRouter:
             classifier = HybridIntentClassifier()
             intent = classifier.classify(query).to_dict()
             goal_signals = _intent_goals(intent)
-            alignment = assess_alignment(goal_signals, [product])
-            baseline = assess_alignment(goal_signals, [product], use_semantic=False)
+            alignment = alignment_service.assess(goal_signals, [product])
+            baseline = alignment_service.assess(
+                goal_signals, [product], use_semantic=False
+            )
             alignment = alignment.__dict__
             alignment["baseline_score"] = baseline.score
             alignment["per_product"] = [
-                score.__dict__ for score in score_alignment(goal_signals, [product])
+                score.__dict__
+                for score in alignment_service.score_products(goal_signals, [product])
             ]
         return {
             "product": product.__dict__,

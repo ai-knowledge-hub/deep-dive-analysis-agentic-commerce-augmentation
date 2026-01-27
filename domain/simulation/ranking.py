@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 
+def rank_scores(scores: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return scores sorted by best score first (stable tie-breaker on product_id)."""
+    return [dict(item) for item in sort_scores(scores)]
+
+
 def sort_scores(scores: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return sorted(
         scores,
@@ -80,3 +85,14 @@ def stable_dedupe(items: Iterable[str]) -> list[str]:
             seen.add(item)
             out.append(item)
     return out
+
+
+__all__ = [
+    "rank_scores",
+    "sort_scores",
+    "winner_id",
+    "score_for_product",
+    "delta_points",
+    "lift_summary",
+    "stable_dedupe",
+]

@@ -25,10 +25,10 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 
 | Module | Status | Simulation Sandbox Gap |
 |--------|--------|------------------------|
-| `intent/` | Partial | Inference works; needs competitive scenario support |
-| `intentionality/` | Functional | Profiling works; needs gap analysis output |
-| `alignment/` | Functional | Scoring works; needs "why you lost" explanation |
-| `commerce/` | Functional | Adapters work; needs dynamic product input |
+| `domain/intent/` | Functional | Needs competitive scenario presets + calibration |
+| `domain/intentionality/` | Functional | Needs richer gap analysis signals |
+| `domain/alignment/` | Functional | Needs “why you lost vs winner” polish |
+| `infrastructure/commerce/` | Functional | Needs more real catalog sources (post-hackathon) |
 | `api/` | Functional | Simulation endpoints live; needs tone sourcing from brand catalogs |
 | `web/` | Functional | Simulation sandbox UI live; needs scenario presets + polish |
 
@@ -37,9 +37,9 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 ## Current State
 
 ### In Place
-- Intentionality profiling module with LLM enrichment (`modules/intentionality/*`)
-- Intent inference with multi-goal support (`modules/intent/*`)
-- Alignment scoring with per-product explanations (`modules/alignment/*`)
+- Intentionality profiling with LLM enrichment (`domain/intentionality/*`, `application/services/intentionality_profiler.py`)
+- Intent inference with multi-goal support (`domain/intent/*`, `application/services/conversation_service.py`)
+- Alignment scoring with per-product explanations (`domain/alignment/*`, `infrastructure/alignment/goal_alignment_gateway.py`)
 - Discovery endpoints: `/intent/infer`, `/products/align`, `/products/profile`, `/products/enrich`
 - Before/after discoverability comparison UI
 - Clerk auth scaffolded
@@ -56,12 +56,12 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 **Goal:** Produce intent → alignment → recommendation pipeline with explanations.
 
 ### 1.1 Intent Inference Engine
-- Expand `modules/intent/` to output `InferredIntent`, `IntentSignals`, `confidence`.
+- Maintain `domain/intent/` outputs: `InferredIntent`, `IntentSignals`, `confidence`.
 - Support multi‑goal inference (primary + secondary goals).
 - Add tests for deterministic intent inference output parsing.
 
 ### 1.2 Intentionality Profiling (NEW)
-- Create `modules/intentionality/`:
+- Maintain `domain/intentionality/`:
   - `domain.py` (IntentionalityProfile)
   - `profiling.py` (spec → capability/outcome transform)
   - `prompts.py` (LLM prompt for enrichment)

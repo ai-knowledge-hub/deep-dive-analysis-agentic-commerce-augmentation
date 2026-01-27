@@ -4,14 +4,18 @@ from typing import List
 
 import pytest
 
-from modules.commerce.domain import Product
-from modules.memory.semantic import SemanticMemory
-from modules.conversation.agents import (
+from domain.commerce.types import Product
+from infrastructure.memory.semantic_memory import SemanticMemory
+from application.services.conversation_agents import (
     CommerceAgent,
     IntentAgent,
     CapabilityAgent,
     ExplainAgent,
 )
+from application.services.commerce_plan_builder import CommercePlanBuilder
+from application.services.alignment_service import alignment_service
+from application.services.intentionality_profiler import build_profile
+from application.services.context_builder import context_for
 
 # Provide lightweight google.genai stubs before importing modules that rely on them.
 if "google" not in sys.modules:
@@ -56,8 +60,8 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 
-@pytest.fixture(autouse=True)
-def mock_reason_about_products(monkeypatch):
+@pytest.fixture
+def fake_reasoner():
     def _fake_reasoner(goals, products, context=None):
         annotated = []
         for product in products:
@@ -66,13 +70,10 @@ def mock_reason_about_products(monkeypatch):
             annotated.append(copy)
         return annotated
 
-    monkeypatch.setattr(
-        "modules.conversation.agents.reason_about_products", _fake_reasoner
-    )
-    yield
+    return _fake_reasoner
 
 
-def test_commerce_agent_emits_clarifications(monkeypatch):
+def test_commerce_agent_emits_clarifications(fake_reasoner):
     mock_products = [
         Product(
             id="p1",
@@ -86,10 +87,18 @@ def test_commerce_agent_emits_clarifications(monkeypatch):
         )
     ]
 
-    monkeypatch.setattr(
-        "modules.commerce.plan_builder.product_search", lambda query: mock_products
+    builder = CommercePlanBuilder(
+        search_fn=lambda query: mock_products,
+        compare_fn=lambda products: {},
+        build_profile_fn=build_profile,
     )
-    agent = CommerceAgent()
+    agent = CommerceAgent(
+        builder=builder,
+        reason_fn=fake_reasoner,
+        assess_fn=alignment_service.assess,
+        score_fn=alignment_service.score_products,
+        search_fn=lambda q: mock_products,
+    )
     plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace upgrade"])
     clarifications = plan["clarifications"]
     assert any("confidence" in message.lower() for message in clarifications)
@@ -97,7 +106,7 @@ def test_commerce_agent_emits_clarifications(monkeypatch):
     assert "goal_alignment" in plan["alignment"]
 
 
-def test_commerce_agent_filters_low_confidence(monkeypatch):
+def test_commerce_agent_filters_low_confidence(fake_reasoner):
     products = [
         Product(
             id="p_high",
@@ -127,10 +136,18 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
             merchant_name="M3",
         ),
     ]
-    monkeypatch.setattr(
-        "modules.commerce.plan_builder.product_search", lambda query: products
+    builder = CommercePlanBuilder(
+        search_fn=lambda query: products,
+        compare_fn=lambda products: {},
+        build_profile_fn=build_profile,
     )
-    agent = CommerceAgent()
+    agent = CommerceAgent(
+        builder=builder,
+        reason_fn=fake_reasoner,
+        assess_fn=alignment_service.assess,
+        score_fn=alignment_service.score_products,
+        search_fn=lambda q: products,
+    )
     plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace"])
     ids = [product["id"] for product in plan["products"]]
     assert ids == ["p_high", "p_mid"]
@@ -138,7 +155,7 @@ def test_commerce_agent_filters_low_confidence(monkeypatch):
     assert plan["alignment"]["goal_alignment"]["score"] >= 0.0
 
 
-def test_commerce_agent_fallback_query(monkeypatch):
+def test_commerce_agent_fallback_query(fake_reasoner):
     def mock_search(query: str):
         mapping = {
             "workspace upgrade": [],
@@ -156,8 +173,18 @@ def test_commerce_agent_fallback_query(monkeypatch):
         }
         return mapping.get(query, [])
 
-    monkeypatch.setattr("modules.commerce.plan_builder.product_search", mock_search)
-    agent = CommerceAgent()
+    builder = CommercePlanBuilder(
+        search_fn=mock_search,
+        compare_fn=lambda products: {},
+        build_profile_fn=build_profile,
+    )
+    agent = CommerceAgent(
+        builder=builder,
+        reason_fn=fake_reasoner,
+        assess_fn=alignment_service.assess,
+        score_fn=alignment_service.score_products,
+        search_fn=mock_search,
+    )
     plan = agent.build_plan(
         {"primary_goal": "workspace upgrade", "domain": "career"},
         goals=["career growth"],
@@ -185,15 +212,14 @@ def test_intent_agent_routes_through_hybrid(monkeypatch):
 
     class FakeClassifier:
         def classify(self, text, context=None):
-            assert context is None
+            assert context in (None, "")
             return FakeResult()
 
-    monkeypatch.setattr(
-        "modules.conversation.agents.HybridIntentClassifier",
-        lambda: FakeClassifier(),
+    intent_agent = IntentAgent(
+        classifier=FakeClassifier(),
+        context_for_fn=context_for,
+        log_replay_fn=None,
     )
-
-    intent_agent = IntentAgent()
     result = intent_agent.detect_intent("Need focus")
 
     assert result["primary_goal"] == "workspace upgrade"
@@ -206,12 +232,7 @@ def test_capability_agent_reads_semantic_memory(monkeypatch, tmp_path):
     memory.set("goals", ["Improve posture"])
     memory.set("capabilities", ["Ergo expert"])
 
-    monkeypatch.setattr(
-        "modules.conversation.agents.SemanticMemory",
-        lambda: SemanticMemory(data_path=db_path),
-    )
-
-    agent = CapabilityAgent()
+    agent = CapabilityAgent(memory_factory=lambda: SemanticMemory(data_path=db_path))
     summary = agent.summarize()
 
     assert summary["goals"] == ["Improve posture"]

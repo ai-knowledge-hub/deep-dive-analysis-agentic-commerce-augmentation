@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from llm.agents.harness.replay_logger import ToolCall
-from llm.tools import execute_tool, get_llm_tools
+from infrastructure.llm.tools import execute_tool, llm_schema
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class ToolRegistry:
     """
 
     def llm_schema(self) -> List[dict]:
-        return get_llm_tools()
+        return llm_schema()
 
     def execute(self, name: str, args: Dict[str, Any]) -> dict:
         return execute_tool(name, args)

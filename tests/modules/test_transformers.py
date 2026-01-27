@@ -1,4 +1,4 @@
-from modules.commerce.domain import RawOffer
+from domain.commerce.types import RawOffer
 from shared.transformers.offers import raw_offer_to_raw_product
 
 

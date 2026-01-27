@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from modules.commerce.adapters.loader import load_catalog
-from modules.commerce.adapters.google_shopping.merchant_center import (
+from infrastructure.commerce.catalog_loader import load_catalog
+from infrastructure.commerce.adapters.google_shopping.merchant_center import (
     load_catalog as load_merchant_catalog,
 )
 

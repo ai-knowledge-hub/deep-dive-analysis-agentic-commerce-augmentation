@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from shared.db.connection import init_db, set_database_path
-from modules.conversation.research import run_research
-from modules.memory.semantic import SemanticMemory
+from infrastructure.memory.semantic_memory import SemanticMemory
+from infrastructure.llm.research_agent import run_research
 
 
 def test_research_agent_executes_tool_calls(monkeypatch, tmp_path):
@@ -26,7 +26,8 @@ def test_research_agent_executes_tool_calls(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(
-        "modules.conversation.research.generate_with_tools", fake_generate_with_tools
+        "infrastructure.llm.research_agent.generate_with_tools",
+        fake_generate_with_tools,
     )
 
     result = run_research(
