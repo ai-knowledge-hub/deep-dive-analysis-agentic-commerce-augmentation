@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from domain.alignment import keyword as domain_keyword
+from domain.alignment import scoring as domain_scoring
 from modules.commerce.domain import Product
 from modules.alignment.domain import AlignmentScore, AlignmentSummary
 
@@ -118,136 +119,34 @@ def _semantic_assess(goals: List[str], products: List[Product]) -> AlignmentSumm
 
     provider = get_embedding_provider()
 
-    # Prepare texts for embedding
-    goal_texts = goals
+    product_dicts = [_product_to_dict(p) for p in products]
+    product_texts = [domain_scoring.build_product_semantic_text(p) for p in product_dicts]
 
-    # Build product capability texts (what each product enables)
-    product_texts: List[Tuple[Product, str]] = []
-    for product in products:
-        # Combine capabilities, description, and tags into a semantic representation
-        capability_text = _build_product_semantic_text(product)
-        product_texts.append((product, capability_text))
-
-    # Generate embeddings
-    all_texts = goal_texts + [pt[1] for pt in product_texts]
+    all_texts = list(goals) + product_texts
     embeddings = provider.embed_batch(all_texts)
 
     goal_embeddings = embeddings[: len(goals)]
     product_embeddings = embeddings[len(goals) :]
 
-    # Calculate alignment scores
-    aligned_goals: List[str] = []
-    misaligned_goals: List[str] = []
-    supporting_products: List[str] = []
-    goal_confidence: Dict[str, float] = {}
-
-    # For each goal, find if any product aligns
-    for j, goal in enumerate(goals):
-        goal_emb = goal_embeddings[j]
-        max_similarity = 0.0
-        best_products: List[str] = []
-
-        for i, (product, _) in enumerate(product_texts):
-            product_emb = product_embeddings[i]
-            similarity = cosine_similarity(goal_emb, product_emb)
-
-            if similarity >= MEDIUM_ALIGNMENT_THRESHOLD:
-                best_products.append(product.id)
-                max_similarity = max(max_similarity, similarity)
-
-        if best_products:
-            aligned_goals.append(goal)
-            supporting_products.extend(best_products)
-            # Weight confidence by similarity and product confidence
-            avg_product_confidence = _average_confidence(
-                [p for p in products if p.id in best_products]
-            )
-            goal_confidence[goal] = max_similarity * avg_product_confidence
-        else:
-            misaligned_goals.append(goal)
-
-    # Deduplicate supporting products
-    supporting_products = list(dict.fromkeys(supporting_products))
-
-    # Calculate overall score
-    if not goals:
-        base_score = 0.0
-    else:
-        base_score = len(aligned_goals) / len(goals)
-
-    # Weight by confidence
-    confidence_weight = (
-        sum(goal_confidence.values()) / max(len(goal_confidence), 1)
-        if goal_confidence
-        else 0.0
-    )
-    weighted_score = round(base_score * (0.6 + 0.4 * confidence_weight), 3)
-
-    confidence_summary: Dict[str, float | Dict[str, float]] = {
-        "average_confidence": round(_average_confidence(products), 2),
-        "aligned_goal_confidence": {
-            goal: round(score, 3) for goal, score in goal_confidence.items()
-        },
-        "embedding_provider": provider.provider_name,
-        "alignment_method": "semantic",
-    }
-
-    return AlignmentSummary(
-        score=weighted_score,
-        aligned_goals=aligned_goals,
-        misaligned_goals=misaligned_goals,
-        supporting_products=supporting_products,
-        confidence_summary=confidence_summary,
+    return domain_scoring.semantic_assess(
+        goals=goals,
+        products=product_dicts,
+        goal_embeddings=goal_embeddings,
+        product_embeddings=product_embeddings,
+        cosine_similarity=cosine_similarity,
+        provider_name=provider.provider_name,
+        high_threshold=HIGH_ALIGNMENT_THRESHOLD,
+        medium_threshold=MEDIUM_ALIGNMENT_THRESHOLD,
     )
 
 
 def _keyword_assess(goals: List[str], products: List[Product]) -> AlignmentSummary:
     """Fallback: Assess alignment using keyword matching (original implementation)."""
-    aligned: List[str] = []
-    supporting_products: List[str] = []
-    goal_confidence: Dict[str, float] = {}
-
-    for goal in goals:
-        normalized = goal.lower()
-        goal_tokens = set(normalized.split())
-        goal_products = [
-            product
-            for product in products
-            if any(
-                goal_tokens & set(capability.lower().split())
-                for capability in product.capabilities_enabled
-            )
-            or any(tag in normalized or normalized in tag for tag in product.tags)
-        ]
-        if goal_products:
-            aligned.append(goal)
-            supporting_products.extend(product.id for product in goal_products)
-            goal_confidence[goal] = _average_confidence(goal_products)
-
-    misaligned = [goal for goal in goals if goal not in aligned]
-    base_score = len(aligned) / max(len(goals), 1)
-    confidence_weight = (
-        sum(goal_confidence.values()) / max(len(goal_confidence), 1)
-        if goal_confidence
-        else 0.0
-    )
-    weighted_score = round(base_score * (0.7 + 0.3 * confidence_weight), 3)
-    confidence_summary: Dict[str, float | Dict[str, float]] = {
-        "average_confidence": round(_average_confidence(products), 2)
-        if products
-        else 0.0,
-        "aligned_goal_confidence": {
-            goal: round(score, 2) for goal, score in goal_confidence.items()
-        },
-        "alignment_method": "keyword",
-    }
-
-    return AlignmentSummary(
-        score=weighted_score,
-        aligned_goals=aligned,
-        misaligned_goals=misaligned,
-        supporting_products=list(dict.fromkeys(supporting_products)),
-        confidence_summary=confidence_summary,
+    return domain_scoring.keyword_assess(
+        goals=goals,
+        products=[_product_to_dict(p) for p in products],
+        high_threshold=HIGH_ALIGNMENT_THRESHOLD,
+        medium_threshold=MEDIUM_ALIGNMENT_THRESHOLD,
     )
 
 
@@ -262,7 +161,8 @@ def _semantic_score_products(
 
     provider = get_embedding_provider()
 
-    product_texts = [_build_product_semantic_text(product) for product in products]
+    product_dicts = [_product_to_dict(p) for p in products]
+    product_texts = [domain_scoring.build_product_semantic_text(p) for p in product_dicts]
     all_texts = goals + product_texts
     embeddings = provider.embed_batch(all_texts)
 
@@ -280,166 +180,48 @@ def _semantic_score_products(
     except Exception:
         pass
 
-    scores: List[AlignmentScore] = []
-    for product, product_emb in zip(products, product_embeddings):
-        best_score = 0.0
-        best_goal = None
-        for goal, goal_emb in zip(goals, goal_embeddings):
-            similarity = cosine_similarity(goal_emb, product_emb)
-            if similarity > best_score:
-                best_score = similarity
-                best_goal = goal
-        best_capability = _get_best_capability(product, best_goal or "")
-        missing_signals = _missing_signals(best_goal or "", product)
-        reasoning = (
-            get_alignment_explanation(
-                best_goal,
-                product,
-                best_score,
-                [best_capability] if best_capability else [],
-                missing_signals,
-            )
-            if best_goal
-            else "No goal match found."
-        )
-        scores.append(
-            AlignmentScore(
-                product_id=product.id,
-                score=round(best_score, 3),
-                matched_capabilities=[cap for cap in [best_capability] if cap],
-                alignment_reasoning=reasoning,
-                confidence=round(product.confidence, 2),
-                low_confidence=best_score < MEDIUM_ALIGNMENT_THRESHOLD,
-            )
-        )
-    return scores
+    return domain_scoring.semantic_score_products(
+        goals=goals,
+        products=product_dicts,
+        goal_embeddings=goal_embeddings,
+        product_embeddings=product_embeddings,
+        cosine_similarity=cosine_similarity,
+        high_threshold=HIGH_ALIGNMENT_THRESHOLD,
+        medium_threshold=MEDIUM_ALIGNMENT_THRESHOLD,
+    )
 
 
 def _keyword_score_products(
     goals: List[str], products: List[Product]
 ) -> List[AlignmentScore]:
     """Score products using keyword overlap heuristics."""
-    scores: List[AlignmentScore] = []
-    for product in products:
-        best_goal = None
-        best_score = 0.0
-        matched_caps: List[str] = []
-        for goal in goals:
-            goal_tokens = set(domain_keyword.tokenize(goal))
-            if not goal_tokens:
-                continue
-            match = _match_goal_to_product(goal_tokens, product)
-            if match["score"] > best_score:
-                best_score = match["score"]
-                best_goal = goal
-                matched_caps = match["capabilities"]
-        best_capability = _get_best_capability(product, best_goal or "")
-        matched_caps = matched_caps or [cap for cap in [best_capability] if cap]
-        missing_signals = match["missing"] if best_goal else []
-        reasoning = (
-            get_alignment_explanation(
-                best_goal, product, best_score, matched_caps, missing_signals
-            )
-            if best_goal
-            else "No goal match found."
-        )
-        scores.append(
-            AlignmentScore(
-                product_id=product.id,
-                score=round(best_score, 3),
-                matched_capabilities=list(dict.fromkeys(matched_caps)),
-                alignment_reasoning=reasoning,
-                confidence=round(product.confidence, 2),
-                low_confidence=best_score < MEDIUM_ALIGNMENT_THRESHOLD,
-            )
-        )
-    return scores
+    return domain_scoring.keyword_score_products(
+        goals=goals,
+        products=[_product_to_dict(p) for p in products],
+        high_threshold=HIGH_ALIGNMENT_THRESHOLD,
+        medium_threshold=MEDIUM_ALIGNMENT_THRESHOLD,
+    )
+
+
+def _product_to_dict(product: Product) -> Dict[str, object]:
+    return {
+        "id": product.id,
+        "name": product.name,
+        "description": product.description,
+        "category": product.category,
+        "tags": product.tags or [],
+        "capabilities_enabled": product.capabilities_enabled or [],
+        "intentionality_profile": product.intentionality_profile or {},
+        "confidence": product.confidence,
+    }
 
 
 def _build_product_semantic_text(product: Product) -> str:
-    """Build a semantic text representation of a product for embedding.
+    """Compatibility shim for older tests/usage.
 
-    Combines capabilities, description, and tags into a text that
-    captures what the product enables and who it's for.
+    Canonical implementation lives in `domain.alignment.scoring.build_product_semantic_text`.
     """
-    parts = []
-
-    # Add capabilities (most important for goal alignment)
-    if product.capabilities_enabled:
-        capabilities = ", ".join(product.capabilities_enabled)
-        parts.append(f"This product enables: {capabilities}")
-
-    # Add description
-    if product.description:
-        parts.append(product.description)
-
-    # Add category context
-    if product.category:
-        parts.append(f"Category: {product.category}")
-
-    # Add tags as additional context
-    if product.tags:
-        tags = ", ".join(product.tags)
-        parts.append(f"Related to: {tags}")
-
-    # Fall back to name if nothing else
-    if not parts:
-        parts.append(product.name)
-
-    return " ".join(parts)
-
-
-def _tokenize(text: str) -> List[str]:
-    return domain_keyword.tokenize(text)
-
-
-def _product_tokens(product: Product) -> set[str]:
-    return domain_keyword.product_tokens(
-        {
-            "name": product.name,
-            "description": product.description,
-            "tags": product.tags or [],
-            "capabilities_enabled": product.capabilities_enabled or [],
-            "intentionality_profile": product.intentionality_profile or {},
-        }
-    )
-
-
-def _match_goal_to_product(goal_tokens: set[str], product: Product) -> dict:
-    return domain_keyword.match_goal_to_product(
-        goal_tokens,
-        {
-            "name": product.name,
-            "description": product.description,
-            "tags": product.tags or [],
-            "capabilities_enabled": product.capabilities_enabled or [],
-            "intentionality_profile": product.intentionality_profile or {},
-        },
-    )
-
-
-def _missing_signals(goal: str, product: Product) -> List[str]:
-    if not goal:
-        return []
-    goal_tokens = set(domain_keyword.tokenize(goal))
-    if not goal_tokens:
-        return []
-    tokens = _product_tokens(product)
-    return sorted(goal_tokens - tokens)
-
-
-def _get_best_capability(product: Product, goal: str) -> Optional[str]:
-    """Find the capability that best matches the goal."""
-    return domain_keyword.best_capability(
-        {"capabilities_enabled": product.capabilities_enabled or []}, goal
-    )
-
-
-def _average_confidence(products: List[Product]) -> float:
-    """Calculate average confidence across products."""
-    if not products:
-        return 0.0
-    return sum(product.confidence for product in products) / len(products)
+    return domain_scoring.build_product_semantic_text(_product_to_dict(product))
 
 
 def get_alignment_explanation(
