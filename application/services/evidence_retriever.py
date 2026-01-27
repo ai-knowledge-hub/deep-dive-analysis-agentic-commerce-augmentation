@@ -7,7 +7,7 @@ import os
 from typing import List
 
 from domain.evidence.types import EvidenceProduct
-from modules.conversation.research import run_research
+from infrastructure.llm.research_agent import run_research
 
 
 def retrieve(query: str, max_items: int = 5) -> List[EvidenceProduct]:
@@ -97,4 +97,3 @@ def _load_demo_products() -> List[EvidenceProduct]:
 
 
 __all__ = ["retrieve"]
-

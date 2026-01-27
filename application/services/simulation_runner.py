@@ -16,7 +16,7 @@ from domain.simulation import ranking as domain_ranking
 from infrastructure.llm.intent_classifier import classify_intent
 from modules.alignment.goal_alignment import score_products
 from modules.commerce.domain import Product
-from modules.intentionality.profiling import build_profile
+from application.services.intentionality_profiler import build_profile
 from modules.simulation.domain import SimulationProduct
 from modules.simulation.gap_analysis import analyze_gap, derive_lessons
 from modules.simulation.tone import derive_tone
@@ -86,4 +86,3 @@ def _tags_from_text(text: str) -> List[str]:
 
 
 __all__ = ["run_simulation"]
-

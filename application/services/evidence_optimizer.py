@@ -7,7 +7,7 @@ from typing import Dict, List
 from domain.evidence.types import EvidenceProduct
 from infrastructure.llm.gateway import generate
 from infrastructure.llm.prompts import build_optimization_prompt
-from modules.intentionality.profiling import build_profile
+from application.services.intentionality_profiler import build_profile
 
 from application.services.evidence_normalizer import to_product
 
@@ -77,4 +77,3 @@ def _llm_optimize_description(
 
 
 __all__ = ["optimize"]
-

@@ -444,8 +444,8 @@ class ConversationService:
     def _intentionality_profiles(
         self, products: List[object], *, build_profile_with_llm_fn: Callable[[Any], Any]
     ) -> List[dict]:
-        from modules.intentionality.domain import IntentionalityProfile
         from modules.commerce.domain import Product
+        from domain.intentionality.types import IntentionalityProfile
 
         profiles: List[dict] = []
         for product in products or []:

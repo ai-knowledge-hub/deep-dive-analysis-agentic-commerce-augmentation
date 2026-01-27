@@ -15,7 +15,7 @@ from application.services.evidence_normalizer import to_product
 from application.services.evidence_optimizer import optimize
 from application.services.evidence_verify import average_alignment, simulate_actual
 from infrastructure.llm.intent_classifier import classify_intent
-from modules.intentionality.profiling import build_profile
+from application.services.intentionality_profiler import build_profile
 
 
 class EvidenceService:
