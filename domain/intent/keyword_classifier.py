@@ -98,7 +98,10 @@ def keyword_intent(
     user_text_lower: str, taxonomy: List[IntentDefinition]
 ) -> InferredIntent:
     """Determine intent from keywords."""
-    ranked = [(definition, *score_definition(user_text_lower, definition)) for definition in taxonomy]
+    ranked = [
+        (definition, *score_definition(user_text_lower, definition))
+        for definition in taxonomy
+    ]
     ranked = [entry for entry in ranked if entry[1] > 0]
 
     if ranked:
@@ -170,4 +173,3 @@ __all__ = [
     "keyword_intent",
     "score_definition",
 ]
-

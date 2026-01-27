@@ -68,4 +68,3 @@ class HybridIntentClassifier:
 
 
 __all__ = ["HybridIntentClassifier", "GenerateFn", "KeywordClassifyFn"]
-

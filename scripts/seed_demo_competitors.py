@@ -11,7 +11,7 @@ import os
 from typing import Any, Dict, List
 
 from shared.db.connection import DEFAULT_DB_PATH, get_connection, init_db
-from modules.memory.repositories.base import to_json
+from infrastructure.db.json import to_json
 
 
 def _upsert_client(*, client_id: str, name: str, metadata: Dict[str, Any]) -> None:

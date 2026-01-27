@@ -73,12 +73,12 @@ Stored goals and preferences make intent inference more accurate over time.
 
 | Sequence Step | Implementation |
 |---------------|----------------|
-| Infer intent | `modules/intent/` |
-| Retrieve memory | `modules/memory/` |
-| Profile intentionality | `modules/intentionality/` |
-| Search products | `modules/commerce/search.py` |
-| Score alignment | `modules/alignment/` |
-| Generate explanations | `modules/conversation/agents.py` |
+| Infer intent | `domain/intent/` + `application/services/conversation_service.py` |
+| Retrieve memory | `domain/memory/` + `infrastructure/db/*` |
+| Profile intentionality | `domain/intentionality/` + `application/services/intentionality_profiler.py` |
+| Search products | `infrastructure/commerce/*` |
+| Score alignment | `domain/alignment/` + `infrastructure/alignment/goal_alignment_gateway.py` |
+| Generate explanations | `application/services/alignment_service.py` + `domain/alignment/*` |
 
 ---
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from shared.db.connection import init_db, set_database_path
-from modules.memory.semantic import SemanticMemory
-from modules.mcp.tools import image_analyze, memory_write, web_fetch
+from infrastructure.db.connection import init_db, set_database_path
+from infrastructure.memory.semantic_memory import SemanticMemory
+from infrastructure.mcp.tools import image_analyze, memory_write, web_fetch
 
 
 def test_web_fetch_requires_allowlist(monkeypatch):
@@ -29,7 +29,7 @@ def test_web_fetch_allowlist_allows(monkeypatch):
             return False
 
     monkeypatch.setattr(
-        "modules.mcp.tools.web_fetch.urllib.request.urlopen",
+        "infrastructure.mcp.tools.web_fetch.urllib.request.urlopen",
         lambda *_, **__: DummyResponse(),
     )
     result = web_fetch.run("https://example.com/test")

@@ -65,4 +65,3 @@ class IntentContext:
 
 
 __all__ = ["InferredIntent", "IntentContext", "IntentDefinition"]
-

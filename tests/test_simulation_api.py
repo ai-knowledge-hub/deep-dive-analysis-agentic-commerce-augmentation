@@ -26,7 +26,7 @@ if "google" not in sys.modules:
 
 from db.connection import init_db, set_database_path
 from api.main import app
-from modules.memory.repositories import clients as clients_repo
+from infrastructure.db import clients as clients_repo
 
 CLIENT_ID = "test-client"
 
@@ -132,8 +132,12 @@ def test_simulation_attach_to_product(client: TestClient):
     run_response = client.post("/simulation/run", json=run_payload)
     run_id = run_response.json()["run_id"]
 
-    brand = clients_repo.create_brand("brand-tv", CLIENT_ID, "TV Brand")
-    clients_repo.create_product("prod-tv-1", brand["id"], "Glare Guard TV")
+    brand = clients_repo.create_brand(
+        brand_id="brand-tv", client_id=CLIENT_ID, name="TV Brand"
+    )
+    clients_repo.create_product(
+        product_id="prod-tv-1", brand_id=brand["id"], name="Glare Guard TV"
+    )
 
     attach_response = client.post(
         "/simulation/attach",
@@ -160,26 +164,30 @@ def test_simulation_attach_to_product(client: TestClient):
 def test_simulation_run_autopicks_competitors_from_catalog(client: TestClient):
     # Create "our" client and product (selected by product_id)
     clients_repo.create_client(
-        "client-underarmour", "Under Armour", metadata={"demo": True}
+        client_id="client-underarmour", name="Under Armour", metadata={"demo": True}
     )
     our_brand = clients_repo.create_brand(
-        "brand-ua", "client-underarmour", "Under Armour"
+        brand_id="brand-ua", client_id="client-underarmour", name="Under Armour"
     )
     clients_repo.create_product(
-        "ua-vest-1",
-        our_brand["id"],
-        "UA Rain Running Vest",
+        product_id="ua-vest-1",
+        brand_id=our_brand["id"],
+        name="UA Rain Running Vest",
         description="Packable running vest for light rain and wind.",
         metadata={"source": "catalog", "offer_url": "https://example.com/ua-vest"},
     )
 
     # Create competitor client + product that should be picked by LIKE query
-    clients_repo.create_client("client-nike", "Nike", metadata={"demo": True})
-    comp_brand = clients_repo.create_brand("brand-nike", "client-nike", "Nike")
+    clients_repo.create_client(
+        client_id="client-nike", name="Nike", metadata={"demo": True}
+    )
+    comp_brand = clients_repo.create_brand(
+        brand_id="brand-nike", client_id="client-nike", name="Nike"
+    )
     clients_repo.create_product(
-        "nike-vest-1",
-        comp_brand["id"],
-        "Nike Running Vest",
+        product_id="nike-vest-1",
+        brand_id=comp_brand["id"],
+        name="Nike Running Vest",
         description="running vest with reflective details and zip pockets.",
         metadata={"source": "catalog", "offer_url": "https://example.com/nike-vest"},
     )

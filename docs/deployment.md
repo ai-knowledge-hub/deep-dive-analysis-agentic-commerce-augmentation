@@ -99,7 +99,9 @@ Set `LLM_PROVIDER` to choose the language model:
 Export attribution events for analytics verification:
 
 ```bash
-python -m modules.attribution.ga4_export --path ga4_events.json
+# TODO (post-migration): implement an attribution export tool.
+# This used to reference `modules/attribution/*` before the clean-architecture migration.
+# Suggested future location: `scripts/ga4_export.py` or `infrastructure/attribution/*`.
 ```
 
 This creates a JSON payload compatible with GA4 or custom dashboards.

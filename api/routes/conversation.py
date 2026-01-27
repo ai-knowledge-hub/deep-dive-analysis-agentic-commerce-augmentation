@@ -11,32 +11,43 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from application.services.conversation_service import ConversationService
-from application.services.conversation_agents import CommerceAgent, ExplainAgent, IntentAgent
+from application.services.conversation_agents import (
+    CommerceAgent,
+    ExplainAgent,
+    IntentAgent,
+)
+from application.services.commerce_plan_builder import CommercePlanBuilder
 from application.services.context_builder import context_for
-from infrastructure.llm.intent_classifier import log_intent_replay
-from modules.values.agent import GoalClarificationAgent
-from modules.conversation.research import run_research
-from modules.alignment.goal_alignment import score_products as score_alignment
-from modules.alignment import goal_alignment
-from modules.alignment.llm_reasoner import reason_about_products
-from modules.commerce.plan_builder import PlanBuilder
-from modules.commerce import search as commerce_search
-from modules.intent.llm_classifier import HybridIntentClassifier
-from modules.intentionality.profiling import build_profile_with_llm
+from infrastructure.llm.intent_classifier import (
+    build_intent_classifier,
+    log_intent_replay,
+)
+from infrastructure.llm.research_agent import run_research
+from application.services.intentionality_profiler import build_profile_with_llm
+from application.services.alignment_service import alignment_service
+from infrastructure.llm.goal_clarification_agent import GoalClarificationAgent
+from infrastructure.llm.product_reasoner import reason_about_products_default
+from infrastructure.commerce.search import search as commerce_search
+from infrastructure.commerce.compare import compare as compare_products
+from application.services.intentionality_profiler import build_profile
 from api.utils.tenancy import require_client_id
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
 INTENT_AGENT = IntentAgent(
-    classifier=HybridIntentClassifier(),
+    classifier=build_intent_classifier(),
     context_for_fn=context_for,
     log_replay_fn=log_intent_replay,
 )
 COMMERCE_AGENT = CommerceAgent(
-    builder=PlanBuilder(),
-    reason_fn=reason_about_products,
-    assess_fn=goal_alignment.assess,
-    score_fn=goal_alignment.score_products,
+    builder=CommercePlanBuilder(
+        search_fn=commerce_search,
+        compare_fn=compare_products,
+        build_profile_fn=build_profile,
+    ),
+    reason_fn=reason_about_products_default,
+    assess_fn=alignment_service.assess,
+    score_fn=alignment_service.score_products,
     search_fn=commerce_search,
 )
 EXPLAIN_AGENT = ExplainAgent()
@@ -103,7 +114,7 @@ def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
         commerce_agent=COMMERCE_AGENT,
         explain_agent=EXPLAIN_AGENT,
         run_research_fn=run_research,
-        score_alignment_fn=score_alignment,
+        score_alignment_fn=alignment_service.score_products,
         build_profile_with_llm_fn=build_profile_with_llm,
     )
 
@@ -127,7 +138,7 @@ def start_conversation_stream(
             commerce_agent=COMMERCE_AGENT,
             explain_agent=EXPLAIN_AGENT,
             run_research_fn=run_research,
-            score_alignment_fn=score_alignment,
+            score_alignment_fn=alignment_service.score_products,
             build_profile_with_llm_fn=build_profile_with_llm,
         )
         yield _sse_event(payload, event="conversation")
@@ -151,7 +162,7 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
         commerce_agent=COMMERCE_AGENT,
         explain_agent=EXPLAIN_AGENT,
         run_research_fn=run_research,
-        score_alignment_fn=score_alignment,
+        score_alignment_fn=alignment_service.score_products,
         build_profile_with_llm_fn=build_profile_with_llm,
     )
 
@@ -176,7 +187,7 @@ def continue_conversation_stream(
             commerce_agent=COMMERCE_AGENT,
             explain_agent=EXPLAIN_AGENT,
             run_research_fn=run_research,
-            score_alignment_fn=score_alignment,
+            score_alignment_fn=alignment_service.score_products,
             build_profile_with_llm_fn=build_profile_with_llm,
         )
         yield _sse_event(payload, event="conversation")
@@ -237,5 +248,5 @@ def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any
         client_id=client_id,
         query=request.query,
         run_research_fn=run_research,
-        score_alignment_fn=score_alignment,
+        score_alignment_fn=alignment_service.score_products,
     )

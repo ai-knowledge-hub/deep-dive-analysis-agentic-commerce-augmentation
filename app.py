@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from config import env as _env  # noqa: F401  # ensure dotenv loaded for CLI runs
-from modules.conversation.agents import IntentAgent, CommerceAgent
 
 Surface = Literal["hackathon", "gpt", "gemini"]
 
@@ -24,15 +23,30 @@ class DemoRuntime:
 
     def run(self) -> None:
         print(f"Launching {self.surface} demo surface...")
-        intent_agent = IntentAgent()
-        commerce_agent = CommerceAgent()
+        from application.services.commerce_plan_builder import CommercePlanBuilder
+        from application.services.alignment_service import alignment_service
+        from application.services.intentionality_profiler import build_profile
+        from infrastructure.commerce.search import search as catalog_search
+        from infrastructure.commerce.compare import compare as catalog_compare
+        from infrastructure.llm.intent_classifier import classify_intent
+        from infrastructure.llm.product_reasoner import reason_about_products_default
 
-        intent = intent_agent.detect_intent("Need a better workspace setup")
+        query = "Need a better workspace setup"
+        intent = classify_intent(query)
         print("Intent:", intent)
-        initial_goals = (
-            [intent["label"].replace("_", " ")] if intent.get("label") else []
+
+        builder = CommercePlanBuilder(
+            search_fn=lambda q: catalog_search(q),
+            compare_fn=lambda products: catalog_compare(products),
+            build_profile_fn=lambda product: build_profile(product),
         )
-        plan = commerce_agent.build_plan(intent, goals=initial_goals)
+        plan = builder.build_plan(
+            intent=intent,
+            goals=[intent.get("primary_goal")] if intent.get("primary_goal") else [],
+            reason_fn=reason_about_products_default,
+            assess_fn=alignment_service.assess,
+            score_fn=alignment_service.score_products,
+        )
         print("Plan:", plan)
 
 

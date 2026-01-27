@@ -67,4 +67,3 @@ def fallback_goals(state: GoalClarificationState) -> List[str]:
 
 
 __all__ = ["extract_goals", "fallback_goals", "has_summary"]
-

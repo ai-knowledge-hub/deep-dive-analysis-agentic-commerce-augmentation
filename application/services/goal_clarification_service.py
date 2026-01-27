@@ -76,4 +76,3 @@ class GoalClarificationService:
 
 
 __all__ = ["GoalClarificationService", "ChatFn"]
-

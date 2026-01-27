@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from domain.intentionality.types import IntentionalityProfile
 
@@ -55,7 +55,9 @@ def parse_profile_json(
 
     return IntentionalityProfile(
         product_id=fallback.product_id,
-        capabilities_enabled=payload.get("capabilities_enabled", fallback.capabilities_enabled),
+        capabilities_enabled=payload.get(
+            "capabilities_enabled", fallback.capabilities_enabled
+        ),
         goals_served=payload.get("goals_served", fallback.goals_served),
         prerequisites=payload.get("prerequisites", fallback.prerequisites),
         outcomes_expected=payload.get("outcomes_expected", fallback.outcomes_expected),
@@ -79,4 +81,3 @@ def build_prompt(
 
 
 __all__ = ["base_profile", "build_prompt", "first_sentence", "parse_profile_json"]
-

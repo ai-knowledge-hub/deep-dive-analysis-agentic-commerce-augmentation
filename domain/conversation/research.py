@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import re
-from typing import Any, Dict, List
+from typing import Dict, List
 from urllib.parse import urlparse
 
 
@@ -45,7 +45,9 @@ def parse_confidence(raw: str) -> float | None:
     return max(0.0, min(1.0, value))
 
 
-def confidence_prompt(query: str, goals: List[str], summary: str, tool_summary: str) -> str:
+def confidence_prompt(
+    query: str, goals: List[str], summary: str, tool_summary: str
+) -> str:
     goals_block = "\n".join(f"- {goal}" for goal in goals) or "- (no explicit goals)"
     return (
         "You are scoring confidence for research notes.\n"
@@ -304,7 +306,11 @@ def _authority_score(domains: List[str]) -> float:
         return 0.0
     authoritative = 0
     for domain in domains:
-        if domain.endswith(".gov") or domain.endswith(".edu") or domain.endswith(".ac.uk"):
+        if (
+            domain.endswith(".gov")
+            or domain.endswith(".edu")
+            or domain.endswith(".ac.uk")
+        ):
             authoritative += 1
             continue
         if domain.endswith(".gov.uk") or domain.endswith(".who.int"):
@@ -352,4 +358,3 @@ __all__ = [
     "sanitize_llm_text",
     "tool_summary",
 ]
-

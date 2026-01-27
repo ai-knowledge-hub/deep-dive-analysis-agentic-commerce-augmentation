@@ -21,7 +21,9 @@ def build_product_semantic_text(product: Mapping[str, Any]) -> str:
 
     capabilities = product.get("capabilities_enabled") or []
     if capabilities:
-        parts.append(f"This product enables: {', '.join([str(c) for c in capabilities])}")
+        parts.append(
+            f"This product enables: {', '.join([str(c) for c in capabilities])}"
+        )
 
     description = product.get("description") or ""
     if description:
@@ -54,7 +56,10 @@ def keyword_assess(
             aligned_goals=[],
             misaligned_goals=[],
             supporting_products=[],
-            confidence_summary={"average_confidence": 0.0, "aligned_goal_confidence": {}},
+            confidence_summary={
+                "average_confidence": 0.0,
+                "aligned_goal_confidence": {},
+            },
         )
 
     if not products:
@@ -63,7 +68,10 @@ def keyword_assess(
             aligned_goals=[],
             misaligned_goals=list(goals),
             supporting_products=[],
-            confidence_summary={"average_confidence": 0.0, "aligned_goal_confidence": {}},
+            confidence_summary={
+                "average_confidence": 0.0,
+                "aligned_goal_confidence": {},
+            },
         )
 
     aligned: List[str] = []
@@ -80,7 +88,9 @@ def keyword_assess(
             match = kw.match_goal_to_product(goal_tokens, dict(product))
             if match["score"] >= medium_threshold:
                 goal_products.append(product)
-                supporting_products.append(str(product.get("id") or product.get("product_id") or ""))
+                supporting_products.append(
+                    str(product.get("id") or product.get("product_id") or "")
+                )
 
         if goal_products:
             aligned.append(goal)
@@ -89,12 +99,16 @@ def keyword_assess(
     misaligned = [goal for goal in goals if goal not in aligned]
     base_score = len(aligned) / max(len(goals), 1)
     confidence_weight = (
-        sum(goal_confidence.values()) / max(len(goal_confidence), 1) if goal_confidence else 0.0
+        sum(goal_confidence.values()) / max(len(goal_confidence), 1)
+        if goal_confidence
+        else 0.0
     )
     weighted_score = round(base_score * (0.7 + 0.3 * confidence_weight), 3)
 
     confidence_summary: Dict[str, float | Dict[str, float]] = {
-        "average_confidence": round(_average_confidence(products), 2) if products else 0.0,
+        "average_confidence": round(_average_confidence(products), 2)
+        if products
+        else 0.0,
         "aligned_goal_confidence": {g: round(s, 2) for g, s in goal_confidence.items()},
         "alignment_method": "keyword",
     }
@@ -125,7 +139,10 @@ def semantic_assess(
             aligned_goals=[],
             misaligned_goals=[],
             supporting_products=[],
-            confidence_summary={"average_confidence": 0.0, "aligned_goal_confidence": {}},
+            confidence_summary={
+                "average_confidence": 0.0,
+                "aligned_goal_confidence": {},
+            },
         )
 
     if not products:
@@ -134,7 +151,10 @@ def semantic_assess(
             aligned_goals=[],
             misaligned_goals=list(goals),
             supporting_products=[],
-            confidence_summary={"average_confidence": 0.0, "aligned_goal_confidence": {}},
+            confidence_summary={
+                "average_confidence": 0.0,
+                "aligned_goal_confidence": {},
+            },
         )
 
     aligned_goals: List[str] = []
@@ -169,7 +189,9 @@ def semantic_assess(
 
     base_score = len(aligned_goals) / len(goals) if goals else 0.0
     confidence_weight = (
-        sum(goal_confidence.values()) / max(len(goal_confidence), 1) if goal_confidence else 0.0
+        sum(goal_confidence.values()) / max(len(goal_confidence), 1)
+        if goal_confidence
+        else 0.0
     )
     weighted_score = round(base_score * (0.6 + 0.4 * confidence_weight), 3)
 

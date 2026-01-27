@@ -7,7 +7,10 @@ from domain.alignment.keyword import dedupe_keep_order, tokenize
 
 
 def product_text(product: Dict[str, Any]) -> str:
-    parts: List[str] = [str(product.get("name") or ""), str(product.get("description") or "")]
+    parts: List[str] = [
+        str(product.get("name") or ""),
+        str(product.get("description") or ""),
+    ]
     tags = product.get("tags") or []
     if tags:
         parts.append(" ".join([str(t) for t in tags]))
@@ -33,7 +36,9 @@ def product_phrases(product: Dict[str, Any]) -> List[str]:
 
     description = str(product.get("description") or "").strip()
     if description:
-        phrases.extend([s.strip() for s in re.split(r"[.!?]+", description) if s.strip()])
+        phrases.extend(
+            [s.strip() for s in re.split(r"[.!?]+", description) if s.strip()]
+        )
 
     tags = product.get("tags") or []
     if tags:

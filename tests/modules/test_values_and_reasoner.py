@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import List
 import sys
 import types
 
@@ -54,11 +53,12 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from modules.intent.llm_classifier import HybridIntentClassifier
-from modules.values.domain import GoalClarificationState
-from modules.values.agent import GoalClarificationAgent
-from modules.alignment.llm_reasoner import reason_about_products
-from modules.intent.domain import InferredIntent as KeywordIntent
+from application.services.goal_clarification_service import GoalClarificationService
+from domain.values.types import GoalClarificationState
+from domain.intent.types import InferredIntent as KeywordIntent
+from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier
+from infrastructure.llm.product_reasoner import reason_about_products
+from infrastructure.llm.prompts import VALUES_CLARIFICATION_PROMPT
 
 
 def test_hybrid_intent_prefers_llm_response(monkeypatch):
@@ -70,8 +70,39 @@ def test_hybrid_intent_prefers_llm_response(monkeypatch):
             '"context_signals": ["desk"], "underlying_needs": ["comfort"], "domain": "career"}'
         )
 
-    monkeypatch.setattr("modules.intent.llm_classifier.generate", fake_generate)
-    classifier = HybridIntentClassifier()
+    fallback_intent = KeywordIntent(
+        primary_goal="unknown",
+        secondary_goals=[],
+        underlying_needs=[],
+        context_signals=[],
+        confidence=0.1,
+        domain="unknown",
+        source="keyword",
+    )
+
+    def fake_keyword(
+        text: str, llm_fallback=None, llm_threshold: float = 0.55, **kwargs
+    ):
+        if not llm_fallback:
+            return fallback_intent
+        llm_data = dict(llm_fallback(text) or {})
+        if float(llm_data.get("confidence") or 0.0) >= llm_threshold:
+            return KeywordIntent(
+                primary_goal=str(llm_data.get("primary_goal") or "unknown"),
+                secondary_goals=list(llm_data.get("secondary_goals") or []),
+                underlying_needs=list(llm_data.get("underlying_needs") or []),
+                context_signals=list(llm_data.get("context_signals") or []),
+                confidence=float(llm_data.get("confidence") or 0.0),
+                domain=str(llm_data.get("domain") or "") or None,
+                source=str(llm_data.get("source") or "gemini"),
+            )
+        return fallback_intent
+
+    classifier = HybridIntentClassifier(
+        generate_fn=fake_generate,
+        keyword_classify_fn=fake_keyword,
+        prompt_template="{}",
+    )
 
     result = classifier.classify("Need a better desk setup")
 
@@ -97,16 +128,14 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
         source="keyword_fallback",
     )
 
-    monkeypatch.setattr("modules.intent.llm_classifier.generate", fake_generate)
-
     def fake_keyword(text: str, **kwargs):
         return fallback_intent
 
-    monkeypatch.setattr(
-        "modules.intent.llm_classifier.keyword_classifier.classify", fake_keyword
+    classifier = HybridIntentClassifier(
+        generate_fn=fake_generate,
+        keyword_classify_fn=fake_keyword,
+        prompt_template="{}",
     )
-
-    classifier = HybridIntentClassifier()
     result = classifier.classify("Need help")
 
     assert result.primary_goal == "workspace upgrade"
@@ -116,15 +145,15 @@ def test_hybrid_intent_falls_back_to_keywords(monkeypatch):
 
 
 def test_values_agent_start_records_turns(monkeypatch):
-    def fake_chat(messages: List[dict], system_instruction: str | None = None) -> str:
+    def fake_chat(messages: list[dict], system_instruction: str | None = None) -> str:
         assert system_instruction and system_instruction.startswith("You are")
         return "Let's explore what matters most to you."
 
-    monkeypatch.setattr("modules.values.agent.chat", fake_chat)
-
-    agent = GoalClarificationAgent()
-    state = agent.start(
-        "Help me design a calmer workspace", metadata={"channel": "test"}
+    service = GoalClarificationService(
+        chat_fn=fake_chat, prompt_template=VALUES_CLARIFICATION_PROMPT
+    )
+    state = service.start(
+        query="Help me design a calmer workspace", metadata={"channel": "test"}
     )
 
     assert len(state.turns) == 2
@@ -141,18 +170,18 @@ def test_values_agent_continue_marks_ready(monkeypatch):
 
     Does that capture it?"""
 
-    def fake_chat(messages: List[dict], system_instruction: str | None = None) -> str:
+    def fake_chat(messages: list[dict], system_instruction: str | None = None) -> str:
         # respond with summary to trigger ready_for_products
         return summary_response
-
-    monkeypatch.setattr("modules.values.agent.chat", fake_chat)
 
     state = GoalClarificationState(query="Need focus")
     state.add_turn("user", "Need focus")
     state.add_turn("agent", "Tell me more.")
 
-    agent = GoalClarificationAgent()
-    updated = agent.continue_dialogue(state, "Long calls drain me")
+    service = GoalClarificationService(
+        chat_fn=fake_chat, prompt_template=VALUES_CLARIFICATION_PROMPT
+    )
+    updated = service.continue_dialogue(state=state, user_message="Long calls drain me")
 
     assert updated.ready_for_products is True
     assert any("reduce stress" in goal.lower() for goal in updated.extracted_goals)
@@ -169,8 +198,6 @@ def test_product_reasoner_attaches_reasoning(monkeypatch):
         prompts.append(prompt)
         return "Supports posture goals and keeps you focused."
 
-    monkeypatch.setattr("modules.alignment.llm_reasoner.generate", fake_generate)
-
     products = [
         {
             "id": "p1",
@@ -181,7 +208,12 @@ def test_product_reasoner_attaches_reasoning(monkeypatch):
         }
     ]
 
-    result = reason_about_products(["Reduce back pain"], products)
+    result = reason_about_products(
+        ["Reduce back pain"],
+        products,
+        generate_fn=lambda prompt: fake_generate(prompt),
+        prompt_template="{goals}\n{product}",
+    )
 
     assert len(result) == 1
     assert result[0]["reasoning"] == "Supports posture goals and keeps you focused."
@@ -198,7 +230,13 @@ def test_product_reasoner_handles_empty_products(monkeypatch):
         called["count"] += 1
         return ""
 
-    monkeypatch.setattr("modules.alignment.llm_reasoner.generate", fake_generate)
-
-    assert reason_about_products(["Improve focus"], []) == []
+    assert (
+        reason_about_products(
+            ["Improve focus"],
+            [],
+            generate_fn=lambda prompt: fake_generate(prompt),
+            prompt_template="{goals}\n{product}",
+        )
+        == []
+    )
     assert called["count"] == 0

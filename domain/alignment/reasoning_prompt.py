@@ -33,4 +33,3 @@ def compose_reasoning_prompt(
 
 
 __all__ = ["compose_reasoning_prompt", "format_reasoning_context"]
-

@@ -1,12 +1,11 @@
-from modules.alignment.goal_alignment import assess
-from modules.commerce import search
-from modules.commerce.adapters.mock import load_catalog as load_mock_catalog
-import modules.commerce.search as search_module
+from domain.commerce.search import search
+from infrastructure.alignment.goal_alignment_gateway import assess
+from infrastructure.commerce.demo_catalog import load_demo_catalog
 
 
-def test_goal_alignment_scores_supporting_products(monkeypatch):
-    monkeypatch.setattr(search_module, "CATALOG", load_mock_catalog())
-    products = search("workspace")
+def test_goal_alignment_scores_supporting_products():
+    catalog = load_demo_catalog()
+    products = search(catalog, "workspace")
     goals = ["Improve posture", "Learn guitar"]
     result = assess(goals, products, use_semantic=False)
     assert "Improve posture" in result.aligned_goals

@@ -21,7 +21,7 @@ This document specifies the transformation of the current LLM Discoverability Si
 ## Reader Guide: What We Implement Now vs Later
 
 **Implement now (Phase 0–3, hackathon-friendly):**
-- Clean Architecture boundaries (`domain/`, `application/`, `infrastructure/`) with a strangler migration (existing `modules/*` become shims).
+- Clean Architecture boundaries (`domain/`, `application/`, `infrastructure/`). The legacy `modules/` layout has been fully removed after migration.
 - Minimal agent harness as a **tool/observation loop**:
   - tool registry + executor
   - replay logging (inputs/outputs/tools/timings/versions)
@@ -46,7 +46,7 @@ We call the system “agentic” when it can:
 
 ---
 
-## Current Architecture (As-Is)
+## Current Architecture (Post-Migration)
 
 ### Directory Structure
 ```
@@ -59,19 +59,9 @@ llm/
 ├── prompts.py        # Prompt templates
 └── tools.py          # Tool definitions
 
-modules/
-├── intent/           # Intent inference
-├── intentionality/   # Product transformation
-├── alignment/        # Scoring
-├── simulation/       # Sandbox loop
-├── memory/           # Working, episodic, semantic
-├── commerce/         # Product adapters
-├── conversation/     # Dialog management
-├── evidence/         # Web evidence gathering
-├── attribution/      # Event tracking
-├── evaluation/       # Metrics
-├── mcp/             # MCP tools
-└── values/          # Goal clarification
+domain/               # Pure types + pure functions (no IO)
+application/          # Use-cases / orchestration services
+infrastructure/       # IO boundaries (DB/LLM/adapters)
 ```
 
 ### Current Flow (Monolithic)
@@ -167,8 +157,8 @@ Infrastructure → Application → Domain
 
 This transformation must be **incremental** to avoid freezing feature work (protocol simulation + verification are urgent).
 
-1. **Introduce `domain/` and `application/` without deleting existing modules**
-   - Keep `modules/*` as compatibility shells that delegate to new code.
+1. **Introduce `domain/` and `application/`**
+   - The codebase now routes behavior through `domain/` + `application/` with IO in `infrastructure/`.
 2. **Move pure functions first**
    - Alignment scoring, gap analysis, phrase matching, normalization.
 3. **Create application services**

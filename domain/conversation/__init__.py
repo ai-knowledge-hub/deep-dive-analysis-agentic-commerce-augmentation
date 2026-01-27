@@ -13,4 +13,3 @@ __all__ = [
     "format_turns",
     "render_context",
 ]
-

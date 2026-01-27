@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
-from modules.commerce.domain import Product, RawProduct
-from modules.intentionality.profiling import build_profile
+from domain.commerce.types import Product, RawProduct
+from application.services.intentionality_profiler import build_profile
 
 
 def raw_product_to_product(raw: RawProduct) -> Product:

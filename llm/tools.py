@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from modules.mcp.server import dispatch
+from infrastructure.mcp.server import dispatch
 
 # =============================================================================
 # TOOL DEFINITIONS

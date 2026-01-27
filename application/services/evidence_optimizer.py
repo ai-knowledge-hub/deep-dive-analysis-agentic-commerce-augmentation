@@ -28,7 +28,8 @@ def optimize(
             goals=goals,
             tone=tone,
             price=product.price,
-            signals=(profile.capabilities_enabled or []) + (profile.outcomes_expected or []),
+            signals=(profile.capabilities_enabled or [])
+            + (profile.outcomes_expected or []),
         )
         optimized.append(
             {
@@ -57,7 +58,9 @@ def _llm_optimize_description(
     merged.extend(signals)
     if goals:
         merged.extend(goals)
-    signals_text = ", ".join([s for s in merged if s][:5]) if merged else "intent clarity"
+    signals_text = (
+        ", ".join([s for s in merged if s][:5]) if merged else "intent clarity"
+    )
     prompt = build_optimization_prompt(
         name=name,
         description=description,

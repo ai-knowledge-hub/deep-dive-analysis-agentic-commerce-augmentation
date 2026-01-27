@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from modules.commerce.domain import Product
+from domain.commerce.types import Product
 
 
 def simulate_actual(products: List[Product], limit: int = 2) -> List[str]:
@@ -19,4 +19,3 @@ def average_alignment(scores) -> float:
 
 
 __all__ = ["simulate_actual", "average_alignment"]
-

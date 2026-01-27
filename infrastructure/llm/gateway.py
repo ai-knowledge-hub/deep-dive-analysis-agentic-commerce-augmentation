@@ -10,9 +10,11 @@ from typing import Any
 
 from shared.llm.gateway import (
     chat as _chat,
+    embed as _embed,
     generate as _generate,
     generate_with_tools as _generate_with_tools,
 )
+from shared.llm.embeddings import embedding_available as _embedding_available
 
 
 def generate(
@@ -36,7 +38,10 @@ def generate_with_tools(
     provider: str | None = None,
 ) -> dict:
     return _generate_with_tools(
-        prompt=prompt, tools=tools, system_instruction=system_instruction, provider=provider
+        prompt=prompt,
+        tools=tools,
+        system_instruction=system_instruction,
+        provider=provider,
     )
 
 
@@ -47,4 +52,19 @@ def raw_client(provider: str | None = None) -> Any:
     return _raw_client(provider)
 
 
-__all__ = ["generate", "chat", "generate_with_tools", "raw_client"]
+def embedding_available() -> bool:
+    return _embedding_available()
+
+
+def embed(text: str, provider: str | None = None) -> list[float]:
+    return _embed(text, provider=provider)
+
+
+__all__ = [
+    "generate",
+    "chat",
+    "generate_with_tools",
+    "raw_client",
+    "embedding_available",
+    "embed",
+]

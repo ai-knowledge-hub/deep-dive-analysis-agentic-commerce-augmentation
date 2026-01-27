@@ -6,7 +6,7 @@ import re
 from typing import List
 
 from domain.evidence.types import EvidenceProduct
-from modules.commerce.domain import Product
+from domain.commerce.types import Product
 
 
 def to_product(evidence: EvidenceProduct) -> Product:
@@ -29,4 +29,3 @@ def _tags_from_text(text: str) -> List[str]:
 
 
 __all__ = ["to_product"]
-

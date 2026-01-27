@@ -39,7 +39,7 @@ The explanation of why a product lost in a competitive simulation—what's missi
 
 **In Code**
 ```
-modules/simulation/gap_analysis.py
+domain/simulation/gap_analysis.py
 ```
 
 ---
@@ -74,8 +74,8 @@ Intent inference:
 **In Code**
 
 ```
-modules/intent/llm_classifier.py
-modules/intent/domain.py
+domain/intent/*
+infrastructure/llm/intent_classifier.py
 ```
 
 **Example**
@@ -127,8 +127,8 @@ class IntentionalityProfile:
 **In Code**
 
 ```
-modules/intentionality/profiling.py
-modules/intentionality/domain.py
+domain/intentionality/profiling.py
+domain/intentionality/types.py
 ```
 
 ---
@@ -174,7 +174,8 @@ class AlignmentScore:
 **In Code**
 
 ```
-modules/alignment/goal_alignment.py
+domain/alignment/scoring.py
+infrastructure/alignment/goal_alignment_gateway.py
 ```
 
 ---
@@ -191,7 +192,7 @@ The stylistic voice of a brand’s product copy (formality, sentence length, jar
 
 **In Code**
 ```
-modules/simulation/tone.py
+domain/simulation/tone.py
 shared/llm/prompts.py
 ```
 
@@ -228,7 +229,7 @@ The transformation of product specifications into human capabilities.
 **In Code**
 
 ```
-modules/intentionality/transforms.py
+domain/intentionality/profiling.py
 ```
 
 ---
@@ -266,7 +267,8 @@ Memory enables **better inference**, not surveillance.
 **In Code**
 
 ```
-modules/memory/
+domain/memory/
+infrastructure/db/
 ```
 
 ---

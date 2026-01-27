@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from shared.llm.prompts import (
     INTENT_CLASSIFICATION_PROMPT,
+    PRODUCT_REASONING_PROMPT,
     VALUES_CLARIFICATION_PROMPT,
     build_optimization_prompt as _build_optimization_prompt,
 )
@@ -33,6 +34,7 @@ def build_optimization_prompt(
 
 __all__ = [
     "INTENT_CLASSIFICATION_PROMPT",
+    "PRODUCT_REASONING_PROMPT",
     "VALUES_CLARIFICATION_PROMPT",
     "build_optimization_prompt",
 ]

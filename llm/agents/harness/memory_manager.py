@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from application.services.context_builder import ContextPacket, context_for, goal_context
-from modules.memory.session_manager import SessionManager
+from application.services.context_builder import (
+    ContextPacket,
+    context_for,
+    goal_context,
+)
+from application.services.session_manager import SessionManager
 
 
 @dataclass(frozen=True)

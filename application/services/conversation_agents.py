@@ -39,7 +39,11 @@ class IntentAgent:
         if manager is not None:
             _, context = self._context_for(manager)
         result = self._classifier.classify(utterance, context=context).to_dict()
-        if self._log_replay and manager is not None and getattr(manager, "client_id", None):
+        if (
+            self._log_replay
+            and manager is not None
+            and getattr(manager, "client_id", None)
+        ):
             self._log_replay(
                 query=utterance,
                 result=result,
@@ -130,4 +134,3 @@ class CapabilityAgent:
 
 
 __all__ = ["IntentAgent", "CommerceAgent", "ExplainAgent", "CapabilityAgent"]
-

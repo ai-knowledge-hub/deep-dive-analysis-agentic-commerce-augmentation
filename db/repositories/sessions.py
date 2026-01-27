@@ -1,6 +1,6 @@
-"""Backward compatibility: re-exports from modules.memory.repositories.sessions."""
+"""Backward compatibility: re-exports from infrastructure DB sessions."""
 
-from modules.memory.repositories.sessions import (
+from infrastructure.db.sessions import (
     create_session,
     get_session,
     list_sessions,

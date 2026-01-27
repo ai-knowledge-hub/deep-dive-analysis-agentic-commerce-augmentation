@@ -58,4 +58,3 @@ class GoalClarificationState:
 
 
 __all__ = ["GoalClarificationState", "GoalClarificationTurn"]
-

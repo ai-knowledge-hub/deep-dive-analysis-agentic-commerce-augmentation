@@ -43,32 +43,22 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 
 | Capability | What It Does | Implementation |
 |-----------|--------------|----------------|
-| **Intent Inference** | Model user goals from query + context | `modules/intent/` |
-| **Intentionality Profiling** | Transform specs → capabilities → outcomes | `modules/intentionality/` |
-| **Alignment Scoring** | Score products against inferred intent | `modules/alignment/` |
-| **Evidence Discovery** | Analyze open-web representations for intent legibility | `modules/evidence/` |
-| **Verification (Lift)** | Show before/after discoverability impact | `modules/evidence/` |
-| **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `modules/simulation/` |
-| **Context Memory** | Persist goals and preferences for better inference | `modules/memory/` |
+| **Intent Inference** | Model user goals from query + context | `domain/intent/` + `application/services/*` |
+| **Intentionality Profiling** | Transform specs → capabilities → outcomes | `domain/intentionality/` + `application/services/intentionality_profiler.py` |
+| **Alignment Scoring** | Score products against inferred intent | `domain/alignment/` + `infrastructure/alignment/goal_alignment_gateway.py` |
+| **Evidence Discovery** | Analyze open-web representations for intent legibility | `domain/evidence/` + `application/services/evidence_service.py` |
+| **Verification (Lift)** | Show before/after discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
+| **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
+| **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
 
 ---
 
 ## Repository Structure
 
 ```
-├── modules/                  # Core feature modules
-│   ├── commerce/            # Product adapters, search, catalog
-│   ├── intent/              # Intent inference + classification
-│   ├── intentionality/      # Product intent profiling
-│   ├── alignment/           # Intent-product alignment scoring
-│   ├── simulation/          # Simulation sandbox loop + gap analysis
-│   ├── memory/              # Working, episodic, semantic memory
-│   ├── conversation/        # Orchestration, context management
-│   ├── values/              # Goal clarification dialogue
-│   ├── mcp/                 # LLM-callable tools (MCP protocol)
-│   ├── attribution/         # Event tracking, conversion attribution
-│   └── evaluation/          # Discovery metrics, A/B testing
-│
+├── domain/                   # Pure types + pure logic (no IO)
+├── application/              # Use-cases / orchestration services
+├── infrastructure/           # DB/LLM/adapters (IO boundaries)
 ├── shared/                   # Cross-cutting infrastructure
 │   ├── llm/                 # Gemini, OpenRouter clients + prompts
 │   ├── db/                  # SQLite schema + connection
@@ -78,10 +68,11 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 ├── web/                      # Next.js chat + discovery dashboard
 ├── data/                     # Product catalogs, intent taxonomy
 ├── docs/                     # Architecture & design documentation
+├── scripts/                  # Local dev utilities (seed, exports, etc.)
 └── tests/                    # Module + integration tests
 ```
 
-**Key principle:** Only `modules/` defines system behavior. Everything else can be replaced without changing what the system optimizes for.
+**Key principle:** `domain/` + `application/` define the system’s behavior; `infrastructure/` can be swapped without changing what the system optimizes for.
 
 **Primary users:** Brand marketing managers, ecommerce growth teams, and agencies optimizing product visibility in AI discovery. Secondary users include commerce developers integrating intent alignment into their stacks.
 

@@ -48,7 +48,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from modules.values.domain import GoalClarificationState
+from domain.values.types import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 

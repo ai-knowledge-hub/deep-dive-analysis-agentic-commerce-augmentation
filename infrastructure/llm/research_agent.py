@@ -14,8 +14,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from domain.conversation import research as research_domain
 from infrastructure.db import replays as replays_repo
-from infrastructure.llm.gateway import generate as default_generate
-from infrastructure.llm.gateway import generate_with_tools as default_generate_with_tools
+from infrastructure.llm.gateway import generate as generate
+from infrastructure.llm.gateway import generate_with_tools as generate_with_tools
 from llm.agents.harness.agent_loop import AgentLoop
 from llm.agents.harness.context_manager import ContextManager, PromptBudget
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
@@ -44,11 +44,14 @@ def run_research(
     client_id: str | None = None,
     user_id: str | None = None,
     session_id: str | None = None,
-    generate_fn: GenerateFn = default_generate,
-    generate_with_tools_fn: GenerateWithToolsFn = default_generate_with_tools,
-    prompt_template: str = RESEARCH_PROMPT,
+    generate_fn: GenerateFn | None = None,
+    generate_with_tools_fn: GenerateWithToolsFn | None = None,
+    prompt_template: str | None = None,
 ) -> dict:
     """Generate a research bundle using MCP tools (web_fetch, etc.)."""
+    generate_fn = generate_fn or generate
+    generate_with_tools_fn = generate_with_tools_fn or generate_with_tools
+    prompt_template = prompt_template or RESEARCH_PROMPT
     tool_registry = ToolRegistry()
     goal_block = "\n".join(f"- {goal}" for goal in goals) or "- (no explicit goals)"
     context_manager = ContextManager(
@@ -68,7 +71,9 @@ def run_research(
     try:
         if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
             raise RuntimeError("OpenRouter API key missing")
-        loop = AgentLoop(tools=tool_registry, generate_with_tools_fn=generate_with_tools_fn)
+        loop = AgentLoop(
+            tools=tool_registry, generate_with_tools_fn=generate_with_tools_fn
+        )
         tool_run, _ = loop.run_tools_once(
             prompt=prompt,
             run_type="conversation.research.llm",
@@ -208,4 +213,3 @@ def _llm_confidence(
 
 
 __all__ = ["RESEARCH_PROMPT", "run_research"]
-

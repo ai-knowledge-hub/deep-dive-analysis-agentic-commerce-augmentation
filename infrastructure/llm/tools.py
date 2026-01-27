@@ -20,4 +20,3 @@ def execute_tool(name: str, args: Dict[str, Any]) -> dict:
 
 
 __all__ = ["llm_schema", "execute_tool"]
-

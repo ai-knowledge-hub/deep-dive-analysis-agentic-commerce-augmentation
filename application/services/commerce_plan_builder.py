@@ -172,7 +172,9 @@ class CommercePlanBuilder:
                     "merchant_name": product.merchant_name,
                     "offer_url": product.offer_url,
                     "capabilities_enabled": product.capabilities_enabled,
-                    "alignment_score": alignment_scores.get(product.id, {}).get("score"),
+                    "alignment_score": alignment_scores.get(product.id, {}).get(
+                        "score"
+                    ),
                     "alignment_reasoning": alignment_scores.get(product.id, {}).get(
                         "alignment_reasoning"
                     ),
@@ -284,14 +286,23 @@ class CommercePlanBuilder:
         scores = score_fn(goals, products) or []
         out: dict[str, dict] = {}
         for score in scores:
-            pid = score.get("product_id")
+            if isinstance(score, dict):
+                pid = score.get("product_id")
+                score_value = score.get("score")
+                reasoning = score.get("alignment_reasoning")
+                confidence = score.get("confidence")
+            else:
+                pid = getattr(score, "product_id", None)
+                score_value = getattr(score, "score", None)
+                reasoning = getattr(score, "alignment_reasoning", None)
+                confidence = getattr(score, "confidence", None)
             if not pid:
                 continue
             out[pid] = {
                 "product_id": pid,
-                "score": score.get("score"),
-                "alignment_reasoning": score.get("alignment_reasoning"),
-                "confidence": score.get("confidence"),
+                "score": score_value,
+                "alignment_reasoning": reasoning,
+                "confidence": confidence,
             }
         return out
 
@@ -307,4 +318,3 @@ class CommercePlanBuilder:
 
 
 __all__ = ["CommercePlanBuilder"]
-

@@ -6,9 +6,21 @@ from application.services.replay import default_versions
 from infrastructure.db import replays as replays_repo
 from infrastructure.llm.gateway import generate
 from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier
+from infrastructure.llm.intent_taxonomy import INTENT_TAXONOMY
 from infrastructure.llm.prompts import INTENT_CLASSIFICATION_PROMPT
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord
-from modules.intent import classifier as keyword_classifier
+from domain.intent import keyword_classifier
+
+
+def build_intent_classifier(*, threshold: float = 0.55) -> HybridIntentClassifier:
+    return HybridIntentClassifier(
+        threshold=threshold,
+        generate_fn=generate,
+        keyword_classify_fn=lambda text, **kwargs: keyword_classifier.classify(
+            text, taxonomy=INTENT_TAXONOMY, **kwargs
+        ),
+        prompt_template=INTENT_CLASSIFICATION_PROMPT,
+    )
 
 
 def log_intent_replay(
@@ -55,11 +67,7 @@ def classify_intent(
 
     When `client_id` is provided, this also writes a replay record for audit/debug.
     """
-    classifier = HybridIntentClassifier(
-        generate_fn=generate,
-        keyword_classify_fn=keyword_classifier.classify,
-        prompt_template=INTENT_CLASSIFICATION_PROMPT,
-    )
+    classifier = build_intent_classifier()
     result = classifier.classify(query, context=context).to_dict()
     if not client_id:
         return result
@@ -75,4 +83,4 @@ def classify_intent(
     return result
 
 
-__all__ = ["classify_intent", "log_intent_replay"]
+__all__ = ["build_intent_classifier", "classify_intent", "log_intent_replay"]

@@ -48,7 +48,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from modules.values.domain import GoalClarificationState
+from domain.values.types import GoalClarificationState
 from db.connection import set_database_path, init_db
 from api.main import app
 
@@ -250,7 +250,7 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
 
 
 def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypatch):
-    from modules.commerce.domain import Product
+    from domain.commerce.types import Product
 
     def mock_search(query: str):
         return [
@@ -294,7 +294,7 @@ def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypa
 
 
 def test_products_profile_endpoint_returns_profile(client, monkeypatch):
-    from modules.commerce.domain import Product
+    from domain.commerce.types import Product
 
     def mock_search(query: str):
         return [
@@ -326,7 +326,7 @@ def test_products_profile_endpoint_requires_product_id(client):
 
 
 def test_products_align_endpoint_returns_alignment(client, monkeypatch):
-    from modules.commerce.domain import Product
+    from domain.commerce.types import Product
 
     def mock_search(query: str):
         return [

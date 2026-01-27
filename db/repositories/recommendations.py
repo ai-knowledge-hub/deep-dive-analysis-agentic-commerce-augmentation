@@ -1,6 +1,6 @@
-"""Backward compatibility: re-exports from modules.memory.repositories.recommendations."""
+"""Backward compatibility: re-exports from infrastructure DB recommendations."""
 
-from modules.memory.repositories.recommendations import (
+from infrastructure.db.recommendations import (
     create_recommendation,
     list_recommendations,
 )

@@ -7,7 +7,11 @@ from __future__ import annotations
 
 from typing import Callable
 
-from domain.intentionality.profiling import base_profile, build_prompt, parse_profile_json
+from domain.intentionality.profiling import (
+    base_profile,
+    build_prompt,
+    parse_profile_json,
+)
 from domain.intentionality.types import IntentionalityProfile
 from infrastructure.llm.gateway import generate
 
@@ -33,7 +37,7 @@ def build_profile(
 ) -> IntentionalityProfile:
     """Build an intent-legible profile for a product.
 
-    `product` is expected to be `modules.commerce.domain.Product`-like.
+    `product` is expected to be `domain.commerce.types.Product`-like.
     """
     fallback = base_profile(
         product_id=product.id,
@@ -64,4 +68,3 @@ def build_profile_with_llm(product) -> IntentionalityProfile:
 
 
 __all__ = ["build_profile", "build_profile_with_llm", "IntentionalityProfile"]
-

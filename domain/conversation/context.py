@@ -84,4 +84,3 @@ def render_context(packet: ContextPacket, include_turns: int = 6) -> str:
 
 
 __all__ = ["ContextPacket", "default_metadata", "format_turns", "render_context"]
-

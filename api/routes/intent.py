@@ -5,7 +5,7 @@ try:
 except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore
 
-from modules.intent.llm_classifier import HybridIntentClassifier
+from infrastructure.llm.intent_classifier import HybridIntentClassifier
 from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 

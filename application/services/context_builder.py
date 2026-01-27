@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 
 from domain.conversation.context import ContextPacket, render_context
-from modules.memory.session_manager import SessionManager
+from application.services.session_manager import SessionManager
 
 if TYPE_CHECKING:  # pragma: no cover
     from domain.values.types import GoalClarificationState
@@ -64,4 +64,3 @@ def goal_context(
 
 
 __all__ = ["ContextPacket", "build_context", "context_for", "goal_context"]
-

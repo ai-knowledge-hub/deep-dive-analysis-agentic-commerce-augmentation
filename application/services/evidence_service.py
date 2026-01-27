@@ -8,7 +8,6 @@ from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from infrastructure.db import replays as replays_repo
-from modules.alignment import goal_alignment
 from domain.evidence.types import EvidenceProduct
 from application.services.evidence_retriever import retrieve as default_retrieve
 from application.services.evidence_normalizer import to_product
@@ -16,6 +15,7 @@ from application.services.evidence_optimizer import optimize
 from application.services.evidence_verify import average_alignment, simulate_actual
 from infrastructure.llm.intent_classifier import classify_intent
 from application.services.intentionality_profiler import build_profile
+from application.services.alignment_service import alignment_service
 
 
 class EvidenceService:
@@ -38,7 +38,7 @@ class EvidenceService:
         products = [to_product(item) for item in evidence_products]
         profiles = [build_profile(product).to_dict() for product in products]
         score_start = time.perf_counter()
-        alignment_scores = goal_alignment.score_products(goals, products)
+        alignment_scores = alignment_service.score_products(goals, products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
 
         replay = ReplayRecord(
@@ -115,8 +115,8 @@ class EvidenceService:
             for product, pair in zip(before_products, optimized_pairs)
         ]
         score_start = time.perf_counter()
-        before_scores = goal_alignment.score_products(goals, before_products)
-        after_scores = goal_alignment.score_products(goals, after_products)
+        before_scores = alignment_service.score_products(goals, before_products)
+        after_scores = alignment_service.score_products(goals, after_products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
         deltas = _score_deltas(before_scores, after_scores)
 
@@ -180,7 +180,7 @@ class EvidenceService:
 
         before_products = [to_product(item) for item in evidence_products]
         score_start = time.perf_counter()
-        before_scores = goal_alignment.score_products(goals, before_products)
+        before_scores = alignment_service.score_products(goals, before_products)
 
         optimized_pairs = optimized or []
         after_products = before_products
@@ -191,7 +191,7 @@ class EvidenceService:
                 )
                 for product, pair in zip(before_products, optimized_pairs)
             ]
-        after_scores = goal_alignment.score_products(goals, after_products)
+        after_scores = alignment_service.score_products(goals, after_products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
 
         predicted = _ranked_ids(after_scores)

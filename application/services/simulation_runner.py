@@ -11,15 +11,15 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from domain.commerce.types import Product
 from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
 from infrastructure.llm.intent_classifier import classify_intent
-from modules.alignment.goal_alignment import score_products
-from modules.commerce.domain import Product
+from application.services.alignment_service import alignment_service
 from application.services.intentionality_profiler import build_profile
-from modules.simulation.domain import SimulationProduct
-from modules.simulation.gap_analysis import analyze_gap, derive_lessons
-from modules.simulation.tone import derive_tone
+from domain.simulation.types import SimulationProduct
+from domain.simulation.tone import derive_tone
+from infrastructure.simulation.gap_analysis import analyze_gap, derive_lessons
 
 
 def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, object]:
@@ -27,7 +27,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
     goals = extract_intent_goals(intent, fallback=query)
 
     normalized = [_to_product(product) for product in products]
-    scores = score_products(goals, normalized)
+    scores = alignment_service.score_products(goals, normalized)
     score_map = {score.product_id: score for score in scores}
 
     score_dicts = [score.__dict__ for score in scores]
@@ -37,7 +37,9 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
     gap_reports = []
     winner_product = None
     if winner:
-        winner_product = next((product for product in normalized if product.id == winner), None)
+        winner_product = next(
+            (product for product in normalized if product.id == winner), None
+        )
 
     primary_goal = goals[0] if goals else ""
     for product in normalized:

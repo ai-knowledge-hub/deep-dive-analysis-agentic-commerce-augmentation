@@ -29,4 +29,3 @@ class IntentionalityProfile:
 
 
 __all__ = ["IntentionalityProfile"]
-

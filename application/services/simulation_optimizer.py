@@ -10,7 +10,7 @@ from typing import Dict, List
 
 from infrastructure.llm.gateway import generate
 from infrastructure.llm.prompts import build_optimization_prompt
-from modules.simulation.domain import SimulationProduct
+from domain.simulation.types import SimulationProduct
 
 
 def optimize_product(
@@ -21,7 +21,12 @@ def optimize_product(
 ) -> Dict[str, str]:
     before = product.description or product.name
     if not missing_signals:
-        return {"id": product.id, "name": product.name, "before": before, "after": before}
+        return {
+            "id": product.id,
+            "name": product.name,
+            "before": before,
+            "after": before,
+        }
 
     signals = ", ".join(missing_signals[:4])
     after = _llm_optimize_description(
@@ -65,4 +70,3 @@ def _llm_optimize_description(
 
 
 __all__ = ["optimize_product"]
-

@@ -191,7 +191,7 @@ class EnvironmentState:
 
 ## Directory Structure Transformation
 
-### Current Structure
+### Pre-migration Structure (Historical)
 ```
 llm/
   - agents/ (empty)
@@ -212,44 +212,12 @@ modules/
   - evidence/
 ```
 
-### Target Structure
+### Current Structure (Post-migration)
 ```
-domain/                      # NEW - Pure business logic
-  - entities/
-  - use_cases/
-    - infer_intent.py        # Bayesian inference (pure functions)
-    - profile_product.py     # Intentionality mapping
-    - score_alignment.py     # Alignment calculation
-  - repositories/            # Abstract interfaces only
-  - value_objects/
-
-llm/agents/                  # ENHANCED
-  - harness/                 # NEW - Agent management
-    - agent_loop.py
-    - tool_executor.py
-    - memory_manager.py
-    - context_manager.py
-    - state_manager.py
-  - layer1_agent.py          # NEW
-  - layer2_agent.py          # NEW
-  - orchestrator_agent.py    # NEW
-  - base_agent.py            # NEW
-  - tools/                   # NEW
-    - layer1_tools.py
-    - layer2_tools.py
-
-infrastructure/              # NEW - Concrete implementations
-  - repositories/
-  - adapters/
-    - shopify_adapter.py
-    - acp_adapter.py
-    - ucp_adapter.py
-  - external/
-    - gemini_client.py
-    - openrouter_client.py
-
-modules/                     # REFACTORED - Becomes thinner
-  - (Most logic moves to domain/ or llm/agents/)
+domain/                      # Pure business logic (no IO)
+application/                 # Orchestration services (API calls only these)
+infrastructure/              # Concrete IO (DB/LLM/adapters/tools)
+llm/agents/                  # Agent harness + Layer 1/2 agents (tool loop + replay)
 ```
 
 ---
@@ -262,9 +230,9 @@ modules/                     # REFACTORED - Becomes thinner
 - [ ] Require deterministic fallbacks + replay runner for debugging
 
 ### Phase 1: Clean Architecture Skeleton (2–5 days)
-- [ ] Create `domain/` for pure entities + pure functions (no FastAPI, no sqlite, no LLM client)
-- [ ] Create `application/` services that the API calls (Simulation/Evidence/Admin/Verification)
-- [ ] Keep `modules/*` as compatibility shims that delegate to domain/application
+- [x] Create `domain/` for pure entities + pure functions (no FastAPI, no sqlite, no LLM client)
+- [x] Create `application/` services that the API calls (Simulation/Evidence/Admin/Verification)
+- [x] Remove legacy `modules/` after migrating call-sites
 
 ### Phase 2: Minimal Harness (2–4 days)
 - [ ] Implement tool registry + executor (tool calls become logged observations)
