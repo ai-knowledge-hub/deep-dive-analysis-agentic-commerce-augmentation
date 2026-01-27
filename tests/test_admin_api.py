@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from db.connection import init_db, set_database_path
+from shared.db.connection import init_db, set_database_path
 from api.main import app
 from shared.config.env import settings
 from infrastructure.db.users import ensure_user

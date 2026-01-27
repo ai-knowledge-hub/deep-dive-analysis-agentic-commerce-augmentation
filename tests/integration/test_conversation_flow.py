@@ -49,7 +49,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 from domain.values.types import GoalClarificationState
-from db.connection import set_database_path, init_db
+from shared.db.connection import set_database_path, init_db
 from api.main import app
 
 CLIENT_ID = "test-client"
