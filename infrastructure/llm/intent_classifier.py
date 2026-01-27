@@ -4,8 +4,11 @@ from typing import Any, Dict
 
 from application.services.replay import default_versions
 from infrastructure.db import replays as replays_repo
+from infrastructure.llm.gateway import generate
+from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier
+from infrastructure.llm.prompts import INTENT_CLASSIFICATION_PROMPT
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord
-from modules.intent.llm_classifier import HybridIntentClassifier
+from modules.intent import classifier as keyword_classifier
 
 
 def log_intent_replay(
@@ -52,7 +55,12 @@ def classify_intent(
 
     When `client_id` is provided, this also writes a replay record for audit/debug.
     """
-    result = HybridIntentClassifier().classify(query, context=context).to_dict()
+    classifier = HybridIntentClassifier(
+        generate_fn=generate,
+        keyword_classify_fn=keyword_classifier.classify,
+        prompt_template=INTENT_CLASSIFICATION_PROMPT,
+    )
+    result = classifier.classify(query, context=context).to_dict()
     if not client_id:
         return result
 

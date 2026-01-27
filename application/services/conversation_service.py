@@ -7,9 +7,9 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from fastapi import HTTPException
 
 from domain.intent.goals import extract_intent_goals
+from application.services.context_builder import context_for
 from infrastructure.db import sessions as sessions_store
 from infrastructure.db import turns as turns_store
-from modules.conversation.context import context_for
 from modules.memory.session_manager import SessionManager
 
 

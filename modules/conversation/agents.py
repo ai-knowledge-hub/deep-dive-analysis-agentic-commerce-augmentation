@@ -1,9 +1,23 @@
-"""Conversation agents that orchestrate different aspects of dialogue."""
+"""Compatibility shim for conversation agents.
+
+Canonical implementations live in `application.services.conversation_agents` and
+are dependency-injected. This module preserves monkeypatch seams used by tests:
+
+- `modules.conversation.agents.HybridIntentClassifier`
+- `modules.conversation.agents.reason_about_products`
+- `modules.conversation.agents.SemanticMemory`
+"""
 
 from __future__ import annotations
 
 from typing import List, Optional
 
+from application.services.conversation_agents import (
+    CapabilityAgent as _CapabilityAgent,
+    CommerceAgent as _CommerceAgent,
+    ExplainAgent as _ExplainAgent,
+    IntentAgent as _IntentAgent,
+)
 from infrastructure.llm.intent_classifier import log_intent_replay
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.conversation.context import context_for
@@ -19,41 +33,37 @@ class IntentAgent:
     """Façade agent for intent detection."""
 
     def __init__(self) -> None:
-        self._classifier = HybridIntentClassifier()
+        self._impl = _IntentAgent(
+            classifier=HybridIntentClassifier(),
+            context_for_fn=context_for,
+            log_replay_fn=log_intent_replay,
+        )
 
     def detect_intent(
         self, utterance: str, manager: SessionManager | None = None
     ) -> dict:
-        """Detect intent from utterance with optional session context."""
-        context: str | None = None
-        if manager is not None:
-            _, context = context_for(manager)
-        result = self._classifier.classify(utterance, context=context).to_dict()
-        if manager is not None and manager.client_id:
-            log_intent_replay(
-                query=utterance,
-                result=result,
-                context_used=bool(context),
-                client_id=manager.client_id,
-                user_id=manager.user_id,
-                session_id=manager.session_id,
-            )
-        return result
+        return self._impl.detect_intent(utterance, manager=manager)
 
 
 class CommerceAgent:
     """Agent that orchestrates search and comparison within the commerce core."""
 
     def __init__(self) -> None:
-        self._builder = PlanBuilder()
+        self._impl = _CommerceAgent(
+            builder=PlanBuilder(),
+            reason_fn=reason_about_products,
+            assess_fn=goal_alignment.assess,
+            score_fn=goal_alignment.score_products,
+            search_fn=commerce_search,
+        )
 
     @property
     def confidence_threshold(self) -> float:
-        return self._builder.confidence_threshold
+        return self._impl.confidence_threshold
 
     @property
     def fallback_limit(self) -> int:
-        return self._builder.fallback_limit
+        return self._impl.fallback_limit
 
     def build_plan(
         self,
@@ -62,47 +72,28 @@ class CommerceAgent:
         context: str | None = None,
     ) -> dict:
         """Build a complete recommendation plan using LLM reasoning and goal alignment."""
-        return self._builder.build_plan(
-            intent=intent,
-            goals=goals,
-            context=context,
-            reason_fn=reason_about_products,
-            assess_fn=goal_alignment.assess,
-            score_fn=goal_alignment.score_products,
-        )
+        return self._impl.build_plan(intent, goals=goals, context=context)
 
     def recommend(self, query: str) -> List[str]:
         """Return product names matching the query."""
-        return [product.name for product in commerce_search(query)]
+        return self._impl.recommend(query)
 
 
 class ExplainAgent:
     """Agent that provides short explanations of recommendations."""
 
     def explain(self, products: List[dict]) -> str:
-        """Explain product recommendations."""
-        if not products:
-            return "No catalog recommendations yet."
-        explanations = []
-        for product in products:
-            base = f"{product['name']} (confidence {product['confidence']:.2f}, source {product['source']})"
-            if product["confidence"] < 0.75:
-                base += " — verify details before purchasing."
-            explanations.append(base)
-        joined = "; ".join(explanations)
-        return f"These items were selected based on intent alignment: {joined}"
+        return _ExplainAgent().explain(products)
 
 
 class CapabilityAgent:
     """Maps semantic memory into capability statements."""
 
+    def __init__(self) -> None:
+        self._impl = _CapabilityAgent(memory_factory=SemanticMemory)
+
     def summarize(self) -> dict:
-        """Summarize capabilities from semantic memory."""
-        memory = SemanticMemory()
-        return {
-            "goals": memory.get("goals"),
-            "capabilities": memory.get("capabilities"),
-        }
+        return self._impl.summarize()
 
 
 __all__ = [

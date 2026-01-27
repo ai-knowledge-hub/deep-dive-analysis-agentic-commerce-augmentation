@@ -11,21 +11,34 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from application.services.conversation_service import ConversationService
-from modules.conversation.agents import (
-    CommerceAgent,
-    ExplainAgent,
-    IntentAgent,
-)
+from application.services.conversation_agents import CommerceAgent, ExplainAgent, IntentAgent
+from application.services.context_builder import context_for
+from infrastructure.llm.intent_classifier import log_intent_replay
 from modules.values.agent import GoalClarificationAgent
 from modules.conversation.research import run_research
 from modules.alignment.goal_alignment import score_products as score_alignment
+from modules.alignment import goal_alignment
+from modules.alignment.llm_reasoner import reason_about_products
+from modules.commerce.plan_builder import PlanBuilder
+from modules.commerce import search as commerce_search
+from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.intentionality.profiling import build_profile_with_llm
 from api.utils.tenancy import require_client_id
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
-INTENT_AGENT = IntentAgent()
-COMMERCE_AGENT = CommerceAgent()
+INTENT_AGENT = IntentAgent(
+    classifier=HybridIntentClassifier(),
+    context_for_fn=context_for,
+    log_replay_fn=log_intent_replay,
+)
+COMMERCE_AGENT = CommerceAgent(
+    builder=PlanBuilder(),
+    reason_fn=reason_about_products,
+    assess_fn=goal_alignment.assess,
+    score_fn=goal_alignment.score_products,
+    search_fn=commerce_search,
+)
 EXPLAIN_AGENT = ExplainAgent()
 GOAL_AGENT = GoalClarificationAgent()
 SERVICE = ConversationService()
