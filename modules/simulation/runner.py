@@ -24,7 +24,9 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
     scores = score_products(goals, normalized)
     score_map = {score.product_id: score for score in scores}
 
-    winner_id = domain_ranking.winner_id([score.__dict__ for score in scores])
+    score_dicts = [score.__dict__ for score in scores]
+    ranked_scores = domain_ranking.rank_scores(score_dicts)
+    winner_id = domain_ranking.winner_id(ranked_scores)
     gap_reports = []
     winner_product = None
     if winner_id:
@@ -51,7 +53,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
     return {
         "intent": intent,
         "goals": goals,
-        "scores": [score.__dict__ for score in scores],
+        "scores": ranked_scores,
         "winner_id": winner_id,
         "gap_analysis": gap_reports,
         "profiles": [build_profile(product).to_dict() for product in normalized],
