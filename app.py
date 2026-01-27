@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from config import env as _env  # noqa: F401  # ensure dotenv loaded for CLI runs
+from shared.config import env as _env  # noqa: F401  # ensure dotenv loaded for CLI runs
 
 Surface = Literal["hackathon", "gpt", "gemini"]
 

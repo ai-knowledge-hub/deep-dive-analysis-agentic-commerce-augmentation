@@ -25,7 +25,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from db.connection import init_db, set_database_path
+from shared.db.connection import init_db, set_database_path
 from api.main import app
 
 CLIENT_ID = "test-client"
