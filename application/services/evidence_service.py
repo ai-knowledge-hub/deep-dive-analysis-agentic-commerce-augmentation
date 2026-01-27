@@ -9,13 +9,11 @@ from domain.simulation import ranking as domain_ranking
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from infrastructure.db import replays as replays_repo
 from modules.alignment import goal_alignment
-from modules.evidence import (
-    EvidenceProduct,
-    retrieve as default_retrieve,
-    to_product,
-    optimize,
-)
-from modules.evidence.verify import average_alignment, simulate_actual
+from domain.evidence.types import EvidenceProduct
+from application.services.evidence_retriever import retrieve as default_retrieve
+from application.services.evidence_normalizer import to_product
+from application.services.evidence_optimizer import optimize
+from application.services.evidence_verify import average_alignment, simulate_actual
 from infrastructure.llm.intent_classifier import classify_intent
 from modules.intentionality.profiling import build_profile
 
