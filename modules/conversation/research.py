@@ -7,7 +7,7 @@ import re
 from typing import Dict, List
 from urllib.parse import urlparse
 
-from shared.llm.gateway import generate, generate_with_tools
+from infrastructure.llm.gateway import generate, generate_with_tools
 from shared.config.env import settings
 from application.services.replay import default_versions
 from llm.agents.harness.agent_loop import AgentLoop
