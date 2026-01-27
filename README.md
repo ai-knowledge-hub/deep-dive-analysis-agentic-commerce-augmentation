@@ -239,6 +239,26 @@ Manual helpers:
 make db-init   # create/open DB and apply schema
 make db-reset  # delete local DB and re-init
 make db-path   # print current DB path
+make seed-demo # seed demo multi-tenant clients/brands/products
+```
+
+### Local dev DB (seeded demo tenants)
+
+If you want the UI client dropdown to show the seeded demo tenants (Nike/Adidas/Under Armour/New Balance/Reebok), make sure you **seed and run against the same SQLite file**.
+
+Example using the local dev DB (`./tmp/local.db`):
+
+```bash
+rm -f ./tmp/local.db
+DATABASE_PATH=./tmp/local.db ./.venv/bin/python -m shared.db.connection
+DATABASE_PATH=./tmp/local.db make seed-demo
+DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
+```
+
+Quick verify:
+
+```bash
+sqlite3 ./tmp/local.db "select id,name from clients order by name;"
 ```
 
 ---

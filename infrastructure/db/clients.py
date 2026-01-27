@@ -42,6 +42,20 @@ def list_products(*, brand_id: str) -> List[Dict[str, Any]]:
     return _repo.list_products(brand_id)
 
 
+def get_product(*, product_id: str) -> Dict[str, Any] | None:
+    return _repo.get_product(product_id)
+
+
+def get_product_for_client(*, client_id: str, product_id: str) -> Dict[str, Any] | None:
+    return _repo.get_product_for_client(client_id, product_id)
+
+
+def search_products_for_client(
+    *, client_id: str, query: str, limit: int = 10
+) -> List[Dict[str, Any]]:
+    return _repo.search_products_for_client(client_id, query, limit=limit)
+
+
 def add_client_user(
     *, client_id: str, user_id: str, role: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -59,7 +73,9 @@ __all__ = [
     "list_brands",
     "create_product",
     "list_products",
+    "get_product",
+    "get_product_for_client",
+    "search_products_for_client",
     "add_client_user",
     "list_client_users",
 ]
-

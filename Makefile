@@ -16,7 +16,11 @@ install:
 
 .PHONY: test
 test:
-	$(PYTHON) -m pytest
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m pytest; \
+	else \
+		$(PYTHON) -m pytest; \
+	fi
 
 .PHONY: run-backend
 run-backend:
@@ -75,3 +79,11 @@ db-reset:
 .PHONY: db-path
 db-path:
 	@$(PYTHON) -c "from shared.db.connection import DEFAULT_DB_PATH; print(DEFAULT_DB_PATH)"
+
+.PHONY: seed-demo
+seed-demo:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.seed_demo_competitors; \
+	else \
+		$(PYTHON) -m scripts.seed_demo_competitors; \
+	fi

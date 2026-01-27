@@ -20,11 +20,15 @@ class _GoalAgent(Protocol):
 
 
 class _IntentAgent(Protocol):
-    def detect_intent(self, utterance: str, manager: SessionManager | None = None) -> dict: ...
+    def detect_intent(
+        self, utterance: str, manager: SessionManager | None = None
+    ) -> dict: ...
 
 
 class _CommerceAgent(Protocol):
-    def build_plan(self, intent: dict, goals: List[str], context: str | None = None) -> dict: ...
+    def build_plan(
+        self, intent: dict, goals: List[str], context: str | None = None
+    ) -> dict: ...
 
 
 class _ExplainAgent(Protocol):
@@ -49,7 +53,9 @@ class ConversationService:
         score_alignment_fn: Callable[[List[str], list], list],
         build_profile_with_llm_fn: Callable[[Any], Any],
     ) -> Dict[str, Any]:
-        manager = SessionManager(user_id=user_id, client_id=client_id, brand_id=brand_id)
+        manager = SessionManager(
+            user_id=user_id, client_id=client_id, brand_id=brand_id
+        )
         if opening_message:
             return self.process_message(
                 manager=manager,
@@ -116,14 +122,18 @@ class ConversationService:
         client_id: str,
     ) -> Dict[str, Any]:
         if user_id:
-            session = sessions_store.get_session(session_id=session_id, client_id=client_id)
+            session = sessions_store.get_session(
+                session_id=session_id, client_id=client_id
+            )
             if (
                 not session
                 or session.get("user_id") != user_id
                 or session.get("client_id") != client_id
             ):
                 raise HTTPException(status_code=404, detail="Session not found")
-        manager = SessionManager(session_id=session_id, user_id=user_id, client_id=client_id)
+        manager = SessionManager(
+            session_id=session_id, user_id=user_id, client_id=client_id
+        )
         return self._session_response(manager)
 
     def list_sessions(
@@ -135,7 +145,9 @@ class ConversationService:
     ) -> Dict[str, Any]:
         if not user_id:
             raise HTTPException(status_code=400, detail="user_id is required")
-        sessions = sessions_store.list_sessions(user_id=user_id, limit=limit, client_id=client_id)
+        sessions = sessions_store.list_sessions(
+            user_id=user_id, limit=limit, client_id=client_id
+        )
         payload = []
         for session in sessions:
             recent = turns_store.list_recent_turns(session_id=session["id"], limit=1)
@@ -158,7 +170,9 @@ class ConversationService:
         client_id: str,
     ) -> Dict[str, str]:
         if user_id:
-            session = sessions_store.get_session(session_id=session_id, client_id=client_id)
+            session = sessions_store.get_session(
+                session_id=session_id, client_id=client_id
+            )
             if not session or session.get("user_id") != user_id:
                 raise HTTPException(status_code=404, detail="Session not found")
         sessions_store.delete_session(session_id=session_id)
@@ -174,9 +188,14 @@ class ConversationService:
         goals: list,
     ) -> Dict[str, Any]:
         if not goals:
-            raise HTTPException(status_code=400, detail="At least one goal is required.")
+            raise HTTPException(
+                status_code=400, detail="At least one goal is required."
+            )
         manager = SessionManager(
-            session_id=session_id, user_id=user_id, client_id=client_id, brand_id=brand_id
+            session_id=session_id,
+            user_id=user_id,
+            client_id=client_id,
+            brand_id=brand_id,
         )
         self._ingest_clarified_goals(manager, goals)
         return self._session_response(manager, goals=manager.goal_texts())
@@ -192,12 +211,18 @@ class ConversationService:
         score_alignment_fn: Callable[[List[str], list], list],
     ) -> Dict[str, Any]:
         if user_id:
-            session = sessions_store.get_session(session_id=session_id, client_id=client_id)
+            session = sessions_store.get_session(
+                session_id=session_id, client_id=client_id
+            )
             if not session or session.get("user_id") != user_id:
                 raise HTTPException(status_code=404, detail="Session not found")
 
-        manager = SessionManager(session_id=session_id, user_id=user_id, client_id=client_id)
-        query_value = query or manager.get_state().get("last_query") or "catalog research"
+        manager = SessionManager(
+            session_id=session_id, user_id=user_id, client_id=client_id
+        )
+        query_value = (
+            query or manager.get_state().get("last_query") or "catalog research"
+        )
         goals = manager.goal_texts()
         _, context_snapshot = context_for(manager)
         research = self._run_research_compat(
@@ -248,7 +273,9 @@ class ConversationService:
             return self._session_response(
                 manager,
                 clarification=clarification_reply,
-                goal_state=clarification_state.to_dict() if clarification_state else None,
+                goal_state=clarification_state.to_dict()
+                if clarification_state
+                else None,
             )
 
         intent = intent_agent.detect_intent(message, manager=manager)
@@ -259,7 +286,10 @@ class ConversationService:
             manager.record_turn(
                 "agent",
                 f"Intent inferred: {intent_signal}",
-                metadata={"type": "intent_inference", "confidence": intent.get("confidence")},
+                metadata={
+                    "type": "intent_inference",
+                    "confidence": intent.get("confidence"),
+                },
             )
 
         _, context_snapshot = context_for(manager)
@@ -276,7 +306,9 @@ class ConversationService:
         )
         manager.record_recommendation(
             product_ids=[product["id"] for product in plan.get("products", [])],
-            alignment_score=(plan.get("alignment", {}).get("goal_alignment", {}) or {}).get("score"),
+            alignment_score=(
+                plan.get("alignment", {}).get("goal_alignment", {}) or {}
+            ).get("score"),
             context={
                 "query": plan.get("query"),
                 "goal_alignment": plan.get("alignment", {}).get("goal_alignment"),
@@ -300,17 +332,22 @@ class ConversationService:
         research_stream = self._build_research_stream(
             research, goal_signals, score_alignment_fn=score_alignment_fn
         )
-        self._persist_research(manager, research_stream, query=plan.get("query") or message)
+        self._persist_research(
+            manager, research_stream, query=plan.get("query") or message
+        )
 
         return self._session_response(
             manager,
             intent=intent,
             plan=self._merge_plan_streams(plan, research_stream),
             research=research,
-            baseline_alignment=plan.get("alignment", {}).get("goal_alignment", {}).get("baseline_score")
+            baseline_alignment=plan.get("alignment", {})
+            .get("goal_alignment", {})
+            .get("baseline_score")
             or 0.0,
             intentionality_profiles=self._intentionality_profiles(
-                plan.get("products") or [], build_profile_with_llm_fn=build_profile_with_llm_fn
+                plan.get("products") or [],
+                build_profile_with_llm_fn=build_profile_with_llm_fn,
             ),
             explanation=explanation,
             product_explanations=product_explanations,
@@ -319,7 +356,9 @@ class ConversationService:
             else manager.get_state().get("clarification_state"),
         )
 
-    def _session_response(self, manager: SessionManager, **payload: Any) -> Dict[str, Any]:
+    def _session_response(
+        self, manager: SessionManager, **payload: Any
+    ) -> Dict[str, Any]:
         snapshot = asdict(manager.summary())
         response: Dict[str, Any] = {
             "session_id": manager.session_id,
@@ -352,7 +391,11 @@ class ConversationService:
             except Exception:
                 state = None
 
-        if state and getattr(state, "ready_for_products", False) and getattr(state, "metadata", {}).get("summary_sent"):
+        if (
+            state
+            and getattr(state, "ready_for_products", False)
+            and getattr(state, "metadata", {}).get("summary_sent")
+        ):
             return state, None
 
         if state:
@@ -363,7 +406,9 @@ class ConversationService:
         manager.update_state(clarification_state=state.to_dict())
         latest_turn = state.turns[-1] if state.turns else None
         if latest_turn and latest_turn.speaker == "agent":
-            manager.record_turn("agent", latest_turn.content, metadata={"type": "clarification"})
+            manager.record_turn(
+                "agent", latest_turn.content, metadata={"type": "clarification"}
+            )
             if state.ready_for_products:
                 for goal in state.extracted_goals:
                     try:
@@ -428,14 +473,18 @@ class ConversationService:
     def _merge_plan_streams(self, plan: dict, research_stream: dict | None) -> dict:
         merged = dict(plan)
         merged["catalog_results"] = plan.get("products", [])
-        merged["research_results"] = research_stream.get("items") if research_stream else []
+        merged["research_results"] = (
+            research_stream.get("items") if research_stream else []
+        )
         merged["alignment"] = merged.get("alignment") or {}
         merged["alignment"]["research"] = (
             research_stream.get("alignment") if research_stream else {}
         )
         return merged
 
-    def _persist_research(self, manager: SessionManager, research_stream: dict | None, *, query: str) -> None:
+    def _persist_research(
+        self, manager: SessionManager, research_stream: dict | None, *, query: str
+    ) -> None:
         if not research_stream:
             return
         manager.update_state(
@@ -479,7 +528,10 @@ class ConversationService:
             return {
                 "items": [],
                 "alignment": {"per_item": []},
-                "meta": {"confidence": research.get("confidence"), "replay": research.get("replay")},
+                "meta": {
+                    "confidence": research.get("confidence"),
+                    "replay": research.get("replay"),
+                },
             }
 
         from modules.commerce.domain import Product
@@ -517,10 +569,15 @@ class ConversationService:
         return {
             "items": enriched,
             "alignment": {"per_item": list(per_item.values())},
-            "meta": {"confidence": research.get("confidence"), "replay": research.get("replay")},
+            "meta": {
+                "confidence": research.get("confidence"),
+                "replay": research.get("replay"),
+            },
         }
 
-    def _ingest_clarified_goals(self, manager: SessionManager, clarified_goals: list) -> None:
+    def _ingest_clarified_goals(
+        self, manager: SessionManager, clarified_goals: list
+    ) -> None:
         for clarified_goal in clarified_goals:
             if isinstance(clarified_goal, dict):
                 goal_text = clarified_goal.get("goal_text")
@@ -531,7 +588,9 @@ class ConversationService:
                 domain = getattr(clarified_goal, "domain", None)
                 importance = getattr(clarified_goal, "importance", None)
             if goal_text:
-                manager.record_goal(goal_text, domain=domain, importance=importance or 0.7)
+                manager.record_goal(
+                    goal_text, domain=domain, importance=importance or 0.7
+                )
 
 
 __all__ = ["ConversationService"]

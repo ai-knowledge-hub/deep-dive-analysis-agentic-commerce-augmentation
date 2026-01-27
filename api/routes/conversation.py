@@ -176,7 +176,9 @@ def get_session_snapshot(
     session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
 ) -> Dict[str, Any]:
     client_scope = require_client_id(client_id, user_id)
-    return SERVICE.get_snapshot(session_id=session_id, user_id=user_id, client_id=client_scope)
+    return SERVICE.get_snapshot(
+        session_id=session_id, user_id=user_id, client_id=client_scope
+    )
 
 
 @router.get("/sessions")

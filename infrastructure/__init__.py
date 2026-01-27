@@ -9,4 +9,3 @@ Application/services should prefer importing from `infrastructure.*` rather than
 directly from `modules/*` or `shared/*`, so we can evolve implementations
 without rewriting higher layers.
 """
-

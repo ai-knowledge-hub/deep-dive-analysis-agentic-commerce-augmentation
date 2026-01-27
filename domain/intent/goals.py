@@ -48,4 +48,3 @@ def extract_intent_goals(
 
 
 __all__ = ["extract_intent_goals"]
-

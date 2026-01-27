@@ -104,6 +104,66 @@ def list_products(brand_id: str) -> List[Dict[str, Any]]:
     return [_product_row(row) for row in rows]
 
 
+def get_product(product_id: str) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute("SELECT * FROM products WHERE id = ?", (product_id,))
+        .fetchone()
+    )
+    return _product_row(row) if row else None
+
+
+def get_product_for_client(client_id: str, product_id: str) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT p.*
+            FROM products p
+            JOIN brands b ON b.id = p.brand_id
+            WHERE b.client_id = ? AND p.id = ?
+            """,
+            (client_id, product_id),
+        )
+        .fetchone()
+    )
+    return _product_row(row) if row else None
+
+
+def search_products_for_client(
+    client_id: str, query: str, *, limit: int = 10
+) -> List[Dict[str, Any]]:
+    """Search products scoped to a client.
+
+    This is a lightweight LIKE-based search for demo purposes.
+    """
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    pattern = f"%{q}%"
+    rows = (
+        get_connection()
+        .execute(
+            """
+            SELECT p.*
+            FROM products p
+            JOIN brands b ON b.id = p.brand_id
+            WHERE b.client_id = ?
+              AND (
+                lower(p.name) LIKE ?
+                OR lower(coalesce(p.description, '')) LIKE ?
+                OR lower(coalesce(p.metadata_json, '')) LIKE ?
+              )
+            ORDER BY p.created_at DESC
+            LIMIT ?
+            """,
+            (client_id, pattern, pattern, pattern, limit),
+        )
+        .fetchall()
+    )
+    return [_product_row(row) for row in rows]
+
+
 def add_client_user(
     client_id: str, user_id: str, role: str | None = None
 ) -> Dict[str, Any]:
@@ -186,6 +246,9 @@ __all__ = [
     "list_brands",
     "create_product",
     "list_products",
+    "get_product",
+    "get_product_for_client",
+    "search_products_for_client",
     "add_client_user",
     "list_client_users",
 ]

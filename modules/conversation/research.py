@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
-import time
 from typing import Dict, List
 from urllib.parse import urlparse
 
 from shared.llm.gateway import generate, generate_with_tools
 from shared.config.env import settings
 from application.services.replay import default_versions
+from llm.agents.harness.agent_loop import AgentLoop
 from llm.agents.harness.context_manager import ContextManager, PromptBudget
-from llm.agents.harness.replay_logger import ReplayRecord, ToolCall
-from llm.tools import get_llm_tools, execute_tool
-from modules.memory.repositories import replays as replays_repo
+from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
+from llm.agents.harness.tool_registry import ToolRegistry
+from infrastructure.db import replays as replays_repo
 
 
 RESEARCH_PROMPT = """You are a catalog gap research agent.
@@ -35,6 +35,7 @@ def run_research(
     session_id: str | None = None,
 ) -> dict:
     """Generate a research bundle using MCP tools (web_fetch, etc.)."""
+    tool_registry = ToolRegistry()
     goal_block = "\n".join(f"- {goal}" for goal in goals) or "- (no explicit goals)"
     context_manager = ContextManager(
         budget=PromptBudget(max_context_chars=2200, max_prompt_chars=14000)
@@ -46,47 +47,39 @@ def run_research(
         context=context,
     )
 
-    tool_schema = get_llm_tools()
-    response = None
-    llm_call_ms = None
+    response: dict
+    tool_calls: List[dict] = []
+    tool_outputs: List[dict] = []
+    tool_call_records: List[ToolCall] = []
     try:
         if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
             raise RuntimeError("OpenRouter API key missing")
-        start = time.perf_counter()
-        response = generate_with_tools(prompt=prompt, tools=tool_schema)
-        llm_call_ms = int((time.perf_counter() - start) * 1000)
+        loop = AgentLoop(
+            tools=tool_registry, generate_with_tools_fn=generate_with_tools
+        )
+        tool_run, _ = loop.run_tools_once(
+            prompt=prompt,
+            run_type="conversation.research.llm",
+            inputs={"query": query, "goals": goals, "context_used": bool(context)},
+            versions=default_versions(),
+        )
+        response = tool_run.model_response
+        tool_calls = tool_run.tool_calls
+        tool_outputs = tool_run.tool_outputs
+        tool_call_records = tool_run.tool_call_records
     except Exception as exc:
         response = {"text": "", "error": str(exc)}
-
-    tool_calls = response.get("tool_calls", []) if isinstance(response, dict) else []
-    tool_outputs = []
-    tool_call_records: List[ToolCall] = []
-    if llm_call_ms is not None:
-        tool_call_records.append(
-            ToolCall(
-                name="generate_with_tools",
-                arguments={"prompt_chars": len(prompt), "tool_count": len(tool_schema)},
-                result_summary=f"tool_calls={len(tool_calls)}",
-                elapsed_ms=llm_call_ms,
-            )
+        tool_calls = (
+            response.get("tool_calls", []) if isinstance(response, dict) else []
         )
-    for call in tool_calls:
-        name = call.get("name")
-        args = call.get("args", {})
-        start = time.perf_counter()
-        output = execute_tool(name, args)
-        elapsed_ms = int((time.perf_counter() - start) * 1000)
-        tool_outputs.append({"name": name, "output": output})
-        tool_call_records.append(
-            ToolCall(
-                name=name or "tool",
-                arguments=args if isinstance(args, dict) else {},
-                result_summary="ok"
-                if isinstance(output, dict) and not output.get("error")
-                else "error",
-                elapsed_ms=elapsed_ms,
+        for call in tool_calls:
+            name = call.get("name")
+            args = call.get("args", {})
+            execution = tool_registry.execute_with_record(
+                name or "tool", args if isinstance(args, dict) else {}
             )
-        )
+            tool_outputs.append({"name": name, "output": execution.output})
+            tool_call_records.append(execution.call)
 
     confidence, breakdown = _estimate_confidence(
         query=query,
@@ -125,18 +118,10 @@ def run_research(
     }
 
     if client_id:
-        record = {
-            "query": query,
-            "goals": goals,
-            "context_used": bool(context),
-            "confidence": confidence,
-            "confidence_breakdown": breakdown,
-            "insights": insights,
-            "replay": replay.to_dict(),
-        }
-        replay_row = replays_repo.create_replay_record(
+        logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+        replay_row = logger.persist(
             run_type="conversation.research",
-            record=record,
+            record=replay,
             client_id=client_id,
             user_id=user_id,
             session_id=session_id,

@@ -132,8 +132,8 @@ Based on OpenAI Codex harness design:
 | Component | Responsibility | Implementation |
 |-----------|---------------|----------------|
 | **Agent Loop** | Perception → Inference → Action cycle | `llm/agents/harness/agent_loop.py` |
-| **Tool Executor** | Execute tools, observe results | `llm/agents/harness/tool_executor.py` |
-| **Memory Manager** | Working, episodic, semantic memory | `llm/agents/harness/memory_manager.py` |
+| **Tool Executor** | Execute tools, observe results | `llm/agents/harness/tool_executor.py` *(or `tool_registry.py` for LLM tool schemas)* |
+| **Memory Manager** | Working, episodic, semantic memory | `llm/agents/harness/memory_manager.py` *(initially wraps existing `SessionManager`)* |
 | **Context Manager** | Context window + prompt caching | `llm/agents/harness/context_manager.py` |
 | **Replay Logger** | Run inputs/outputs + versioning for reproducibility | `llm/agents/harness/replay_logger.py` |
 | **Knowledge Capsule** | Agent-specific knowledge isolation | `llm/agents/harness/knowledge_capsule.py` |

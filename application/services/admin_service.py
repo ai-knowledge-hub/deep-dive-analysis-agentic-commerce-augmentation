@@ -9,7 +9,9 @@ class AdminService:
     def create_client(
         self, *, client_id: str, name: str, metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        return clients_repo.create_client(client_id=client_id, name=name, metadata=metadata or {})
+        return clients_repo.create_client(
+            client_id=client_id, name=name, metadata=metadata or {}
+        )
 
     def list_clients(self) -> list[Dict[str, Any]]:
         return clients_repo.list_clients()

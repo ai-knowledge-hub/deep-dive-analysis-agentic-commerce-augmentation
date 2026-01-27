@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from application.services.replay import default_versions
 from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
-from llm.agents.harness.replay_logger import ReplayRecord, ToolCall
+from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from infrastructure.db import replays as replays_repo
 from modules.alignment import goal_alignment
 from modules.evidence import (
@@ -68,9 +68,10 @@ class EvidenceService:
         )
         replay_id = None
         if client_id:
-            replay_id = replays_repo.create_replay_record(
+            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            replay_id = logger.persist(
                 run_type="evidence.analyze",
-                record=replay.to_dict(),
+                record=replay,
                 client_id=client_id,
                 user_id=user_id,
                 session_id=session_id,
@@ -146,9 +147,10 @@ class EvidenceService:
         )
         replay_id = None
         if client_id:
-            replay_id = replays_repo.create_replay_record(
+            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            replay_id = logger.persist(
                 run_type="representation.optimize",
-                record=replay.to_dict(),
+                record=replay,
                 client_id=client_id,
                 user_id=user_id,
                 session_id=session_id,
@@ -221,9 +223,10 @@ class EvidenceService:
         )
         replay_id = None
         if client_id:
-            replay_id = replays_repo.create_replay_record(
+            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            replay_id = logger.persist(
                 run_type="recommendation.verify",
-                record=replay.to_dict(),
+                record=replay,
                 client_id=client_id,
                 user_id=user_id,
                 session_id=session_id,

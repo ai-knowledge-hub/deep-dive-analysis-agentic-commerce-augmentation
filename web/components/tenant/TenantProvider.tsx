@@ -116,16 +116,21 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     if (!isAdminMode || !userId) return;
     let isActive = true;
     (async () => {
-      const response = await listAdminClients(userId);
-      const adminClients: TenantClient[] = (response.clients ?? []).map((client) => ({
-        id: client.id,
-        name: client.name,
-        brands: [],
-      }));
-      if (!isActive || adminClients.length === 0) return;
-      setClients(adminClients);
-      if (!adminClients.find((client) => client.id === clientId)) {
-        setClientIdState(adminClients[0].id);
+      try {
+        const response = await listAdminClients(userId);
+        const adminClients: TenantClient[] = (response.clients ?? []).map((client) => ({
+          id: client.id,
+          name: client.name,
+          brands: [],
+        }));
+        if (!isActive || adminClients.length === 0) return;
+        setClients(adminClients);
+        if (!adminClients.find((client) => client.id === clientId)) {
+          setClientIdState(adminClients[0].id);
+        }
+      } catch (error) {
+        // Falls back to DEFAULT_CLIENTS when admin mode isn't authorized (403) or backend is unreachable.
+        console.warn("Admin client list unavailable; using default tenant list.", error);
       }
     })();
     return () => {

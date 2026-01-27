@@ -29,7 +29,9 @@ if APIRouter:
 
     class SimulationRunRequest(BaseModel):
         query: str = Field(..., min_length=1)
-        products: List[SimulationProductPayload]
+        products: List[SimulationProductPayload] = Field(default_factory=list)
+        auto_competitors: bool = True
+        competitor_client_ids: Optional[List[str]] = None
         user_id: Optional[str] = None
         session_id: Optional[str] = None
         client_id: Optional[str] = None
@@ -117,6 +119,8 @@ if APIRouter:
             brand_id=payload.brand_id,
             product_id=payload.product_id,
             raw_products=[item.dict() for item in payload.products],
+            auto_competitors=payload.auto_competitors,
+            competitor_client_ids=payload.competitor_client_ids,
         )
 
     @router.post("/optimize")

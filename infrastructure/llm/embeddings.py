@@ -22,4 +22,3 @@ def batch_cosine_similarity(vec: List[float], vecs: List[List[float]]) -> List[f
 
 
 __all__ = ["embedding_available", "embed_batch", "batch_cosine_similarity"]
-
