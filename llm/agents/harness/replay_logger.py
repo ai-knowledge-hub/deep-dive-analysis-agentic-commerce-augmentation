@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass
@@ -26,3 +26,38 @@ class ReplayRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+class ReplayLogger:
+    """Persist replay records via an injected persistence function."""
+
+    def __init__(
+        self,
+        *,
+        persist_fn: Callable[..., Dict[str, Any]],
+    ) -> None:
+        self._persist_fn = persist_fn
+
+    def persist(
+        self,
+        *,
+        run_type: str,
+        record: ReplayRecord,
+        client_id: str,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return self._persist_fn(
+            run_type=run_type,
+            record=record.to_dict(),
+            client_id=client_id,
+            user_id=user_id,
+            session_id=session_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
+
+__all__ = ["ToolCall", "ReplayRecord", "ReplayLogger"]

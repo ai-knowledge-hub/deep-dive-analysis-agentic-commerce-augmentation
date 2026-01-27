@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
 from modules.alignment.goal_alignment import score_products
 from modules.commerce.domain import Product
@@ -17,7 +18,7 @@ from modules.simulation.tone import derive_tone
 def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, object]:
     classifier = HybridIntentClassifier()
     intent = classifier.classify(query).to_dict()
-    goals = _intent_goals(intent, fallback=query)
+    goals = extract_intent_goals(intent, fallback=query)
 
     normalized = [_to_product(product) for product in products]
     scores = score_products(goals, normalized)
@@ -78,16 +79,8 @@ def _tags_from_text(text: str) -> List[str]:
 
 
 def _intent_goals(intent: dict, fallback: str | None = None) -> List[str]:
-    goals: List[str] = []
-    primary = intent.get("primary_goal") or intent.get("label")
-    if primary and primary != "unknown":
-        goals.append(primary)
-    goals.extend(intent.get("secondary_goals") or [])
-    goals.extend(intent.get("underlying_needs") or [])
-    deduped = list(dict.fromkeys([goal for goal in goals if goal]))
-    if not deduped and fallback:
-        deduped = [fallback]
-    return deduped
+    # Backward-compatible wrapper.
+    return extract_intent_goals(intent, fallback=fallback)
 
 
 __all__ = ["run_simulation"]

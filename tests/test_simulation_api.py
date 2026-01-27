@@ -155,3 +155,48 @@ def test_simulation_attach_to_product(client: TestClient):
     assert any(
         run["id"] == run_id and run.get("product_id") == "prod-tv-1" for run in runs
     )
+
+
+def test_simulation_run_autopicks_competitors_from_catalog(client: TestClient):
+    # Create "our" client and product (selected by product_id)
+    clients_repo.create_client(
+        "client-underarmour", "Under Armour", metadata={"demo": True}
+    )
+    our_brand = clients_repo.create_brand(
+        "brand-ua", "client-underarmour", "Under Armour"
+    )
+    clients_repo.create_product(
+        "ua-vest-1",
+        our_brand["id"],
+        "UA Rain Running Vest",
+        description="Packable running vest for light rain and wind.",
+        metadata={"source": "catalog", "offer_url": "https://example.com/ua-vest"},
+    )
+
+    # Create competitor client + product that should be picked by LIKE query
+    clients_repo.create_client("client-nike", "Nike", metadata={"demo": True})
+    comp_brand = clients_repo.create_brand("brand-nike", "client-nike", "Nike")
+    clients_repo.create_product(
+        "nike-vest-1",
+        comp_brand["id"],
+        "Nike Running Vest",
+        description="running vest with reflective details and zip pockets.",
+        metadata={"source": "catalog", "offer_url": "https://example.com/nike-vest"},
+    )
+
+    payload = {
+        "query": "running vest",
+        "client_id": "client-underarmour",
+        "products": [],
+        "product_id": "ua-vest-1",
+        "auto_competitors": True,
+        "competitor_client_ids": ["client-nike"],
+    }
+
+    response = client.post("/simulation/run", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["run_id"]
+    product_ids = [score["product_id"] for score in data["result"]["scores"]]
+    assert "ua-vest-1" in product_ids
+    assert "nike-vest-1" in product_ids

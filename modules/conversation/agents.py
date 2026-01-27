@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from infrastructure.llm.intent_classifier import log_intent_replay
 from modules.intent.llm_classifier import HybridIntentClassifier
 from modules.conversation.context import context_for
 from modules.memory.session_manager import SessionManager
@@ -27,7 +28,17 @@ class IntentAgent:
         context: str | None = None
         if manager is not None:
             _, context = context_for(manager)
-        return self._classifier.classify(utterance, context=context).to_dict()
+        result = self._classifier.classify(utterance, context=context).to_dict()
+        if manager is not None and manager.client_id:
+            log_intent_replay(
+                query=utterance,
+                result=result,
+                context_used=bool(context),
+                client_id=manager.client_id,
+                user_id=manager.user_id,
+                session_id=manager.session_id,
+            )
+        return result
 
 
 class CommerceAgent:
