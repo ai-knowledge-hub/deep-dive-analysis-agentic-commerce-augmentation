@@ -11,8 +11,8 @@ from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
 from infrastructure.db import replays as replays_repo
 from domain.simulation.ranking import lift_summary
 from modules.simulation.domain import SimulationProduct
-from modules.simulation.optimizer import optimize_product
-from modules.simulation.runner import run_simulation
+from application.services.simulation_optimizer import optimize_product
+from application.services.simulation_runner import run_simulation
 from infrastructure.db import simulation_runs as simulation_repo
 from infrastructure.db import clients as clients_repo
 
