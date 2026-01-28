@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
+from application.ports.deps import AppDeps
+from application.services.protocol_discovery_service import ProtocolDiscoveryService
 from infrastructure.db import clients as clients_repo
 
 
@@ -24,6 +26,19 @@ class Layer2Agent:
 
     This keeps the architecture ready for real protocol tool integrations later.
     """
+
+    def __init__(self, *, deps: AppDeps | None = None) -> None:
+        self._deps = deps
+        self._protocol_service = (
+            ProtocolDiscoveryService(
+                discover_acp_fn=deps.protocol_discover_acp,
+                discover_ucp_fn=deps.protocol_discover_ucp,
+                validate_acp_fn=deps.protocol_validate_acp,
+                validate_ucp_fn=deps.protocol_validate_ucp,
+            )
+            if deps
+            else None
+        )
 
     def analyze_products(self, products: List[Dict[str, Any]]) -> Dict[str, Any]:
         results: List[Dict[str, Any]] = []
@@ -85,6 +100,37 @@ class Layer2Agent:
             )
 
         return {"client_id": client_id, "query": query, "candidates": candidates}
+
+    def discover_protocol_candidates(
+        self,
+        *,
+        client_id: str,
+        query: str,
+        brand_id: str | None = None,
+        protocol: str | None = None,
+        limit: int = 10,
+        inferred_intent: dict | None = None,
+    ) -> Dict[str, Any]:
+        """Protocol discovery entrypoint (ACP/UCP mock-first).
+
+        If deps/service isn't configured, returns an empty result so callers can
+        degrade gracefully.
+        """
+        if not self._protocol_service:
+            return {
+                "structured_query": {"query_text": query},
+                "candidates": [],
+                "summary": {"count": 0, "errors": 0, "warnings": 0},
+            }
+        proto = protocol if protocol in {"acp", "ucp"} else None
+        return self._protocol_service.discover(
+            client_id=client_id,
+            query=query,
+            protocol=proto,  # type: ignore[arg-type]
+            brand_id=brand_id,
+            limit=limit,
+            inferred_intent=inferred_intent,
+        )
 
 
 def _validate_product(product: Dict[str, Any]) -> List[SchemaIssue]:

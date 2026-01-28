@@ -6,11 +6,10 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from fastapi import HTTPException
 
-from domain.intent.goals import extract_intent_goals
+from application.ports.deps import AppDeps
 from application.services.context_builder import context_for
 from application.services.session_manager import SessionManager
-from infrastructure.db import sessions as sessions_store
-from infrastructure.db import turns as turns_store
+from domain.intent.goals import extract_intent_goals
 
 
 class _GoalAgent(Protocol):
@@ -36,6 +35,9 @@ class _ExplainAgent(Protocol):
 
 
 class ConversationService:
+    def __init__(self, *, deps: AppDeps) -> None:
+        self._deps = deps
+
     def start(
         self,
         *,
@@ -54,7 +56,7 @@ class ConversationService:
         build_profile_with_llm_fn: Callable[[Any], Any],
     ) -> Dict[str, Any]:
         manager = SessionManager(
-            user_id=user_id, client_id=client_id, brand_id=brand_id
+            deps=self._deps, user_id=user_id, client_id=client_id, brand_id=brand_id
         )
         if opening_message:
             return self.process_message(
@@ -99,6 +101,7 @@ class ConversationService:
             user_id=user_id,
             client_id=client_id,
             brand_id=brand_id,
+            deps=self._deps,
         )
         return self.process_message(
             manager=manager,
@@ -122,7 +125,7 @@ class ConversationService:
         client_id: str,
     ) -> Dict[str, Any]:
         if user_id:
-            session = sessions_store.get_session(
+            session = self._deps.sessions.get_session(
                 session_id=session_id, client_id=client_id
             )
             if (
@@ -132,7 +135,7 @@ class ConversationService:
             ):
                 raise HTTPException(status_code=404, detail="Session not found")
         manager = SessionManager(
-            session_id=session_id, user_id=user_id, client_id=client_id
+            deps=self._deps, session_id=session_id, user_id=user_id, client_id=client_id
         )
         return self._session_response(manager)
 
@@ -145,12 +148,14 @@ class ConversationService:
     ) -> Dict[str, Any]:
         if not user_id:
             raise HTTPException(status_code=400, detail="user_id is required")
-        sessions = sessions_store.list_sessions(
+        sessions = self._deps.sessions.list_sessions(
             user_id=user_id, limit=limit, client_id=client_id
         )
         payload = []
         for session in sessions:
-            recent = turns_store.list_recent_turns(session_id=session["id"], limit=1)
+            recent = self._deps.turns.list_recent_turns(
+                session_id=session["id"], limit=1
+            )
             last_turn = recent[0] if recent else None
             payload.append(
                 {
@@ -170,12 +175,12 @@ class ConversationService:
         client_id: str,
     ) -> Dict[str, str]:
         if user_id:
-            session = sessions_store.get_session(
+            session = self._deps.sessions.get_session(
                 session_id=session_id, client_id=client_id
             )
             if not session or session.get("user_id") != user_id:
                 raise HTTPException(status_code=404, detail="Session not found")
-        sessions_store.delete_session(session_id=session_id)
+        self._deps.sessions.delete_session(session_id=session_id)
         return {"status": "deleted"}
 
     def ingest_goals(
@@ -196,6 +201,7 @@ class ConversationService:
             user_id=user_id,
             client_id=client_id,
             brand_id=brand_id,
+            deps=self._deps,
         )
         self._ingest_clarified_goals(manager, goals)
         return self._session_response(manager, goals=manager.goal_texts())
@@ -211,14 +217,14 @@ class ConversationService:
         score_alignment_fn: Callable[[List[str], list], list],
     ) -> Dict[str, Any]:
         if user_id:
-            session = sessions_store.get_session(
+            session = self._deps.sessions.get_session(
                 session_id=session_id, client_id=client_id
             )
             if not session or session.get("user_id") != user_id:
                 raise HTTPException(status_code=404, detail="Session not found")
 
         manager = SessionManager(
-            session_id=session_id, user_id=user_id, client_id=client_id
+            deps=self._deps, session_id=session_id, user_id=user_id, client_id=client_id
         )
         query_value = (
             query or manager.get_state().get("last_query") or "catalog research"

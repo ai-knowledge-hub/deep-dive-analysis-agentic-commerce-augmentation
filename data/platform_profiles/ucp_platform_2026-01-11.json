@@ -1,0 +1,13 @@
+{
+  "version": "2026-01-11",
+  "capabilities": [
+    {
+      "name": "dev.ucp.shopping.checkout",
+      "version": "2026-01-11"
+    },
+    {
+      "name": "dev.ucp.shopping.order",
+      "version": "2026-01-11"
+    }
+  ]
+}

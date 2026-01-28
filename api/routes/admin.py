@@ -11,10 +11,14 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_admin
 from application.services.admin_service import AdminService
+from api.composition import default_deps
 
 if APIRouter:
     router = APIRouter(prefix="", tags=["admin"])
-    admin_service = AdminService()
+    deps = default_deps()
+    admin_service = AdminService(
+        clients_repo=deps.clients, platform_profiles_repo=deps.platform_profiles
+    )
 
     class ClientCreateRequest(BaseModel):
         id: str = Field(..., min_length=1)
@@ -39,6 +43,12 @@ if APIRouter:
         user_id: Optional[str] = None
         member_user_id: str = Field(..., min_length=1)
         role: Optional[str] = None
+
+    class PlatformProfileUpdateRequest(BaseModel):
+        user_id: Optional[str] = None
+        name: str = Field(..., min_length=1)
+        version: str = Field(..., min_length=1)
+        profile: Dict[str, Any] = Field(default_factory=dict)
 
     @router.post("/clients")
     def create_client(payload: ClientCreateRequest) -> Dict[str, Any]:
@@ -104,6 +114,22 @@ if APIRouter:
     ) -> Dict[str, Any]:
         require_admin(user_id)
         return {"users": admin_service.list_client_users(client_id=client_id)}
+
+    @router.get("/platform-profile")
+    def get_platform_profile(user_id: Optional[str] = None) -> Dict[str, Any]:
+        require_admin(user_id)
+        profile = admin_service.get_platform_profile()
+        return {"profile": profile}
+
+    @router.put("/platform-profile")
+    def update_platform_profile(
+        payload: PlatformProfileUpdateRequest,
+    ) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        profile = admin_service.update_platform_profile(
+            name=payload.name, version=payload.version, profile=payload.profile
+        )
+        return {"profile": profile}
 else:  # pragma: no cover
     router = None
 

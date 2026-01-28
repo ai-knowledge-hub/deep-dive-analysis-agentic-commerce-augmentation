@@ -1,25 +1,22 @@
-"""Infrastructure adapter for goal clarification (LLM chat + parsing).
+"""Goal clarification agent wrapper (application layer).
 
-The pure state machine lives in `domain.values.types`.
-The orchestration lives in `application.services.goal_clarification_service`.
-This adapter binds LLM + prompts and exposes the legacy agent interface used by
-API routes (`start`, `continue_dialogue`).
+This is a small adapter around `GoalClarificationService` that keeps the agent
+interface stable (`start`, `continue_dialogue`) while allowing dependency
+injection from the API composition root.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from application.services.goal_clarification_service import GoalClarificationService
 from domain.values.types import GoalClarificationState
-from infrastructure.llm.gateway import chat
-from infrastructure.llm.prompts import VALUES_CLARIFICATION_PROMPT
 
 
 class GoalClarificationAgent:
-    def __init__(self) -> None:
+    def __init__(self, *, chat_fn: Callable[..., str], prompt_template: str) -> None:
         self._service = GoalClarificationService(
-            chat_fn=chat, prompt_template=VALUES_CLARIFICATION_PROMPT
+            chat_fn=chat_fn, prompt_template=prompt_template
         )
 
     def start(

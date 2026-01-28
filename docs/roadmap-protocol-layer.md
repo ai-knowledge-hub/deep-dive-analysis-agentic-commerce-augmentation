@@ -11,14 +11,15 @@ This roadmap translates the Phase 6–9 additions in `docs/build-plan.md` into c
 **Goal:** Simulate ACP/UCP discovery in parallel with current inference loop.
 
 ### Deliverables
-- Mock ACP product feed endpoint (JSON → ranked results).
-- Mock UCP discovery endpoint (query + filters → structured results).
-- Intent → protocol query translator.
-- Protocol preview UI: “what the agent sees” from feed/manifest.
+- Mock ACP product feed endpoint (JSON → ranked results). ✅
+- Mock UCP discovery endpoint (query + filters → structured results). ✅
+- Intent → protocol query translator. ✅
+- Protocol readiness preview UI (capability + profile issues). ✅
 
 ### Success signals
 - One scenario shows different outcomes between web‑inference and protocol‑feed paths.
 - Gap analysis includes protocol field misses (capabilities, availability, enable_checkout).
+- UCP readiness score + issues visible in simulation output.
 
 ---
 
@@ -90,8 +91,8 @@ This roadmap translates the Phase 6–9 additions in `docs/build-plan.md` into c
 
 ## Owner’s Checklist
 
-- [ ] ACP feed mock + mapping
-- [ ] UCP discovery mock + mapping
+- [x] ACP feed mock + mapping
+- [x] UCP discovery mock + mapping
 - [ ] Verification route (1 platform)
 - [ ] Calibration scorecard
 - [ ] Brand DNA extraction

@@ -9,9 +9,10 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from infrastructure.llm.intent_classifier import build_intent_classifier
 from application.services.intentionality_profiler import build_profile
-from application.services.alignment_service import alignment_service
+from application.services.alignment_service import AlignmentService
 from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
+from api.composition import default_deps
 
 from infrastructure.commerce.search import search as search_products_fn
 
@@ -27,6 +28,7 @@ class HybridIntentClassifier:
 
 
 product_search = SimpleNamespace(search=search_products_fn)
+ALIGNMENT = AlignmentService(default_deps())
 
 
 def _search_products(query: str):
@@ -88,13 +90,11 @@ if APIRouter:
                 candidates.extend(_search_products(pid))
         else:
             candidates = _search_products(query)
-        alignment = alignment_service.assess(goal_signals, candidates)
-        baseline = alignment_service.assess(
-            goal_signals, candidates, use_semantic=False
-        )
+        alignment = ALIGNMENT.assess(goal_signals, candidates)
+        baseline = ALIGNMENT.assess(goal_signals, candidates, use_semantic=False)
         per_product = [
             score.__dict__
-            for score in alignment_service.score_products(goal_signals, candidates)
+            for score in ALIGNMENT.score_products(goal_signals, candidates)
         ]
         alignment_payload = alignment.__dict__
         alignment_payload["baseline_score"] = baseline.score
@@ -117,15 +117,13 @@ if APIRouter:
             classifier = HybridIntentClassifier()
             intent = classifier.classify(query).to_dict()
             goal_signals = _intent_goals(intent)
-            alignment = alignment_service.assess(goal_signals, [product])
-            baseline = alignment_service.assess(
-                goal_signals, [product], use_semantic=False
-            )
+            alignment = ALIGNMENT.assess(goal_signals, [product])
+            baseline = ALIGNMENT.assess(goal_signals, [product], use_semantic=False)
             alignment = alignment.__dict__
             alignment["baseline_score"] = baseline.score
             alignment["per_product"] = [
                 score.__dict__
-                for score in alignment_service.score_products(goal_signals, [product])
+                for score in ALIGNMENT.score_products(goal_signals, [product])
             ]
         return {
             "product": product.__dict__,

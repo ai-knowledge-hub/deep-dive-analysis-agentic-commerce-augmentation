@@ -6,16 +6,17 @@ It is orchestration (LLM call + prompt template), not domain logic.
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Callable, Dict, List
 
-from infrastructure.llm.gateway import generate
-from infrastructure.llm.prompts import build_optimization_prompt
 from domain.simulation.types import SimulationProduct
 
 
 def optimize_product(
     product: SimulationProduct,
     missing_signals: List[str],
+    *,
+    generate_fn: Callable[[str], str] | None,
+    build_optimization_prompt_fn: Callable[..., str],
     tone: str | None = None,
     lessons: List[str] | None = None,
 ) -> Dict[str, str]:
@@ -36,6 +37,8 @@ def optimize_product(
         price=product.price,
         tone=tone,
         lessons=lessons,
+        generate_fn=generate_fn,
+        build_optimization_prompt_fn=build_optimization_prompt_fn,
     )
     return {"id": product.id, "name": product.name, "before": before, "after": after}
 
@@ -45,11 +48,13 @@ def _llm_optimize_description(
     before: str,
     name: str,
     signals: str,
+    generate_fn: Callable[[str], str] | None,
+    build_optimization_prompt_fn: Callable[..., str],
     price: float | None = None,
     tone: str | None = None,
     lessons: List[str] | None = None,
 ) -> str:
-    prompt = build_optimization_prompt(
+    prompt = build_optimization_prompt_fn(
         name=name,
         description=before,
         signals=signals,
@@ -57,13 +62,14 @@ def _llm_optimize_description(
         tone=tone,
         lessons=lessons,
     )
-    try:
-        response = generate(prompt)
-        cleaned = response.strip()
-        if cleaned:
-            return cleaned
-    except Exception:
-        pass
+    if generate_fn:
+        try:
+            response = generate_fn(prompt)
+            cleaned = response.strip()
+            if cleaned:
+                return cleaned
+        except Exception:
+            pass
 
     suffix = f" Focused on {signals}."
     return before.rstrip(".") + "." + suffix

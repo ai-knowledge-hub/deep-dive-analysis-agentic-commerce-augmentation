@@ -21,7 +21,7 @@ from llm.agents.harness.context_manager import ContextManager, PromptBudget
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from llm.agents.harness.tool_registry import ToolRegistry
 from shared.config.env import settings
-from application.services.replay import default_versions
+from shared.replay.versions import default_versions
 
 
 RESEARCH_PROMPT = """You are a catalog gap research agent.

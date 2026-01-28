@@ -11,7 +11,7 @@ Transform your current **monolithic module architecture** into a **layered, agen
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    ORCHESTRATOR AGENT                         │
-│            (Optional - coordinates Layer 1 & 2)               │
+│            (coordinates Layer 1 & 2)               │
 └──────────────────────────────────────────────────────────────┘
                            │
                ┌───────────┴───────────┐
@@ -127,7 +127,6 @@ In the near-term, we model “belief/state” as: **inputs → tools used → ob
 
 ### 3. **Agent Harness Components**
 
-Based on OpenAI Codex harness design:
 
 | Component | Responsibility | Implementation |
 |-----------|---------------|----------------|

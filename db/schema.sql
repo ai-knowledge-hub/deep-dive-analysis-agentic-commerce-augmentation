@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS products (
     FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS platform_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    profile_json TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS client_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id TEXT NOT NULL,

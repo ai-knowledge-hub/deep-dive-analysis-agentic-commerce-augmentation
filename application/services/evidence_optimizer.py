@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 from domain.evidence.types import EvidenceProduct
-from infrastructure.llm.gateway import generate
-from infrastructure.llm.prompts import build_optimization_prompt
 from application.services.intentionality_profiler import build_profile
 
 from application.services.evidence_normalizer import to_product
@@ -14,6 +12,9 @@ from application.services.evidence_normalizer import to_product
 
 def optimize(
     evidence_products: List[EvidenceProduct],
+    *,
+    generate_fn: Callable[[str], str] | None,
+    build_optimization_prompt_fn: Callable[..., str],
     goals: List[str] | None = None,
     tone: str | None = None,
 ) -> List[Dict[str, object]]:
@@ -28,6 +29,8 @@ def optimize(
             goals=goals,
             tone=tone,
             price=product.price,
+            generate_fn=generate_fn,
+            build_optimization_prompt_fn=build_optimization_prompt_fn,
             signals=(profile.capabilities_enabled or [])
             + (profile.outcomes_expected or []),
         )
@@ -50,6 +53,8 @@ def _llm_optimize_description(
     name: str,
     description: str,
     signals: List[str],
+    generate_fn: Callable[[str], str] | None,
+    build_optimization_prompt_fn: Callable[..., str],
     goals: List[str] | None = None,
     tone: str | None = None,
     price: float | None = None,
@@ -61,20 +66,21 @@ def _llm_optimize_description(
     signals_text = (
         ", ".join([s for s in merged if s][:5]) if merged else "intent clarity"
     )
-    prompt = build_optimization_prompt(
+    prompt = build_optimization_prompt_fn(
         name=name,
         description=description,
         signals=signals_text,
         price=price,
         tone=tone,
     )
-    try:
-        response = generate(prompt)
-        cleaned = response.strip()
-        if cleaned:
-            return cleaned
-    except Exception:
-        pass
+    if generate_fn:
+        try:
+            response = generate_fn(prompt)
+            cleaned = response.strip()
+            if cleaned:
+                return cleaned
+        except Exception:
+            pass
     # fallback: keep original description if LLM not available
     return description
 

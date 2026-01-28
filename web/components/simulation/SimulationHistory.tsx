@@ -56,6 +56,11 @@ export function SimulationHistory({
                     {new Date(run.created_at).toLocaleDateString()}
                   </span>
                 )}
+                {typeof run.protocol_readiness_score === "number" && (
+                  <span className="simulation__history-meta">
+                    Protocol readiness: {run.protocol_readiness_score}/100
+                  </span>
+                )}
                 {run.product_id && (
                   <span className="simulation__history-meta">
                     Linked product: {run.product_id}

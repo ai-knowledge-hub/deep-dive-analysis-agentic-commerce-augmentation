@@ -228,6 +228,15 @@ export default function OverviewPage() {
               <div className="summary-card__meta">
                 <span>Runs: {simulationRuns.length}</span>
                 <span>Lessons: {simulationLessons.length}</span>
+                {typeof simulationRuns?.[0]?.protocol_readiness_score === "number" && (
+                  <span>
+                    <span
+                      title="UCP readiness score based on business profile validation and platform capability intersection."
+                    >
+                      Protocol readiness: {simulationRuns[0].protocol_readiness_score}/100
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
 

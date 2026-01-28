@@ -9,17 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
+from application.ports.deps import AppDeps
 from domain.memory.types import SessionSnapshot
-from infrastructure.db.connection import init_db, set_database_path
-from infrastructure.db import episodes as episodes_store
-from infrastructure.db import goals as goals_store
-from infrastructure.db import recommendations as recommendations_store
-from infrastructure.db import sessions as sessions_store
-from infrastructure.db import turns as turns_store
-from infrastructure.db import users as users_store
-from infrastructure.llm.gateway import embed, embedding_available
-from infrastructure.memory.semantic_memory import SemanticMemory
-from infrastructure.db import semantic as semantic_store
 
 
 def _normalize_goal_text(goal: str | None) -> str | None:
@@ -33,6 +24,8 @@ class SessionManager:
 
     def __init__(
         self,
+        *,
+        deps: AppDeps,
         user_id: str | None = None,
         session_id: str | None = None,
         state: Dict[str, Any] | None = None,
@@ -40,30 +33,31 @@ class SessionManager:
         client_id: str | None = None,
         brand_id: str | None = None,
     ) -> None:
+        self._deps = deps
         if db_path:
-            set_database_path(db_path)
-        init_db()
+            deps.set_database_path(db_path)
+        deps.init_db()
 
-        self.user_id = user_id or semantic_store.DEFAULT_USER_ID
-        self.client_id = client_id or semantic_store.DEFAULT_CLIENT_ID
+        self.user_id = user_id or deps.default_user_id
+        self.client_id = client_id or deps.default_client_id
         self.brand_id = brand_id
-        users_store.ensure_user(self.user_id)
+        deps.users.ensure_user(self.user_id)
 
         self._session = self._resolve_session(session_id=session_id, state=state or {})
         self.session_id = self._session["id"]
         self._state = self._session.get("state") or {}
-        self._memory = SemanticMemory(user_id=self.user_id, client_id=self.client_id)
+        self._memory = deps.semantic_memory_factory(self.user_id, self.client_id)
 
     def _resolve_session(
         self, session_id: str | None, state: Dict[str, Any]
     ) -> Dict[str, Any]:
         if session_id:
-            existing = sessions_store.get_session(
+            existing = self._deps.sessions.get_session(
                 session_id=session_id, client_id=self.client_id
             )
             if existing:
                 return existing
-        return sessions_store.create_session(
+        return self._deps.sessions.create_session(
             user_id=self.user_id,
             state=state,
             client_id=self.client_id,
@@ -74,7 +68,7 @@ class SessionManager:
     def record_turn(
         self, speaker: str, content: str, metadata: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
-        return turns_store.add_turn(
+        return self._deps.turns.add_turn(
             session_id=self.session_id,
             speaker=speaker,
             content=content,
@@ -82,7 +76,7 @@ class SessionManager:
         )
 
     def list_turns(self, limit: int = 100) -> List[Dict[str, Any]]:
-        return turns_store.list_turns(session_id=self.session_id, limit=limit)
+        return self._deps.turns.list_turns(session_id=self.session_id, limit=limit)
 
     # ------------------------------------------------------------------ goals
     def record_goal(
@@ -95,12 +89,12 @@ class SessionManager:
         if not normalized_goal:
             raise ValueError("Goal text cannot be empty.")
         goal_embedding: list[float] | None = None
-        if embedding_available():
+        if self._deps.embedding_available():
             try:
-                goal_embedding = embed(normalized_goal)
+                goal_embedding = self._deps.embed(normalized_goal)
             except Exception:
                 goal_embedding = None
-        entry = goals_store.create_goal(
+        entry = self._deps.goals.create_goal(
             user_id=self.user_id,
             goal_text=normalized_goal,
             session_id=self.session_id,
@@ -126,7 +120,7 @@ class SessionManager:
     def goal_texts(self) -> List[str]:
         session_goals = [
             goal["goal_text"]
-            for goal in goals_store.list_goals_for_session(
+            for goal in self._deps.goals.list_goals_for_session(
                 session_id=self.session_id, client_id=self.client_id
             )
         ]
@@ -144,7 +138,7 @@ class SessionManager:
         alignment_score: float | None,
         context: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        return recommendations_store.create_recommendation(
+        return self._deps.recommendations.create_recommendation(
             session_id=self.session_id,
             product_ids=product_ids,
             alignment_score=alignment_score,
@@ -156,7 +150,7 @@ class SessionManager:
     def record_outcome(
         self, outcome_text: str, outcome: str | None = "outcome_summary"
     ) -> Dict[str, Any]:
-        return episodes_store.create_episode(
+        return self._deps.episodes.create_episode(
             user_id=self.user_id,
             session_id=self.session_id,
             outcome=outcome,
@@ -167,7 +161,7 @@ class SessionManager:
     # ---------------------------------------------------------------- state helpers
     def update_state(self, **updates: Any) -> None:
         self._state.update(updates)
-        sessions_store.update_state(session_id=self.session_id, state=self._state)
+        self._deps.sessions.update_state(session_id=self.session_id, state=self._state)
 
     def get_state(self) -> Dict[str, Any]:
         return dict(self._state)
@@ -178,19 +172,19 @@ class SessionManager:
             turns=self.list_turns(limit=include_turn_limit),
             goals=[
                 goal["goal_text"]
-                for goal in goals_store.list_goals_for_session(
+                for goal in self._deps.goals.list_goals_for_session(
                     session_id=self.session_id, client_id=self.client_id
                 )
             ],
             semantic_goals=self._memory.get("goals"),
-            latest_episode=episodes_store.get_latest(
+            latest_episode=self._deps.episodes.get_latest(
                 user_id=self.user_id, client_id=self.client_id
             ),
         )
 
     def _session_info(self) -> Dict[str, Any]:
         refreshed = (
-            sessions_store.get_session(
+            self._deps.sessions.get_session(
                 session_id=self.session_id, client_id=self.client_id
             )
             or self._session

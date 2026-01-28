@@ -86,6 +86,24 @@ export function SimulationPanel({
     run?.result?.gap_analysis?.find((gap) => gap.product_id === selectedProductId) ??
     run?.result?.gap_analysis?.[0] ??
     null;
+  const protocolReadiness =
+    run?.result?.protocol_readiness?.find(
+      (entry) => entry.product_id === selectedProductId
+    ) ??
+    run?.result?.protocol_readiness?.[0] ??
+    null;
+  const protocolIssues = protocolReadiness?.issues ?? [];
+  const protocolScore = (() => {
+    const scoreIssue = protocolIssues.find(
+      (issue) => issue.field === "ucp_readiness_score"
+    );
+    if (!scoreIssue?.message) return null;
+    const match = scoreIssue.message.match(/(\\d{1,3})\\s*\\/\\s*100/);
+    if (!match) return null;
+    const value = Number(match[1]);
+    if (Number.isNaN(value)) return null;
+    return value;
+  })();
 
   return (
     <div className="panel__card">
@@ -146,6 +164,27 @@ export function SimulationPanel({
         <div className="simulation__comparison">
           <span className="simulation__diff-label">Why you lost</span>
           <p>{primaryGap.competitor_summary}</p>
+        </div>
+      )}
+
+      {protocolIssues.length > 0 && (
+        <div className="simulation__comparison">
+          <span className="simulation__diff-label">Protocol readiness</span>
+          {protocolScore !== null && (
+            <div className="simulation__protocol-score">
+              Readiness score: {protocolScore}/100
+            </div>
+          )}
+          <ul>
+            {protocolIssues
+              .filter((issue) => issue.severity !== "info")
+              .slice(0, 4)
+              .map((issue, index) => (
+                <li key={`${issue.field}-${index}`}>
+                <strong>{issue.severity.toUpperCase()}:</strong> {issue.message}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

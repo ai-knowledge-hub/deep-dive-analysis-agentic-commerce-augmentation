@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List
+from typing import Callable, List
 
 from domain.evidence.types import EvidenceProduct
-from infrastructure.llm.research_agent import run_research
 
 
-def retrieve(query: str, max_items: int = 5) -> List[EvidenceProduct]:
+def retrieve(
+    query: str,
+    max_items: int = 5,
+    *,
+    run_research_fn: Callable[..., dict],
+) -> List[EvidenceProduct]:
     demo_products = _load_demo_products()
     if demo_products:
         return demo_products[:max_items]
 
-    research = run_research(query=query, goals=[query], context=None)
+    research = run_research_fn(query=query, goals=[query], context=None)
     insights = research.get("insights", []) or []
     if not insights:
         return _fallback_products(query)[:max_items]

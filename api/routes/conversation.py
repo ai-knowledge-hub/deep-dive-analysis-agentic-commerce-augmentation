@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from application.agents.goal_clarification_agent import GoalClarificationAgent
 from application.services.conversation_service import ConversationService
 from application.services.conversation_agents import (
     CommerceAgent,
@@ -23,16 +24,25 @@ from infrastructure.llm.intent_classifier import (
     log_intent_replay,
 )
 from infrastructure.llm.research_agent import run_research
-from application.services.intentionality_profiler import build_profile_with_llm
-from application.services.alignment_service import alignment_service
-from infrastructure.llm.goal_clarification_agent import GoalClarificationAgent
+from application.services.alignment_service import AlignmentService
+from infrastructure.llm.gateway import chat
+from infrastructure.llm.prompts import VALUES_CLARIFICATION_PROMPT
 from infrastructure.llm.product_reasoner import reason_about_products_default
 from infrastructure.commerce.search import search as commerce_search
 from infrastructure.commerce.compare import compare as compare_products
 from application.services.intentionality_profiler import build_profile
 from api.utils.tenancy import require_client_id
+from api.composition import default_deps
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
+
+DEPS = default_deps()
+ALIGNMENT = AlignmentService(DEPS)
+
+
+def build_profile_with_llm(product: Any) -> Any:
+    return build_profile(product, generate_fn=DEPS.generate)
+
 
 INTENT_AGENT = IntentAgent(
     classifier=build_intent_classifier(),
@@ -46,13 +56,15 @@ COMMERCE_AGENT = CommerceAgent(
         build_profile_fn=build_profile,
     ),
     reason_fn=reason_about_products_default,
-    assess_fn=alignment_service.assess,
-    score_fn=alignment_service.score_products,
+    assess_fn=ALIGNMENT.assess,
+    score_fn=ALIGNMENT.score_products,
     search_fn=commerce_search,
 )
 EXPLAIN_AGENT = ExplainAgent()
-GOAL_AGENT = GoalClarificationAgent()
-SERVICE = ConversationService()
+GOAL_AGENT = GoalClarificationAgent(
+    chat_fn=chat, prompt_template=VALUES_CLARIFICATION_PROMPT
+)
+SERVICE = ConversationService(deps=DEPS)
 
 
 class ClarifiedGoal(BaseModel):
@@ -114,7 +126,7 @@ def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
         commerce_agent=COMMERCE_AGENT,
         explain_agent=EXPLAIN_AGENT,
         run_research_fn=run_research,
-        score_alignment_fn=alignment_service.score_products,
+        score_alignment_fn=ALIGNMENT.score_products,
         build_profile_with_llm_fn=build_profile_with_llm,
     )
 
@@ -138,7 +150,7 @@ def start_conversation_stream(
             commerce_agent=COMMERCE_AGENT,
             explain_agent=EXPLAIN_AGENT,
             run_research_fn=run_research,
-            score_alignment_fn=alignment_service.score_products,
+            score_alignment_fn=ALIGNMENT.score_products,
             build_profile_with_llm_fn=build_profile_with_llm,
         )
         yield _sse_event(payload, event="conversation")
@@ -162,7 +174,7 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
         commerce_agent=COMMERCE_AGENT,
         explain_agent=EXPLAIN_AGENT,
         run_research_fn=run_research,
-        score_alignment_fn=alignment_service.score_products,
+        score_alignment_fn=ALIGNMENT.score_products,
         build_profile_with_llm_fn=build_profile_with_llm,
     )
 
@@ -187,7 +199,7 @@ def continue_conversation_stream(
             commerce_agent=COMMERCE_AGENT,
             explain_agent=EXPLAIN_AGENT,
             run_research_fn=run_research,
-            score_alignment_fn=alignment_service.score_products,
+            score_alignment_fn=ALIGNMENT.score_products,
             build_profile_with_llm_fn=build_profile_with_llm,
         )
         yield _sse_event(payload, event="conversation")
@@ -248,5 +260,5 @@ def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any
         client_id=client_id,
         query=request.query,
         run_research_fn=run_research,
-        score_alignment_fn=alignment_service.score_products,
+        score_alignment_fn=ALIGNMENT.score_products,
     )

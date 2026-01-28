@@ -3,42 +3,50 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional
 
-from application.services.replay import default_versions
+from shared.replay.versions import default_versions
 from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
-from infrastructure.db import replays as replays_repo
 from domain.evidence.types import EvidenceProduct
-from application.services.evidence_retriever import retrieve as default_retrieve
+from application.ports.deps import AppDeps
+from application.services.alignment_service import AlignmentService
+from application.services.evidence_retriever import retrieve as retrieve_evidence
 from application.services.evidence_normalizer import to_product
 from application.services.evidence_optimizer import optimize
 from application.services.evidence_verify import average_alignment, simulate_actual
-from infrastructure.llm.intent_classifier import classify_intent
 from application.services.intentionality_profiler import build_profile
-from application.services.alignment_service import alignment_service
 
 
 class EvidenceService:
+    def __init__(self, *, deps: AppDeps) -> None:
+        self._deps = deps
+        self._alignment = AlignmentService(deps)
+
     def analyze(
         self,
         *,
         query: str,
         max_items: int = 5,
-        retrieve_fn=default_retrieve,
+        retrieve_fn=None,
         client_id: str | None = None,
         user_id: str | None = None,
         session_id: str | None = None,
     ) -> Dict[str, Any]:
-        intent = classify_intent(query)
+        intent = self._deps.classify_intent(query)
         goals = extract_intent_goals(intent, fallback=query)
 
         start = time.perf_counter()
-        evidence_products = retrieve_fn(query, max_items=max_items)
+        if retrieve_fn is None:
+            evidence_products = retrieve_evidence(
+                query, max_items=max_items, run_research_fn=self._deps.run_research
+            )
+        else:
+            evidence_products = retrieve_fn(query, max_items=max_items)
         retrieve_ms = int((time.perf_counter() - start) * 1000)
         products = [to_product(item) for item in evidence_products]
         profiles = [build_profile(product).to_dict() for product in products]
         score_start = time.perf_counter()
-        alignment_scores = alignment_service.score_products(goals, products)
+        alignment_scores = self._alignment.score_products(goals, products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
 
         replay = ReplayRecord(
@@ -66,7 +74,7 @@ class EvidenceService:
         )
         replay_id = None
         if client_id:
-            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
             replay_id = logger.persist(
                 run_type="evidence.analyze",
                 record=replay,
@@ -102,11 +110,17 @@ class EvidenceService:
         intent = None
         goals: List[str] = []
         if query:
-            intent = classify_intent(query)
+            intent = self._deps.classify_intent(query)
             goals = extract_intent_goals(intent, fallback=query)
 
         start = time.perf_counter()
-        optimized_pairs = optimize(evidence_products, goals=goals or None, tone=tone)
+        optimized_pairs = optimize(
+            evidence_products,
+            generate_fn=self._deps.generate,
+            build_optimization_prompt_fn=self._deps.build_optimization_prompt,
+            goals=goals or None,
+            tone=tone,
+        )
         optimize_ms = int((time.perf_counter() - start) * 1000)
 
         before_products = [to_product(item) for item in evidence_products]
@@ -115,8 +129,8 @@ class EvidenceService:
             for product, pair in zip(before_products, optimized_pairs)
         ]
         score_start = time.perf_counter()
-        before_scores = alignment_service.score_products(goals, before_products)
-        after_scores = alignment_service.score_products(goals, after_products)
+        before_scores = self._alignment.score_products(goals, before_products)
+        after_scores = self._alignment.score_products(goals, after_products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
         deltas = _score_deltas(before_scores, after_scores)
 
@@ -145,7 +159,7 @@ class EvidenceService:
         )
         replay_id = None
         if client_id:
-            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
             replay_id = logger.persist(
                 run_type="representation.optimize",
                 record=replay,
@@ -175,12 +189,12 @@ class EvidenceService:
         user_id: str | None = None,
         session_id: str | None = None,
     ) -> Dict[str, Any]:
-        intent = classify_intent(query)
+        intent = self._deps.classify_intent(query)
         goals = extract_intent_goals(intent, fallback=query)
 
         before_products = [to_product(item) for item in evidence_products]
         score_start = time.perf_counter()
-        before_scores = alignment_service.score_products(goals, before_products)
+        before_scores = self._alignment.score_products(goals, before_products)
 
         optimized_pairs = optimized or []
         after_products = before_products
@@ -191,7 +205,7 @@ class EvidenceService:
                 )
                 for product, pair in zip(before_products, optimized_pairs)
             ]
-        after_scores = alignment_service.score_products(goals, after_products)
+        after_scores = self._alignment.score_products(goals, after_products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
 
         predicted = _ranked_ids(after_scores)
@@ -221,7 +235,7 @@ class EvidenceService:
         )
         replay_id = None
         if client_id:
-            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
             replay_id = logger.persist(
                 run_type="recommendation.verify",
                 record=replay,

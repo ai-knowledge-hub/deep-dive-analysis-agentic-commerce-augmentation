@@ -5,19 +5,21 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
-from application.services.replay import default_versions
+from shared.replay.versions import default_versions
 from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
-from infrastructure.db import replays as replays_repo
 from domain.simulation.ranking import lift_summary
 from domain.simulation.types import SimulationProduct
+from domain.protocol.types import ProtocolCandidate
+from application.ports.deps import AppDeps
 from application.services.simulation_optimizer import optimize_product
 from application.services.simulation_runner import run_simulation
-from infrastructure.db import simulation_runs as simulation_repo
-from infrastructure.db import clients as clients_repo
 
 
 class SimulationService:
+    def __init__(self, *, deps: AppDeps) -> None:
+        self._deps = deps
+
     def list_runs(
         self,
         *,
@@ -25,17 +27,22 @@ class SimulationService:
         user_id: Optional[str] = None,
         limit: int = 20,
     ) -> Dict[str, Any]:
-        runs = simulation_repo.list_runs(
+        runs = self._deps.simulation_runs.list_runs(
             user_id=user_id, limit=limit, client_id=client_id
         )
         payload: list[Dict[str, Any]] = []
         for run in runs:
+            result = run.get("result") or {}
+            winner_id = result.get("winner_id")
             payload.append(
                 {
                     "id": run.get("id"),
                     "query": run.get("query"),
                     "created_at": run.get("created_at"),
-                    "winner_id": (run.get("result") or {}).get("winner_id"),
+                    "winner_id": winner_id,
+                    "protocol_readiness_score": _extract_protocol_readiness_score(
+                        result, winner_id
+                    ),
                     "brand_id": run.get("brand_id"),
                     "product_id": run.get("product_id"),
                 }
@@ -45,7 +52,7 @@ class SimulationService:
     def get_run(
         self, *, run_id: str, client_id: str, user_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        run_record = _get_run(run_id, user_id=user_id, client_id=client_id)
+        run_record = _get_run(self._deps, run_id, user_id=user_id, client_id=client_id)
         return {"run": run_record}
 
     def list_lessons(
@@ -56,7 +63,7 @@ class SimulationService:
         limit: int = 50,
     ) -> Dict[str, Any]:
         return {
-            "lessons": simulation_repo.list_lessons(
+            "lessons": self._deps.simulation_runs.list_lessons(
                 user_id=user_id, limit=limit, client_id=client_id
             )
         }
@@ -91,7 +98,9 @@ class SimulationService:
             ToolSpec(
                 name="run_simulation",
                 description="Infer intent, score products, compute gaps, derive lessons and tone.",
-                func=lambda q, ps: run_simulation(q, ps),
+                func=lambda q, ps: run_simulation(
+                    deps=self._deps, query=q, products=ps
+                ),
             )
         )
         tool_calls: list[ToolCall] = []
@@ -122,8 +131,13 @@ class SimulationService:
         if isinstance(result, dict):
             result["_replay"] = replay.to_dict()
 
+        if isinstance(result, dict):
+            result["protocol_readiness"] = _protocol_readiness_for_items(
+                self._deps, resolved_raw_products
+            )
+
         tone_summary = (result.get("tone") or {}).get("summary")
-        stored = simulation_repo.create_run(
+        stored = self._deps.simulation_runs.create_run(
             query=query,
             scenario={"query": query, "tone_suggestion": tone_summary},
             products=resolved_raw_products,
@@ -134,7 +148,7 @@ class SimulationService:
             brand_id=brand_id,
             product_id=product_id,
         )
-        logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+        logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
         replay_row = logger.persist(
             run_type="simulation.run",
             record=replay,
@@ -161,7 +175,7 @@ class SimulationService:
         sim_products: List[SimulationProduct] = []
 
         if product_id:
-            product = clients_repo.get_product_for_client(
+            product = self._deps.clients.get_product_for_client(
                 client_id=client_id, product_id=product_id
             )
             if product:
@@ -169,6 +183,7 @@ class SimulationService:
                 metadata = product.get("metadata") or {}
                 raw_item = {
                     "id": product["id"],
+                    "brand_id": product.get("brand_id"),
                     "name": product["name"],
                     "description": product.get("description") or "",
                     "source": str(metadata.get("source") or "catalog"),
@@ -183,19 +198,22 @@ class SimulationService:
         # Competitors: pick from other clients (or explicit list)
         if competitor_client_ids is None:
             competitor_client_ids = [
-                c["id"] for c in clients_repo.list_clients() if c["id"] != client_id
+                c["id"]
+                for c in self._deps.clients.list_clients()
+                if c["id"] != client_id
             ][:3]
 
         for competitor_id in competitor_client_ids:
             if competitor_id == client_id:
                 continue
-            matches = clients_repo.search_products_for_client(
+            matches = self._deps.clients.search_products_for_client(
                 client_id=competitor_id, query=query, limit=3
             )
             for match in matches:
                 metadata = match.get("metadata") or {}
                 raw_item = {
                     "id": match["id"],
+                    "brand_id": match.get("brand_id"),
                     "name": match["name"],
                     "description": match.get("description") or "",
                     "source": str(metadata.get("source") or "catalog"),
@@ -219,7 +237,7 @@ class SimulationService:
         tone: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        run_record = _get_run(run_id, user_id=user_id, client_id=client_id)
+        run_record = _get_run(self._deps, run_id, user_id=user_id, client_id=client_id)
         result = run_record.get("result") or {}
         gap_analysis = result.get("gap_analysis") or []
         target_gap = next(
@@ -237,8 +255,10 @@ class SimulationService:
         optimized = optimize_product(
             _to_simulation_product(target),
             target_gap.get("missing_signals") or [],
-            tone,
-            (result.get("lessons") or []),
+            generate_fn=self._deps.generate,
+            build_optimization_prompt_fn=self._deps.build_optimization_prompt,
+            tone=tone,
+            lessons=(result.get("lessons") or []),
         )
         replay = ReplayRecord(
             run_type="simulation.optimize",
@@ -257,7 +277,7 @@ class SimulationService:
             ],
             versions=default_versions(scoring_version="n/a"),
         )
-        logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+        logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
         return {
             "run_id": run_id,
             "optimized": optimized,
@@ -282,12 +302,14 @@ class SimulationService:
         client_id: str,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        run_record = _get_run(run_id, user_id=user_id, client_id=client_id)
+        run_record = _get_run(self._deps, run_id, user_id=user_id, client_id=client_id)
         query = run_record.get("query") or run_record.get("scenario", {}).get("query")
         if not query:
             raise HTTPException(status_code=400, detail="Query missing for run")
         start = time.perf_counter()
-        result = run_simulation(query, optimized_products)
+        result = run_simulation(
+            deps=self._deps, query=query, products=optimized_products
+        )
         elapsed_ms = int((time.perf_counter() - start) * 1000)
 
         # Optional lift summary used by the UI (kept stable even if scores missing).
@@ -301,6 +323,10 @@ class SimulationService:
                 before_scores=before_scores,
                 after_scores=after_scores,
                 optimized_product_id=optimized_product_id,
+            )
+            result["protocol_readiness"] = _protocol_readiness_for_items(
+                self._deps,
+                [_simulation_product_dict(p) for p in optimized_products],
             )
 
         replay = ReplayRecord(
@@ -326,7 +352,7 @@ class SimulationService:
         )
         if isinstance(result, dict):
             result["_replay"] = replay.to_dict()
-            logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)
+            logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
             result["_replay_id"] = logger.persist(
                 run_type="simulation.retest",
                 record=replay,
@@ -336,7 +362,7 @@ class SimulationService:
                 entity_type="simulation_run",
                 entity_id=run_id,
             ).get("id")
-        simulation_repo.update_retest(run_id, result)
+        self._deps.simulation_runs.update_retest(run_id, result)
         return {"run_id": run_id, "result": result}
 
     def update_tone(
@@ -347,11 +373,11 @@ class SimulationService:
         user_id: Optional[str] = None,
         tone: Optional[str] = None,
     ) -> Dict[str, Any]:
-        run_record = _get_run(run_id, user_id=user_id, client_id=client_id)
+        run_record = _get_run(self._deps, run_id, user_id=user_id, client_id=client_id)
         scenario = run_record.get("scenario") or {}
         tone_clean = (tone or "").strip()
         scenario["confirmed_tone"] = tone_clean or None
-        simulation_repo.update_scenario(run_id, scenario)
+        self._deps.simulation_runs.update_scenario(run_id, scenario)
         return {"run_id": run_id, "tone": scenario.get("confirmed_tone")}
 
     def tone_from_brand(
@@ -362,10 +388,12 @@ class SimulationService:
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         if run_id:
-            run_record = _get_run(run_id, user_id=user_id, client_id=client_id)
+            run_record = _get_run(
+                self._deps, run_id, user_id=user_id, client_id=client_id
+            )
             scenario = run_record.get("scenario") or {}
             scenario["tone_source"] = "brand_site"
-            simulation_repo.update_scenario(run_id, scenario)
+            self._deps.simulation_runs.update_scenario(run_id, scenario)
         return {
             "status": "coming_soon",
             "message": "Brand tone import requires catalog integration.",
@@ -380,8 +408,8 @@ class SimulationService:
         brand_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        _get_run(run_id, user_id=user_id, client_id=client_id)
-        updated = simulation_repo.update_run_linkage(
+        _get_run(self._deps, run_id, user_id=user_id, client_id=client_id)
+        updated = self._deps.simulation_runs.update_run_linkage(
             run_id,
             client_id=client_id,
             product_id=product_id,
@@ -409,8 +437,140 @@ def _to_simulation_product(item: Dict[str, Any]) -> SimulationProduct:
     )
 
 
-def _get_run(run_id: str, *, user_id: Optional[str], client_id: str) -> Dict[str, Any]:
-    run_record = simulation_repo.get_run(run_id)
+def _simulation_product_dict(product: SimulationProduct) -> Dict[str, Any]:
+    return {
+        "id": product.id,
+        "name": product.name,
+        "description": product.description,
+        "source": product.source,
+        "url": product.url,
+        "price": product.price,
+        "confidence": product.confidence,
+        "metadata": product.metadata,
+    }
+
+
+def _protocol_readiness_for_items(
+    deps: AppDeps, items: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    readiness: List[Dict[str, Any]] = []
+    for item in items:
+        candidate = _to_protocol_candidate(item)
+        issues = deps.protocol_validate_ucp(candidate)
+        readiness.append(
+            {
+                "product_id": candidate.id,
+                "protocol": candidate.protocol,
+                "issues": [issue.__dict__ for issue in issues],
+            }
+        )
+    return readiness
+
+
+def _to_protocol_candidate(item: Dict[str, Any]) -> ProtocolCandidate:
+    meta = item.get("metadata") or {}
+    ucp_meta = meta.get("ucp") or {}
+    attributes = ucp_meta.get("attributes") or meta.get("attributes") or {}
+    return ProtocolCandidate(
+        id=item.get("id") or "",
+        name=item.get("name") or "",
+        description=item.get("description") or "",
+        protocol="ucp",
+        offer_url=_pick(ucp_meta, meta, "offer_url", "url") or item.get("url"),
+        merchant_name=_pick(ucp_meta, meta, "merchant_name"),
+        price=_pick_number(ucp_meta, meta, "price") or item.get("price"),
+        currency=_pick(ucp_meta, meta, "currency"),
+        availability=_pick(ucp_meta, meta, "availability"),
+        available_for_sale=_pick_bool(ucp_meta, meta, "available_for_sale"),
+        inventory_quantity=_pick_int(ucp_meta, meta, "inventory_quantity"),
+        attributes=attributes if isinstance(attributes, dict) else {},
+        raw={"product": {**item, "metadata": meta}},
+    )
+
+
+def _extract_protocol_readiness_score(
+    result: Dict[str, Any], winner_id: Optional[str]
+) -> Optional[int]:
+    readiness = result.get("protocol_readiness") or []
+    if not isinstance(readiness, list) or not readiness:
+        return None
+    entry = None
+    if winner_id:
+        entry = next(
+            (item for item in readiness if item.get("product_id") == winner_id),
+            None,
+        )
+    if entry is None:
+        entry = readiness[0] if readiness else None
+    if not entry:
+        return None
+    issues = entry.get("issues") or []
+    for issue in issues:
+        if issue.get("field") == "ucp_readiness_score":
+            message = issue.get("message") or ""
+            match = None
+            if isinstance(message, str):
+                match = __import__("re").search(r"(\\d{1,3})\\s*/\\s*100", message)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    return None
+    return None
+
+
+def _pick(primary: Dict[str, Any], fallback: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in primary and primary.get(key) is not None:
+            return primary.get(key)
+        if key in fallback and fallback.get(key) is not None:
+            return fallback.get(key)
+    return None
+
+
+def _pick_number(
+    primary: Dict[str, Any], fallback: Dict[str, Any], key: str
+) -> Optional[float]:
+    value = _pick(primary, fallback, key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_int(
+    primary: Dict[str, Any], fallback: Dict[str, Any], key: str
+) -> Optional[int]:
+    value = _pick(primary, fallback, key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_bool(
+    primary: Dict[str, Any], fallback: Dict[str, Any], key: str
+) -> Optional[bool]:
+    value = _pick(primary, fallback, key)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return None
+
+
+def _get_run(
+    deps: AppDeps, run_id: str, *, user_id: Optional[str], client_id: str
+) -> Dict[str, Any]:
+    run_record = deps.simulation_runs.get_run(run_id)
     if not run_record:
         raise HTTPException(status_code=404, detail="Simulation run not found")
     if run_record.get("client_id") and run_record.get("client_id") != client_id:

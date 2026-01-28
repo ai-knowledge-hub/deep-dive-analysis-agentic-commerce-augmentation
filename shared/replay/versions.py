@@ -17,3 +17,6 @@ def default_versions(*, scoring_version: str = "alignment-v1") -> Dict[str, str]
         "llm_model": model,
         "scoring": scoring_version,
     }
+
+
+__all__ = ["default_versions"]

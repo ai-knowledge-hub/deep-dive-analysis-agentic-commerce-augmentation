@@ -1159,6 +1159,18 @@ ul { list-style: none; }
   padding: 8px;
 }
 
+.panel__error {
+  font-size: 12px;
+  color: #ff7b7b;
+  margin-top: 6px;
+}
+
+.panel__success {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 6px;
+}
+
 /* =============================================================================
    WORLD A VS B
    ============================================================================= */
@@ -1652,6 +1664,12 @@ ul { list-style: none; }
 
 .simulation__comparison p {
   margin: 6px 0 0;
+  color: var(--text-primary);
+}
+
+.simulation__protocol-score {
+  margin-top: 6px;
+  font-size: 11px;
   color: var(--text-primary);
 }
 

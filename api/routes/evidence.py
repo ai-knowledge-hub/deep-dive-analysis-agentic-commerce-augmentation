@@ -10,15 +10,20 @@ except ImportError:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 from domain.evidence.types import EvidenceProduct
-from application.services.evidence_retriever import retrieve as retrieve
 from application.services.evidence_service import EvidenceService
 from api.utils.tenancy import require_client_id
+from api.composition import default_deps
+from application.services.evidence_retriever import retrieve as _retrieve
 
 if APIRouter:
     router = APIRouter(prefix="/evidence", tags=["evidence"])
     representation_router = APIRouter(prefix="/representation", tags=["evidence"])
     recommendation_router = APIRouter(prefix="/recommendation", tags=["evidence"])
-    evidence_service = EvidenceService()
+    DEPS = default_deps()
+    evidence_service = EvidenceService(deps=DEPS)
+
+    def retrieve(query: str, max_items: int = 5):
+        return _retrieve(query, max_items=max_items, run_research_fn=DEPS.run_research)
 
     class EvidenceAnalyzeRequest(BaseModel):
         query: str = Field(..., min_length=1)

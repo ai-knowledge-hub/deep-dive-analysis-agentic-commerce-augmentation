@@ -74,6 +74,11 @@ Let users test their products against user queries and see what an LLM shopping 
 │  • Missing: outcome framing ("Combat glare")                 │
 │  • Missing: context fit ("bright living room")               │
 │  • Present but hidden: 3000 nits (the actual differentiator) │
+│                                                              │
+│  PROTOCOL READINESS (UCP/ACP):                               │
+│  • UCP readiness: 72/100                                     │
+│  • Missing: UCP checkout capability                          │
+│  • Missing: REST endpoint in business profile                │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -144,6 +149,7 @@ class SimulationResult:
     product_scores: List[ProductScore]
     winner: str  # product_id of recommended product
     gap_analysis: GapAnalysis  # Why user's product lost (if it did)
+    protocol_readiness: List[Dict[str, Any]]  # UCP/ACP readiness issues
     tone: Dict[str, Any]  # Suggested brand tone summary
     lessons: List[str]  # Winner vs loser takeaways
 
@@ -170,7 +176,7 @@ class GapAnalysis:
 ```
 POST /simulation/run
   Input: { query, products[] }
-  Output: { run_id, result: { intent, scores, winner_id, gap_analysis, tone } }
+  Output: { run_id, result: { intent, scores, winner_id, gap_analysis, protocol_readiness, tone } }
 
 POST /simulation/optimize
   Input: { run_id, product_id, tone? }
@@ -187,6 +193,12 @@ POST /simulation/tone
 POST /simulation/tone/from-brand
   Input: { run_id? }
   Output: { status, message }  # stub until catalog integration
+
+GET /admin/platform-profile
+  Output: { profile }  # UCP platform profile used for intersection
+
+PUT /admin/platform-profile
+  Input: { name, version, profile }  # editable platform capabilities
 ```
 
 ### UI Components
@@ -194,6 +206,7 @@ POST /simulation/tone/from-brand
 - **Scenario Setup Form**: Query input, product description input, competitor inputs
 - **Results Dashboard**: Side-by-side product cards with scores
 - **Gap Analysis Panel**: Why you lost, what's missing
+- **Protocol Readiness**: UCP/ACP readiness score + missing capabilities
 - **Tone Card**: Suggested brand voice with accept/edit/clear
 - **Optimization Preview**: Before/after with score delta
 - **Re-test Button**: Immediate feedback on changes

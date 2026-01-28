@@ -12,10 +12,11 @@ from pydantic import BaseModel, Field
 from domain.simulation.types import SimulationProduct
 from application.services.simulation_service import SimulationService
 from api.utils.tenancy import require_client_id
+from api.composition import default_deps
 
 if APIRouter:
     router = APIRouter(prefix="/simulation", tags=["simulation"])
-    simulation_service = SimulationService()
+    simulation_service = SimulationService(deps=default_deps())
 
     class SimulationProductPayload(BaseModel):
         id: str

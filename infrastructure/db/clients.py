@@ -95,6 +95,15 @@ def get_product(*, product_id: str) -> Dict[str, Any] | None:
     return _product_row(row) if row else None
 
 
+def get_brand(*, brand_id: str) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute("SELECT * FROM brands WHERE id = ?", (brand_id,))
+        .fetchone()
+    )
+    return _brand_row(row) if row else None
+
+
 def get_product_for_client(*, client_id: str, product_id: str) -> Dict[str, Any] | None:
     row = (
         get_connection()
@@ -222,10 +231,10 @@ __all__ = [
     "list_brands",
     "create_product",
     "list_products",
+    "get_brand",
     "get_product",
     "get_product_for_client",
     "search_products_for_client",
     "add_client_user",
     "list_client_users",
 ]
-

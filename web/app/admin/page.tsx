@@ -8,6 +8,7 @@ import type {
   AdminClient,
   AdminClientUser,
   AdminProduct,
+  AdminPlatformProfile,
   SessionSummary,
 } from "../../lib/types";
 import {
@@ -16,11 +17,13 @@ import {
   createAdminClient,
   createAdminProduct,
   deleteConversationSession,
+  getAdminPlatformProfile,
   listAdminBrands,
   listAdminClientUsers,
   listAdminClients,
   listAdminProducts,
   listConversationSessions,
+  updateAdminPlatformProfile,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -48,6 +51,12 @@ export default function AdminPage() {
   const [brands, setBrands] = useState<AdminBrand[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [clientUsers, setClientUsers] = useState<AdminClientUser[]>([]);
+  const [platformProfile, setPlatformProfile] = useState<AdminPlatformProfile | null>(null);
+  const [platformProfileText, setPlatformProfileText] = useState<string>("");
+  const [platformProfileName, setPlatformProfileName] = useState<string>("");
+  const [platformProfileVersion, setPlatformProfileVersion] = useState<string>("2026-01-11");
+  const [platformProfileError, setPlatformProfileError] = useState<string | null>(null);
+  const [platformProfileSaved, setPlatformProfileSaved] = useState<boolean>(false);
 
   const [activeClientId, setActiveClientId] = useState<string>("");
   const [activeBrandId, setActiveBrandId] = useState<string>("");
@@ -67,6 +76,19 @@ export default function AdminPage() {
       }
     });
   }, [activeClientId, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void getAdminPlatformProfile(userId).then((response) => {
+      if (!response.profile) return;
+      setPlatformProfile(response.profile);
+      setPlatformProfileText(
+        JSON.stringify(response.profile.profile ?? {}, null, 2),
+      );
+      setPlatformProfileName(response.profile.name ?? "UCP Platform Profile");
+      setPlatformProfileVersion(response.profile.version ?? "2026-01-11");
+    });
+  }, [userId]);
 
   useEffect(() => {
     if (!activeClientId || !userId) {
@@ -186,6 +208,32 @@ export default function AdminPage() {
     setClientUsers((current) => [response.user, ...current]);
     setUserForm({ ...emptyForm });
   }, [activeClientId, userForm, userId]);
+
+  const handleSavePlatformProfile = useCallback(async () => {
+    if (!userId || !platformProfile) return;
+    try {
+      const parsed = JSON.parse(platformProfileText || "{}");
+      const response = await updateAdminPlatformProfile(
+        {
+          name: platformProfileName || "UCP Platform Profile",
+          version: platformProfileVersion || "2026-01-11",
+          profile: parsed,
+        },
+        userId,
+      );
+      setPlatformProfile(response.profile);
+      setPlatformProfileText(
+        JSON.stringify(response.profile.profile ?? {}, null, 2),
+      );
+      setPlatformProfileName(response.profile.name ?? "UCP Platform Profile");
+      setPlatformProfileVersion(response.profile.version ?? "2026-01-11");
+      setPlatformProfileError(null);
+      setPlatformProfileSaved(true);
+      window.setTimeout(() => setPlatformProfileSaved(false), 1500);
+    } catch (error) {
+      setPlatformProfileError("Invalid JSON. Please fix the profile JSON.");
+    }
+  }, [platformProfile, platformProfileName, platformProfileText, platformProfileVersion, userId]);
 
   return (
     <div className="app">
@@ -320,6 +368,52 @@ export default function AdminPage() {
                   Add client
                 </button>
               </div>
+            </section>
+
+            <section className="panel__card admin__panel">
+              <div className="panel__header">
+                <h3>Platform profile</h3>
+                <span className="panel__meta">UCP 2026-01-11</span>
+              </div>
+              {!platformProfile ? (
+                <p className="panel__empty">Platform profile not loaded yet.</p>
+              ) : (
+                <>
+                  <div className="admin__form">
+                    <span className="panel__label">Profile JSON</span>
+                    <input
+                      type="text"
+                      placeholder="Profile name"
+                      value={platformProfileName}
+                      onChange={(event) => setPlatformProfileName(event.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Version"
+                      value={platformProfileVersion}
+                      onChange={(event) => setPlatformProfileVersion(event.target.value)}
+                    />
+                    <textarea
+                      rows={8}
+                      value={platformProfileText}
+                      onChange={(event) => setPlatformProfileText(event.target.value)}
+                    />
+                    {platformProfileError && (
+                      <p className="panel__error">{platformProfileError}</p>
+                    )}
+                    {platformProfileSaved && (
+                      <p className="panel__success">Saved platform profile.</p>
+                    )}
+                    <button
+                      type="button"
+                      className="button button--primary"
+                      onClick={handleSavePlatformProfile}
+                    >
+                      Save profile
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
 
             <section className="panel__card admin__panel">
