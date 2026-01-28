@@ -50,6 +50,7 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 | **Verification (Lift)** | Show before/after discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
 | **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
 | **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
+| **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
 
 ---
 
@@ -205,6 +206,10 @@ When `CATALOG_SOURCE=mock`, the catalog stream is disabled and the UI shows rese
 
 Evidence-first demo data loads from `data/evidence_demo.json` when `EVIDENCE_DEMO=true`
 (default). Override with `EVIDENCE_DEMO_PATH` if you want a different dataset.
+
+Protocol readiness (UCP/ACP) is computed from brand profiles + feed metadata and shown in the
+Simulation Sandbox “Why you lost” section and history list. Seeded demo brands include
+mock UCP business profiles and ACP feed fields to make readiness scores visible.
 
 Copy `.env.example` to `.env.local` for backend settings, and add Clerk keys to
 `web/.env.local` for the frontend.

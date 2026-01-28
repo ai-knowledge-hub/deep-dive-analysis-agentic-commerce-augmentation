@@ -79,6 +79,7 @@ Let users test their products against user queries and see what an LLM shopping 
 │  • UCP readiness: 72/100                                     │
 │  • Missing: UCP checkout capability                          │
 │  • Missing: REST endpoint in business profile                │
+│  • ACP feed stale: update within 15 minutes                  │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼

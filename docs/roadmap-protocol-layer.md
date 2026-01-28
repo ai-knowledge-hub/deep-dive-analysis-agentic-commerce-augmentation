@@ -15,11 +15,13 @@ This roadmap translates the Phase 6–9 additions in `docs/build-plan.md` into c
 - Mock UCP discovery endpoint (query + filters → structured results). ✅
 - Intent → protocol query translator. ✅
 - Protocol readiness preview UI (capability + profile issues). ✅
+- ACP readiness checks (feed + checkout + delegated payment). ✅
 
 ### Success signals
 - One scenario shows different outcomes between web‑inference and protocol‑feed paths.
 - Gap analysis includes protocol field misses (capabilities, availability, enable_checkout).
 - UCP readiness score + issues visible in simulation output.
+- ACP readiness score + feed freshness warnings visible in simulation output.
 
 ---
 

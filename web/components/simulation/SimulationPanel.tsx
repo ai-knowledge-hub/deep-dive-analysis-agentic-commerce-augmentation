@@ -86,24 +86,30 @@ export function SimulationPanel({
     run?.result?.gap_analysis?.find((gap) => gap.product_id === selectedProductId) ??
     run?.result?.gap_analysis?.[0] ??
     null;
+  const protocolEntries = (run?.result?.protocol_readiness ?? []).filter(
+    (entry) => entry.product_id === selectedProductId
+  );
   const protocolReadiness =
-    run?.result?.protocol_readiness?.find(
-      (entry) => entry.product_id === selectedProductId
-    ) ??
-    run?.result?.protocol_readiness?.[0] ??
-    null;
-  const protocolIssues = protocolReadiness?.issues ?? [];
-  const protocolScore = (() => {
-    const scoreIssue = protocolIssues.find(
-      (issue) => issue.field === "ucp_readiness_score"
-    );
-    if (!scoreIssue?.message) return null;
-    const match = scoreIssue.message.match(/(\\d{1,3})\\s*\\/\\s*100/);
-    if (!match) return null;
-    const value = Number(match[1]);
-    if (Number.isNaN(value)) return null;
-    return value;
-  })();
+    protocolEntries.length > 0
+      ? protocolEntries
+      : run?.result?.protocol_readiness ?? [];
+
+  const readinessByProtocol = ["ucp", "acp"]
+    .map((protocol) => {
+      const entry =
+        protocolReadiness.find((item) => item.protocol === protocol) ?? null;
+      const issues = entry?.issues ?? [];
+      const scoreIssue = issues.find(
+        (issue) => issue.field === `${protocol}_readiness_score`
+      );
+      const scoreMatch = scoreIssue?.message?.match(/(\d{1,3})\s*\/\s*100/);
+      const score =
+        scoreMatch && !Number.isNaN(Number(scoreMatch[1]))
+          ? Number(scoreMatch[1])
+          : null;
+      return { protocol, issues, score, hasEntry: Boolean(entry) };
+    })
+    .filter((entry) => entry.hasEntry);
 
   return (
     <div className="panel__card">
@@ -167,24 +173,32 @@ export function SimulationPanel({
         </div>
       )}
 
-      {protocolIssues.length > 0 && (
+      {protocolReadiness.length > 0 && (
         <div className="simulation__comparison">
           <span className="simulation__diff-label">Protocol readiness</span>
-          {protocolScore !== null && (
-            <div className="simulation__protocol-score">
-              Readiness score: {protocolScore}/100
+          {readinessByProtocol.map((entry) => (
+            <div key={entry.protocol} className="simulation__protocol-block">
+              <div className="simulation__protocol-title">
+                {entry.protocol.toUpperCase()}
+              </div>
+              {entry.score !== null && (
+                <div className="simulation__protocol-score">
+                  Readiness score: {entry.score}/100
+                </div>
+              )}
+              <ul>
+                {entry.issues
+                  .filter((issue) => issue.severity !== "info")
+                  .slice(0, 4)
+                  .map((issue, index) => (
+                    <li key={`${entry.protocol}-${issue.field}-${index}`}>
+                      <strong>{issue.severity.toUpperCase()}:</strong>{" "}
+                      {issue.message}
+                    </li>
+                  ))}
+              </ul>
             </div>
-          )}
-          <ul>
-            {protocolIssues
-              .filter((issue) => issue.severity !== "info")
-              .slice(0, 4)
-              .map((issue, index) => (
-                <li key={`${issue.field}-${index}`}>
-                <strong>{issue.severity.toUpperCase()}:</strong> {issue.message}
-              </li>
-            ))}
-          </ul>
+          ))}
         </div>
       )}
 

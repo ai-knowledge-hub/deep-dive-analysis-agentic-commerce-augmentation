@@ -106,18 +106,24 @@ Useful for testing aggregated product flows without API dependencies.
 
 ---
 
-## Future Adapters
+## Protocol Adapters (Layer 2)
 
-The architecture supports additional adapters:
+We now ship **mock-first** protocol adapters for readiness scoring and discovery simulation:
+
+| Adapter | Status | Description |
+|---------|--------|-------------|
+| **UCP** | ✅ Mock | Business profile validation + capability intersection + readiness issues |
+| **ACP** | ✅ Mock | Feed readiness + freshness + checkout/payment readiness issues |
+
+These adapters are used in the Simulation Sandbox “Protocol readiness” panel and history badges.
+See [docs/roadmap-protocol-layer.md](./roadmap-protocol-layer.md) for next steps.
+
+## Future Adapters
 
 | Planned | Description |
 |---------|-------------|
-| **UCP** | Google Universal Commerce Protocol integration |
-| **ACP** | OpenAI Agentic Commerce Protocol integration |
 | **Amazon** | Amazon Product Advertising API |
 | **Direct API** | Generic REST/GraphQL product APIs |
-
-See [docs/strategic-positioning.md](./strategic-positioning.md) for UCP adapter design.
 
 ---
 

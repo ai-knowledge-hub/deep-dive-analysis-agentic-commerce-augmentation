@@ -342,6 +342,25 @@ def seed_demo_competitors() -> Dict[str, int]:
                 "ucp_version": PINNED_UCP_VERSION,
                 "ucp_profile_source": "seed",
                 "ucp_profile": _build_ucp_profile(tenant["site"]),
+                "acp_profile": {
+                    "checkout": {
+                        "endpoints": {
+                            "create_session": f"{tenant['site'].rstrip('/')}/acp/checkout-sessions",
+                            "update_session": f"{tenant['site'].rstrip('/')}/acp/checkout-sessions/{{id}}",
+                        },
+                        "webhooks": [
+                            f"{tenant['site'].rstrip('/')}/acp/webhooks/order",
+                        ],
+                    },
+                    "payment": {
+                        "delegated": True,
+                        "psp": "stripe",
+                        "token_constraints": {
+                            "max_amount": 500.0,
+                            "expires_in_minutes": 15,
+                        },
+                    },
+                },
             },
         )
         created_brands += 1
@@ -356,6 +375,21 @@ def seed_demo_competitors() -> Dict[str, int]:
                 "offer_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
                 "availability": "in_stock",
                 "price": 99.0,
+                "acp": {
+                    "item_id": product["id"],
+                    "title": product["name"],
+                    "description": product["description"],
+                    "url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
+                    "image_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}.jpg",
+                    "price": "99.00 USD",
+                    "availability": "in_stock",
+                    "brand": tenant["name"],
+                    "is_eligible_search": True,
+                    "is_eligible_checkout": True,
+                    "seller_name": tenant["name"],
+                    "seller_url": tenant["site"],
+                    "updated_at": "2026-01-28T12:00:00Z",
+                },
             }
             _upsert_product(
                 product_id=product["id"],
