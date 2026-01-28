@@ -18,9 +18,9 @@ from llm.agents.layer2_agent import Layer2Agent
 
 if APIRouter:
     router = APIRouter(prefix="/agents", tags=["agents"])
-    layer2_agent = Layer2Agent()
     deps = default_deps()
     layer1_agent = Layer1Agent(evidence_service=EvidenceService(deps=deps))
+    layer2_agent = Layer2Agent(deps=deps)
     orchestrator = OrchestratorAgent(layer1=layer1_agent, layer2=layer2_agent)
 
     class Layer1RunRequest(BaseModel):
@@ -88,8 +88,14 @@ if APIRouter:
     @router.post("/layer2/candidates")
     def layer2_candidates(payload: Layer2CandidatesRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return layer2_agent.get_catalog_candidates(
+        # Return both catalog candidates and protocol-layer candidates so we can
+        # compare inference vs declaration paths.
+        catalog = layer2_agent.get_catalog_candidates(
             client_id=client_scope, query=payload.query, limit=payload.limit
         )
+        protocol = layer2_agent.discover_protocol_candidates(
+            client_id=client_scope, query=payload.query, limit=payload.limit
+        )
+        return {"catalog": catalog, "protocol": protocol}
 else:  # pragma: no cover
     router = None

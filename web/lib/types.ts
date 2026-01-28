@@ -124,6 +124,19 @@ export type SimulationGapReport = {
   competitor_summary?: string | null;
 };
 
+export type ProtocolReadinessIssue = {
+  field: string;
+  severity: "info" | "warning" | "error";
+  message: string;
+  fix?: string | null;
+};
+
+export type ProtocolReadinessReport = {
+  product_id: string;
+  protocol: "ucp" | "acp";
+  issues: ProtocolReadinessIssue[];
+};
+
 export type SimulationRunResponse = {
   run_id: string;
   result: {
@@ -152,6 +165,7 @@ export type SimulationRunResponse = {
       summary: string;
       markers?: Record<string, string | number>;
     };
+    protocol_readiness?: ProtocolReadinessReport[];
   };
 };
 
@@ -176,6 +190,7 @@ export type SimulationRunSummary = {
   query: string;
   created_at?: string;
   winner_id?: string | null;
+  protocol_readiness_score?: number | null;
   brand_id?: string | null;
   product_id?: string | null;
 };
@@ -196,6 +211,19 @@ export type SimulationRunDetailResponse = {
     result: SimulationRunResponse["result"];
     retest?: SimulationRunResponse["result"] | null;
   };
+};
+
+export type AdminPlatformProfile = {
+  id: string;
+  name: string;
+  version: string;
+  profile: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AdminPlatformProfileResponse = {
+  profile: AdminPlatformProfile;
 };
 
 export type SimulationAttachResponse = {

@@ -13,6 +13,8 @@ from typing import Any, Dict, List
 from shared.db.connection import DEFAULT_DB_PATH, get_connection, init_db
 from infrastructure.db.json import to_json
 
+PINNED_UCP_VERSION = "2026-01-11"
+
 
 def _upsert_client(*, client_id: str, name: str, metadata: Dict[str, Any]) -> None:
     conn = get_connection()
@@ -66,6 +68,41 @@ def _upsert_product(
         """,
         (product_id, brand_id, name, description, to_json(metadata) or to_json({})),
     )
+
+
+def _build_ucp_profile(site_url: str) -> Dict[str, Any]:
+    base = site_url.rstrip("/")
+    return {
+        "ucp": {
+            "version": PINNED_UCP_VERSION,
+            "services": {
+                "dev.ucp.transport.rest": [
+                    {
+                        "version": PINNED_UCP_VERSION,
+                        "id": "rest",
+                        "config": {"endpoint": f"{base}/ucp"},
+                    }
+                ]
+            },
+            "capabilities": {
+                "dev.ucp.shopping.checkout": [
+                    {
+                        "version": PINNED_UCP_VERSION,
+                        "spec": "https://ucp.dev/specification/checkout",
+                        "schema": "https://ucp.dev/schemas/shopping/checkout.json",
+                    }
+                ],
+                "dev.ucp.shopping.order": [
+                    {
+                        "version": PINNED_UCP_VERSION,
+                        "spec": "https://ucp.dev/specification/order",
+                        "schema": "https://ucp.dev/schemas/shopping/order.json",
+                    }
+                ],
+            },
+            "payment_handlers": {},
+        }
+    }
 
 
 def seed_demo_competitors() -> Dict[str, int]:
@@ -300,7 +337,12 @@ def seed_demo_competitors() -> Dict[str, int]:
             brand_id=brand_id,
             client_id=tenant["id"],
             name=tenant["name"],
-            metadata={"site_url": tenant["site"]},
+            metadata={
+                "site_url": tenant["site"],
+                "ucp_version": PINNED_UCP_VERSION,
+                "ucp_profile_source": "seed",
+                "ucp_profile": _build_ucp_profile(tenant["site"]),
+            },
         )
         created_brands += 1
 

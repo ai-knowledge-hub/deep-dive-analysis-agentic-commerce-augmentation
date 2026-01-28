@@ -22,6 +22,7 @@ import {
   AdminBrand,
   AdminProduct,
   AdminClientUser,
+  AdminPlatformProfileResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -427,6 +428,33 @@ export async function addAdminClientUser(
 ): Promise<{ user: AdminClientUser }> {
   return request<{ user: AdminClientUser }>(`/clients/${clientId}/users`, {
     method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function getAdminPlatformProfile(
+  userId?: string | null,
+): Promise<AdminPlatformProfileResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminPlatformProfileResponse>(`/platform-profile${suffix}`);
+}
+
+export async function updateAdminPlatformProfile(
+  payload: {
+    name: string;
+    version: string;
+    profile: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AdminPlatformProfileResponse> {
+  return request<AdminPlatformProfileResponse>("/platform-profile", {
+    method: "PUT",
     body: JSON.stringify({
       ...payload,
       user_id: userId ?? undefined,

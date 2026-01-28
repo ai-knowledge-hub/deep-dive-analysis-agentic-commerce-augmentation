@@ -19,6 +19,7 @@ from infrastructure.db import (
     clients as clients_repo,
     episodes as episodes_repo,
     goals as goals_repo,
+    platform_profiles as platform_profiles_repo,
     replays as replays_repo,
     recommendations as recommendations_repo,
     sessions as sessions_repo,
@@ -34,6 +35,8 @@ from infrastructure.llm.prompts import build_optimization_prompt
 from infrastructure.llm.research_agent import run_research
 from infrastructure.memory.semantic_memory import SemanticMemory
 from infrastructure.simulation.gap_analysis import analyze_gap, derive_lessons
+from infrastructure.protocol.acp import discover_acp_candidates, validate_acp_candidate
+from infrastructure.protocol.ucp import discover_ucp_candidates, validate_ucp_candidate
 
 
 def default_deps() -> AppDeps:
@@ -49,6 +52,7 @@ def default_deps() -> AppDeps:
         replays=replays_repo,
         simulation_runs=simulation_runs_repo,
         clients=clients_repo,
+        platform_profiles=platform_profiles_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),
@@ -64,6 +68,10 @@ def default_deps() -> AppDeps:
         alignment_score_products=goal_alignment_gateway.score_products,
         simulation_analyze_gap=analyze_gap,
         simulation_derive_lessons=derive_lessons,
+        protocol_discover_acp=discover_acp_candidates,
+        protocol_discover_ucp=discover_ucp_candidates,
+        protocol_validate_acp=validate_acp_candidate,
+        protocol_validate_ucp=validate_ucp_candidate,
     )
 
 

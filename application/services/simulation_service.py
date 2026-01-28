@@ -10,6 +10,7 @@ from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCal
 from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
 from domain.simulation.ranking import lift_summary
 from domain.simulation.types import SimulationProduct
+from domain.protocol.types import ProtocolCandidate
 from application.ports.deps import AppDeps
 from application.services.simulation_optimizer import optimize_product
 from application.services.simulation_runner import run_simulation
@@ -31,12 +32,17 @@ class SimulationService:
         )
         payload: list[Dict[str, Any]] = []
         for run in runs:
+            result = run.get("result") or {}
+            winner_id = result.get("winner_id")
             payload.append(
                 {
                     "id": run.get("id"),
                     "query": run.get("query"),
                     "created_at": run.get("created_at"),
-                    "winner_id": (run.get("result") or {}).get("winner_id"),
+                    "winner_id": winner_id,
+                    "protocol_readiness_score": _extract_protocol_readiness_score(
+                        result, winner_id
+                    ),
                     "brand_id": run.get("brand_id"),
                     "product_id": run.get("product_id"),
                 }
@@ -125,6 +131,11 @@ class SimulationService:
         if isinstance(result, dict):
             result["_replay"] = replay.to_dict()
 
+        if isinstance(result, dict):
+            result["protocol_readiness"] = _protocol_readiness_for_items(
+                self._deps, resolved_raw_products
+            )
+
         tone_summary = (result.get("tone") or {}).get("summary")
         stored = self._deps.simulation_runs.create_run(
             query=query,
@@ -172,6 +183,7 @@ class SimulationService:
                 metadata = product.get("metadata") or {}
                 raw_item = {
                     "id": product["id"],
+                    "brand_id": product.get("brand_id"),
                     "name": product["name"],
                     "description": product.get("description") or "",
                     "source": str(metadata.get("source") or "catalog"),
@@ -201,6 +213,7 @@ class SimulationService:
                 metadata = match.get("metadata") or {}
                 raw_item = {
                     "id": match["id"],
+                    "brand_id": match.get("brand_id"),
                     "name": match["name"],
                     "description": match.get("description") or "",
                     "source": str(metadata.get("source") or "catalog"),
@@ -311,6 +324,10 @@ class SimulationService:
                 after_scores=after_scores,
                 optimized_product_id=optimized_product_id,
             )
+            result["protocol_readiness"] = _protocol_readiness_for_items(
+                self._deps,
+                [_simulation_product_dict(p) for p in optimized_products],
+            )
 
         replay = ReplayRecord(
             run_type="simulation.retest",
@@ -418,6 +435,136 @@ def _to_simulation_product(item: Dict[str, Any]) -> SimulationProduct:
         confidence=float(item.get("confidence") or 0.5),
         metadata=item.get("metadata") or {},
     )
+
+
+def _simulation_product_dict(product: SimulationProduct) -> Dict[str, Any]:
+    return {
+        "id": product.id,
+        "name": product.name,
+        "description": product.description,
+        "source": product.source,
+        "url": product.url,
+        "price": product.price,
+        "confidence": product.confidence,
+        "metadata": product.metadata,
+    }
+
+
+def _protocol_readiness_for_items(
+    deps: AppDeps, items: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    readiness: List[Dict[str, Any]] = []
+    for item in items:
+        candidate = _to_protocol_candidate(item)
+        issues = deps.protocol_validate_ucp(candidate)
+        readiness.append(
+            {
+                "product_id": candidate.id,
+                "protocol": candidate.protocol,
+                "issues": [issue.__dict__ for issue in issues],
+            }
+        )
+    return readiness
+
+
+def _to_protocol_candidate(item: Dict[str, Any]) -> ProtocolCandidate:
+    meta = item.get("metadata") or {}
+    ucp_meta = meta.get("ucp") or {}
+    attributes = ucp_meta.get("attributes") or meta.get("attributes") or {}
+    return ProtocolCandidate(
+        id=item.get("id") or "",
+        name=item.get("name") or "",
+        description=item.get("description") or "",
+        protocol="ucp",
+        offer_url=_pick(ucp_meta, meta, "offer_url", "url") or item.get("url"),
+        merchant_name=_pick(ucp_meta, meta, "merchant_name"),
+        price=_pick_number(ucp_meta, meta, "price") or item.get("price"),
+        currency=_pick(ucp_meta, meta, "currency"),
+        availability=_pick(ucp_meta, meta, "availability"),
+        available_for_sale=_pick_bool(ucp_meta, meta, "available_for_sale"),
+        inventory_quantity=_pick_int(ucp_meta, meta, "inventory_quantity"),
+        attributes=attributes if isinstance(attributes, dict) else {},
+        raw={"product": {**item, "metadata": meta}},
+    )
+
+
+def _extract_protocol_readiness_score(
+    result: Dict[str, Any], winner_id: Optional[str]
+) -> Optional[int]:
+    readiness = result.get("protocol_readiness") or []
+    if not isinstance(readiness, list) or not readiness:
+        return None
+    entry = None
+    if winner_id:
+        entry = next(
+            (item for item in readiness if item.get("product_id") == winner_id),
+            None,
+        )
+    if entry is None:
+        entry = readiness[0] if readiness else None
+    if not entry:
+        return None
+    issues = entry.get("issues") or []
+    for issue in issues:
+        if issue.get("field") == "ucp_readiness_score":
+            message = issue.get("message") or ""
+            match = None
+            if isinstance(message, str):
+                match = __import__("re").search(r"(\\d{1,3})\\s*/\\s*100", message)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    return None
+    return None
+
+
+def _pick(primary: Dict[str, Any], fallback: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in primary and primary.get(key) is not None:
+            return primary.get(key)
+        if key in fallback and fallback.get(key) is not None:
+            return fallback.get(key)
+    return None
+
+
+def _pick_number(
+    primary: Dict[str, Any], fallback: Dict[str, Any], key: str
+) -> Optional[float]:
+    value = _pick(primary, fallback, key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_int(
+    primary: Dict[str, Any], fallback: Dict[str, Any], key: str
+) -> Optional[int]:
+    value = _pick(primary, fallback, key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_bool(
+    primary: Dict[str, Any], fallback: Dict[str, Any], key: str
+) -> Optional[bool]:
+    value = _pick(primary, fallback, key)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return None
 
 
 def _get_run(

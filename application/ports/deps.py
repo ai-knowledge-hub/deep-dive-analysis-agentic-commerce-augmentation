@@ -115,6 +115,14 @@ class ClientsStore(Protocol):
     def search_products_for_client(self, **kwargs: Any) -> list[dict]: ...
 
 
+class PlatformProfilesStore(Protocol):
+    def get_platform_profile(self, **kwargs: Any) -> dict | None: ...
+
+    def upsert_platform_profile(self, **kwargs: Any) -> dict: ...
+
+    def ensure_platform_profile(self, **kwargs: Any) -> dict: ...
+
+
 class SemanticMemory(Protocol):
     def get(self, key: str) -> list[str]: ...
 
@@ -137,6 +145,7 @@ class AppDeps:
     replays: ReplaysStore
     simulation_runs: SimulationRunsStore
     clients: ClientsStore
+    platform_profiles: PlatformProfilesStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]
@@ -160,3 +169,9 @@ class AppDeps:
     # Simulation gap analysis (may use embeddings in infrastructure)
     simulation_analyze_gap: Callable[..., dict]
     simulation_derive_lessons: Callable[..., list]
+
+    # Protocol discovery (Layer 2) adapters
+    protocol_discover_acp: Callable[..., list]
+    protocol_discover_ucp: Callable[..., list]
+    protocol_validate_acp: Callable[..., list]
+    protocol_validate_ucp: Callable[..., list]
