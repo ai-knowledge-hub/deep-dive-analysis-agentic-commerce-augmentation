@@ -1673,6 +1673,19 @@ ul { list-style: none; }
   color: var(--text-primary);
 }
 
+.simulation__protocol-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.simulation__protocol-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .simulation__lessons {
   margin-top: 10px;
   padding: 10px;
@@ -1799,6 +1812,19 @@ ul { list-style: none; }
   margin-top: 4px;
   font-size: 10px;
   color: var(--text-muted);
+}
+
+.simulation__history-badge {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .admin__grid {

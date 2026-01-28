@@ -51,6 +51,11 @@ export function SimulationHistory({
                     </span>
                   )}
                 </div>
+                {typeof run.protocol_readiness_score === "number" && (
+                  <span className="simulation__history-badge">
+                    Protocol: {run.protocol_readiness_score}/100
+                  </span>
+                )}
                 {run.created_at && (
                   <span className="simulation__history-meta">
                     {new Date(run.created_at).toLocaleDateString()}

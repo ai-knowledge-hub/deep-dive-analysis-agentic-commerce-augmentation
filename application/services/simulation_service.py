@@ -455,34 +455,43 @@ def _protocol_readiness_for_items(
 ) -> List[Dict[str, Any]]:
     readiness: List[Dict[str, Any]] = []
     for item in items:
-        candidate = _to_protocol_candidate(item)
-        issues = deps.protocol_validate_ucp(candidate)
+        ucp_candidate = _to_protocol_candidate(item, protocol="ucp")
+        ucp_issues = deps.protocol_validate_ucp(ucp_candidate)
         readiness.append(
             {
-                "product_id": candidate.id,
-                "protocol": candidate.protocol,
-                "issues": [issue.__dict__ for issue in issues],
+                "product_id": ucp_candidate.id,
+                "protocol": ucp_candidate.protocol,
+                "issues": [issue.__dict__ for issue in ucp_issues],
+            }
+        )
+        acp_candidate = _to_protocol_candidate(item, protocol="acp")
+        acp_issues = deps.protocol_validate_acp(acp_candidate)
+        readiness.append(
+            {
+                "product_id": acp_candidate.id,
+                "protocol": acp_candidate.protocol,
+                "issues": [issue.__dict__ for issue in acp_issues],
             }
         )
     return readiness
 
 
-def _to_protocol_candidate(item: Dict[str, Any]) -> ProtocolCandidate:
+def _to_protocol_candidate(item: Dict[str, Any], protocol: str) -> ProtocolCandidate:
     meta = item.get("metadata") or {}
-    ucp_meta = meta.get("ucp") or {}
-    attributes = ucp_meta.get("attributes") or meta.get("attributes") or {}
+    protocol_meta = meta.get(protocol) if isinstance(meta.get(protocol), dict) else {}
+    attributes = protocol_meta.get("attributes") or meta.get("attributes") or {}
     return ProtocolCandidate(
         id=item.get("id") or "",
         name=item.get("name") or "",
         description=item.get("description") or "",
-        protocol="ucp",
-        offer_url=_pick(ucp_meta, meta, "offer_url", "url") or item.get("url"),
-        merchant_name=_pick(ucp_meta, meta, "merchant_name"),
-        price=_pick_number(ucp_meta, meta, "price") or item.get("price"),
-        currency=_pick(ucp_meta, meta, "currency"),
-        availability=_pick(ucp_meta, meta, "availability"),
-        available_for_sale=_pick_bool(ucp_meta, meta, "available_for_sale"),
-        inventory_quantity=_pick_int(ucp_meta, meta, "inventory_quantity"),
+        protocol=protocol,  # type: ignore[arg-type]
+        offer_url=_pick(protocol_meta, meta, "offer_url", "url") or item.get("url"),
+        merchant_name=_pick(protocol_meta, meta, "merchant_name"),
+        price=_pick_number(protocol_meta, meta, "price") or item.get("price"),
+        currency=_pick(protocol_meta, meta, "currency"),
+        availability=_pick(protocol_meta, meta, "availability"),
+        available_for_sale=_pick_bool(protocol_meta, meta, "available_for_sale"),
+        inventory_quantity=_pick_int(protocol_meta, meta, "inventory_quantity"),
         attributes=attributes if isinstance(attributes, dict) else {},
         raw={"product": {**item, "metadata": meta}},
     )
@@ -494,28 +503,41 @@ def _extract_protocol_readiness_score(
     readiness = result.get("protocol_readiness") or []
     if not isinstance(readiness, list) or not readiness:
         return None
-    entry = None
-    if winner_id:
-        entry = next(
-            (item for item in readiness if item.get("product_id") == winner_id),
-            None,
-        )
-    if entry is None:
-        entry = readiness[0] if readiness else None
-    if not entry:
-        return None
-    issues = entry.get("issues") or []
-    for issue in issues:
-        if issue.get("field") == "ucp_readiness_score":
-            message = issue.get("message") or ""
-            match = None
-            if isinstance(message, str):
-                match = __import__("re").search(r"(\\d{1,3})\\s*/\\s*100", message)
-            if match:
-                try:
-                    return int(match.group(1))
-                except ValueError:
-                    return None
+    for preferred_protocol in ("ucp", "acp"):
+        entry = None
+        if winner_id:
+            entry = next(
+                (
+                    item
+                    for item in readiness
+                    if item.get("product_id") == winner_id
+                    and item.get("protocol") == preferred_protocol
+                ),
+                None,
+            )
+        if entry is None:
+            entry = next(
+                (
+                    item
+                    for item in readiness
+                    if item.get("protocol") == preferred_protocol
+                ),
+                None,
+            )
+        if not entry:
+            continue
+        issues = entry.get("issues") or []
+        for issue in issues:
+            if issue.get("field") in {"ucp_readiness_score", "acp_readiness_score"}:
+                message = issue.get("message") or ""
+                match = None
+                if isinstance(message, str):
+                    match = __import__("re").search(r"(\\d{1,3})\\s*/\\s*100", message)
+                if match:
+                    try:
+                        return int(match.group(1))
+                    except ValueError:
+                        return None
     return None
 
 
