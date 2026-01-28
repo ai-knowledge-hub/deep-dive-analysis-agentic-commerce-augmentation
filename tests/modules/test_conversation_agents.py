@@ -13,7 +13,8 @@ from application.services.conversation_agents import (
     ExplainAgent,
 )
 from application.services.commerce_plan_builder import CommercePlanBuilder
-from application.services.alignment_service import alignment_service
+from api.composition import default_deps
+from application.services.alignment_service import AlignmentService
 from application.services.intentionality_profiler import build_profile
 from application.services.context_builder import context_for
 
@@ -95,8 +96,8 @@ def test_commerce_agent_emits_clarifications(fake_reasoner):
     agent = CommerceAgent(
         builder=builder,
         reason_fn=fake_reasoner,
-        assess_fn=alignment_service.assess,
-        score_fn=alignment_service.score_products,
+        assess_fn=AlignmentService(default_deps()).assess,
+        score_fn=AlignmentService(default_deps()).score_products,
         search_fn=lambda q: mock_products,
     )
     plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace upgrade"])
@@ -144,8 +145,8 @@ def test_commerce_agent_filters_low_confidence(fake_reasoner):
     agent = CommerceAgent(
         builder=builder,
         reason_fn=fake_reasoner,
-        assess_fn=alignment_service.assess,
-        score_fn=alignment_service.score_products,
+        assess_fn=AlignmentService(default_deps()).assess,
+        score_fn=AlignmentService(default_deps()).score_products,
         search_fn=lambda q: products,
     )
     plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace"])
@@ -181,8 +182,8 @@ def test_commerce_agent_fallback_query(fake_reasoner):
     agent = CommerceAgent(
         builder=builder,
         reason_fn=fake_reasoner,
-        assess_fn=alignment_service.assess,
-        score_fn=alignment_service.score_products,
+        assess_fn=AlignmentService(default_deps()).assess,
+        score_fn=AlignmentService(default_deps()).score_products,
         search_fn=mock_search,
     )
     plan = agent.build_plan(

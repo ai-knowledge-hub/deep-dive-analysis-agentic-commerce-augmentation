@@ -1,0 +1,70 @@
+"""API composition root.
+
+This module wires concrete infrastructure implementations into application
+services via `AppDeps`.
+
+Why `api/`?
+- `application/` must not import infrastructure (Clean Architecture)
+- `infrastructure/` must not import application (adapter direction)
+- The outermost layer (API) is allowed to depend on both
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from application.ports.deps import AppDeps
+from infrastructure.alignment import goal_alignment_gateway
+from infrastructure.db import (
+    clients as clients_repo,
+    episodes as episodes_repo,
+    goals as goals_repo,
+    replays as replays_repo,
+    recommendations as recommendations_repo,
+    sessions as sessions_repo,
+    simulation_runs as simulation_runs_repo,
+    turns as turns_repo,
+    users as users_repo,
+)
+from infrastructure.db.connection import init_db, set_database_path
+from infrastructure.db.semantic import DEFAULT_CLIENT_ID, DEFAULT_USER_ID
+from infrastructure.llm.gateway import embed, embedding_available, generate
+from infrastructure.llm.intent_classifier import classify_intent
+from infrastructure.llm.prompts import build_optimization_prompt
+from infrastructure.llm.research_agent import run_research
+from infrastructure.memory.semantic_memory import SemanticMemory
+from infrastructure.simulation.gap_analysis import analyze_gap, derive_lessons
+
+
+def default_deps() -> AppDeps:
+    return AppDeps(
+        init_db=init_db,
+        set_database_path=lambda p: set_database_path(Path(p)),
+        sessions=sessions_repo,
+        turns=turns_repo,
+        goals=goals_repo,
+        episodes=episodes_repo,
+        recommendations=recommendations_repo,
+        users=users_repo,
+        replays=replays_repo,
+        simulation_runs=simulation_runs_repo,
+        clients=clients_repo,
+        semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
+            user_id=user_id, client_id=client_id
+        ),
+        default_user_id=DEFAULT_USER_ID,
+        default_client_id=DEFAULT_CLIENT_ID,
+        embedding_available=embedding_available,
+        embed=embed,
+        generate=generate,
+        build_optimization_prompt=build_optimization_prompt,
+        run_research=run_research,
+        classify_intent=classify_intent,
+        alignment_assess=goal_alignment_gateway.assess,
+        alignment_score_products=goal_alignment_gateway.score_products,
+        simulation_analyze_gap=analyze_gap,
+        simulation_derive_lessons=derive_lessons,
+    )
+
+
+__all__ = ["default_deps"]

@@ -1,9 +1,12 @@
 from pathlib import Path
 
+from dataclasses import replace
+
 from infrastructure.memory.semantic_memory import SemanticMemory
 from application.services.session_manager import SessionManager
 from infrastructure.db import goals as goals_repo
 from domain.memory.working import WorkingMemory
+from api.composition import default_deps
 
 
 def test_semantic_memory_persists_in_sqlite(tmp_path: Path):
@@ -28,11 +31,12 @@ def test_working_memory_tracks_turns():
 
 def test_goal_embedding_persists_in_goals_table(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "goals.db"
-    monkeypatch.setattr(
-        "application.services.session_manager.embed",
-        lambda text: [0.11, 0.22, 0.33],
+    deps = replace(
+        default_deps(),
+        embedding_available=lambda: True,
+        embed=lambda text: [0.11, 0.22, 0.33],
     )
-    manager = SessionManager(db_path=db_path)
+    manager = SessionManager(deps=deps, db_path=db_path)
     goal = manager.record_goal("Reduce back pain")
 
     stored = goals_repo.list_goals_for_session(

@@ -1,7 +1,7 @@
 """Backward compatibility: goal clarification agent + state types."""
 
+from application.agents.goal_clarification_agent import GoalClarificationAgent
 from domain.values.types import GoalClarificationState, GoalClarificationTurn
-from infrastructure.llm.goal_clarification_agent import GoalClarificationAgent
 
 __all__ = [
     "GoalClarificationState",

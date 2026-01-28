@@ -38,6 +38,14 @@ lint:
 		$(PYTHON) -m ruff check . --force-exclude; \
 	fi
 
+.PHONY: arch-check
+arch-check:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.arch_check; \
+	else \
+		$(PYTHON) -m scripts.arch_check; \
+	fi
+
 .PHONY: format
 format:
 	@if [ -x ./.venv/bin/python ]; then \

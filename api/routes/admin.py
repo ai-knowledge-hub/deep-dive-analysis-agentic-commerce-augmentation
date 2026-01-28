@@ -11,10 +11,11 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_admin
 from application.services.admin_service import AdminService
+from api.composition import default_deps
 
 if APIRouter:
     router = APIRouter(prefix="", tags=["admin"])
-    admin_service = AdminService()
+    admin_service = AdminService(clients_repo=default_deps().clients)
 
     class ClientCreateRequest(BaseModel):
         id: str = Field(..., min_length=1)

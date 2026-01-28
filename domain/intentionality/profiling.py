@@ -80,4 +80,21 @@ def build_prompt(
     )
 
 
-__all__ = ["base_profile", "build_prompt", "first_sentence", "parse_profile_json"]
+def fallback_profile_for_product(product) -> IntentionalityProfile:
+    """Build a deterministic fallback profile from a Product-like object."""
+    return base_profile(
+        product_id=getattr(product, "id"),
+        capabilities_enabled=list(getattr(product, "capabilities_enabled", []) or []),
+        tags=list(getattr(product, "tags", []) or []),
+        description=getattr(product, "description", None),
+        context_fit=dict(getattr(product, "intent_scores", {}) or {}),
+    )
+
+
+__all__ = [
+    "base_profile",
+    "build_prompt",
+    "fallback_profile_for_product",
+    "first_sentence",
+    "parse_profile_json",
+]

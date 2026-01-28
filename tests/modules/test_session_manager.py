@@ -1,11 +1,12 @@
 from pathlib import Path
 
 from application.services.session_manager import SessionManager
+from api.composition import default_deps
 
 
 def test_session_manager_tracks_goals_and_turns(tmp_path: Path):
     db_path = tmp_path / "memory.db"
-    manager = SessionManager(user_id="test-user", db_path=db_path)
+    manager = SessionManager(deps=default_deps(), user_id="test-user", db_path=db_path)
     manager.record_turn("user", "Need a better chair")
     manager.record_goal("Reduce back pain", domain="health", importance=0.9)
     manager.record_turn("agent", "Logged your goal.", metadata={"type": "ack"})

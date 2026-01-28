@@ -9,6 +9,7 @@ from application.services.context_builder import (
     goal_context,
 )
 from application.services.session_manager import SessionManager
+from api.composition import default_deps
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class MemoryManager:
     """
 
     def __init__(self) -> None:
-        pass
+        self._deps = default_deps()
 
     def session(
         self,
@@ -40,6 +41,7 @@ class MemoryManager:
         state: Optional[Dict[str, Any]] = None,
     ) -> SessionManager:
         return SessionManager(
+            deps=self._deps,
             user_id=user_id,
             session_id=session_id,
             state=state or {},

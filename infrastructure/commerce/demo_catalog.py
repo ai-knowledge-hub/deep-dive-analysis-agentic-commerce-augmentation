@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 from typing import List
 
-from application.services.intentionality_profiler import build_profile
 from domain.commerce.types import Product
+from domain.intentionality.profiling import fallback_profile_for_product
 
 
 CATALOG_PATH = (
@@ -25,7 +25,7 @@ def load_demo_catalog(path: Path = CATALOG_PATH) -> List[Product]:
         payload = json.load(handle)
     products = [Product(**item) for item in payload]
     for product in products:
-        product.intentionality_profile = build_profile(product).to_dict()
+        product.intentionality_profile = fallback_profile_for_product(product).to_dict()
     return products
 
 

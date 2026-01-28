@@ -7,24 +7,27 @@ from __future__ import annotations
 
 from typing import Any, List
 
-from infrastructure.alignment.goal_alignment_gateway import assess as _assess
-from infrastructure.alignment.goal_alignment_gateway import (
-    score_products as _score_products,
-)
+from application.ports.deps import AppDeps
 
 
 class AlignmentService:
+    def __init__(self, deps: AppDeps) -> None:
+        self._deps = deps
+
     def assess(
         self, goals: List[str], products: List[Any], *, use_semantic: bool = True
     ) -> Any:
-        return _assess(goals, products, use_semantic=use_semantic)
+        return self._deps.alignment_assess(goals, products, use_semantic=use_semantic)
 
     def score_products(
         self, goals: List[str], products: List[Any], *, use_semantic: bool = True
     ) -> list:
-        return _score_products(goals, products, use_semantic=use_semantic) or []
+        return (
+            self._deps.alignment_score_products(
+                goals, products, use_semantic=use_semantic
+            )
+            or []
+        )
 
 
-alignment_service = AlignmentService()
-
-__all__ = ["AlignmentService", "alignment_service"]
+__all__ = ["AlignmentService"]

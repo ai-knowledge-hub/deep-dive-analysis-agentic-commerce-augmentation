@@ -8,12 +8,11 @@ from __future__ import annotations
 from typing import Callable
 
 from domain.intentionality.profiling import (
-    base_profile,
     build_prompt,
+    fallback_profile_for_product,
     parse_profile_json,
 )
 from domain.intentionality.types import IntentionalityProfile
-from infrastructure.llm.gateway import generate
 
 
 def _intentionality_prompt_template() -> str:
@@ -39,13 +38,7 @@ def build_profile(
 
     `product` is expected to be `domain.commerce.types.Product`-like.
     """
-    fallback = base_profile(
-        product_id=product.id,
-        capabilities_enabled=list(getattr(product, "capabilities_enabled", []) or []),
-        tags=list(getattr(product, "tags", []) or []),
-        description=getattr(product, "description", None),
-        context_fit=dict(getattr(product, "intent_scores", {}) or {}),
-    )
+    fallback = fallback_profile_for_product(product)
 
     if not generate_fn:
         return fallback
@@ -64,7 +57,10 @@ def build_profile(
 
 
 def build_profile_with_llm(product) -> IntentionalityProfile:
-    return build_profile(product, generate_fn=lambda p: generate(p))
+    raise RuntimeError(
+        "build_profile_with_llm requires dependency injection. "
+        "Call build_profile(product, generate_fn=...) instead."
+    )
 
 
 __all__ = ["build_profile", "build_profile_with_llm", "IntentionalityProfile"]

@@ -11,23 +11,25 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from application.ports.deps import AppDeps
 from domain.commerce.types import Product
 from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
-from infrastructure.llm.intent_classifier import classify_intent
-from application.services.alignment_service import alignment_service
+from application.services.alignment_service import AlignmentService
 from application.services.intentionality_profiler import build_profile
 from domain.simulation.types import SimulationProduct
 from domain.simulation.tone import derive_tone
-from infrastructure.simulation.gap_analysis import analyze_gap, derive_lessons
 
 
-def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, object]:
-    intent = classify_intent(query)
+def run_simulation(
+    *, deps: AppDeps, query: str, products: List[SimulationProduct]
+) -> Dict[str, object]:
+    intent = deps.classify_intent(query)
     goals = extract_intent_goals(intent, fallback=query)
 
     normalized = [_to_product(product) for product in products]
-    scores = alignment_service.score_products(goals, normalized)
+    alignment = AlignmentService(deps)
+    scores = alignment.score_products(goals, normalized)
     score_map = {score.product_id: score for score in scores}
 
     score_dicts = [score.__dict__ for score in scores]
@@ -46,7 +48,7 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
         score = score_map.get(product.id)
         if score:
             gap_reports.append(
-                analyze_gap(
+                deps.simulation_analyze_gap(
                     goal=primary_goal,
                     product=product,
                     score=score.score,
@@ -55,7 +57,11 @@ def run_simulation(query: str, products: List[SimulationProduct]) -> Dict[str, o
             )
 
     tone = derive_tone(products)
-    lessons = derive_lessons(primary_goal, gap_reports) if primary_goal else []
+    lessons = (
+        deps.simulation_derive_lessons(primary_goal, gap_reports)
+        if primary_goal
+        else []
+    )
 
     return {
         "intent": intent,

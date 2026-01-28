@@ -10,15 +10,18 @@ except ImportError:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
+from api.composition import default_deps
+from application.services.evidence_service import EvidenceService
 from llm.agents.layer1_agent import Layer1Agent, Layer1RunConfig
 from llm.agents.orchestrator_agent import OrchestratorAgent, OrchestratorConfig
 from llm.agents.layer2_agent import Layer2Agent
 
 if APIRouter:
     router = APIRouter(prefix="/agents", tags=["agents"])
-    layer1_agent = Layer1Agent()
-    orchestrator = OrchestratorAgent()
     layer2_agent = Layer2Agent()
+    deps = default_deps()
+    layer1_agent = Layer1Agent(evidence_service=EvidenceService(deps=deps))
+    orchestrator = OrchestratorAgent(layer1=layer1_agent, layer2=layer2_agent)
 
     class Layer1RunRequest(BaseModel):
         query: str = Field(..., min_length=1)
