@@ -234,9 +234,9 @@ llm/agents/                  # Agent harness + Layer 1/2 agents (tool loop + rep
 - [x] Remove legacy `modules/` after migrating call-sites
 
 ### Phase 2: Minimal Harness (2–4 days)
-- [ ] Implement tool registry + executor (tool calls become logged observations)
+- [x] Implement tool registry + executor (tool calls become logged observations)
 - [ ] Implement context builder (token budget policies, prompt caching)
-- [ ] Implement replay logger (inputs/outputs/versions/timing for every run)
+- [x] Implement replay logger (inputs/outputs/versions/timing for every run)
 
 ### Phase 3: Layer 1 + Layer 2 Agents (3–7 days)
 - [ ] Layer 1 agent wraps the existing evidence/web pipeline via tools

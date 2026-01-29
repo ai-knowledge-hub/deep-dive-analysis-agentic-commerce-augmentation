@@ -6,6 +6,7 @@ This document complements:
 - `docs/roadmap-protocol-layer.md` (protocol simulation milestones)
 - `docs/build-plan.md` (execution phases)
 - `docs/product-workflow.md` (current user flow)
+- `docs/query-battery-builder.md` (planned experiment loop + query batteries)
 
 ---
 

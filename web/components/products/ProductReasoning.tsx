@@ -13,6 +13,8 @@ type Props = {
   actionLabel?: string;
   onAction?: () => void;
   actionDisabled?: boolean;
+  onQuickCreateBattery?: (productId: string, productName?: string) => void;
+  statusMessage?: string | null;
 };
 
 type MergedProduct = {
@@ -85,6 +87,8 @@ export function ProductReasoning({
   actionLabel,
   onAction,
   actionDisabled,
+  onQuickCreateBattery,
+  statusMessage,
 }: Props) {
   const merged = mergeProducts(products, explanations);
 
@@ -109,6 +113,7 @@ export function ProductReasoning({
           )}
         </div>
       </div>
+      {statusMessage ? <p className="panel__success">{statusMessage}</p> : null}
 
       {merged.length === 0 ? (
         <p className="panel__empty">No recommendations yet.</p>
@@ -119,6 +124,15 @@ export function ProductReasoning({
               <div className="product__header">
                 <span className="product__name">{product.name}</span>
                 <div className="product__meta">
+                  {onQuickCreateBattery && product.id ? (
+                    <button
+                      type="button"
+                      className="product__action"
+                      onClick={() => onQuickCreateBattery(product.id, product.name)}
+                    >
+                      Create battery
+                    </button>
+                  ) : null}
                   {product.alignment_score !== undefined && (
                     <span
                       className="product__confidence product__tooltip"

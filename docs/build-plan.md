@@ -167,9 +167,9 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 
 **Goal:** Simulate ACP/UCP discovery alongside inference-based discovery.
 
-- [ ] Add protocol simulation module (mock ACP feed + UCP discovery)
-- [ ] Translate intent → protocol query filters
-- [ ] Protocol preview UI (show feed rows + missing fields)
+- [x] Add protocol simulation module (mock ACP feed + UCP discovery)
+- [x] Translate intent → protocol query filters
+- [x] Protocol preview UI (show feed rows + missing fields)
 
 ---
 
@@ -254,7 +254,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - [x] Simulation sandbox UI complete
 - [ ] 3 compelling demo scenarios ready
 - [ ] 60-second demo script polished
-- [ ] Protocol preview demo (ACP/UCP mock)
+- [x] Protocol preview demo (ACP/UCP mock)
 - [ ] One real verification surface integrated
 - [ ] Prediction vs reality accuracy metric visible
 

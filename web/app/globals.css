@@ -1171,6 +1171,42 @@ ul { list-style: none; }
   margin-top: 6px;
 }
 
+.panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.panel__input,
+.panel__textarea {
+  background: var(--bg-hover);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.panel__textarea {
+  resize: vertical;
+}
+
+.panel__notice {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 123, 123, 0.1);
+  color: #ff9a9a;
+}
+
 /* =============================================================================
    WORLD A VS B
    ============================================================================= */
@@ -1254,6 +1290,21 @@ ul { list-style: none; }
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-start;
+}
+
+.product__action {
+  border: none;
+  background: rgba(28, 200, 134, 0.15);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.product__action:hover {
+  background: rgba(28, 200, 134, 0.25);
 }
 
 .product__confidence {
