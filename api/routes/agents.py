@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 from application.services.evidence_service import EvidenceService
-from llm.agents.layer1_agent import Layer1Agent, Layer1RunConfig
-from llm.agents.orchestrator_agent import OrchestratorAgent, OrchestratorConfig
-from llm.agents.layer2_agent import Layer2Agent
+from application.agents.layer1_agent import Layer1Agent, Layer1RunConfig
+from application.agents.orchestrator_agent import OrchestratorAgent, OrchestratorConfig
+from application.agents.layer2_agent import Layer2Agent
 
 if APIRouter:
     router = APIRouter(prefix="/agents", tags=["agents"])

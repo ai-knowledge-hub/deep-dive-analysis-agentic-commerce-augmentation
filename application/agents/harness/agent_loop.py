@@ -4,8 +4,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from llm.agents.harness.replay_logger import ReplayRecord, ToolCall
-from llm.agents.harness.tool_registry import ToolRegistry
+from application.agents.harness.replay_logger import ReplayRecord, ToolCall
+from application.agents.harness.tool_registry import ToolRegistry
 
 
 @dataclass(frozen=True)

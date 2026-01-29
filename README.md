@@ -60,8 +60,9 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 ├── domain/                   # Pure types + pure logic (no IO)
 ├── application/              # Use-cases / orchestration services
 ├── infrastructure/           # DB/LLM/adapters (IO boundaries)
+│   ├── llm/                  # Gemini/OpenRouter clients + gateway
 ├── shared/                   # Cross-cutting infrastructure
-│   ├── llm/                 # Gemini, OpenRouter clients + prompts
+│   ├── llm/                  # Prompt templates
 │   ├── db/                  # SQLite schema + connection
 │   └── config/             # Environment configuration
 │

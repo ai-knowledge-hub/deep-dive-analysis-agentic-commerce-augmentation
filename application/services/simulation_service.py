@@ -6,8 +6,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from shared.replay.versions import default_versions
-from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
-from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
+from application.agents.harness.replay_logger import (
+    ReplayLogger,
+    ReplayRecord,
+    ToolCall,
+)
+from application.agents.harness.tool_executor import ToolExecutor, ToolSpec
 from domain.simulation.ranking import lift_summary
 from domain.simulation.types import SimulationProduct
 from domain.protocol.types import ProtocolCandidate

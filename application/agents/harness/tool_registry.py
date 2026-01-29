@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from llm.agents.harness.replay_logger import ToolCall
+from application.agents.harness.replay_logger import ToolCall
 from infrastructure.llm.tools import execute_tool, llm_schema
 
 
@@ -15,7 +15,7 @@ class ToolExecution:
 
 
 class ToolRegistry:
-    """Small adapter around `llm.tools`.
+    """Small adapter around `infrastructure.llm.tools`.
 
     Goals:
     - Provide a single place to build tool schemas for LLM calls.

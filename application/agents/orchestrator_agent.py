@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from llm.agents.layer1_agent import Layer1Agent, Layer1RunConfig
-from llm.agents.layer2_agent import Layer2Agent
+from application.agents.layer1_agent import Layer1Agent, Layer1RunConfig
+from application.agents.layer2_agent import Layer2Agent
 
 
 @dataclass(frozen=True)

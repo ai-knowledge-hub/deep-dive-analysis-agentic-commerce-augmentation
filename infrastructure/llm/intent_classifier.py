@@ -8,7 +8,7 @@ from infrastructure.llm.gateway import generate
 from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier
 from infrastructure.llm.intent_taxonomy import INTENT_TAXONOMY
 from infrastructure.llm.prompts import INTENT_CLASSIFICATION_PROMPT
-from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord
+from application.agents.harness.replay_logger import ReplayLogger, ReplayRecord
 from domain.intent import keyword_classifier
 
 
