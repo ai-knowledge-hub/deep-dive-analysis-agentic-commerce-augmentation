@@ -251,7 +251,7 @@ export function SimulationPanel({
           <button
             type="button"
             className="button button--ghost"
-            title="Connect a brand catalog to pull tone from live product copy."
+            title="Attach product data to pull tone from live brand copy."
             onClick={onToneFromBrand}
           >
             Use tone from brand site

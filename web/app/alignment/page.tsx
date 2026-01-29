@@ -11,7 +11,13 @@ import { IntentDisplay } from "../../components/intent/IntentDisplay";
 import { IntentionalityProfileCard } from "../../components/products/IntentionalityProfileCard";
 import { GoalClarificationPanel } from "../../components/values/GoalClarificationPanel";
 import { ProductReasoning } from "../../components/products/ProductReasoning";
-import { deleteConversationSession, listConversationSessions } from "../../lib/api";
+import { ProtocolReadinessPanel } from "../../components/simulation/ProtocolReadinessPanel";
+import { useTenant } from "../../components/tenant/TenantProvider";
+import {
+  createBattery,
+  deleteConversationSession,
+  listConversationSessions,
+} from "../../lib/api";
 
 type AlignmentSnapshot = {
   intent?: ConversationResponse["intent"];
@@ -37,6 +43,8 @@ export default function AlignmentPage() {
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
+  const { brandId } = useTenant();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -74,6 +82,29 @@ export default function AlignmentPage() {
       setDeleteTargetId(null);
     }
   }, [deleteTargetId, userId]);
+
+  const handleQuickCreateBattery = useCallback(
+    async (productId: string, productName?: string) => {
+      if (!productId) return;
+      const name = productName ? `${productName} Battery` : "Product Battery";
+      try {
+        await createBattery({
+          name,
+          product_id: productId,
+          brand_id: brandId ?? undefined,
+          generation_mode: "bottom_up",
+          user_id: userId,
+        });
+        setBatteryStatus(`Battery created for ${productName ?? "product"}.`);
+        window.setTimeout(() => setBatteryStatus(null), 4000);
+      } catch (error) {
+        setBatteryStatus(
+          error instanceof Error ? error.message : "Unable to create battery.",
+        );
+      }
+    },
+    [brandId, userId],
+  );
 
   const plan = snapshot.plan;
   const products = plan?.products ?? [];
@@ -158,12 +189,9 @@ export default function AlignmentPage() {
           </div>
 
           <div className="detail__grid">
-            <ProductReasoning
-              title="Catalog recommendations"
-              products={plan?.products ?? []}
-              explanations={snapshot.product_reasoning}
-              badge={snapshot.last_query ? "Catalog" : undefined}
-              disclaimer="Catalog results reflect product data currently available in the source feed."
+            <ProtocolReadinessPanel
+              issues={(snapshot as any)?.protocol_readiness ?? []}
+              onAction={() => router.push("/simulation")}
             />
             <div id="alignment-research">
               <ProductReasoning
@@ -171,6 +199,8 @@ export default function AlignmentPage() {
                 products={research}
                 badge="Research"
                 disclaimer="Research insights are synthesized from external sources; verify before purchase."
+                onQuickCreateBattery={handleQuickCreateBattery}
+                statusMessage={batteryStatus}
               />
             </div>
           </div>

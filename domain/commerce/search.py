@@ -17,19 +17,19 @@ def _matches(product: Product, query: str) -> bool:
 
 
 def search(
-    catalog: Sequence[Product], query: str, limit: int | None = None
+    products: Sequence[Product], query: str, limit: int | None = None
 ) -> List[Product]:
     if not query:
-        results = list(catalog)
+        results = list(products)
     else:
-        results = [product for product in catalog if _matches(product, query)]
+        results = [product for product in products if _matches(product, query)]
     if limit is not None:
         results = results[:limit]
     return results
 
 
-def related_by_tag(catalog: Sequence[Product], tag: str) -> List[Product]:
-    return [product for product in catalog if tag in product.tags]
+def related_by_tag(products: Sequence[Product], tag: str) -> List[Product]:
+    return [product for product in products if tag in product.tags]
 
 
 def list_intent_scores(products: Iterable[Product]) -> List[dict]:

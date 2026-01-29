@@ -65,7 +65,7 @@ class CommerceAgent:
         reason_fn: Callable[..., Any],
         assess_fn: Callable[..., Any],
         score_fn: Callable[..., Any],
-        search_fn: Callable[[str], list],
+        search_fn: Callable[[str, str | None, str | None], list],
     ) -> None:
         self._builder = builder
         self._reason_fn = reason_fn
@@ -86,18 +86,24 @@ class CommerceAgent:
         intent: dict,
         goals: Optional[List[str]] = None,
         context: str | None = None,
+        client_id: str | None = None,
+        brand_id: str | None = None,
     ) -> dict:
         return self._builder.build_plan(
             intent=intent,
             goals=goals,
             context=context,
+            client_id=client_id,
+            brand_id=brand_id,
             reason_fn=self._reason_fn,
             assess_fn=self._assess_fn,
             score_fn=self._score_fn,
         )
 
-    def recommend(self, query: str) -> List[str]:
-        return [product.name for product in self._search_fn(query)]
+    def recommend(
+        self, query: str, *, client_id: str | None = None, brand_id: str | None = None
+    ) -> List[str]:
+        return [product.name for product in self._search_fn(query, client_id, brand_id)]
 
 
 class ExplainAgent:
@@ -105,7 +111,7 @@ class ExplainAgent:
 
     def explain(self, products: List[dict]) -> str:
         if not products:
-            return "No catalog recommendations yet."
+            return "No protocol readiness results yet."
         explanations = []
         for product in products:
             base = (

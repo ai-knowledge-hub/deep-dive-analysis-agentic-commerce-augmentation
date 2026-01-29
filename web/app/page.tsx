@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   analyzeEvidence,
+  createBattery,
   deleteConversationSession,
   getConversationSnapshot,
   listConversationSessions,
@@ -33,6 +34,7 @@ import { IntentDisplay } from "../components/intent/IntentDisplay";
 import { ProductReasoning } from "../components/products/ProductReasoning";
 import { HistoryDrawer } from "../components/layout/HistoryDrawer";
 import { useUser } from "@clerk/nextjs";
+import { useTenant } from "../components/tenant/TenantProvider";
 
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -68,11 +70,13 @@ export default function HomePage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { user } = useUser();
   const searchParams = useSearchParams();
   const userId = user?.id ?? null;
+  const { brandId } = useTenant();
   const storageKey = useMemo(
     () => (userId ? `intentionality.sessions.${userId}` : "intentionality.sessions.anonymous"),
     [userId],
@@ -116,6 +120,29 @@ export default function HomePage() {
       setHistoryClosing(false);
     }, 200);
   }, [isHistoryClosing]);
+
+  const handleQuickCreateBattery = useCallback(
+    async (productId: string, productName?: string) => {
+      if (!productId) return;
+      const name = productName ? `${productName} Battery` : "Product Battery";
+      try {
+        await createBattery({
+          name,
+          product_id: productId,
+          brand_id: brandId ?? undefined,
+          generation_mode: "bottom_up",
+          user_id: userId,
+        });
+        setBatteryStatus(`Battery created for ${productName ?? "product"}.`);
+        window.setTimeout(() => setBatteryStatus(null), 4000);
+      } catch (error) {
+        setBatteryStatus(
+          error instanceof Error ? error.message : "Unable to create battery.",
+        );
+      }
+    },
+    [brandId, userId],
+  );
 
   const resetConversation = useCallback(() => {
     setSessionId(null);
@@ -558,6 +585,8 @@ export default function HomePage() {
               products={researchResults}
               badge="Research"
               disclaimer="Research insights are synthesized from external sources; verify before purchase."
+              onQuickCreateBattery={handleQuickCreateBattery}
+              statusMessage={batteryStatus}
             />
             <div className="insights__summary">
               <div className="summary-card summary-card--header">

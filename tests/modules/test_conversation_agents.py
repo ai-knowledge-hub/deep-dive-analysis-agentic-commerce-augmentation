@@ -82,14 +82,14 @@ def test_commerce_agent_emits_clarifications(fake_reasoner):
             price=499.0,
             tags=["chair"],
             confidence=0.6,
-            source="google_shopping",
+            source="product",
             merchant_name="Mock Merchant",
             capabilities_enabled=["Improve posture"],
         )
     ]
 
     builder = CommercePlanBuilder(
-        search_fn=lambda query: mock_products,
+        search_fn=lambda query, client_id=None, brand_id=None: mock_products,
         compare_fn=lambda products: {},
         build_profile_fn=build_profile,
     )
@@ -98,9 +98,13 @@ def test_commerce_agent_emits_clarifications(fake_reasoner):
         reason_fn=fake_reasoner,
         assess_fn=AlignmentService(default_deps()).assess,
         score_fn=AlignmentService(default_deps()).score_products,
-        search_fn=lambda q: mock_products,
+        search_fn=lambda q, client_id=None, brand_id=None: mock_products,
     )
-    plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace upgrade"])
+    plan = agent.build_plan(
+        {"primary_goal": "workspace"},
+        goals=["workspace upgrade"],
+        client_id="client-1",
+    )
     clarifications = plan["clarifications"]
     assert any("confidence" in message.lower() for message in clarifications)
     assert plan["data_quality"]["average_confidence"] == round(0.6, 2)
@@ -115,7 +119,7 @@ def test_commerce_agent_filters_low_confidence(fake_reasoner):
             price=100,
             tags=[],
             confidence=0.95,
-            source="shopify",
+            source="product",
             merchant_name="M1",
         ),
         Product(
@@ -124,7 +128,7 @@ def test_commerce_agent_filters_low_confidence(fake_reasoner):
             price=150,
             tags=[],
             confidence=0.7,
-            source="google_shopping",
+            source="product",
             merchant_name="M2",
         ),
         Product(
@@ -133,12 +137,12 @@ def test_commerce_agent_filters_low_confidence(fake_reasoner):
             price=80,
             tags=[],
             confidence=0.3,
-            source="google_shopping",
+            source="product",
             merchant_name="M3",
         ),
     ]
     builder = CommercePlanBuilder(
-        search_fn=lambda query: products,
+        search_fn=lambda query, client_id=None, brand_id=None: products,
         compare_fn=lambda products: {},
         build_profile_fn=build_profile,
     )
@@ -147,9 +151,13 @@ def test_commerce_agent_filters_low_confidence(fake_reasoner):
         reason_fn=fake_reasoner,
         assess_fn=AlignmentService(default_deps()).assess,
         score_fn=AlignmentService(default_deps()).score_products,
-        search_fn=lambda q: products,
+        search_fn=lambda q, client_id=None, brand_id=None: products,
     )
-    plan = agent.build_plan({"primary_goal": "workspace"}, goals=["workspace"])
+    plan = agent.build_plan(
+        {"primary_goal": "workspace"},
+        goals=["workspace"],
+        client_id="client-1",
+    )
     ids = [product["id"] for product in plan["products"]]
     assert ids == ["p_high", "p_mid"]
     assert any("hidden" in message.lower() for message in plan["clarifications"])
@@ -157,7 +165,7 @@ def test_commerce_agent_filters_low_confidence(fake_reasoner):
 
 
 def test_commerce_agent_fallback_query(fake_reasoner):
-    def mock_search(query: str):
+    def mock_search(query: str, client_id=None, brand_id=None):
         mapping = {
             "workspace upgrade": [],
             "career": [
@@ -167,7 +175,7 @@ def test_commerce_agent_fallback_query(fake_reasoner):
                     price=200,
                     tags=["workspace"],
                     confidence=0.8,
-                    source="google_shopping",
+                    source="product",
                     merchant_name="CareerShop",
                 )
             ],
@@ -189,6 +197,7 @@ def test_commerce_agent_fallback_query(fake_reasoner):
     plan = agent.build_plan(
         {"primary_goal": "workspace upgrade", "domain": "career"},
         goals=["career growth"],
+        client_id="client-1",
     )
     assert plan["query"] == "career"
     assert any("fell back" in clarification for clarification in plan["clarifications"])
@@ -196,8 +205,8 @@ def test_commerce_agent_fallback_query(fake_reasoner):
 
 def test_explain_agent_mentions_confidence():
     products = [
-        {"name": "Focus Chair", "confidence": 0.6, "source": "google_shopping"},
-        {"name": "Desk", "confidence": 0.9, "source": "shopify"},
+        {"name": "Focus Chair", "confidence": 0.6, "source": "product"},
+        {"name": "Desk", "confidence": 0.9, "source": "product"},
     ]
     explanation = ExplainAgent().explain(products)
     assert "Focus Chair" in explanation and "0.60" in explanation

@@ -37,7 +37,7 @@ export default function SimulationPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
-  const { productId, productName, brandId } = useTenant();
+  const { productId, productName, brandId, setProductId } = useTenant();
   const storageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
     [userId],
@@ -214,6 +214,16 @@ export default function SimulationPage() {
     [userId],
   );
 
+  const handleOpenExperiments = useCallback(
+    (_runId: string, runProductId?: string | null) => {
+      if (runProductId) {
+        setProductId(runProductId);
+      }
+      router.push("/experiments");
+    },
+    [router, setProductId],
+  );
+
   const handleSaveTone = useCallback(async () => {
     if (!simulationRun) return;
     await updateSimulationTone(simulationRun.run_id, simulationTone, userId);
@@ -383,6 +393,7 @@ export default function SimulationPage() {
             onAttach={handleAttachRun}
             attachLabel={productName}
             attachDisabled={!productId}
+            onOpenExperiments={handleOpenExperiments}
           />
           {simulationScenarioDirty && (
             <div className="detail__note">

@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from shared.replay.versions import default_versions
-from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
-from llm.agents.harness.tool_executor import ToolExecutor, ToolSpec
+from shared.agents.replay_logger import ReplayLogger, ReplayRecord, ToolCall
+from shared.agents.tool_executor import ToolExecutor, ToolSpec
 from domain.simulation.ranking import lift_summary
 from domain.simulation.types import SimulationProduct
 from domain.protocol.types import ProtocolCandidate
@@ -170,7 +170,7 @@ class SimulationService:
         product_id: Optional[str],
         competitor_client_ids: Optional[List[str]],
     ) -> tuple[List[SimulationProduct], List[Dict[str, Any]]]:
-        # Base: include the selected catalog product (if provided)
+        # Base: include the selected product (if provided)
         raw: List[Dict[str, Any]] = []
         sim_products: List[SimulationProduct] = []
 
@@ -186,7 +186,7 @@ class SimulationService:
                     "brand_id": product.get("brand_id"),
                     "name": product["name"],
                     "description": product.get("description") or "",
-                    "source": str(metadata.get("source") or "catalog"),
+                    "source": str(metadata.get("source") or "product"),
                     "url": metadata.get("offer_url") or metadata.get("url"),
                     "price": metadata.get("price"),
                     "confidence": 0.7,
@@ -216,7 +216,7 @@ class SimulationService:
                     "brand_id": match.get("brand_id"),
                     "name": match["name"],
                     "description": match.get("description") or "",
-                    "source": str(metadata.get("source") or "catalog"),
+                    "source": str(metadata.get("source") or "product"),
                     "url": metadata.get("offer_url") or metadata.get("url"),
                     "price": metadata.get("price"),
                     "confidence": 0.65,
@@ -396,7 +396,7 @@ class SimulationService:
             self._deps.simulation_runs.update_scenario(run_id, scenario)
         return {
             "status": "coming_soon",
-            "message": "Brand tone import requires catalog integration.",
+            "message": "Brand tone import requires product data integration.",
         }
 
     def attach(

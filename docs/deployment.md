@@ -2,11 +2,11 @@
 
 ## 1. Environment Profiles
 
-| Environment | Catalog | LLM Provider | DB Path | Notes |
-|-------------|---------|--------------|---------|-------|
-| **Local** | `mock` | `openrouter` | `./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
-| **Dev / Preview** | `google_merchant` | `gemini` | `./db/discovery.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
-| **Production** | `google_merchant` | `gemini` | `/var/lib/app/prod.db` | Real feeds, full telemetry, rate-limit logging. |
+| Environment | LLM Provider | DB Path | Notes |
+|-------------|--------------|---------|-------|
+| **Local** | `openrouter` | `./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
+| **Dev / Preview** | `gemini` | `./db/discovery.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
+| **Production** | `gemini` | `/var/lib/app/prod.db` | Full telemetry, rate-limit logging. |
 
 Copy the relevant section from `.env.example` into `.env.local` (local) or configure as platform secrets (dev/prod).
 
@@ -52,8 +52,6 @@ Visit `http://localhost:3000` to interact with the assistant.
 
 1. Connect your GitHub repository
 2. Set environment variables:
-   - `CATALOG_SOURCE=google_merchant`
-   - `GOOGLE_MERCHANT_FEED_PATH=/path/to/feed.json`
    - `LLM_PROVIDER=gemini`
    - `GOOGLE_API_KEY=your-key`
    - `GEMINI_MODEL=gemini-2.0-flash`
@@ -70,20 +68,7 @@ Visit `http://localhost:3000` to interact with the assistant.
 
 ---
 
-## 4. Catalog Sources
-
-Set `CATALOG_SOURCE` to choose the product adapter:
-
-| Source | Environment Variables | Use Case |
-|--------|----------------------|----------|
-| `mock` | None | Local development; catalog stream disabled (research-only UI) |
-| `shopify` | `SHOPIFY_DOMAIN`, `SHOPIFY_TOKEN` | Live Shopify store |
-| `google_shopping` | None | Deterministic mock data |
-| `google_merchant` | `GOOGLE_MERCHANT_FEED_PATH` | Google Merchant Center feed |
-
----
-
-## 5. LLM Providers
+## 4. LLM Providers
 
 Set `LLM_PROVIDER` to choose the language model:
 
@@ -94,7 +79,7 @@ Set `LLM_PROVIDER` to choose the language model:
 
 ---
 
-## 6. Attribution Exports
+## 5. Attribution Exports
 
 Export attribution events for analytics verification:
 
@@ -108,11 +93,11 @@ This creates a JSON payload compatible with GA4 or custom dashboards.
 
 ---
 
-## 7. Health Checks
+## 6. Health Checks
 
 ```bash
-# Verify product search
-curl "http://localhost:8000/products/search?query=workspace"
+# Verify product search (requires client_id)
+curl "http://localhost:8000/products/search?query=workspace&client_id=default"
 
 # Verify conversation API
 curl -X POST "http://localhost:8000/conversation/start" \
@@ -124,5 +109,3 @@ make test
 ```
 
 ---
-
-See [docs/adapters.md](./adapters.md) for detailed adapter configuration.

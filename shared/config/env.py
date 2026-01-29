@@ -22,19 +22,6 @@ class Settings(BaseSettings):
     app_env: Literal["local", "dev", "prod"] = Field(
         default="local", validation_alias=AliasChoices("APP_ENV")
     )
-    catalog_source: str = Field(
-        default="mock", validation_alias=AliasChoices("CATALOG_SOURCE")
-    )
-    google_merchant_feed_path: str | None = Field(
-        default=None, validation_alias=AliasChoices("GOOGLE_MERCHANT_FEED_PATH")
-    )
-    shopify_domain: str | None = Field(
-        default=None, validation_alias=AliasChoices("SHOPIFY_DOMAIN")
-    )
-    shopify_token: str | None = Field(
-        default=None, validation_alias=AliasChoices("SHOPIFY_TOKEN")
-    )
-
     database_path: str = Field(
         default="./tmp/local.db", validation_alias=AliasChoices("DATABASE_PATH")
     )

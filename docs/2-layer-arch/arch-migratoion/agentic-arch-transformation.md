@@ -50,14 +50,9 @@ We call the system “agentic” when it can:
 
 ### Directory Structure
 ```
-llm/
-├── agents/           # Empty (placeholder)
-├── clients/          # LLM API clients
-├── __init__.py
-├── gateway.py        # Routes requests to LLMs
-├── orchestrator.py   # Orchestrates multi-step reasoning
-├── prompts.py        # Prompt templates
-└── tools.py          # Tool definitions
+application/agents/   # Agent harness + Layer 1/2 agents
+infrastructure/llm/   # LLM API clients + gateway
+shared/llm/           # Prompt templates
 
 domain/               # Pure types + pure functions (no IO)
 application/          # Use-cases / orchestration services
@@ -318,10 +313,10 @@ class BayesianIntentInference:
 **Key Point**: This is pure domain logic. No LLM calls, no database, no HTTP requests. Agents will use this, but it's testable in isolation.
 
 #### **2. Agent Harness Layer**
-Location: `llm/agents/harness/`
+Location: `application/agents/harness/`
 
 ```
-llm/agents/harness/
+application/agents/harness/
 ├── __init__.py
 ├── agent_loop.py         # Main agent loop (perception → action)
 ├── tool_executor.py      # Tool calling + observation
@@ -344,7 +339,7 @@ llm/agents/harness/
 > Phase 0–3 can implement a simpler tool/observation loop (perceive → call tool → log → respond),
 > and add richer belief updates only after we have calibration data.
 ```python
-# llm/agents/harness/agent_loop.py
+# application/agents/harness/agent_loop.py
 
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
@@ -676,10 +671,10 @@ class AgentLoop:
 5. **Context Management**: Handles growing conversation history
 
 #### **3. Agent Implementations**
-Location: `llm/agents/`
+Location: `application/agents/`
 
 ```
-llm/agents/
+application/agents/
 ├── __init__.py
 ├── base_agent.py         # Base agent class using harness
 ├── layer1_agent.py       # Inference-based discovery agent
@@ -693,11 +688,11 @@ llm/agents/
 
 **Example: Layer 1 Agent**
 ```python
-# llm/agents/layer1_agent.py
+# application/agents/layer1_agent.py
 
 from typing import Dict, Any
-from llm.agents.base_agent import BaseAgent
-from llm.agents.tools.layer1_tools import (
+from application.agents.base_agent import BaseAgent
+from application.agents.tools.layer1_tools import (
     infer_intent_tool,
     scrape_product_page_tool,
     extract_capabilities_tool,
@@ -791,11 +786,11 @@ class Layer1Agent(BaseAgent):
 
 **Example: Layer 2 Agent**
 ```python
-# llm/agents/layer2_agent.py
+# application/agents/layer2_agent.py
 
 from typing import Dict, Any
-from llm.agents.base_agent import BaseAgent
-from llm.agents.tools.layer2_tools import (
+from application.agents.base_agent import BaseAgent
+from application.agents.tools.layer2_tools import (
     query_acp_feed_tool,
     query_ucp_api_tool,
     validate_feed_schema_tool,
@@ -890,10 +885,10 @@ class Layer2Agent(BaseAgent):
 
 **Example: Orchestrator Agent**
 ```python
-# llm/agents/orchestrator_agent.py
+# application/agents/orchestrator_agent.py
 
 from typing import Dict, Any, List
-from llm.agents.base_agent import BaseAgent
+from application.agents.base_agent import BaseAgent
 
 class OrchestratorAgent(BaseAgent):
     """
@@ -1020,8 +1015,6 @@ infrastructure/
 │   └── evidence_repository.py  # Web scraping
 │
 ├── adapters/            # External system adapters
-│   ├── shopify_adapter.py
-│   ├── merchant_center_adapter.py
 │   ├── acp_adapter.py   # OpenAI ACP protocol
 │   ├── ucp_adapter.py   # Google UCP protocol
 │   └── vector_store_adapter.py
@@ -1114,7 +1107,7 @@ class ACPAdapter:
 ### Layer 1 Agent Tools
 
 ```python
-# llm/agents/tools/layer1_tools.py
+# application/agents/tools/layer1_tools.py
 
 from typing import Dict, Any
 from dataclasses import dataclass
@@ -1252,7 +1245,7 @@ score_semantic_match_tool = Tool(
 ### Layer 2 Agent Tools
 
 ```python
-# llm/agents/tools/layer2_tools.py
+# application/agents/tools/layer2_tools.py
 
 # Tool 1: Query ACP Feed
 query_acp_feed_tool = Tool(
@@ -1346,7 +1339,7 @@ score_structured_match_tool = Tool(
 ### Memory Types
 
 ```python
-# llm/agents/harness/memory_manager.py
+# application/agents/harness/memory_manager.py
 
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
@@ -1511,7 +1504,7 @@ class MemoryManager:
 ## Context Window Management
 
 ```python
-# llm/agents/harness/context_manager.py
+# application/agents/harness/context_manager.py
 
 from typing import List, Dict, Any
 from dataclasses import dataclass
@@ -1605,7 +1598,7 @@ class ContextWindow:
 ## State Persistence (RL Environment)
 
 ```python
-# llm/agents/harness/state_manager.py
+# application/agents/harness/state_manager.py
 
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
@@ -1781,9 +1774,9 @@ async def query_agents(
     }
     """
     
-    from llm.agents.layer1_agent import Layer1Agent
-    from llm.agents.layer2_agent import Layer2Agent
-    from llm.agents.orchestrator_agent import OrchestratorAgent
+    from application.agents.layer1_agent import Layer1Agent
+    from application.agents.layer2_agent import Layer2Agent
+    from application.agents.orchestrator_agent import OrchestratorAgent
     
     results = {}
     

@@ -326,7 +326,6 @@ export type ConversationResponse = {
   plan?: {
     query?: string;
     products?: Product[];
-    catalog_results?: Product[];
     research_results?: Product[];
     clarifications?: string[];
     alignment?: {
@@ -381,4 +380,130 @@ export type ResearchRefreshResponse = {
   goals?: string[];
   research_results: Product[];
   updated_at?: string;
+};
+
+export type QueryBattery = {
+  id: string;
+  client_id: string;
+  brand_id?: string | null;
+  product_id: string;
+  name: string;
+  purpose?: string | null;
+  generation_mode?: string | null;
+  status?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type QueryBatteryQuery = {
+  id: string;
+  battery_id: string;
+  query_text: string;
+  query_type?: string | null;
+  intent_archetype?: string | null;
+  constraints?: Record<string, unknown>;
+  weight?: number;
+  enabled?: boolean;
+  created_at?: string;
+};
+
+export type QueryBatteryListResponse = {
+  batteries: QueryBattery[];
+};
+
+export type QueryBatteryQueryListResponse = {
+  queries: QueryBatteryQuery[];
+};
+
+export type QueryBatteryMetrics = {
+  total_queries: number;
+  enabled_queries: number;
+  unique_queries: number;
+  redundancy_rate: number;
+  avg_weight?: number | null;
+  avg_words?: number | null;
+  enabled_ratio?: number;
+  type_diversity?: number;
+  archetype_diversity?: number;
+  quality_score?: number;
+  quality_issues?: string[];
+  type_breakdown: Record<string, number>;
+  archetype_breakdown: Record<string, number>;
+};
+
+export type QueryBatteryMetricsResponse = {
+  metrics: QueryBatteryMetrics;
+};
+
+export type Experiment = {
+  id: string;
+  client_id: string;
+  brand_id?: string | null;
+  product_id: string;
+  battery_id?: string | null;
+  name: string;
+  hypothesis?: Record<string, unknown>;
+  competitor_policy?: Record<string, unknown>;
+  status?: string | null;
+  schedule_enabled?: boolean;
+  schedule_interval_minutes?: number | null;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ExperimentVariant = {
+  id: string;
+  experiment_id: string;
+  label: string;
+  type: string;
+  payload?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type ExperimentRun = {
+  id: string;
+  experiment_id: string;
+  variant_id: string;
+  query_id: string;
+  simulation_run_id?: string | null;
+  created_at?: string;
+};
+
+export type ExperimentMetric = {
+  id: string;
+  experiment_id: string;
+  variant_id?: string | null;
+  metrics?: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type ExperimentListResponse = {
+  experiments: Experiment[];
+};
+
+export type ExperimentVariantListResponse = {
+  variants: ExperimentVariant[];
+};
+
+export type ExperimentRunListResponse = {
+  runs: ExperimentRun[];
+};
+
+export type ExperimentMetricListResponse = {
+  metrics: ExperimentMetric[];
+};
+
+export type ExperimentRunResponse = {
+  experiment_id: string;
+  variant_id: string;
+  runs: {
+    query_id: string;
+    query_text?: string;
+    run_id?: string;
+    winner_id?: string | null;
+    score?: number | null;
+  }[];
+  metrics: Record<string, unknown>;
 };

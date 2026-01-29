@@ -102,6 +102,19 @@ export function Sidebar({
       ),
     },
     {
+      href: "/experiments",
+      label: "Experiments",
+      shortLabel: "X",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M9 3h6v2h-1v4.3l4.8 7.7A2 2 0 0 1 17.1 20H6.9a2 2 0 0 1-1.7-3L10 9.3V5H9V3zm2 8.1-4 6.4h10l-4-6.4V5h-2v6.1z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
+    {
       href: "/evidence",
       label: "Evidence",
       shortLabel: "E",

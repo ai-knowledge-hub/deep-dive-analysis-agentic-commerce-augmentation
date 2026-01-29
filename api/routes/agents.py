@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 from application.services.evidence_service import EvidenceService
-from llm.agents.layer1_agent import Layer1Agent, Layer1RunConfig
-from llm.agents.orchestrator_agent import OrchestratorAgent, OrchestratorConfig
-from llm.agents.layer2_agent import Layer2Agent
+from application.agents.layer1_agent import Layer1Agent, Layer1RunConfig
+from application.agents.orchestrator_agent import OrchestratorAgent, OrchestratorConfig
+from application.agents.layer2_agent import Layer2Agent
 
 if APIRouter:
     router = APIRouter(prefix="/agents", tags=["agents"])
@@ -88,14 +88,9 @@ if APIRouter:
     @router.post("/layer2/candidates")
     def layer2_candidates(payload: Layer2CandidatesRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        # Return both catalog candidates and protocol-layer candidates so we can
-        # compare inference vs declaration paths.
-        catalog = layer2_agent.get_catalog_candidates(
-            client_id=client_scope, query=payload.query, limit=payload.limit
-        )
         protocol = layer2_agent.discover_protocol_candidates(
             client_id=client_scope, query=payload.query, limit=payload.limit
         )
-        return {"catalog": catalog, "protocol": protocol}
+        return {"protocol": protocol}
 else:  # pragma: no cover
     router = None

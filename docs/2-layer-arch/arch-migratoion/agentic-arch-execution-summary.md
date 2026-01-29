@@ -130,12 +130,12 @@ In the near-term, we model “belief/state” as: **inputs → tools used → ob
 
 | Component | Responsibility | Implementation |
 |-----------|---------------|----------------|
-| **Agent Loop** | Perception → Inference → Action cycle | `llm/agents/harness/agent_loop.py` |
-| **Tool Executor** | Execute tools, observe results | `llm/agents/harness/tool_executor.py` *(or `tool_registry.py` for LLM tool schemas)* |
-| **Memory Manager** | Working, episodic, semantic memory | `llm/agents/harness/memory_manager.py` *(initially wraps existing `SessionManager`)* |
-| **Context Manager** | Context window + prompt caching | `llm/agents/harness/context_manager.py` |
-| **Replay Logger** | Run inputs/outputs + versioning for reproducibility | `llm/agents/harness/replay_logger.py` |
-| **Knowledge Capsule** | Agent-specific knowledge isolation | `llm/agents/harness/knowledge_capsule.py` |
+| **Agent Loop** | Perception → Inference → Action cycle | `application/agents/harness/agent_loop.py` |
+| **Tool Executor** | Execute tools, observe results | `application/agents/harness/tool_executor.py` *(or `tool_registry.py` for LLM tool schemas)* |
+| **Memory Manager** | Working, episodic, semantic memory | `application/agents/harness/memory_manager.py` *(initially wraps existing `SessionManager`)* |
+| **Context Manager** | Context window + prompt caching | `application/agents/harness/context_manager.py` |
+| **Replay Logger** | Run inputs/outputs + versioning for reproducibility | `application/agents/harness/replay_logger.py` |
+| **Knowledge Capsule** | Agent-specific knowledge isolation | `application/agents/harness/knowledge_capsule.py` |
 
 ### 4. **Bayesian Inference Integration (Future Experiment)**
 
@@ -192,7 +192,7 @@ class EnvironmentState:
 
 ### Pre-migration Structure (Historical)
 ```
-llm/
+application/agents/
   - agents/ (empty)
   - clients/
   - gateway.py
@@ -216,7 +216,7 @@ modules/
 domain/                      # Pure business logic (no IO)
 application/                 # Orchestration services (API calls only these)
 infrastructure/              # Concrete IO (DB/LLM/adapters/tools)
-llm/agents/                  # Agent harness + Layer 1/2 agents (tool loop + replay)
+application/agents/          # Agent harness + Layer 1/2 agents (tool loop + replay)
 ```
 
 ---
@@ -224,7 +224,7 @@ llm/agents/                  # Agent harness + Layer 1/2 agents (tool loop + rep
 ## Implementation Roadmap (Incremental / Strangler)
 
 ### Phase 0: Guardrails (1–2 days)
-- [ ] Define boundaries: `domain/`, `application/`, `infrastructure/`, `llm/agents/`
+- [ ] Define boundaries: `domain/`, `application/`, `infrastructure/`, `application/agents/`
 - [ ] Add replay metadata to every run (provider/model, prompt version, scoring version)
 - [ ] Require deterministic fallbacks + replay runner for debugging
 
@@ -234,9 +234,9 @@ llm/agents/                  # Agent harness + Layer 1/2 agents (tool loop + rep
 - [x] Remove legacy `modules/` after migrating call-sites
 
 ### Phase 2: Minimal Harness (2–4 days)
-- [ ] Implement tool registry + executor (tool calls become logged observations)
+- [x] Implement tool registry + executor (tool calls become logged observations)
 - [ ] Implement context builder (token budget policies, prompt caching)
-- [ ] Implement replay logger (inputs/outputs/versions/timing for every run)
+- [x] Implement replay logger (inputs/outputs/versions/timing for every run)
 
 ### Phase 3: Layer 1 + Layer 2 Agents (3–7 days)
 - [ ] Layer 1 agent wraps the existing evidence/web pipeline via tools
@@ -315,7 +315,7 @@ class BayesianIntentInference:
 ### Step 2: Define Agent Tools
 
 ```python
-# llm/agents/tools/layer1_tools.py
+# application/agents/tools/layer1_tools.py
 
 from dataclasses import dataclass
 from typing import Dict, Any, Callable
@@ -379,7 +379,7 @@ infer_intent_tool = Tool(
 ### Step 3: Implement Agent Loop
 
 ```python
-# llm/agents/harness/agent_loop.py
+# application/agents/harness/agent_loop.py
 
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
@@ -504,10 +504,10 @@ class AgentLoop:
 ### Step 4: Create Agent
 
 ```python
-# llm/agents/layer1_agent.py
+# application/agents/layer1_agent.py
 
-from llm.agents.base_agent import BaseAgent
-from llm.agents.tools.layer1_tools import (
+from application.agents.base_agent import BaseAgent
+from application.agents.tools.layer1_tools import (
     infer_intent_tool,
     scrape_product_page_tool,
     extract_capabilities_tool,
@@ -560,8 +560,8 @@ class Layer1Agent(BaseAgent):
 # api/routes/agents.py
 
 from fastapi import APIRouter
-from llm.agents.layer1_agent import Layer1Agent
-from llm.agents.layer2_agent import Layer2Agent
+from application.agents.layer1_agent import Layer1Agent
+from application.agents.layer2_agent import Layer2Agent
 
 router = APIRouter(prefix="/agents")
 

@@ -28,8 +28,8 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 | `domain/intent/` | Functional | Needs competitive scenario presets + calibration |
 | `domain/intentionality/` | Functional | Needs richer gap analysis signals |
 | `domain/alignment/` | Functional | Needs “why you lost vs winner” polish |
-| `infrastructure/commerce/` | Functional | Needs more real catalog sources (post-hackathon) |
-| `api/` | Functional | Simulation endpoints live; needs tone sourcing from brand catalogs |
+| `infrastructure/protocol/` | Functional | ACP/UCP readiness checks + negotiation |
+| `api/` | Functional | Simulation endpoints live; tone sourced from product metadata |
 | `web/` | Functional | Simulation sandbox UI live; needs scenario presets + polish |
 
 ---
@@ -46,7 +46,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 
 ### Missing for Simulation Sandbox
 - **Scenario presets**: One-click TV, shoes, workspace scenarios
-- **Tone from brand site**: Stubbed; needs catalog integration
+- **Tone from brand site**: Stubbed; use product metadata until brand site ingestion is added
 - **Demo copy polish**: Reinforce "See what the LLM sees"
 
 ---
@@ -96,8 +96,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - Replace World‑B UI with intent‑alignment demo flow:
   - Query → inferred intent → aligned products → explanations
 - Add “discoverability delta” visualization (before/after enrichment).
-- Add dual-stream discovery display (catalog + research) with alignment scores.
-- Disable catalog stream for `CATALOG_SOURCE=mock` to avoid misleading recommendations.
+- Add protocol readiness panel alongside research insights.
 
 ---
 
@@ -110,8 +109,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - [x] Show alignment score alongside intentionality profile
 - [x] Wire “discoverability delta” panel (before/after comparison)
 - [x] Surface per-product alignment explanations in UI cards
-- [x] Show catalog + research streams side-by-side with alignment scores
-- [x] Disable catalog stream for `CATALOG_SOURCE=mock`
+- [x] Protocol readiness + research streams side-by-side
 ---
 ### Phase 2.5 — Evidence-First Demo Layer (Done)
 - [x] Add evidence analysis endpoint (`POST /evidence/analyze`)
@@ -167,9 +165,9 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 
 **Goal:** Simulate ACP/UCP discovery alongside inference-based discovery.
 
-- [ ] Add protocol simulation module (mock ACP feed + UCP discovery)
-- [ ] Translate intent → protocol query filters
-- [ ] Protocol preview UI (show feed rows + missing fields)
+- [x] Add protocol simulation module (mock ACP feed + UCP discovery)
+- [x] Translate intent → protocol query filters
+- [x] Protocol preview UI (show feed rows + missing fields)
 
 ---
 
@@ -213,8 +211,8 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - Harden Shopify + Google Merchant adapters for intentionality enrichment.
 
 ### 3.2 Intentionality Batch Enrichment
-- Run catalog enrichment pipeline offline.
-- Output “intent legibility report” per catalog.
+- Run protocol readiness checks across brands.
+- Output “intent legibility report” per brand + protocol readiness.
 
 ---
 
@@ -254,7 +252,7 @@ This plan aligns the codebase to the simulation sandbox architecture in `docs/ar
 - [x] Simulation sandbox UI complete
 - [ ] 3 compelling demo scenarios ready
 - [ ] 60-second demo script polished
-- [ ] Protocol preview demo (ACP/UCP mock)
+- [x] Protocol preview demo (ACP/UCP mock)
 - [ ] One real verification surface integrated
 - [ ] Prediction vs reality accuracy metric visible
 

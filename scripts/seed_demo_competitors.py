@@ -1,6 +1,6 @@
 """Seed demo competitor tenants/brands/products for hackathon scenarios.
 
-This keeps the demo realistic without blocking on real catalog integrations.
+This keeps the demo realistic without blocking on real protocol integrations.
 
 Safe to run multiple times (UPSERTs by id).
 """
@@ -370,7 +370,7 @@ def seed_demo_competitors() -> Dict[str, int]:
                 "demo": True,
                 "scenario": product["scenario"],
                 "copy_style": product["style"],
-                "source": "catalog",
+                "source": "product",
                 "merchant_name": tenant["name"],
                 "offer_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
                 "availability": "in_stock",

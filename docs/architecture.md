@@ -163,8 +163,8 @@ This foundation informs architecture but does not dominate user-facing messaging
 │     Google AI Mode │ ChatGPT Shopping │ Claude │ Others     │
 └─────────────────────────────────────────────────────────────┘
 
-Note: In production, evidence sources are replaced by brand catalogs and feeds
-(Shopify, Merchant Center, JSON-LD). The pipeline stays the same.
+Note: In production, evidence sources can be replaced by brand product data and protocol feeds
+as a future phase. The pipeline stays the same.
 ```
 
 ---
@@ -325,22 +325,17 @@ Memory enables **better inference**, not surveillance. The distinction matters.
 
 ---
 
-### 6. Commerce Adapters (`infrastructure/commerce/adapters/`)
+### 6. Protocol Integrations (ACP/UCP)
 
-**Purpose**: Ingest product data from any source, transform to our schema.
+**Purpose**: Validate protocol readiness and surface discovery gaps for ACP and UCP.
 
-**Adapters**:
-- `mock.py` — Testing
-- `shopify.py` — Shopify Storefront API
-- `google_merchant.py` — Merchant Center feeds
-- `ucp.py` — Google Universal Commerce Protocol (future)
+**Scope (v1)**:
+- Business profile discovery + negotiation/intersection (UCP)
+- Feed readiness checks + delegated payment readiness (ACP)
+- Protocol readiness issues surfaced in simulation output
 
-**Pipeline**:
-```
-External Feed → RawOffer → IntentionalityProfile → Aligned Product
-```
-
-Each adapter normalizes source data; the intentionality module enriches it.
+**Note**: External catalog adapters (Shopify/Merchant Center) are removed from the v1
+scope to keep the product focused on protocol readiness and simulation feedback loops.
 
 ---
 
@@ -443,7 +438,7 @@ Lift: +63% alignment score
 
 ## API Surface
 
-**Multi-tenant requirement:** Every request includes `client_id` unless the caller is an admin user. `brand_id` and `product_id` are optional on simulation endpoints to link runs to catalog records.
+**Multi-tenant requirement:** Every request includes `client_id` unless the caller is an admin user. `brand_id` and `product_id` are optional on simulation endpoints to link runs to product records.
 
 ### Core Endpoints
 
@@ -483,22 +478,8 @@ POST /recommendation/verify
 
 ### For Brands (Future)
 
-```
-POST /catalog/analyze
-  Input: { catalog_url or feed }
-  Output: { products_analyzed, intent_legibility_scores, recommendations }
-
-POST /catalog/optimize
-  Input: { product_ids, optimization_types? }
-  Output: { suggestions, alignment_deltas }
-
-POST /catalog/verify
-  Input: { scenarios, baseline? }
-  Output: { recommendation_rates, lift }
-
-GET /catalog/{catalog_id}/report
-  Output: { discoverability_report }
-```
+Catalog automation endpoints are deferred; v1 focuses on simulation,
+query batteries, and protocol readiness (ACP/UCP).
 
 ---
 
@@ -539,13 +520,13 @@ GET /catalog/{catalog_id}/report
 
 ### P1 — Strategic Value
 
-1. Automated catalog enrichment
+1. Automated product data enrichment (future)
 2. Multi-LLM testing harness (AI Mode, ChatGPT, Claude)
 3. Brand dashboard showing discoverability metrics
 
 ### P2 — Scale
 
-1. Batch catalog processing
+1. Batch product processing (future)
 2. Real-time feed integration
 3. Historical discoverability tracking
 
@@ -584,11 +565,14 @@ We are **LLM-agnostic**:
 
 **We are a brand-side optimization tool.** Brands pay us to make their products discoverable by AI.
 
-We don't sit in the runtime path between users and LLMs. We optimize the *source data* that LLMs eventually discover—through Merchant Center feeds, Shopify stores, website content, and structured data.
+We don't sit in the runtime path between users and LLMs. We optimize the *source data* that LLMs eventually discover—through ACP/UCP profiles today, and (future) Merchant Center feeds, Shopify stores, website content, and structured data.
 
-Think of it as **SEO for LLMs**: just as SEO agencies optimize websites for Google Search, we optimize product catalogs for AI recommendations.
+Think of it as **SEO for LLMs**: just as SEO agencies optimize websites for Google Search, we optimize product data for AI recommendations.
 
-### The Brand Workflow
+### The Brand Workflow (Future)
+
+**Current release focus:** ACP/UCP protocol readiness + simulation feedback loops.  
+Catalog connection + enrichment workflows below are deferred until post‑v1.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -604,7 +588,7 @@ Think of it as **SEO for LLMs**: just as SEO agencies optimize websites for Goog
 ┌─────────────────────────────────────────────────────────────┐
 │  2. ANALYZE                                                  │
 │     Score current intent legibility of each product          │
-│     • Overall catalog legibility score                       │
+│     • Overall product legibility score                       │
 │     • Per-product breakdown                                  │
 │     • Gap analysis: what's missing for discoverability       │
 │     • Priority ranking: which products to optimize first     │
@@ -690,7 +674,7 @@ Once we optimize a brand's product data, the improvement propagates everywhere:
 
 | Tier | What Brand Gets | Pricing Model |
 |------|-----------------|---------------|
-| **Analysis** | One-time legibility report | Per-catalog fee |
+| **Analysis** | One-time legibility report | Per‑product data fee |
 | **Optimization** | Rewritten product descriptions | Per-product or flat fee |
 | **SaaS** | Ongoing monitoring + re-optimization | Monthly subscription |
 | **Enterprise** | Custom integration + priority support | Annual contract |
@@ -730,7 +714,7 @@ Once we optimize a brand's product data, the improvement propagates everywhere:
 |-----------|--------|----------|
 | Shopify OAuth + write-back | Not built | P1 |
 | Merchant Center integration | Not built | P1 |
-| Batch catalog processing | Not built | P1 |
+| Batch product processing | Not built | P1 |
 | LLM testing harness | Not built | P1 |
 | Discoverability monitoring | Not built | P2 |
 | Brand dashboard | Not built | P2 |

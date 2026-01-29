@@ -79,7 +79,15 @@ def integration_client(tmp_path, monkeypatch):
             }
 
     class DummyCommerceAgent:
-        def build_plan(self, intent, goals, context=None):
+        def build_plan(
+            self,
+            intent,
+            goals,
+            *,
+            client_id: str | None = None,
+            brand_id: str | None = None,
+            context=None,
+        ):
             return {
                 "query": "workspace focus kit",
                 "products": [

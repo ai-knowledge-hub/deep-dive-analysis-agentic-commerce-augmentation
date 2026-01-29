@@ -8,7 +8,7 @@
 
 ## What This Is
 
-This repository implements a **brand-side intentionality optimization + verification layer** that turns product catalogs into intent‑legible data structures and proves they lift organic AI recommendations.
+This repository implements a **brand-side intentionality optimization + verification layer** that turns product data into intent‑legible structures and proves they lift organic AI recommendations.
 
 We provide **the discovery layer that transaction protocols don't define**, working at the source data brands control:
 
@@ -29,11 +29,11 @@ We provide **the discovery layer that transaction protocols don't define**, work
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         Commerce Protocols (UCP, ACP, Shopify, etc.)        │
+│         Commerce Protocols (UCP, ACP, etc.)                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**We are protocol-agnostic.** The discovery layer works with Google's UCP, OpenAI's ACP, Shopify direct, or any future commerce protocol.
+**We are protocol-agnostic.** The discovery layer works with Google's UCP, OpenAI's ACP, or any future commerce protocol.
 
 ---
 
@@ -60,14 +60,15 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 ├── domain/                   # Pure types + pure logic (no IO)
 ├── application/              # Use-cases / orchestration services
 ├── infrastructure/           # DB/LLM/adapters (IO boundaries)
+│   ├── llm/                  # Gemini/OpenRouter clients + gateway
 ├── shared/                   # Cross-cutting infrastructure
-│   ├── llm/                 # Gemini, OpenRouter clients + prompts
+│   ├── llm/                  # Prompt templates
 │   ├── db/                  # SQLite schema + connection
 │   └── config/             # Environment configuration
 │
 ├── api/                      # FastAPI routes
 ├── web/                      # Next.js chat + discovery dashboard
-├── data/                     # Product catalogs, intent taxonomy
+├── data/                     # Product data mocks, intent taxonomy
 ├── docs/                     # Architecture & design documentation
 ├── scripts/                  # Local dev utilities (seed, exports, etc.)
 └── tests/                    # Module + integration tests
@@ -114,7 +115,7 @@ Visit `http://localhost:3000` for the chat interface.
 ### Multi-tenant scoping
 
 All API calls require `client_id` unless the caller is an admin user (see `ADMIN_USER_IDS`).
-`brand_id` and `product_id` are optional on simulation endpoints for tying runs to a catalog item.
+`brand_id` and `product_id` are optional on simulation endpoints for tying runs to a product record.
 The UI exposes a manual admin context picker when `NEXT_PUBLIC_ADMIN_MODE=true` so you can
 switch client/brand/product without automated onboarding.
 
@@ -162,7 +163,6 @@ make test
 | [docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md](docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md) | Step-by-step execution plan (incremental) |
 | [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
 | [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
-| [docs/adapters.md](docs/adapters.md) | Shopify, Google Merchant adapter setup |
 | [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product data pipeline |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
@@ -195,14 +195,11 @@ See [docs/terminology.md](docs/terminology.md) for complete definitions.
 
 ## Environment Configuration
 
-| Environment | Catalog | LLM Provider | Use Case |
-|-------------|---------|--------------|----------|
-| **Local** | `mock` | `openrouter` | Development without API costs |
-| **Dev** | `google_merchant` | `gemini` | Preview deployments |
-| **Prod** | `google_merchant` | `gemini` | Production with full telemetry |
-
-Set `CATALOG_SOURCE` to choose: `mock`, `shopify`, `google_shopping`, or `google_merchant`.
-When `CATALOG_SOURCE=mock`, the catalog stream is disabled and the UI shows research insights only to avoid misleading recommendations.
+| Environment | LLM Provider | Use Case |
+|-------------|--------------|----------|
+| **Local** | `openrouter` | Development without API costs |
+| **Dev** | `gemini` | Preview deployments |
+| **Prod** | `gemini` | Production with full telemetry |
 
 Evidence-first demo data loads from `data/evidence_demo.json` when `EVIDENCE_DEMO=true`
 (default). Override with `EVIDENCE_DEMO_PATH` if you want a different dataset.

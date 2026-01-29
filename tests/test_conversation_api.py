@@ -79,7 +79,15 @@ def test_start_endpoint_returns_clarification(client, monkeypatch):
             return {"primary_goal": "unknown", "confidence": 0.2}
 
     class DummyCommerceAgent:
-        def build_plan(self, intent, goals, context=None):
+        def build_plan(
+            self,
+            intent,
+            goals,
+            *,
+            client_id: str | None = None,
+            brand_id: str | None = None,
+            context=None,
+        ):
             return {
                 "query": "focus support",
                 "products": [],
@@ -127,7 +135,15 @@ def _configure_full_pipeline(monkeypatch):
             }
 
     class DummyCommerceAgent:
-        def build_plan(self, intent, goals, context=None):
+        def build_plan(
+            self,
+            intent,
+            goals,
+            *,
+            client_id: str | None = None,
+            brand_id: str | None = None,
+            context=None,
+        ):
             products = [
                 {
                     "id": "p1",
@@ -184,7 +200,15 @@ def _configure_research_pipeline(monkeypatch):
             }
 
     class DummyCommerceAgent:
-        def build_plan(self, intent, goals, context=None):
+        def build_plan(
+            self,
+            intent,
+            goals,
+            *,
+            client_id: str | None = None,
+            brand_id: str | None = None,
+            context=None,
+        ):
             products = [
                 {
                     "id": "p1",
@@ -214,7 +238,7 @@ def _configure_research_pipeline(monkeypatch):
 
     class DummyExplain:
         def explain(self, products):
-            return "Low confidence catalog results."
+            return "Low confidence protocol results."
 
     def fake_research(query, goals, context):
         return {"query": query, "goals": goals, "summary": "stub research"}
@@ -252,7 +276,7 @@ def test_start_endpoint_runs_full_pipeline(client, monkeypatch):
 def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypatch):
     from domain.commerce.types import Product
 
-    def mock_search(query: str):
+    def mock_search(*, deps, query: str, client_id: str, brand_id=None):
         return [
             Product(
                 id="p1",
@@ -296,7 +320,7 @@ def test_products_enrich_endpoint_returns_profile_and_alignment(client, monkeypa
 def test_products_profile_endpoint_returns_profile(client, monkeypatch):
     from domain.commerce.types import Product
 
-    def mock_search(query: str):
+    def mock_search(*, deps, query: str, client_id: str, brand_id=None):
         return [
             Product(
                 id="p2",
@@ -328,7 +352,7 @@ def test_products_profile_endpoint_requires_product_id(client):
 def test_products_align_endpoint_returns_alignment(client, monkeypatch):
     from domain.commerce.types import Product
 
-    def mock_search(query: str):
+    def mock_search(*, deps, query: str, client_id: str, brand_id=None):
         return [
             Product(
                 id="p3",

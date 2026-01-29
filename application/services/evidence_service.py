@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from shared.replay.versions import default_versions
 from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
-from llm.agents.harness.replay_logger import ReplayLogger, ReplayRecord, ToolCall
+from shared.agents.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from domain.evidence.types import EvidenceProduct
 from application.ports.deps import AppDeps
 from application.services.alignment_service import AlignmentService

@@ -235,7 +235,7 @@ def _validate_feed_freshness(feed: Dict[str, Any]) -> List[ProtocolReadinessIssu
                 field="updated_at",
                 severity="error",
                 message="Feed update is stale (>120 minutes).",
-                fix="Update feeds at least every 15 minutes; hourly for low-change catalogs.",
+                fix="Update feeds at least every 15 minutes; hourly for low-change feeds.",
             )
         )
     elif age_minutes > 15:
@@ -244,7 +244,7 @@ def _validate_feed_freshness(feed: Dict[str, Any]) -> List[ProtocolReadinessIssu
                 field="updated_at",
                 severity="warning",
                 message="Feed update is older than 15 minutes.",
-                fix="Update feeds every 15 minutes for high-change catalogs.",
+                fix="Update feeds every 15 minutes for high-change feeds.",
             )
         )
     return issues

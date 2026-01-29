@@ -27,7 +27,7 @@ class _Product(Protocol):
     intentionality_profile: Any | None
 
 
-SearchFn = Callable[[str], List[_Product]]
+SearchFn = Callable[[str, str | None, str | None], List[_Product]]
 CompareFn = Callable[[List[_Product]], Any]
 BuildProfileFn = Callable[[_Product], Any]
 
@@ -55,6 +55,8 @@ class CommercePlanBuilder:
         intent: dict,
         goals: Optional[List[str]] = None,
         context: str | None = None,
+        client_id: str | None = None,
+        brand_id: str | None = None,
         reason_fn=None,
         assess_fn=None,
         score_fn=None,
@@ -66,7 +68,7 @@ class CommercePlanBuilder:
         products: List[_Product] = []
 
         for candidate in queries:
-            candidate_products = self._search_fn(candidate)
+            candidate_products = self._search_fn(candidate, client_id, brand_id)
             if candidate_products:
                 products = candidate_products
                 query = candidate
@@ -215,9 +217,11 @@ class CommercePlanBuilder:
             clarifications.append(
                 f"{filtered_count} low-confidence products were hidden from the plan."
             )
-        if any(product["source"] != "shopify" for product in products):
+        if products and any(
+            product.get("source") not in {"product", "manual"} for product in products
+        ):
             clarifications.append(
-                "Some recommendations come from discovery surfaces (e.g., Google Shopping). Confirm availability before purchasing."
+                "Some recommendations rely on inferred data. Confirm availability before purchasing."
             )
         if fallback_reason:
             clarifications.append(fallback_reason)

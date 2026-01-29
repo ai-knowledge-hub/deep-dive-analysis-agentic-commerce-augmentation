@@ -98,7 +98,7 @@ A **closed-loop simulation sandbox** where users can:
 > *Marcus manages product feeds for 500 SKUs. He knows AI shopping is growing but doesn't know which products need work or what "work" means.*
 
 **What Marcus needs:**
-- Upload his catalog (or connect Shopify/Merchant Center)
+- Provide product data or protocol profiles for readiness and simulation
 - Get a legibility report: "340 products score below 0.5. Common issue: specs-only descriptions."
 - Prioritized list: "Fix these 20 high-margin products first"
 - Before/after suggestions for each

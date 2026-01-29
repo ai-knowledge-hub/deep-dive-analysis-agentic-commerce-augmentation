@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 
-from infrastructure.commerce.search import search as search_products_fn
+from application.services.product_search import search_products_for_client
 
 
 class HybridIntentClassifier:
@@ -27,12 +27,14 @@ class HybridIntentClassifier:
         return self._impl.classify(text, context=context)
 
 
-product_search = SimpleNamespace(search=search_products_fn)
+product_search = SimpleNamespace(search=search_products_for_client)
 ALIGNMENT = AlignmentService(default_deps())
 
 
-def _search_products(query: str):
-    return product_search.search(query)
+def _search_products(query: str, *, client_id: str, brand_id: str | None = None):
+    return product_search.search(
+        deps=default_deps(), query=query, client_id=client_id, brand_id=brand_id
+    )
 
 
 if APIRouter:
@@ -62,7 +64,7 @@ if APIRouter:
         user_id: str | None = None,
     ):
         require_client_id(client_id, user_id)
-        products = _search_products(query)
+        products = _search_products(query, client_id=client_id)
         return [product.__dict__ for product in products]
 
     @router.post("/profile")
@@ -70,7 +72,7 @@ if APIRouter:
         """Return an intentionality profile for a single product."""
         require_client_id(payload.client_id, payload.user_id)
         product_id = payload.product_id
-        products = _search_products(product_id)
+        products = _search_products(product_id, client_id=payload.client_id)
         if not products:
             return {"error": "product not found"}
         return {"profile": build_profile(products[0]).to_dict()}
@@ -87,9 +89,9 @@ if APIRouter:
         candidates = []
         if product_ids:
             for pid in product_ids:
-                candidates.extend(_search_products(pid))
+                candidates.extend(_search_products(pid, client_id=payload.client_id))
         else:
-            candidates = _search_products(query)
+            candidates = _search_products(query, client_id=payload.client_id)
         alignment = ALIGNMENT.assess(goal_signals, candidates)
         baseline = ALIGNMENT.assess(goal_signals, candidates, use_semantic=False)
         per_product = [
@@ -107,7 +109,7 @@ if APIRouter:
         require_client_id(payload.client_id, payload.user_id)
         product_id = payload.product_id
         query = payload.query or ""
-        products = _search_products(product_id)
+        products = _search_products(product_id, client_id=payload.client_id)
         if not products:
             return {"error": "product not found"}
         product = products[0]

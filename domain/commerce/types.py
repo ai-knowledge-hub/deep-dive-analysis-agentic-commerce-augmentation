@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 class RawOffer:
     """Offer-level schema emitted by adapters before product reconstruction."""
 
-    source: str  # e.g., shopify, google_shopping
+    source: str  # e.g., product, acp, ucp
     source_id: str
     merchant_name: Optional[str]
     offer_url: Optional[str]

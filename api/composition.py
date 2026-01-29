@@ -18,8 +18,11 @@ from infrastructure.alignment import goal_alignment_gateway
 from infrastructure.db import (
     clients as clients_repo,
     episodes as episodes_repo,
+    experiments as experiments_repo,
+    experiment_runs as experiment_runs_repo,
     goals as goals_repo,
     platform_profiles as platform_profiles_repo,
+    query_batteries as query_batteries_repo,
     replays as replays_repo,
     recommendations as recommendations_repo,
     sessions as sessions_repo,
@@ -53,6 +56,9 @@ def default_deps() -> AppDeps:
         simulation_runs=simulation_runs_repo,
         clients=clients_repo,
         platform_profiles=platform_profiles_repo,
+        query_batteries=query_batteries_repo,
+        experiments=experiments_repo,
+        experiment_runs=experiment_runs_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),
