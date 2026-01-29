@@ -26,3 +26,6 @@ class ToolExecutor:
         if not tool:
             raise KeyError(f"Tool not registered: {name}")
         return tool.func(**kwargs)
+
+
+__all__ = ["ToolExecutor", "ToolSpec"]

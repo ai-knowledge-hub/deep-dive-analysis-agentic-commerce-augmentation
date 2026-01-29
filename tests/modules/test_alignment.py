@@ -1,13 +1,34 @@
 from domain.commerce.search import search
+from domain.commerce.types import Product
 from infrastructure.alignment.goal_alignment_gateway import assess
-from infrastructure.commerce.demo_catalog import load_demo_catalog
 
 
 def test_goal_alignment_scores_supporting_products():
-    catalog = load_demo_catalog()
-    products = search(catalog, "workspace")
+    products = [
+        Product(
+            id="chair-1",
+            name="Posture Support Chair",
+            description="Ergonomic chair for better posture.",
+            price=299.0,
+            tags=["ergonomic", "workspace"],
+            capabilities_enabled=["Improve posture"],
+            confidence=0.9,
+            source="product",
+        ),
+        Product(
+            id="guitar-1",
+            name="Acoustic Guitar",
+            description="Entry-level acoustic guitar for beginners.",
+            price=199.0,
+            tags=["music"],
+            capabilities_enabled=["Learn guitar"],
+            confidence=0.7,
+            source="product",
+        ),
+    ]
+    results = search(products, "workspace")
     goals = ["Improve posture", "Learn guitar"]
-    result = assess(goals, products, use_semantic=False)
+    result = assess(goals, results, use_semantic=False)
     assert "Improve posture" in result.aligned_goals
     assert "Learn guitar" in result.misaligned_goals
     assert result.score < 1

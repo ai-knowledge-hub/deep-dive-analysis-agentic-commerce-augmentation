@@ -41,5 +41,5 @@ def _extract_intent_scores(raw: RawProduct) -> dict[str, float]:
     return {key: float(value) for key, value in scores.items()}
 
 
-def transform_catalog(catalog: Iterable[RawProduct]) -> List[Product]:
-    return [raw_product_to_product(item) for item in catalog]
+def transform_products(products: Iterable[RawProduct]) -> List[Product]:
+    return [raw_product_to_product(item) for item in products]

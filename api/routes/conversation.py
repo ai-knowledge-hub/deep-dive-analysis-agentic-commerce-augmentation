@@ -18,6 +18,7 @@ from application.services.conversation_agents import (
     IntentAgent,
 )
 from application.services.commerce_plan_builder import CommercePlanBuilder
+from application.services.product_search import search_products_for_client
 from application.services.context_builder import context_for
 from infrastructure.llm.intent_classifier import (
     build_intent_classifier,
@@ -28,8 +29,7 @@ from application.services.alignment_service import AlignmentService
 from infrastructure.llm.gateway import chat
 from infrastructure.llm.prompts import VALUES_CLARIFICATION_PROMPT
 from infrastructure.llm.product_reasoner import reason_about_products_default
-from infrastructure.commerce.search import search as commerce_search
-from infrastructure.commerce.compare import compare as compare_products
+from domain.commerce.compare import compare as compare_products
 from application.services.intentionality_profiler import build_profile
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
@@ -49,16 +49,26 @@ INTENT_AGENT = IntentAgent(
     context_for_fn=context_for,
     log_replay_fn=log_intent_replay,
 )
+
+
+def _search_products(query: str, client_id: str | None, brand_id: str | None):
+    if not client_id:
+        return []
+    return search_products_for_client(
+        deps=DEPS, query=query, client_id=client_id, brand_id=brand_id
+    )
+
+
 COMMERCE_AGENT = CommerceAgent(
     builder=CommercePlanBuilder(
-        search_fn=commerce_search,
+        search_fn=_search_products,
         compare_fn=compare_products,
         build_profile_fn=build_profile,
     ),
     reason_fn=reason_about_products_default,
     assess_fn=ALIGNMENT.assess,
     score_fn=ALIGNMENT.score_products,
-    search_fn=commerce_search,
+    search_fn=_search_products,
 )
 EXPLAIN_AGENT = ExplainAgent()
 GOAL_AGENT = GoalClarificationAgent(

@@ -1,5 +1,5 @@
 -- SQLite schema for discovery-first memory + session storage.
--- This schema supports intent inference, alignment, and catalog analytics.
+-- This schema supports intent inference, alignment, and product analytics.
 
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;

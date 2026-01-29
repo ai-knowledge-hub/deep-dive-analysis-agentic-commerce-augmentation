@@ -11,6 +11,7 @@ import { IntentDisplay } from "../../components/intent/IntentDisplay";
 import { IntentionalityProfileCard } from "../../components/products/IntentionalityProfileCard";
 import { GoalClarificationPanel } from "../../components/values/GoalClarificationPanel";
 import { ProductReasoning } from "../../components/products/ProductReasoning";
+import { ProtocolReadinessPanel } from "../../components/simulation/ProtocolReadinessPanel";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import {
   createBattery,
@@ -188,14 +189,9 @@ export default function AlignmentPage() {
           </div>
 
           <div className="detail__grid">
-            <ProductReasoning
-              title="Catalog recommendations"
-              products={plan?.products ?? []}
-              explanations={snapshot.product_reasoning}
-              badge={snapshot.last_query ? "Catalog" : undefined}
-              disclaimer="Catalog results reflect product data currently available in the source feed."
-              onQuickCreateBattery={handleQuickCreateBattery}
-              statusMessage={batteryStatus}
+            <ProtocolReadinessPanel
+              issues={(snapshot as any)?.protocol_readiness ?? []}
+              onAction={() => router.push("/simulation")}
             />
             <div id="alignment-research">
               <ProductReasoning

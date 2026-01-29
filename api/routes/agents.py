@@ -88,14 +88,9 @@ if APIRouter:
     @router.post("/layer2/candidates")
     def layer2_candidates(payload: Layer2CandidatesRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        # Return both catalog candidates and protocol-layer candidates so we can
-        # compare inference vs declaration paths.
-        catalog = layer2_agent.get_catalog_candidates(
-            client_id=client_scope, query=payload.query, limit=payload.limit
-        )
         protocol = layer2_agent.discover_protocol_candidates(
             client_id=client_scope, query=payload.query, limit=payload.limit
         )
-        return {"catalog": catalog, "protocol": protocol}
+        return {"protocol": protocol}
 else:  # pragma: no cover
     router = None

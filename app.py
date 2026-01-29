@@ -24,10 +24,11 @@ class DemoRuntime:
     def run(self) -> None:
         print(f"Launching {self.surface} demo surface...")
         from application.services.commerce_plan_builder import CommercePlanBuilder
-        from application.services.alignment_service import alignment_service
+        from api.composition import default_deps
+        from application.services.alignment_service import AlignmentService
         from application.services.intentionality_profiler import build_profile
-        from infrastructure.commerce.search import search as catalog_search
-        from infrastructure.commerce.compare import compare as catalog_compare
+        from application.services.product_search import search_products_for_client
+        from domain.commerce.compare import compare as product_compare
         from infrastructure.llm.intent_classifier import classify_intent
         from infrastructure.llm.product_reasoner import reason_about_products_default
 
@@ -35,14 +36,19 @@ class DemoRuntime:
         intent = classify_intent(query)
         print("Intent:", intent)
 
+        deps = default_deps()
+        alignment_service = AlignmentService(deps)
         builder = CommercePlanBuilder(
-            search_fn=lambda q: catalog_search(q),
-            compare_fn=lambda products: catalog_compare(products),
+            search_fn=lambda q, client_id, brand_id: search_products_for_client(
+                deps=deps, query=q, client_id=client_id or "default", brand_id=brand_id
+            ),
+            compare_fn=lambda products: product_compare(products),
             build_profile_fn=lambda product: build_profile(product),
         )
         plan = builder.build_plan(
             intent=intent,
             goals=[intent.get("primary_goal")] if intent.get("primary_goal") else [],
+            client_id="default",
             reason_fn=reason_about_products_default,
             assess_fn=alignment_service.assess,
             score_fn=alignment_service.score_products,

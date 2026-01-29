@@ -17,7 +17,7 @@ class OrchestratorAgent:
 
     Keeps orchestration transparent and deterministic:
     - Always run Layer 1 (inference discovery) for a query.
-    - Optionally run Layer 2 (protocol/schema checks) when catalog-like products
+    - Optionally run Layer 2 (protocol/schema checks) when products include protocol metadata
       are present or when explicitly requested.
     """
 
@@ -69,7 +69,7 @@ class OrchestratorAgent:
 def _should_run_layer2(products: List[Dict[str, Any]]) -> bool:
     for product in products:
         source = (product.get("source") or "").lower()
-        if source in {"catalog", "shopify", "google_merchant", "ucp", "acp"}:
+        if source in {"ucp", "acp"}:
             return True
         if product.get("offer_url") or product.get("merchant_name"):
             return True

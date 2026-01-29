@@ -227,7 +227,7 @@ class ConversationService:
             deps=self._deps, session_id=session_id, user_id=user_id, client_id=client_id
         )
         query_value = (
-            query or manager.get_state().get("last_query") or "catalog research"
+            query or manager.get_state().get("last_query") or "product research"
         )
         goals = manager.goal_texts()
         _, context_snapshot = context_for(manager)
@@ -299,7 +299,13 @@ class ConversationService:
             )
 
         _, context_snapshot = context_for(manager)
-        plan = commerce_agent.build_plan(intent, goals=goals, context=context_snapshot)
+        plan = commerce_agent.build_plan(
+            intent,
+            goals=goals,
+            context=context_snapshot,
+            client_id=manager.client_id,
+            brand_id=getattr(manager, "brand_id", None),
+        )
         product_explanations = plan.get("product_explanations")
         if not product_explanations:
             product_explanations = self._format_reasoning(plan.get("products", []))
@@ -330,7 +336,7 @@ class ConversationService:
         goal_signals = extract_intent_goals(intent, explicit_goals=goals)
         research = self._run_research_compat(
             run_research_fn,
-            query=plan.get("query") or "catalog research",
+            query=plan.get("query") or "product research",
             goals=goals,
             context=context_snapshot,
             manager=manager,
@@ -478,7 +484,6 @@ class ConversationService:
 
     def _merge_plan_streams(self, plan: dict, research_stream: dict | None) -> dict:
         merged = dict(plan)
-        merged["catalog_results"] = plan.get("products", [])
         merged["research_results"] = (
             research_stream.get("items") if research_stream else []
         )

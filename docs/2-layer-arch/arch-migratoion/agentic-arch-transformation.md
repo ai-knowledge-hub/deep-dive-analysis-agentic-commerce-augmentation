@@ -1015,8 +1015,6 @@ infrastructure/
 │   └── evidence_repository.py  # Web scraping
 │
 ├── adapters/            # External system adapters
-│   ├── shopify_adapter.py
-│   ├── merchant_center_adapter.py
 │   ├── acp_adapter.py   # OpenAI ACP protocol
 │   ├── ucp_adapter.py   # Google UCP protocol
 │   └── vector_store_adapter.py

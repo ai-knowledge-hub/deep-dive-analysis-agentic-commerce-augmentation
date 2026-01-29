@@ -161,7 +161,7 @@ def test_simulation_attach_to_product(client: TestClient):
     )
 
 
-def test_simulation_run_autopicks_competitors_from_catalog(client: TestClient):
+def test_simulation_run_autopicks_competitors_from_brand_products(client: TestClient):
     # Create "our" client and product (selected by product_id)
     clients_repo.create_client(
         client_id="client-underarmour", name="Under Armour", metadata={"demo": True}
@@ -174,7 +174,7 @@ def test_simulation_run_autopicks_competitors_from_catalog(client: TestClient):
         brand_id=our_brand["id"],
         name="UA Rain Running Vest",
         description="Packable running vest for light rain and wind.",
-        metadata={"source": "catalog", "offer_url": "https://example.com/ua-vest"},
+        metadata={"source": "product", "offer_url": "https://example.com/ua-vest"},
     )
 
     # Create competitor client + product that should be picked by LIKE query
@@ -189,7 +189,7 @@ def test_simulation_run_autopicks_competitors_from_catalog(client: TestClient):
         brand_id=comp_brand["id"],
         name="Nike Running Vest",
         description="running vest with reflective details and zip pockets.",
-        metadata={"source": "catalog", "offer_url": "https://example.com/nike-vest"},
+        metadata={"source": "product", "offer_url": "https://example.com/nike-vest"},
     )
 
     payload = {

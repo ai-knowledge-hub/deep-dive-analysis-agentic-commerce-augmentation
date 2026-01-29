@@ -7,50 +7,6 @@ from typing import Any, Dict, List
 from infrastructure.mcp.server import dispatch
 
 
-PRODUCT_SEARCH_TOOL = {
-    "name": "product_search",
-    "description": (
-        "Search for products that enable specific capabilities or serve user goals. "
-        "Use this when you need to find products that match user needs. "
-        "Returns products with confidence scores and source attribution."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": (
-                    "The capability, goal, or need to search for. "
-                    "Examples: 'reduce back pain', 'productivity tools', 'ergonomic workspace'"
-                ),
-            },
-        },
-        "required": ["query"],
-    },
-}
-
-
-PRODUCT_COMPARE_TOOL = {
-    "name": "product_compare",
-    "description": (
-        "Compare multiple products side-by-side on intent alignment dimensions. "
-        "Use this to help users understand tradeoffs between options. "
-        "Requires product IDs from a previous search."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "product_ids": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "List of product IDs to compare (2-4 products recommended)",
-            },
-        },
-        "required": ["product_ids"],
-    },
-}
-
-
 WEB_FETCH_TOOL = {
     "name": "web_fetch",
     "description": (
@@ -117,8 +73,6 @@ MEMORY_WRITE_TOOL = {
 
 
 ALL_TOOLS = [
-    PRODUCT_SEARCH_TOOL,
-    PRODUCT_COMPARE_TOOL,
     WEB_FETCH_TOOL,
     IMAGE_ANALYZE_TOOL,
     MEMORY_WRITE_TOOL,
@@ -128,8 +82,6 @@ ALL_TOOLS = [
 def execute_tool(name: str, args: Dict[str, Any]) -> dict:
     """Execute a tool by name with the given arguments."""
     tool_mapping = {
-        "product_search": ("product_search", lambda a: (a["query"],)),
-        "product_compare": ("product_compare", lambda a: (a["product_ids"],)),
         "web_fetch": ("web_fetch", lambda a: (a["url"], a.get("max_chars", 5000))),
         "image_analyze": (
             "image_analyze",

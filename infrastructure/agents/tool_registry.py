@@ -4,8 +4,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from application.agents.harness.replay_logger import ToolCall
 from infrastructure.llm.tools import execute_tool, llm_schema
+from shared.agents.replay_logger import ToolCall
 
 
 @dataclass(frozen=True)
@@ -15,12 +15,7 @@ class ToolExecution:
 
 
 class ToolRegistry:
-    """Small adapter around `infrastructure.llm.tools`.
-
-    Goals:
-    - Provide a single place to build tool schemas for LLM calls.
-    - Provide an execution surface that returns ToolCall records.
-    """
+    """Small adapter around `infrastructure.llm.tools`."""
 
     def llm_schema(self) -> List[dict]:
         return llm_schema()
@@ -51,3 +46,6 @@ class ToolRegistry:
             elapsed_ms=ms,
         )
         return ToolExecution(output=output, call=call)
+
+
+__all__ = ["ToolRegistry", "ToolExecution"]

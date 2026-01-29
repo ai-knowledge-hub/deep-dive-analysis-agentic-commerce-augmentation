@@ -4,7 +4,7 @@ from shared.transformers.offers import raw_offer_to_raw_product
 
 def test_raw_offer_conversion_preserves_metadata():
     offer = RawOffer(
-        source="shopify",
+        source="acp",
         source_id="variant-1",
         merchant_name="Acme",
         offer_url="https://acme.test/product",
@@ -24,7 +24,7 @@ def test_raw_offer_conversion_preserves_metadata():
         completeness=0.9,
     )
     raw_product = raw_offer_to_raw_product(offer)
-    assert raw_product.source == "shopify"
+    assert raw_product.source == "acp"
     assert raw_product.merchant_name == "Acme"
     assert raw_product.offer_url == "https://acme.test/product"
     assert raw_product.confidence == 0.95

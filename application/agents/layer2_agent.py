@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 
 from application.ports.deps import AppDeps
 from application.services.protocol_discovery_service import ProtocolDiscoveryService
-from infrastructure.db import clients as clients_repo
 
 
 @dataclass(frozen=True)
@@ -19,7 +18,7 @@ class Layer2Agent:
     """Layer 2 agent (Protocol Discovery) - minimal placeholder.
 
     For now (hackathon scope), Layer 2 does *not* call real ACP/UCP endpoints.
-    It performs lightweight schema/shape validation on "catalog/protocol-like"
+    It performs lightweight schema/shape validation on "protocol-like"
     product records so we can surface:
     - missing critical commerce fields (url, price, availability)
     - protocol readiness hints (e.g., offer_url/merchant_name)
@@ -71,35 +70,6 @@ class Layer2Agent:
                 "warnings": total_warnings,
             },
         }
-
-    def get_catalog_candidates(
-        self,
-        *,
-        client_id: str,
-        query: str,
-        limit: int = 8,
-    ) -> Dict[str, Any]:
-        matches = clients_repo.search_products_for_client(
-            client_id=client_id, query=query, limit=limit
-        )
-        candidates: List[Dict[str, Any]] = []
-        for match in matches:
-            metadata = match.get("metadata") or {}
-            candidates.append(
-                {
-                    "id": match["id"],
-                    "name": match["name"],
-                    "description": match.get("description") or "",
-                    "source": str(metadata.get("source") or "catalog"),
-                    "offer_url": metadata.get("offer_url") or metadata.get("url"),
-                    "merchant_name": metadata.get("merchant_name"),
-                    "price": metadata.get("price"),
-                    "availability": metadata.get("availability"),
-                    "metadata": metadata,
-                }
-            )
-
-        return {"client_id": client_id, "query": query, "candidates": candidates}
 
     def discover_protocol_candidates(
         self,
@@ -162,9 +132,8 @@ def _validate_product(product: Dict[str, Any]) -> List[SchemaIssue]:
     warn("availability", "Missing availability; inventory-aware flows need this.")
 
     source = product.get("source") or "unknown"
-    if source in {"catalog", "shopify", "google_merchant", "ucp", "acp"}:
-        # When we *think* it's a catalog record, be a bit stricter.
-        req("offer_url", "Catalog/protocol product missing offer_url.")
+    if source in {"ucp", "acp"}:
+        req("offer_url", "Protocol product missing offer_url.")
 
     return issues
 

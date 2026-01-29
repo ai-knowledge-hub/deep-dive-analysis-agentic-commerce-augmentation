@@ -16,21 +16,17 @@ from domain.conversation import research as research_domain
 from infrastructure.db import replays as replays_repo
 from infrastructure.llm.gateway import generate as generate
 from infrastructure.llm.gateway import generate_with_tools as generate_with_tools
-from application.agents.harness.agent_loop import AgentLoop
-from application.agents.harness.context_manager import ContextManager, PromptBudget
-from application.agents.harness.replay_logger import (
-    ReplayLogger,
-    ReplayRecord,
-    ToolCall,
-)
-from application.agents.harness.tool_registry import ToolRegistry
+from infrastructure.agents.agent_loop import AgentLoop
+from infrastructure.agents.tool_registry import ToolRegistry
+from shared.agents.context_manager import ContextManager, PromptBudget
+from shared.agents.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from shared.config.env import settings
 from shared.replay.versions import default_versions
 
 
-RESEARCH_PROMPT = """You are a catalog gap research agent.
+RESEARCH_PROMPT = """You are a product gap research agent.
 
-Goal: Provide neutral discovery research when catalog data is thin.
+Goal: Provide neutral discovery research when product data is thin.
 Return a concise bullet summary with citations, plus risks and uncertainty.
 Never fabricate sources. If data is unavailable, say so explicitly.
 """

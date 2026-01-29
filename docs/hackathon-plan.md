@@ -151,7 +151,7 @@ Samsung QN90B: 0.52 → 0.85 ✅ NOW RECOMMENDED
 **Module Updates**
 - `domain/memory/`: Context for inference only
 - `domain/conversation/` + `application/services/*`: Demo flow orchestration
-- `infrastructure/commerce/*`: Adapters + catalog-backed competitors
+- `infrastructure/protocol/*`: ACP/UCP readiness + protocol simulation
 
 ### Phase 3 — Demo UI (Week 3)
 

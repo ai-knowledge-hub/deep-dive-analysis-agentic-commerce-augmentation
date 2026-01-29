@@ -175,7 +175,7 @@ def _build_variant_product(
         "brand_id": product.get("brand_id"),
         "name": name,
         "description": description,
-        "source": str(metadata.get("source") or "catalog"),
+        "source": str(metadata.get("source") or "product"),
         "url": metadata.get("offer_url") or metadata.get("url"),
         "price": metadata.get("price"),
         "confidence": 0.7,

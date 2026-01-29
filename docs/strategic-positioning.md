@@ -17,7 +17,7 @@ Our simulation sandbox lets brands:
 
 Gap analysis uses semantic matching (embeddings + keyword fallback), so brands get true intent coverage rather than literal token overlap.
 
-Each simulation run also yields a short "lesson learned" that becomes reusable guidance for future catalog optimization.
+Each simulation run also yields a short "lesson learned" that becomes reusable guidance for future product data optimization.
 
 This document maps our strategic position:
 1. The user problem: who we serve and their pain
@@ -301,7 +301,7 @@ The LLM doesn't know we exist. It just sees better product representations that 
 
 ### API Surface
 
-**Multi-tenant requirement:** All API requests include `client_id`. `brand_id`/`product_id` are optional on simulation endpoints to bind runs to catalog records.
+**Multi-tenant requirement:** All API requests include `client_id`. `brand_id`/`product_id` are optional on simulation endpoints to bind runs to product records.
 
 ```
 POST /intent/infer
@@ -328,12 +328,8 @@ POST /recommendation/verify
   Input: { query, evidence_products }
   Output: { predicted_vs_actual, lift }
 
-POST /catalog/analyze
-  Input: { catalog_url or feed }
-  Output: { products_analyzed, intent_legibility_scores, recommendations }
-
-GET /catalog/{catalog_id}/report
-  Output: { discoverability_report }
+Catalog automation endpoints are intentionally deferred; v1 focuses on
+protocol readiness + simulation outcomes.
 ```
 
 ---
@@ -342,28 +338,30 @@ GET /catalog/{catalog_id}/report
 
 ### Protocol-Agnostic Design
 
-We work above the protocol layer:
+We work above the protocol layer, focusing on readiness and simulation:
 
 ```
-infrastructure/commerce/adapters/
-├── base.py           # Abstract adapter interface
-├── shopify.py        # Shopify Storefront API
-├── google_merchant.py # Merchant Center feeds
-├── mock.py           # Testing
-└── ucp.py            # Google UCP (future)
+ACP/UCP Profiles + Feeds
+    │
+    ▼
+Protocol Readiness Checks
+    │
+    ▼
+Simulation + Gap Analysis
 ```
 
-Each adapter normalizes source data; our intentionality module enriches it.
+External catalog adapters (Shopify/Merchant Center) are intentionally out of scope
+for the first release to keep the product focused on protocol readiness.
 
 ### Data Flow
 
 ```
-Brand Catalog
+Brand Protocol Metadata
     │
     ▼
 ┌─────────────────────────────────────────┐
-│ Adapter (Shopify/Merchant Center/etc)   │
-│ Normalize to RawOffer                   │
+│ Protocol Readiness (ACP/UCP)            │
+│ Validate feeds + business profiles      │
 └─────────────────────────────────────────┘
     │
     ▼
@@ -386,7 +384,7 @@ We don't require platform integration to deliver value:
 
 | Scenario | How We Help |
 |----------|-------------|
-| **Brand wants more AI recommendations** | Analyze catalog, optimize intentionality, measure lift |
+| **Brand wants more AI recommendations** | Analyze product data, optimize intentionality, measure lift |
 | **Platform wants better recommendations** | Provide intent inference + alignment scoring as service |
 | **Developer building commerce agent** | Use our APIs to match products to user intent |
 
@@ -402,7 +400,7 @@ Brands pay us to make their products more discoverable by AI. This is analogous 
 
 | Stream | What Brand Gets | Pricing Model |
 |--------|-----------------|---------------|
-| **Catalog Audit** | One-time discoverability report + recommendations | Per-catalog fee |
+| **Product Data Audit** | One-time discoverability report + recommendations | Per‑product data fee |
 | **Optimization SaaS** | Ongoing enrichment, monitoring, re-optimization | Monthly subscription |
 | **API Access** | Programmatic intent + alignment scoring | Usage-based |
 | **Enterprise** | White-label for platforms, custom integration | Contract |
@@ -411,7 +409,7 @@ Brands pay us to make their products more discoverable by AI. This is analogous 
 
 | Tier | Customer | Problem | Solution |
 |------|----------|---------|----------|
-| **Primary** | D2C Brands & Retailers | "We're invisible to AI shopping" | Full catalog optimization + verification |
+| **Primary** | D2C Brands & Retailers | "We're invisible to AI shopping" | Product data optimization + verification (future) |
 | **Secondary** | E-commerce Platforms | "Our merchants need AI discoverability" | White-label tools, platform integration |
 | **Tertiary** | Commerce Developers | "How do I match products to intent?" | API access |
 
@@ -431,7 +429,7 @@ Brands pay us to make their products more discoverable by AI. This is analogous 
 | Asset | Why It's Defensible |
 |-------|---------------------|
 | **Intentionality taxonomy** | Structured mapping of specs → capabilities → outcomes |
-| **Legibility scoring** | Consistent, explainable scoring tied to catalog improvements |
+| **Legibility scoring** | Consistent, explainable scoring tied to product data improvements |
 | **Before/after dataset** | Proprietary optimization + verification outcomes over time |
 | **Protocol-agnostic architecture** | Works with any commerce infrastructure |
 | **First-mover in organic LLM discovery** | New category, establishing standards |

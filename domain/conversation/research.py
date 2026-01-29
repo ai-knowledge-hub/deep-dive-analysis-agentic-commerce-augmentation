@@ -142,7 +142,7 @@ def fallback_insights(
         if isinstance(results, list) and results:
             for idx, item in enumerate(results[:3]):
                 name = item.get("name") or "Research result"
-                source = item.get("source") or "catalog"
+                source = item.get("source") or "product"
                 summary = f"{name} surfaced for intent matching (source: {source})."
                 insights.append(
                     {

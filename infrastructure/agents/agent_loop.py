@@ -4,8 +4,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from application.agents.harness.replay_logger import ReplayRecord, ToolCall
-from application.agents.harness.tool_registry import ToolRegistry
+from infrastructure.agents.tool_registry import ToolRegistry
+from shared.agents.replay_logger import ReplayRecord, ToolCall
 
 
 @dataclass(frozen=True)
@@ -18,13 +18,7 @@ class ToolRunResult:
 
 
 class AgentLoop:
-    """Minimal agent harness loop (single-turn tool execution).
-
-    This is intentionally small:
-    - One LLM call with tool schema
-    - Execute returned tool calls
-    - Return tool outputs + structured ToolCall records for replay logging
-    """
+    """Minimal agent harness loop (single-turn tool execution)."""
 
     def __init__(
         self,

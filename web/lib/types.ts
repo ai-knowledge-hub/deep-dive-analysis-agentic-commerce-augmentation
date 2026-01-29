@@ -326,7 +326,6 @@ export type ConversationResponse = {
   plan?: {
     query?: string;
     products?: Product[];
-    catalog_results?: Product[];
     research_results?: Product[];
     clarifications?: string[];
     alignment?: {
