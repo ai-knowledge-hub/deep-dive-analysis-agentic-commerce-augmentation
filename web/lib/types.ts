@@ -479,6 +479,20 @@ export type ExperimentMetric = {
   created_at?: string;
 };
 
+export type BrandBelief = {
+  id: string;
+  client_id: string;
+  brand_id: string;
+  product_id?: string | null;
+  hypothesis: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  recommendation?: string | null;
+  confidence?: number | null;
+  metadata: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ExperimentListResponse = {
   experiments: Experiment[];
 };
@@ -493,6 +507,14 @@ export type ExperimentRunListResponse = {
 
 export type ExperimentMetricListResponse = {
   metrics: ExperimentMetric[];
+};
+
+export type BrandBeliefListResponse = {
+  beliefs: BrandBelief[];
+};
+
+export type BrandBeliefResponse = {
+  belief: BrandBelief | null;
 };
 
 export type ExperimentRunResponse = {

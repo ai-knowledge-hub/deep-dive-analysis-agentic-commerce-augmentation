@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from application.ports.deps import AppDeps
 from application.services.simulation_service import SimulationService
+from application.services.brand_belief_service import BrandBeliefService
 from domain.simulation.ranking import score_for_product
 from domain.simulation.types import SimulationProduct
 
@@ -21,6 +22,7 @@ class ExperimentRunner:
     def __init__(self, *, deps: AppDeps) -> None:
         self._deps = deps
         self._simulation = SimulationService(deps=deps)
+        self._beliefs = BrandBeliefService(repo=deps.brand_beliefs)
 
     def run_experiment(
         self,
@@ -124,6 +126,14 @@ class ExperimentRunner:
         )
         metrics["metric_id"] = metric_row.get("id")
 
+        if experiment.get("brand_id"):
+            self._record_belief(
+                experiment=experiment,
+                variant=variant,
+                metrics=metrics,
+                client_id=client_id,
+            )
+
         self._deps.experiments.update_experiment(
             experiment_id=experiment_id, client_id=client_id, status="completed"
         )
@@ -133,6 +143,42 @@ class ExperimentRunner:
             variant_id=variant_id,
             runs=runs_payload,
             metrics=metrics,
+        )
+
+    def _record_belief(
+        self,
+        *,
+        experiment: Dict[str, Any],
+        variant: Dict[str, Any],
+        metrics: Dict[str, Any],
+        client_id: str,
+    ) -> None:
+        brand_id = experiment.get("brand_id")
+        if not brand_id:
+            return
+        win_rate = float(metrics.get("win_rate") or 0.0)
+        avg_score = float(metrics.get("avg_score") or 0.0)
+        recommendation = (
+            f"Variant '{variant.get('label')}' outperformed baseline."
+            if win_rate >= 0.5
+            else f"Variant '{variant.get('label')}' underperformed; revise hypothesis."
+        )
+        self._beliefs.create_belief(
+            client_id=client_id,
+            brand_id=brand_id,
+            product_id=experiment.get("product_id"),
+            hypothesis=experiment.get("hypothesis") or {},
+            evidence={
+                "experiment_id": experiment.get("id"),
+                "variant_id": variant.get("id"),
+                "metrics": metrics,
+            },
+            recommendation=recommendation,
+            confidence=round((win_rate + avg_score) / 2, 3),
+            metadata={
+                "experiment_name": experiment.get("name"),
+                "variant_label": variant.get("label"),
+            },
         )
 
     def run_experiment_for_all_variants(

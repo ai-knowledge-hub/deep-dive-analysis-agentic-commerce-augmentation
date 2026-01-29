@@ -35,6 +35,8 @@ import {
   Experiment,
   ExperimentVariant,
   QueryBatteryQuery,
+  BrandBeliefListResponse,
+  BrandBeliefResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -341,6 +343,30 @@ export async function listExperiments(
   if (userId) params.set("user_id", userId);
   if (productId) params.set("product_id", productId);
   return request<ExperimentListResponse>(`/experiments?${params.toString()}`);
+}
+
+export async function listBrandBeliefs(
+  brandId: string,
+  userId?: string | null,
+): Promise<BrandBeliefListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("brand_id", brandId);
+  return request<BrandBeliefListResponse>(`/beliefs?${params.toString()}`);
+}
+
+export async function getLatestBrandBelief(
+  brandId: string,
+  userId?: string | null,
+): Promise<BrandBeliefResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("brand_id", brandId);
+  return request<BrandBeliefResponse>(`/beliefs/latest?${params.toString()}`);
 }
 
 export async function createExperiment(payload: {
