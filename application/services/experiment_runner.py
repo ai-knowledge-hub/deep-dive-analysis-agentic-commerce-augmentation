@@ -135,6 +135,28 @@ class ExperimentRunner:
             metrics=metrics,
         )
 
+    def run_experiment_for_all_variants(
+        self,
+        *,
+        experiment_id: str,
+        client_id: str,
+        user_id: Optional[str] = None,
+    ) -> List[ExperimentRunResult]:
+        variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
+        if not variants:
+            raise ValueError("experiment has no variants")
+        results: List[ExperimentRunResult] = []
+        for variant in variants:
+            results.append(
+                self.run_experiment(
+                    experiment_id=experiment_id,
+                    variant_id=variant["id"],
+                    client_id=client_id,
+                    user_id=user_id,
+                )
+            )
+        return results
+
 
 def _build_variant_product(
     *, product: Dict[str, Any], variant: Dict[str, Any]

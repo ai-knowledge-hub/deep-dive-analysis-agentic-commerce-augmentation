@@ -6,6 +6,8 @@ import { useUser } from "@clerk/nextjs";
 import type {
   ConversationResponse,
   EvidenceAnalyzeResponse,
+  ExperimentMetric,
+  Experiment,
   RecommendationVerifyResponse,
   RepresentationOptimizeResponse,
   SessionSummary,
@@ -18,9 +20,12 @@ import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import {
   deleteConversationSession,
   listConversationSessions,
+  listExperimentMetrics,
+  listExperiments,
   listSimulationLessons,
   listSimulationRuns,
 } from "../../lib/api";
+import { useTenant } from "../../components/tenant/TenantProvider";
 
 type AlignmentSnapshot = {
   intent?: ConversationResponse["intent"];
@@ -48,9 +53,15 @@ export default function OverviewPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
+  const { productId } = useTenant();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
+  const [experimentMetrics, setExperimentMetrics] = useState<ExperimentMetric[]>([]);
+  const [latestExperiment, setLatestExperiment] = useState<Experiment | null>(null);
+  const [trendMetric, setTrendMetric] = useState<"win_rate" | "avg_score">(
+    "win_rate",
+  );
   const [alignment, setAlignment] = useState<AlignmentSnapshot>({});
   const [evidence, setEvidence] = useState<EvidenceSnapshot>({});
   const [simulation, setSimulation] = useState<SimulationSnapshot>({});
@@ -111,7 +122,18 @@ export default function OverviewPage() {
     void listSimulationLessons(userId).then((response) => {
       setSimulationLessons(response.lessons ?? []);
     });
-  }, [userId]);
+    void listExperiments(userId, productId ?? undefined).then((response) => {
+      const experiment = response.experiments?.[0] ?? null;
+      setLatestExperiment(experiment);
+      if (!experiment) {
+        setExperimentMetrics([]);
+        return;
+      }
+      void listExperimentMetrics(experiment.id, userId).then((metricsResponse) => {
+        setExperimentMetrics(metricsResponse.metrics ?? []);
+      });
+    });
+  }, [productId, userId]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -139,6 +161,55 @@ export default function OverviewPage() {
     evidence.verification?.lift !== undefined
       ? `${Math.round(evidence.verification.lift * 100)}%`
       : "—";
+
+  const experimentTrend = useMemo(() => {
+    if (!experimentMetrics.length) return [];
+    return [...experimentMetrics]
+      .filter((metric) =>
+        trendMetric === "win_rate"
+          ? metric.metrics?.win_rate !== undefined
+          : metric.metrics?.avg_score !== undefined,
+      )
+      .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
+      .slice(-12)
+      .map((metric) =>
+        Number(
+          trendMetric === "win_rate"
+            ? metric.metrics?.win_rate ?? 0
+            : metric.metrics?.avg_score ?? 0,
+        ),
+      );
+  }, [experimentMetrics, trendMetric]);
+
+  const latestTrendValue = experimentTrend.length
+    ? trendMetric === "win_rate"
+      ? `${Math.round(experimentTrend[experimentTrend.length - 1] * 100)}%`
+      : `${Math.round(experimentTrend[experimentTrend.length - 1] * 100) / 100}`
+    : "—";
+
+  const renderSparkline = (values: number[]) => {
+    if (values.length === 0) return null;
+    const width = 120;
+    const height = 36;
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const range = max - min || 1;
+    const points = values.map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${x},${y}`;
+    });
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <polyline
+          fill="none"
+          stroke="rgba(28, 200, 134, 0.7)"
+          strokeWidth="2"
+          points={points.join(" ")}
+        />
+      </svg>
+    );
+  };
 
   return (
     <div className="app">
@@ -209,6 +280,52 @@ export default function OverviewPage() {
             backLabel="Back to chat"
           />
           <div className="detail__grid">
+            <div className="summary-card">
+              <div className="summary-card__header">
+                <h4>Experiment Trend</h4>
+                <button
+                  type="button"
+                  className="summary-card__link"
+                  onClick={() => router.push("/experiments")}
+                >
+                  Open
+                </button>
+              </div>
+              <p className="summary-card__meta">
+                {latestExperiment?.name ?? "No experiment selected"}
+              </p>
+              <div className="summary-card__row">
+                <div className="summary-card__stat">
+                  <span className="summary-card__label">Latest {trendMetric.replace("_", " ")}</span>
+                  <span className="summary-card__value">{latestTrendValue}</span>
+                  <div className="summary-card__toggle">
+                    <button
+                      type="button"
+                      className={`summary-card__toggle-btn ${
+                        trendMetric === "win_rate" ? "is-active" : ""
+                      }`}
+                      onClick={() => setTrendMetric("win_rate")}
+                    >
+                      Win rate
+                    </button>
+                    <button
+                      type="button"
+                      className={`summary-card__toggle-btn ${
+                        trendMetric === "avg_score" ? "is-active" : ""
+                      }`}
+                      onClick={() => setTrendMetric("avg_score")}
+                    >
+                      Avg score
+                    </button>
+                  </div>
+                </div>
+                <div className="summary-card__sparkline">
+                  {renderSparkline(experimentTrend) ?? (
+                    <span className="summary-card__empty">No trend yet.</span>
+                  )}
+                </div>
+              </div>
+            </div>
             <div className="summary-card">
               <div className="summary-card__header">
                 <h4>Simulation Sandbox</h4>

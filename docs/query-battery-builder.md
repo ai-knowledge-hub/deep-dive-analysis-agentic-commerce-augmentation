@@ -42,6 +42,10 @@ Add the following tables (names are suggested; IDs are UUIDs unless noted).
 - `hypothesis_json` (json)
 - `competitor_policy_json` (json) — how competitors are selected/held constant
 - `status` (`draft|running|completed|archived`)
+- `schedule_enabled` (bool, default false)
+- `schedule_interval_minutes` (int, nullable)
+- `last_run_at` (timestamp, nullable)
+- `next_run_at` (timestamp, nullable)
 - `created_at`, `updated_at`
 
 ### `experiment_variants`
@@ -103,9 +107,12 @@ Outputs:
   - `{ source: "bottom_up"|"top_down"|"hybrid", seed_queries?: string[], limit?: number }`
 - `GET /batteries?client_id=...&product_id=...`
 - `GET /batteries/{battery_id}`
+- `GET /batteries/{battery_id}/metrics` — coverage + redundancy snapshot
 - `PATCH /batteries/{battery_id}`
 - `POST /batteries/{battery_id}/queries`
 - `PATCH /batteries/{battery_id}/queries/{query_id}`
+- `DELETE /batteries/{battery_id}/queries/{query_id}`
+  - Metrics now include `quality_score` (0–100) + `quality_issues` + `avg_words`
 
 ### Experiments + variants
 - `POST /experiments`
@@ -114,6 +121,10 @@ Outputs:
   - `{ label, type, payload_json }`
 - `POST /experiments/{experiment_id}/run`
   - `{ variant_id }` (runs the entire battery for that variant)
+- `POST /experiments/{experiment_id}/schedule`
+  - `{ enabled, interval_minutes }` (sets cadence + next_run_at)
+- `POST /experiments/{experiment_id}/backfill`
+  - runs all variants once, stores metrics, updates last/next run timestamps
 - `GET /experiments?client_id=...&product_id=...`
 - `GET /experiments/{experiment_id}` (includes metrics + per-query outcomes)
 
@@ -144,6 +155,13 @@ New page: **Experiments / Flight Tests**
 - Generate (bottom-up / top-down / hybrid)
 - Import market queries (paste list)
 - Enable/disable, weight, edit queries
+- Quick-create battery from product panels (chat + alignment)
+- Inline status (battery/experiment created)
+- JSON templates for hypothesis, competitor policy, variant payload
+- Battery metrics snapshot (coverage + redundancy)
+- Quality score (query count, redundancy, diversity, length heuristics)
+- Scheduling controls (enable, cadence, last/next run) + backfill now
+- Metrics history (trend)
 
 2) Experiment setup
 - Hypothesis form (target metric, expected direction, rationale)
@@ -165,4 +183,3 @@ New page: **Experiments / Flight Tests**
   - mean score
   - protocol readiness (ACP/UCP)
   - top recurring gaps + lessons
-

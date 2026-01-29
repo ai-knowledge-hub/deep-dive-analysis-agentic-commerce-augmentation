@@ -170,6 +170,20 @@ def update_query(
     return {"query": query}
 
 
+@router.delete("/{battery_id}/queries/{query_id}")
+def delete_query(
+    battery_id: str,
+    query_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    require_client_id(client_id, user_id)
+    deleted = SERVICE.delete_query(query_id=query_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="query not found")
+    return {"status": "deleted"}
+
+
 @router.post("/{battery_id}/generate")
 def generate_queries(
     battery_id: str, payload: BatteryGenerateRequest
@@ -186,6 +200,15 @@ def generate_queries(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"queries": created}
+
+
+@router.get("/{battery_id}/metrics")
+def get_metrics(
+    battery_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    require_client_id(client_id, user_id)
+    metrics = SERVICE.get_metrics(battery_id=battery_id)
+    return {"metrics": metrics}
 
 
 __all__ = ["router"]

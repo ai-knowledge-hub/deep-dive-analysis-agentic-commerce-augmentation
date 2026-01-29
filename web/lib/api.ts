@@ -25,6 +25,7 @@ import {
   AdminPlatformProfileResponse,
   QueryBatteryListResponse,
   QueryBatteryQueryListResponse,
+  QueryBatteryMetricsResponse,
   ExperimentListResponse,
   ExperimentVariantListResponse,
   ExperimentRunListResponse,
@@ -33,6 +34,7 @@ import {
   QueryBattery,
   Experiment,
   ExperimentVariant,
+  QueryBatteryQuery,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -210,6 +212,30 @@ export async function createBattery(payload: {
   });
 }
 
+export async function updateBattery(
+  batteryId: string,
+  payload: {
+    name?: string | null;
+    purpose?: string | null;
+    generation_mode?: string | null;
+    status?: string | null;
+    user_id?: string | null;
+  },
+): Promise<{ battery: QueryBattery }> {
+  const clientId = getClientId();
+  return request<{ battery: QueryBattery }>(`/batteries/${batteryId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: payload.user_id ?? undefined,
+      name: payload.name ?? undefined,
+      purpose: payload.purpose ?? undefined,
+      generation_mode: payload.generation_mode ?? undefined,
+      status: payload.status ?? undefined,
+    }),
+  });
+}
+
 export async function listBatteryQueries(
   batteryId: string,
   userId?: string | null,
@@ -220,6 +246,66 @@ export async function listBatteryQueries(
   if (userId) params.set("user_id", userId);
   return request<QueryBatteryQueryListResponse>(
     `/batteries/${batteryId}/queries?${params.toString()}`,
+  );
+}
+
+export async function updateBatteryQuery(
+  batteryId: string,
+  queryId: string,
+  payload: {
+    query_text?: string | null;
+    query_type?: string | null;
+    intent_archetype?: string | null;
+    constraints?: Record<string, unknown> | null;
+    weight?: number | null;
+    enabled?: boolean | null;
+    user_id?: string | null;
+  },
+): Promise<{ query: QueryBatteryQuery }> {
+  const clientId = getClientId();
+  return request<{ query: QueryBatteryQuery }>(
+    `/batteries/${batteryId}/queries/${queryId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: payload.user_id ?? undefined,
+        query_text: payload.query_text ?? undefined,
+        query_type: payload.query_type ?? undefined,
+        intent_archetype: payload.intent_archetype ?? undefined,
+        constraints: payload.constraints ?? undefined,
+        weight: payload.weight ?? undefined,
+        enabled: payload.enabled ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function deleteBatteryQuery(
+  batteryId: string,
+  queryId: string,
+  userId?: string | null,
+): Promise<{ status: string }> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<{ status: string }>(
+    `/batteries/${batteryId}/queries/${queryId}?${params.toString()}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function getBatteryMetrics(
+  batteryId: string,
+  userId?: string | null,
+): Promise<QueryBatteryMetricsResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<QueryBatteryMetricsResponse>(
+    `/batteries/${batteryId}/metrics?${params.toString()}`,
   );
 }
 
@@ -363,6 +449,51 @@ export async function runExperiment(
       client_id: clientId ?? undefined,
       user_id: userId ?? undefined,
       variant_id: variantId,
+    }),
+  });
+}
+
+export async function updateExperimentSchedule(
+  experimentId: string,
+  payload: {
+    enabled: boolean;
+    interval_minutes?: number | null;
+    user_id?: string | null;
+  },
+): Promise<{ schedule: { experiment_id: string; next_run_at?: string | null } }> {
+  const clientId = getClientId();
+  return request<{ schedule: { experiment_id: string; next_run_at?: string | null } }>(
+    `/experiments/${experimentId}/schedule`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: payload.user_id ?? undefined,
+        enabled: payload.enabled,
+        interval_minutes: payload.interval_minutes ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function backfillExperiment(
+  experimentId: string,
+  userId?: string | null,
+): Promise<{
+  experiment_id: string;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+}> {
+  const clientId = getClientId();
+  return request<{
+    experiment_id: string;
+    last_run_at?: string | null;
+    next_run_at?: string | null;
+  }>(`/experiments/${experimentId}/backfill`, {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: userId ?? undefined,
     }),
   });
 }

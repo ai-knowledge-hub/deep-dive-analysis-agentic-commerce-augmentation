@@ -220,6 +220,10 @@ CREATE TABLE IF NOT EXISTS experiments (
     hypothesis_json TEXT,
     competitor_policy_json TEXT,
     status TEXT DEFAULT 'draft',
+    schedule_enabled INTEGER DEFAULT 0,
+    schedule_interval_minutes INTEGER,
+    last_run_at TEXT,
+    next_run_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
@@ -278,6 +282,7 @@ CREATE INDEX IF NOT EXISTS idx_query_battery_queries_battery ON query_battery_qu
 CREATE INDEX IF NOT EXISTS idx_experiments_client ON experiments(client_id);
 CREATE INDEX IF NOT EXISTS idx_experiments_product ON experiments(product_id);
 CREATE INDEX IF NOT EXISTS idx_experiments_battery ON experiments(battery_id);
+CREATE INDEX IF NOT EXISTS idx_experiments_next_run ON experiments(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_runs_experiment ON experiment_runs(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_runs_variant ON experiment_runs(variant_id);

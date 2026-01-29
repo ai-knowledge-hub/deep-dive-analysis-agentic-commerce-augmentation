@@ -9,12 +9,14 @@ from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 from application.services.experiment_service import ExperimentService
 from application.services.experiment_runner import ExperimentRunner
+from application.services.experiment_scheduler import ExperimentScheduler
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 DEPS = default_deps()
 SERVICE = ExperimentService(repo=DEPS.experiments)
 RUNNER = ExperimentRunner(deps=DEPS)
+SCHEDULER = ExperimentScheduler(deps=DEPS)
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -50,6 +52,18 @@ class ExperimentRunRequest(BaseModel):
     user_id: Optional[str] = None
     client_id: Optional[str] = None
     variant_id: str = Field(..., min_length=1)
+
+
+class ExperimentScheduleRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    enabled: bool
+    interval_minutes: Optional[int] = Field(default=None, gt=0)
+
+
+class ExperimentBackfillRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
 
 
 @router.post("")
@@ -155,6 +169,44 @@ def run_experiment(experiment_id: str, payload: ExperimentRunRequest) -> Dict[st
         "variant_id": result.variant_id,
         "runs": result.runs,
         "metrics": result.metrics,
+    }
+
+
+@router.post("/{experiment_id}/schedule")
+def update_schedule(
+    experiment_id: str, payload: ExperimentScheduleRequest
+) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    try:
+        result = SCHEDULER.update_schedule(
+            experiment_id=experiment_id,
+            client_id=client_id,
+            enabled=payload.enabled,
+            interval_minutes=payload.interval_minutes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"schedule": result.__dict__}
+
+
+@router.post("/{experiment_id}/backfill")
+def backfill_experiment(
+    experiment_id: str, payload: ExperimentBackfillRequest
+) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    try:
+        result = SCHEDULER.run_backfill(
+            experiment_id=experiment_id,
+            client_id=client_id,
+            user_id=payload.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "experiment_id": result.experiment_id,
+        "last_run_at": result.last_run_at,
+        "next_run_at": result.next_run_at,
+        "runs": [r.__dict__ for r in result.runs],
     }
 
 

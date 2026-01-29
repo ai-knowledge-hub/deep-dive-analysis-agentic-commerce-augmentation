@@ -54,6 +54,12 @@ def _should_apply_multi_tenant(conn: sqlite3.Connection) -> bool:
     return not _column_exists(conn, "sessions", "client_id")
 
 
+def _should_apply_experiment_scheduling(conn: sqlite3.Connection) -> bool:
+    if not _table_exists(conn, "experiments"):
+        return True
+    return not _column_exists(conn, "experiments", "schedule_enabled")
+
+
 def _iter_migration_files(path: Path) -> Iterable[Path]:
     if not path.exists():
         return []
@@ -72,9 +78,14 @@ def apply_migrations(
         should_apply = name == "001_multi_tenant.sql" and _should_apply_multi_tenant(
             conn
         )
+        if name == "005_experiment_scheduling.sql":
+            should_apply = _should_apply_experiment_scheduling(conn)
         if name in applied and not should_apply:
             continue
         if name == "001_multi_tenant.sql" and not should_apply:
+            _mark_applied(conn, name)
+            continue
+        if name == "005_experiment_scheduling.sql" and not should_apply:
             _mark_applied(conn, name)
             continue
         script = migration.read_text(encoding="utf-8")

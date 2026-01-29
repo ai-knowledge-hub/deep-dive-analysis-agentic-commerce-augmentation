@@ -67,6 +67,10 @@ class ExperimentService:
         status: Optional[str] = None,
         hypothesis: Optional[Dict[str, Any]] = None,
         competitor_policy: Optional[Dict[str, Any]] = None,
+        schedule_enabled: Optional[bool] = None,
+        schedule_interval_minutes: Optional[int] = None,
+        last_run_at: Optional[str] = None,
+        next_run_at: Optional[str] = None,
     ) -> Dict[str, Any] | None:
         return self._repo.update_experiment(
             experiment_id=experiment_id,
@@ -75,6 +79,10 @@ class ExperimentService:
             status=status,
             hypothesis=hypothesis,
             competitor_policy=competitor_policy,
+            schedule_enabled=schedule_enabled,
+            schedule_interval_minutes=schedule_interval_minutes,
+            last_run_at=last_run_at,
+            next_run_at=next_run_at,
         )
 
     def add_variant(

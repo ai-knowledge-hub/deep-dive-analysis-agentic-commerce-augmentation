@@ -20,6 +20,15 @@ SET UP SCENARIO → SIMULATE → SEE RESULTS → LESSONS → CONFIRM TONE → OP
 
 This is the **closed feedback loop** that solves the user's core pain point: "I don't know why my product isn't showing up in AI results."
 
+### Query Battery + Experiments (v1)
+
+To make the loop repeatable, we attach a per‑product **query battery** and run structured experiments:
+
+- **Create battery** from product panels (chat or alignment) → generate queries (bottom‑up/top‑down/hybrid).
+- **Edit battery**: enable/disable queries, adjust weights, review coverage metrics.
+- **Create experiment**: hypothesis + competitor policy + variants (A/B/C).
+- **Run battery** against each variant to compare win‑rate and score lift.
+
 ### Mode 2: Full Catalog Workflow (Production)
 
 After proving value with the sandbox, brands connect their full catalogs:

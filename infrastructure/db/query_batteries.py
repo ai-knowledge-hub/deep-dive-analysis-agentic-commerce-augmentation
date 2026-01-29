@@ -230,6 +230,16 @@ def update_query(
     return get_query(query_id)
 
 
+def delete_query(*, query_id: str) -> bool:
+    conn = get_connection()
+    cursor = conn.execute(
+        "DELETE FROM query_battery_queries WHERE id = ?",
+        (query_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def _battery_row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],

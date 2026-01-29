@@ -9,6 +9,7 @@ type Props = {
   onAttach?: (runId: string) => void;
   attachLabel?: string | null;
   attachDisabled?: boolean;
+  onOpenExperiments?: (runId: string, productId?: string | null) => void;
 };
 
 export function SimulationHistory({
@@ -18,6 +19,7 @@ export function SimulationHistory({
   onAttach,
   attachLabel,
   attachDisabled,
+  onOpenExperiments,
 }: Props) {
   return (
     <div className="panel__card">
@@ -87,6 +89,15 @@ export function SimulationHistory({
                   >
                     Attach
                   </button>
+                  {onOpenExperiments && (
+                    <button
+                      type="button"
+                      className="button button--ghost button--compact"
+                      onClick={() => onOpenExperiments(run.id, run.product_id)}
+                    >
+                      Experiments
+                    </button>
+                  )}
                 </div>
               )}
             </div>

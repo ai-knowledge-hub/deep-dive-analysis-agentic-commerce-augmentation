@@ -416,6 +416,26 @@ export type QueryBatteryQueryListResponse = {
   queries: QueryBatteryQuery[];
 };
 
+export type QueryBatteryMetrics = {
+  total_queries: number;
+  enabled_queries: number;
+  unique_queries: number;
+  redundancy_rate: number;
+  avg_weight?: number | null;
+  avg_words?: number | null;
+  enabled_ratio?: number;
+  type_diversity?: number;
+  archetype_diversity?: number;
+  quality_score?: number;
+  quality_issues?: string[];
+  type_breakdown: Record<string, number>;
+  archetype_breakdown: Record<string, number>;
+};
+
+export type QueryBatteryMetricsResponse = {
+  metrics: QueryBatteryMetrics;
+};
+
 export type Experiment = {
   id: string;
   client_id: string;
@@ -426,6 +446,10 @@ export type Experiment = {
   hypothesis?: Record<string, unknown>;
   competitor_policy?: Record<string, unknown>;
   status?: string | null;
+  schedule_enabled?: boolean;
+  schedule_interval_minutes?: number | null;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
   created_at?: string;
   updated_at?: string;
 };

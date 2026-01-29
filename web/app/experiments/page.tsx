@@ -16,16 +16,22 @@ import {
   createBattery,
   createExperiment,
   createExperimentVariant,
+  deleteBatteryQuery,
   deleteConversationSession,
   generateBatteryQueries,
+  getBatteryMetrics,
   listConversationSessions,
   listBatteries,
+  updateBattery,
+  updateBatteryQuery,
   listExperimentMetrics,
   listExperimentRuns,
   listExperimentVariants,
   listExperiments,
   listBatteryQueries,
   runExperiment,
+  updateExperimentSchedule,
+  backfillExperiment,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -57,6 +63,14 @@ export default function ExperimentsPage() {
     purpose: "",
     generationMode: "bottom_up",
   });
+  const [batteryEdit, setBatteryEdit] = useState({
+    name: "",
+    purpose: "",
+    status: "draft",
+  });
+  const [batteryMetrics, setBatteryMetrics] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
   const [experimentForm, setExperimentForm] = useState({
     name: "",
@@ -73,6 +87,20 @@ export default function ExperimentsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
+  const [queryStatus, setQueryStatus] = useState<string | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    enabled: false,
+    intervalMinutes: "1440",
+  });
+  const [scheduleStatus, setScheduleStatus] = useState<string | null>(null);
+  const [metricsTrendMetric, setMetricsTrendMetric] = useState<
+    "win_rate" | "avg_score"
+  >("win_rate");
+  const [jsonErrors, setJsonErrors] = useState({
+    hypothesis: null as string | null,
+    competitorPolicy: null as string | null,
+    variantPayload: null as string | null,
+  });
 
   useEffect(() => {
     if (!userId) return;
@@ -104,7 +132,6 @@ export default function ExperimentsPage() {
       setVariants([]);
       setRuns([]);
       setMetrics([]);
-      setQueries([]);
       return;
     }
     void listExperimentVariants(selectedExperimentId, userId).then((response) => {
@@ -116,21 +143,80 @@ export default function ExperimentsPage() {
     void listExperimentMetrics(selectedExperimentId, userId).then((response) => {
       setMetrics(response.metrics ?? []);
     });
-    const batteryId = selectedExperiment?.battery_id;
+  }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+
+  useEffect(() => {
+    const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
     if (batteryId) {
       void listBatteryQueries(batteryId, userId).then((response) => {
         setQueries(response.queries ?? []);
       });
+      void getBatteryMetrics(batteryId, userId).then((response) => {
+        setBatteryMetrics(response.metrics ?? null);
+      });
     } else {
       setQueries([]);
+      setBatteryMetrics(null);
     }
-  }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+  }, [experimentForm.batteryId, selectedExperiment?.battery_id, userId]);
 
   const queryMap = useMemo(() => {
     const map = new Map<string, string>();
     queries.forEach((query) => map.set(query.id, query.query_text));
     return map;
   }, [queries]);
+
+  const selectedBattery = useMemo(
+    () => batteries.find((battery) => battery.id === experimentForm.batteryId) ?? null,
+    [batteries, experimentForm.batteryId],
+  );
+
+  const validateJsonField = useCallback((value: string) => {
+    if (!value.trim()) return null;
+    try {
+      JSON.parse(value);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Invalid JSON";
+    }
+  }, []);
+
+  useEffect(() => {
+    setJsonErrors((prev) => ({
+      ...prev,
+      hypothesis: validateJsonField(experimentForm.hypothesis),
+      competitorPolicy: validateJsonField(experimentForm.competitorPolicy),
+    }));
+  }, [experimentForm.hypothesis, experimentForm.competitorPolicy, validateJsonField]);
+
+  useEffect(() => {
+    setJsonErrors((prev) => ({
+      ...prev,
+      variantPayload: validateJsonField(variantForm.payload),
+    }));
+  }, [variantForm.payload, validateJsonField]);
+
+  useEffect(() => {
+    if (selectedBattery) {
+      setBatteryEdit({
+        name: selectedBattery.name ?? "",
+        purpose: selectedBattery.purpose ?? "",
+        status: selectedBattery.status ?? "draft",
+      });
+    }
+  }, [selectedBattery]);
+
+  useEffect(() => {
+    if (selectedExperiment) {
+      setScheduleForm({
+        enabled: Boolean(selectedExperiment.schedule_enabled),
+        intervalMinutes: String(
+          selectedExperiment.schedule_interval_minutes ?? 1440,
+        ),
+      });
+      setScheduleStatus(null);
+    }
+  }, [selectedExperiment]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -170,6 +256,56 @@ export default function ExperimentsPage() {
     [selectedExperimentId, userId],
   );
 
+  const handleScheduleSave = useCallback(async () => {
+    if (!selectedExperimentId) return;
+    const interval = Number(scheduleForm.intervalMinutes);
+    if (scheduleForm.enabled && (Number.isNaN(interval) || interval <= 0)) {
+      setScheduleStatus("Interval must be a positive number.");
+      return;
+    }
+    setScheduleStatus(null);
+    try {
+      await updateExperimentSchedule(selectedExperimentId, {
+        enabled: scheduleForm.enabled,
+        interval_minutes: scheduleForm.enabled ? interval : undefined,
+        user_id: userId ?? undefined,
+      });
+      const response = await listExperiments(userId, productId ?? undefined);
+      setExperiments(response.experiments ?? []);
+      setScheduleStatus("Schedule updated.");
+    } catch (error) {
+      setScheduleStatus("Failed to update schedule.");
+    }
+  }, [
+    productId,
+    scheduleForm.enabled,
+    scheduleForm.intervalMinutes,
+    selectedExperimentId,
+    userId,
+  ]);
+
+  const handleBackfill = useCallback(async () => {
+    if (!selectedExperimentId) return;
+    setScheduleStatus(null);
+    try {
+      await backfillExperiment(selectedExperimentId, userId);
+      const experimentsResponse = await listExperiments(
+        userId,
+        productId ?? undefined,
+      );
+      setExperiments(experimentsResponse.experiments ?? []);
+      const [runsResponse, metricsResponse] = await Promise.all([
+        listExperimentRuns(selectedExperimentId, userId),
+        listExperimentMetrics(selectedExperimentId, userId),
+      ]);
+      setRuns(runsResponse.runs ?? []);
+      setMetrics(metricsResponse.metrics ?? []);
+      setScheduleStatus("Backfill completed.");
+    } catch (error) {
+      setScheduleStatus("Backfill failed.");
+    }
+  }, [productId, selectedExperimentId, userId]);
+
   const handleCreateBattery = useCallback(async () => {
     if (!productId || !batteryForm.name.trim()) return;
     setFormError(null);
@@ -196,6 +332,32 @@ export default function ExperimentsPage() {
     }
   }, [batteryForm, productId, userId]);
 
+  const handleUpdateBattery = useCallback(async () => {
+    if (!selectedBattery) return;
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const response = await updateBattery(selectedBattery.id, {
+        name: batteryEdit.name,
+        purpose: batteryEdit.purpose,
+        status: batteryEdit.status,
+        user_id: userId,
+      });
+      setBatteries((current) =>
+        current.map((battery) =>
+          battery.id === selectedBattery.id ? response.battery : battery,
+        ),
+      );
+      setBatteryStatus("Battery updated.");
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : "Unable to update battery.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [batteryEdit, selectedBattery, userId]);
+
   const handleGenerateQueries = useCallback(
     async (batteryId: string) => {
       if (!batteryId) return;
@@ -220,8 +382,71 @@ export default function ExperimentsPage() {
     [batterySeedQueries, batteryForm.generationMode, userId],
   );
 
+  const handleQueryToggle = useCallback(
+    async (batteryId: string, queryId: string, enabled: boolean) => {
+      setQueryStatus(null);
+      try {
+        const response = await updateBatteryQuery(batteryId, queryId, {
+          enabled,
+          user_id: userId,
+        });
+        setQueries((current) =>
+          current.map((query) =>
+            query.id === queryId ? response.query : query,
+          ),
+        );
+        setQueryStatus("Query updated.");
+      } catch (error) {
+        setQueryStatus(
+          error instanceof Error ? error.message : "Unable to update query.",
+        );
+      }
+    },
+    [userId],
+  );
+
+  const handleQueryWeight = useCallback(
+    async (batteryId: string, queryId: string, weight: number) => {
+      setQueryStatus(null);
+      try {
+        const response = await updateBatteryQuery(batteryId, queryId, {
+          weight,
+          user_id: userId,
+        });
+        setQueries((current) =>
+          current.map((query) =>
+            query.id === queryId ? response.query : query,
+          ),
+        );
+        setQueryStatus("Query updated.");
+      } catch (error) {
+        setQueryStatus(
+          error instanceof Error ? error.message : "Unable to update query.",
+        );
+      }
+    },
+    [userId],
+  );
+
+  const handleQueryDelete = useCallback(
+    async (batteryId: string, queryId: string) => {
+      setQueryStatus(null);
+      try {
+        await deleteBatteryQuery(batteryId, queryId, userId);
+        setQueries((current) => current.filter((query) => query.id !== queryId));
+        setQueryStatus("Query deleted.");
+      } catch (error) {
+        setQueryStatus(
+          error instanceof Error ? error.message : "Unable to delete query.",
+        );
+      }
+    },
+    [userId],
+  );
+
   const handleCreateExperiment = useCallback(async () => {
     if (!productId || !experimentForm.name.trim()) return;
+    if (jsonErrors.hypothesis || jsonErrors.competitorPolicy) return;
     setFormError(null);
     setExperimentStatus(null);
     setSubmitting(true);
@@ -259,10 +484,11 @@ export default function ExperimentsPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [experimentForm, productId, userId]);
+  }, [experimentForm, jsonErrors, productId, userId]);
 
   const handleCreateVariant = useCallback(async () => {
     if (!selectedExperimentId || !variantForm.label.trim()) return;
+    if (jsonErrors.variantPayload) return;
     setFormError(null);
     setSubmitting(true);
     try {
@@ -286,9 +512,70 @@ export default function ExperimentsPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [selectedExperimentId, userId, variantForm]);
+  }, [jsonErrors.variantPayload, selectedExperimentId, userId, variantForm]);
 
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
+  const metricsByVariant = useMemo(() => {
+    const map = new Map<string, ExperimentMetric>();
+    metrics.forEach((metric) => {
+      if (!metric.variant_id) return;
+      const existing = map.get(metric.variant_id);
+      if (!existing || (metric.created_at || "") > (existing.created_at || "")) {
+        map.set(metric.variant_id, metric);
+      }
+    });
+    return map;
+  }, [metrics]);
+
+  const metricsHistory = useMemo(() => {
+    return [...metrics]
+      .filter((metric) => metric.variant_id)
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+      .slice(0, 10);
+  }, [metrics]);
+
+  const metricsTrend = useMemo(() => {
+    if (!metrics.length) return [];
+    return [...metrics]
+      .filter((metric) =>
+        metricsTrendMetric === "win_rate"
+          ? metric.metrics?.win_rate !== undefined
+          : metric.metrics?.avg_score !== undefined,
+      )
+      .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
+      .slice(-12)
+      .map((metric) =>
+        Number(
+          metricsTrendMetric === "win_rate"
+            ? metric.metrics?.win_rate ?? 0
+            : metric.metrics?.avg_score ?? 0,
+        ),
+      );
+  }, [metrics, metricsTrendMetric]);
+
+  const renderSparkline = (values: number[]) => {
+    if (values.length === 0) return null;
+    const width = 120;
+    const height = 36;
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const range = max - min || 1;
+    const points = values.map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${x},${y}`;
+    });
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <polyline
+          fill="none"
+          stroke="rgba(28, 200, 134, 0.7)"
+          strokeWidth="2"
+          points={points.join(" ")}
+        />
+      </svg>
+    );
+  };
 
   return (
     <div className="app">
@@ -313,18 +600,19 @@ export default function ExperimentsPage() {
         confirmDeleteId={deleteTargetId}
         onConfirmDelete={confirmDeleteSession}
       />
-      <main className="detail">
-        <DetailHeader
-          title="Experiments"
-          subtitle={
-            productName
-              ? `Experiment results for ${productName}`
-              : "Track query batteries, variants, and outcomes."
-          }
-          onMenu={() => setSidebarOpen(true)}
-          onBack={() => router.push("/")}
-        />
-        <div className="detail__stack">
+      <main className="main main--detail">
+        <div className="detail">
+          <DetailHeader
+            title="Experiments"
+            subtitle={
+              productName
+                ? `Experiment results for ${productName}`
+                : "Track query batteries, variants, and outcomes."
+            }
+            onMenu={() => setSidebarOpen(true)}
+            onBack={() => router.push("/")}
+          />
+          <div className="detail__stack">
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
@@ -435,6 +723,153 @@ export default function ExperimentsPage() {
 
           <section className="panel__card">
             <div className="panel__header">
+              <h3>Battery Details</h3>
+            </div>
+            {selectedBattery ? (
+              <div className="panel__form">
+                <label className="panel__label">
+                  Battery name
+                  <input
+                    className="panel__input"
+                    value={batteryEdit.name}
+                    onChange={(event) =>
+                      setBatteryEdit((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="panel__label">
+                  Purpose
+                  <input
+                    className="panel__input"
+                    value={batteryEdit.purpose}
+                    onChange={(event) =>
+                      setBatteryEdit((prev) => ({
+                        ...prev,
+                        purpose: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="panel__label">
+                  Status
+                  <select
+                    className="panel__input"
+                    value={batteryEdit.status}
+                    onChange={(event) =>
+                      setBatteryEdit((prev) => ({
+                        ...prev,
+                        status: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="active">Active</option>
+                    <option value="paused">Paused</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="panel__action"
+                  onClick={handleUpdateBattery}
+                  disabled={isSubmitting}
+                >
+                  Save battery
+                </button>
+                {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
+                {queries.length === 0 ? (
+                  <p className="panel__empty">No queries yet.</p>
+                ) : (
+                  <ul className="panel__list">
+                    {queries.map((query) => (
+                      <li key={query.id}>
+                        <div className="panel__meta">
+                          <span>{query.query_text}</span>
+                          <label className="panel__toggle">
+                            <input
+                              type="checkbox"
+                              checked={query.enabled}
+                              onChange={(event) =>
+                                handleQueryToggle(
+                                  selectedBattery.id,
+                                  query.id,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            <span>Enabled</span>
+                          </label>
+                          <button
+                            type="button"
+                            className="panel__action panel__action--ghost"
+                            onClick={() => handleQueryDelete(selectedBattery.id, query.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        <div className="panel__meta">
+                          <span className="panel__muted">Weight</span>
+                          <input
+                            className="panel__input panel__input--inline"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            defaultValue={query.weight ?? 1}
+                            onBlur={(event) =>
+                              handleQueryWeight(
+                                selectedBattery.id,
+                                query.id,
+                                Number(event.target.value),
+                              )
+                            }
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {batteryMetrics ? (
+                  <div className="panel__metrics">
+                    <p className="panel__muted">
+                      Total: {batteryMetrics.total_queries ?? 0} · Enabled:{" "}
+                      {batteryMetrics.enabled_queries ?? 0} · Unique:{" "}
+                      {batteryMetrics.unique_queries ?? 0}
+                    </p>
+                    <p className="panel__muted">
+                      Redundancy:{" "}
+                      {batteryMetrics.redundancy_rate !== undefined
+                        ? `${Number(batteryMetrics.redundancy_rate) * 100}%`
+                        : "—"}
+                    </p>
+                    <p className="panel__muted">
+                      Quality score:{" "}
+                      {batteryMetrics.quality_score !== undefined
+                        ? `${batteryMetrics.quality_score}/100`
+                        : "—"}
+                      {batteryMetrics.avg_words
+                        ? ` · Avg words: ${batteryMetrics.avg_words}`
+                        : ""}
+                    </p>
+                    {Array.isArray(batteryMetrics.quality_issues) &&
+                    batteryMetrics.quality_issues.length > 0 ? (
+                      <ul className="panel__list panel__list--compact">
+                        {batteryMetrics.quality_issues.map((issue, index) => (
+                          <li key={`${issue}-${index}`}>{issue}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="panel__empty">Select a battery to edit.</p>
+            )}
+          </section>
+
+          <section className="panel__card">
+            <div className="panel__header">
               <h3>Create Experiment</h3>
             </div>
             {productId ? (
@@ -490,6 +925,23 @@ export default function ExperimentsPage() {
                     rows={3}
                     placeholder='{"metric":"win_rate","direction":"increase"}'
                   />
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() =>
+                        setExperimentForm((prev) => ({
+                          ...prev,
+                          hypothesis: '{"metric":"win_rate","direction":"increase","rationale":"Outcome framing improves intent alignment"}',
+                        }))
+                      }
+                    >
+                      Use template
+                    </button>
+                  </div>
+                  {jsonErrors.hypothesis ? (
+                    <span className="panel__error">{jsonErrors.hypothesis}</span>
+                  ) : null}
                 </label>
                 <label className="panel__label">
                   Competitor policy (JSON)
@@ -505,12 +957,33 @@ export default function ExperimentsPage() {
                     rows={3}
                     placeholder='{"competitor_client_ids":["client-nike"]}'
                   />
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() =>
+                        setExperimentForm((prev) => ({
+                          ...prev,
+                          competitorPolicy: '{"competitor_client_ids":["client-nike","client-adidas"],"strategy":"hold_constant"}',
+                        }))
+                      }
+                    >
+                      Use template
+                    </button>
+                  </div>
+                  {jsonErrors.competitorPolicy ? (
+                    <span className="panel__error">{jsonErrors.competitorPolicy}</span>
+                  ) : null}
                 </label>
                 <button
                   type="button"
                   className="panel__action"
                   onClick={handleCreateExperiment}
-                  disabled={isSubmitting || experimentForm.name.trim() === ""}
+                  disabled={
+                    isSubmitting ||
+                    experimentForm.name.trim() === "" ||
+                    Boolean(jsonErrors.hypothesis || jsonErrors.competitorPolicy)
+                  }
                 >
                   Create experiment
                 </button>
@@ -619,12 +1092,33 @@ export default function ExperimentsPage() {
                     rows={3}
                     placeholder='{"description":"Updated copy"}'
                   />
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() =>
+                        setVariantForm((prev) => ({
+                          ...prev,
+                          payload: '{"description":"Outcome-led copy that emphasizes user goals and capabilities."}',
+                        }))
+                      }
+                    >
+                      Use template
+                    </button>
+                  </div>
+                  {jsonErrors.variantPayload ? (
+                    <span className="panel__error">{jsonErrors.variantPayload}</span>
+                  ) : null}
                 </label>
                 <button
                   type="button"
                   className="panel__action"
                   onClick={handleCreateVariant}
-                  disabled={isSubmitting || !selectedExperimentId}
+                  disabled={
+                    isSubmitting ||
+                    !selectedExperimentId ||
+                    Boolean(jsonErrors.variantPayload)
+                  }
                 >
                   Add variant
                 </button>
@@ -670,7 +1164,125 @@ export default function ExperimentsPage() {
                 <p className="panel__empty">Run a variant to generate metrics.</p>
               )}
             </section>
+
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Scheduling</h3>
+              </div>
+              {selectedExperiment ? (
+                <div className="panel__form">
+                  {scheduleStatus ? (
+                    <p className="panel__success">{scheduleStatus}</p>
+                  ) : null}
+                  <label className="panel__label">
+                    Enable schedule
+                    <input
+                      type="checkbox"
+                      checked={scheduleForm.enabled}
+                      onChange={(event) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          enabled: event.target.checked,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="panel__label">
+                    Interval (minutes)
+                    <input
+                      className="panel__input"
+                      type="number"
+                      min={15}
+                      step={15}
+                      value={scheduleForm.intervalMinutes}
+                      onChange={(event) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          intervalMinutes: event.target.value,
+                        }))
+                      }
+                      disabled={!scheduleForm.enabled}
+                    />
+                  </label>
+                  <div className="panel__meta">
+                    <span className="panel__muted">
+                      Last run:{" "}
+                      {selectedExperiment.last_run_at
+                        ? new Date(selectedExperiment.last_run_at).toLocaleString()
+                        : "—"}
+                    </span>
+                    <span className="panel__muted">
+                      Next run:{" "}
+                      {selectedExperiment.next_run_at
+                        ? new Date(selectedExperiment.next_run_at).toLocaleString()
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action"
+                      onClick={handleScheduleSave}
+                    >
+                      Save schedule
+                    </button>
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={handleBackfill}
+                    >
+                      Backfill now
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="panel__empty">Select an experiment to schedule reruns.</p>
+              )}
+            </section>
           </div>
+
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Variant Comparison</h3>
+            </div>
+            {variants.length === 0 ? (
+              <p className="panel__empty">Add variants to compare results.</p>
+            ) : (
+              <ul className="panel__list">
+                {variants.map((variant) => {
+                  const metric = metricsByVariant.get(variant.id);
+                  const values = (metric?.metrics ?? {}) as Record<string, unknown>;
+                  return (
+                    <li key={variant.id}>
+                      <div className="panel__meta">
+                        <span>{variant.label}</span>
+                        <span className="panel__badge panel__badge--secondary">
+                          {variant.type}
+                        </span>
+                      </div>
+                      <div className="panel__meta">
+                        <span className="panel__muted">
+                          Win rate: {values.win_rate ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Avg score: {values.avg_score ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Runs: {values.total_runs ?? "—"}
+                        </span>
+                      </div>
+                      {metric?.created_at ? (
+                        <span className="panel__muted">
+                          Last run:{" "}
+                          {new Date(metric.created_at).toLocaleDateString()}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
           <section className="panel__card">
             <div className="panel__header">
@@ -700,9 +1312,69 @@ export default function ExperimentsPage() {
             )}
           </section>
 
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Metrics History</h3>
+              <div className="panel__meta">
+                {renderSparkline(metricsTrend) ?? (
+                  <span className="panel__muted">No trend yet.</span>
+                )}
+              </div>
+            </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className={`panel__action panel__action--ghost ${
+                  metricsTrendMetric === "win_rate" ? "is-active" : ""
+                }`}
+                onClick={() => setMetricsTrendMetric("win_rate")}
+              >
+                Win rate
+              </button>
+              <button
+                type="button"
+                className={`panel__action panel__action--ghost ${
+                  metricsTrendMetric === "avg_score" ? "is-active" : ""
+                }`}
+                onClick={() => setMetricsTrendMetric("avg_score")}
+              >
+                Avg score
+              </button>
+            </div>
+            {metricsHistory.length === 0 ? (
+              <p className="panel__empty">No metrics history yet.</p>
+            ) : (
+              <ul className="panel__list">
+                {metricsHistory.map((metric) => {
+                  const values = (metric.metrics ?? {}) as Record<string, unknown>;
+                  const variantLabel =
+                    variants.find((variant) => variant.id === metric.variant_id)
+                      ?.label ?? metric.variant_id;
+                  return (
+                    <li key={metric.id}>
+                      <div className="panel__meta">
+                        <span>{variantLabel}</span>
+                        <span className="panel__muted">
+                          {metric.created_at
+                            ? new Date(metric.created_at).toLocaleDateString()
+                            : ""}
+                        </span>
+                      </div>
+                      <span className="panel__muted">
+                        Win rate: {values.win_rate ?? "—"} · Avg score:{" "}
+                        {values.avg_score ?? "—"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
           <div className="detail__note">
             Runs execute the full query battery against the selected variant and
             aggregate win-rate + score metrics.
+          </div>
           </div>
         </div>
       </main>

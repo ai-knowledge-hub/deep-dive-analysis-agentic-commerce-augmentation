@@ -100,6 +100,10 @@ def update_experiment(
     status: Optional[str] = None,
     hypothesis: Optional[Dict[str, Any]] = None,
     competitor_policy: Optional[Dict[str, Any]] = None,
+    schedule_enabled: Optional[bool] = None,
+    schedule_interval_minutes: Optional[int] = None,
+    last_run_at: Optional[str] = None,
+    next_run_at: Optional[str] = None,
 ) -> Dict[str, Any] | None:
     conn = get_connection()
     updates: list[str] = []
@@ -116,6 +120,18 @@ def update_experiment(
     if competitor_policy is not None:
         updates.append("competitor_policy_json = json(?)")
         params.append(to_json(competitor_policy) or to_json({}))
+    if schedule_enabled is not None:
+        updates.append("schedule_enabled = ?")
+        params.append(1 if schedule_enabled else 0)
+    if schedule_interval_minutes is not None:
+        updates.append("schedule_interval_minutes = ?")
+        params.append(schedule_interval_minutes)
+    if last_run_at is not None:
+        updates.append("last_run_at = ?")
+        params.append(last_run_at)
+    if next_run_at is not None:
+        updates.append("next_run_at = ?")
+        params.append(next_run_at)
     if not updates:
         return get_experiment(experiment_id, client_id=client_id)
     updates.append("updated_at = datetime('now')")
@@ -184,6 +200,26 @@ def list_variants(experiment_id: str) -> List[Dict[str, Any]]:
     return [_variant_row(row) for row in rows]
 
 
+def list_due_experiments(
+    *, client_id: Optional[str] = None, limit: int = 20
+) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    query = """
+        SELECT * FROM experiments
+        WHERE schedule_enabled = 1
+          AND next_run_at IS NOT NULL
+          AND next_run_at <= datetime('now')
+    """
+    params: list[Any] = []
+    if client_id:
+        query += " AND client_id = ?"
+        params.append(client_id)
+    query += " ORDER BY next_run_at ASC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(query, params).fetchall()
+    return [_experiment_row(row) for row in rows]
+
+
 def _experiment_row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -195,6 +231,12 @@ def _experiment_row(row) -> Dict[str, Any]:
         "hypothesis": from_json(row["hypothesis_json"], default={}),
         "competitor_policy": from_json(row["competitor_policy_json"], default={}),
         "status": row["status"],
+        "schedule_enabled": bool(row["schedule_enabled"])
+        if row["schedule_enabled"] is not None
+        else False,
+        "schedule_interval_minutes": row["schedule_interval_minutes"],
+        "last_run_at": row["last_run_at"],
+        "next_run_at": row["next_run_at"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -219,4 +261,5 @@ __all__ = [
     "add_variant",
     "get_variant",
     "list_variants",
+    "list_due_experiments",
 ]
