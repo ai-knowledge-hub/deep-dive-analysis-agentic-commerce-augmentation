@@ -31,6 +31,7 @@ import {
   ExperimentRunListResponse,
   ExperimentMetricListResponse,
   ExperimentRunResponse,
+  NextTestRecommendationResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
@@ -460,6 +461,19 @@ export async function listExperimentMetrics(
   if (variantId) params.set("variant_id", variantId);
   return request<ExperimentMetricListResponse>(
     `/experiments/${experimentId}/metrics?${params.toString()}`,
+  );
+}
+
+export async function getNextTestRecommendation(
+  experimentId: string,
+  userId?: string | null,
+): Promise<NextTestRecommendationResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<NextTestRecommendationResponse>(
+    `/experiments/${experimentId}/next-test?${params.toString()}`,
   );
 }
 

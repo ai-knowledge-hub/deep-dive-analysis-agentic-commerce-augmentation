@@ -67,4 +67,3 @@ def latest_belief(
     scoped_client_id = require_client_id(client_id, user_id)
     belief = SERVICE.latest_belief(client_id=scoped_client_id, brand_id=brand_id)
     return {"belief": belief}
-

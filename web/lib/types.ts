@@ -517,6 +517,21 @@ export type BrandBeliefResponse = {
   belief: BrandBelief | null;
 };
 
+export type NextTestRecommendation = {
+  experiment_id: string;
+  action: "run_variant" | "create_variant" | "none";
+  reason: string;
+  variant_id?: string | null;
+  confidence?: number | null;
+  suggested_label?: string | null;
+  suggested_type?: string | null;
+  suggested_payload?: Record<string, unknown> | null;
+};
+
+export type NextTestRecommendationResponse = {
+  recommendation: NextTestRecommendation;
+};
+
 export type ExperimentRunResponse = {
   experiment_id: string;
   variant_id: string;

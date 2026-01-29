@@ -34,6 +34,7 @@ import {
   updateExperimentSchedule,
   backfillExperiment,
   getLatestBrandBelief,
+  getNextTestRecommendation,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -100,6 +101,16 @@ export default function ExperimentsPage() {
   const [metricsTrendMetric, setMetricsTrendMetric] = useState<
     "win_rate" | "avg_score"
   >("win_rate");
+  const [nextTest, setNextTest] = useState<{
+    action: "run_variant" | "create_variant" | "none";
+    reason: string;
+    variant_id?: string | null;
+    suggested_label?: string | null;
+    suggested_type?: string | null;
+    suggested_payload?: Record<string, unknown> | null;
+  } | null>(null);
+  const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
+  const [isRecommending, setIsRecommending] = useState(false);
   const [jsonErrors, setJsonErrors] = useState({
     hypothesis: null as string | null,
     competitorPolicy: null as string | null,
@@ -625,6 +636,88 @@ export default function ExperimentsPage() {
       setSubmitting(false);
     }
   }, [jsonErrors.variantPayload, selectedExperimentId, userId, variantForm]);
+
+  const handleRecommendNextTest = useCallback(async () => {
+    if (!selectedExperimentId) return;
+    setNextTestStatus(null);
+    setIsRecommending(true);
+    try {
+      const response = await getNextTestRecommendation(
+        selectedExperimentId,
+        userId,
+      );
+      setNextTest(response.recommendation);
+    } catch (error) {
+      setNextTestStatus("Unable to recommend next test.");
+    } finally {
+      setIsRecommending(false);
+    }
+  }, [selectedExperimentId, userId]);
+
+  const handleRunRecommended = useCallback(async () => {
+    if (!selectedExperimentId || !nextTest?.variant_id) return;
+    setRunningVariantId(nextTest.variant_id);
+    try {
+      await runExperiment(selectedExperimentId, nextTest.variant_id, userId);
+      const [runsResponse, metricsResponse] = await Promise.all([
+        listExperimentRuns(selectedExperimentId, userId),
+        listExperimentMetrics(selectedExperimentId, userId),
+      ]);
+      setRuns(runsResponse.runs ?? []);
+      setMetrics(metricsResponse.metrics ?? []);
+      setNextTestStatus("Recommended variant run completed.");
+    } finally {
+      setRunningVariantId(null);
+    }
+  }, [nextTest?.variant_id, selectedExperimentId, userId]);
+
+  const handleCreateSuggestedVariant = useCallback(async () => {
+    if (!selectedExperimentId || !nextTest || nextTest.action !== "create_variant") {
+      return;
+    }
+    if (labMode === "lab") {
+      const ok = window.confirm(
+        "Create and run the suggested variant now?",
+      );
+      if (!ok) return;
+    }
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      const response = await createExperimentVariant(selectedExperimentId, {
+        label: nextTest.suggested_label ?? "Hypothesis (next)",
+        type: nextTest.suggested_type ?? "copy",
+        payload:
+          nextTest.suggested_payload &&
+          typeof nextTest.suggested_payload === "object"
+            ? nextTest.suggested_payload
+            : {},
+        user_id: userId,
+      });
+      const refreshed = await listExperimentVariants(selectedExperimentId, userId);
+      setVariants(refreshed.variants ?? []);
+      if (labMode === "lab") {
+        await runExperiment(selectedExperimentId, response.variant.id, userId);
+        const [runsResponse, metricsResponse] = await Promise.all([
+          listExperimentRuns(selectedExperimentId, userId),
+          listExperimentMetrics(selectedExperimentId, userId),
+        ]);
+        setRuns(runsResponse.runs ?? []);
+        setMetrics(metricsResponse.metrics ?? []);
+        setNextTestStatus(
+          `Created and ran variant ${response.variant.label}.`,
+        );
+      } else {
+        setNextTestStatus(`Created variant ${response.variant.label}.`);
+      }
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : "Unable to create variant.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [labMode, nextTest, selectedExperimentId, userId]);
 
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
   const metricsByVariant = useMemo(() => {
@@ -1221,6 +1314,14 @@ export default function ExperimentsPage() {
                   {variants.length > 0 && (
                     <span className="panel__badge">{variants.length}</span>
                   )}
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleRecommendNextTest}
+                    disabled={!selectedExperimentId || isRecommending}
+                  >
+                    {isRecommending ? "Recommending…" : "Recommend next test"}
+                  </button>
                 </div>
               </div>
               <div className="panel__form">
@@ -1321,6 +1422,40 @@ export default function ExperimentsPage() {
                   ))}
                 </ul>
               )}
+              {nextTest ? (
+                <div className="panel__notice">
+                  <strong>Next test:</strong> {nextTest.reason}
+                  {nextTest.action === "run_variant" && nextTest.variant_id ? (
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="panel__action"
+                        onClick={handleRunRecommended}
+                        disabled={runningVariantId === nextTest.variant_id}
+                      >
+                        {runningVariantId === nextTest.variant_id
+                          ? "Running…"
+                          : "Run recommended"}
+                      </button>
+                    </div>
+                  ) : null}
+                  {nextTest.action === "create_variant" ? (
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="panel__action"
+                        onClick={handleCreateSuggestedVariant}
+                        disabled={isSubmitting}
+                      >
+                        Create suggested variant
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {nextTestStatus ? (
+                <p className="panel__success">{nextTestStatus}</p>
+              ) : null}
             </section>
 
             <section className="panel__card">
