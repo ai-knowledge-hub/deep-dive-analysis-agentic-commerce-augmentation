@@ -532,6 +532,17 @@ export type NextTestRecommendationResponse = {
   recommendation: NextTestRecommendation;
 };
 
+export type ExperimentRecommendation = {
+  id: string;
+  experiment_id: string;
+  recommendation: NextTestRecommendation;
+  created_at?: string;
+};
+
+export type ExperimentRecommendationListResponse = {
+  recommendations: ExperimentRecommendation[];
+};
+
 export type ExperimentRunResponse = {
   experiment_id: string;
   variant_id: string;

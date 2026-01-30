@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
+  BrandBelief,
   Experiment,
   ExperimentMetric,
+  ExperimentRecommendation,
   ExperimentRun,
   ExperimentVariant,
   QueryBattery,
@@ -33,6 +35,7 @@ import {
   updateExperimentSchedule,
   backfillExperiment,
   getNextTestRecommendation,
+  listExperimentRecommendations,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -58,6 +61,9 @@ export default function ExperimentsPage() {
   const [variants, setVariants] = useState<ExperimentVariant[]>([]);
   const [runs, setRuns] = useState<ExperimentRun[]>([]);
   const [metrics, setMetrics] = useState<ExperimentMetric[]>([]);
+  const [recommendations, setRecommendations] = useState<
+    ExperimentRecommendation[]
+  >([]);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [batteries, setBatteries] = useState<QueryBattery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
@@ -158,6 +164,7 @@ export default function ExperimentsPage() {
       setVariants([]);
       setRuns([]);
       setMetrics([]);
+      setRecommendations([]);
       return;
     }
     void listExperimentVariants(selectedExperimentId, userId).then((response) => {
@@ -169,6 +176,11 @@ export default function ExperimentsPage() {
     void listExperimentMetrics(selectedExperimentId, userId).then((response) => {
       setMetrics(response.metrics ?? []);
     });
+    void listExperimentRecommendations(selectedExperimentId, userId).then(
+      (response) => {
+        setRecommendations(response.recommendations ?? []);
+      },
+    );
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
 
   useEffect(() => {
@@ -625,6 +637,21 @@ export default function ExperimentsPage() {
     }
   }, [jsonErrors.variantPayload, selectedExperimentId, userId, variantForm]);
 
+  const handleUseBelief = useCallback((belief: BrandBelief) => {
+    const metric = belief?.metadata?.metric ?? "win_rate";
+    const direction = belief?.metadata?.direction ?? "increase";
+    const hypothesisPayload = {
+      metric,
+      direction,
+      rationale: belief?.metadata?.summary ?? belief?.recommendation ?? "",
+      belief_id: belief?.id,
+    };
+    setExperimentForm((prev) => ({
+      ...prev,
+      hypothesis: JSON.stringify(hypothesisPayload, null, 2),
+    }));
+  }, []);
+
   const handleRecommendNextTest = useCallback(async () => {
     if (!selectedExperimentId) return;
     setNextTestStatus(null);
@@ -707,6 +734,30 @@ export default function ExperimentsPage() {
     }
   }, [labMode, nextTest, selectedExperimentId, userId]);
 
+  const handleRunRecommendation = useCallback(
+    async (variantId: string | null | undefined) => {
+      if (!selectedExperimentId || !variantId) return;
+      if (labMode === "lab") {
+        const ok = window.confirm("Run this recommended test now?");
+        if (!ok) return;
+      }
+      setRunningVariantId(variantId);
+      try {
+        await runExperiment(selectedExperimentId, variantId, userId);
+        const [runsResponse, metricsResponse] = await Promise.all([
+          listExperimentRuns(selectedExperimentId, userId),
+          listExperimentMetrics(selectedExperimentId, userId),
+        ]);
+        setRuns(runsResponse.runs ?? []);
+        setMetrics(metricsResponse.metrics ?? []);
+        setNextTestStatus("Recommended test run completed.");
+      } finally {
+        setRunningVariantId(null);
+      }
+    },
+    [labMode, selectedExperimentId, userId],
+  );
+
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
   const metricsByVariant = useMemo(() => {
     const map = new Map<string, ExperimentMetric>();
@@ -769,6 +820,16 @@ export default function ExperimentsPage() {
       </svg>
     );
   };
+
+  const hypothesisBeliefId = useMemo(() => {
+    if (!experimentForm.hypothesis.trim()) return null;
+    try {
+      const parsed = JSON.parse(experimentForm.hypothesis);
+      return typeof parsed?.belief_id === "string" ? parsed.belief_id : null;
+    } catch {
+      return null;
+    }
+  }, [experimentForm.hypothesis]);
 
   return (
     <div className="app">
@@ -834,6 +895,7 @@ export default function ExperimentsPage() {
               clientId={clientId ?? undefined}
               userId={userId ?? undefined}
               limit={50}
+              onUseBelief={handleUseBelief}
             />
           ) : null}
           {formError ? (
@@ -1162,6 +1224,11 @@ export default function ExperimentsPage() {
                       Use template
                     </button>
                   </div>
+                  {hypothesisBeliefId ? (
+                    <span className="panel__success">
+                      Created from belief: {hypothesisBeliefId}
+                    </span>
+                  ) : null}
                   {jsonErrors.hypothesis ? (
                     <span className="panel__error">{jsonErrors.hypothesis}</span>
                   ) : null}
@@ -1632,6 +1699,46 @@ export default function ExperimentsPage() {
                     </li>
                   );
                 })}
+              </ul>
+            )}
+            <div className="panel__meta">
+              <h4 className="panel__subtitle">Orchestrator Recommendations</h4>
+            </div>
+            {recommendations.length === 0 ? (
+              <p className="panel__empty">No recommendations yet.</p>
+            ) : (
+              <ul className="panel__list panel__list--compact">
+                {recommendations.map((rec) => (
+                  <li key={rec.id}>
+                    <div className="panel__meta">
+                      <span>{rec.recommendation.reason}</span>
+                      <span className="panel__badge panel__badge--secondary">
+                        {rec.recommendation.action}
+                      </span>
+                    </div>
+                    <span className="panel__muted">
+                      {rec.created_at
+                        ? new Date(rec.created_at).toLocaleDateString()
+                        : ""}
+                    </span>
+                    {rec.recommendation.action === "run_variant" ? (
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() =>
+                            handleRunRecommendation(rec.recommendation.variant_id)
+                          }
+                          disabled={runningVariantId === rec.recommendation.variant_id}
+                        >
+                          {runningVariantId === rec.recommendation.variant_id
+                            ? "Running…"
+                            : "Run next test"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
             )}
           </section>

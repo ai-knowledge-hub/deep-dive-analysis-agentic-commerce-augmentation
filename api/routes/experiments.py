@@ -218,7 +218,11 @@ def next_test(
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(client_id, user_id)
     recommendation = ORCHESTRATOR.suggest_next_test(
-        experiment_id=experiment_id, client_id=scoped_client_id, user_id=user_id
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    DEPS.experiment_recommendations.create_recommendation(
+        experiment_id=experiment_id,
+        recommendation=recommendation.to_dict(),
     )
     return {"recommendation": recommendation.to_dict()}
 
@@ -251,6 +255,20 @@ def list_metrics(
         experiment_id=experiment_id, variant_id=variant_id, limit=limit
     )
     return {"metrics": metrics}
+
+
+@router.get("/{experiment_id}/recommendations")
+def list_recommendations(
+    experiment_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 25,
+) -> Dict[str, Any]:
+    require_client_id(client_id, user_id)
+    recommendations = DEPS.experiment_recommendations.list_recommendations(
+        experiment_id=experiment_id, limit=limit
+    )
+    return {"recommendations": recommendations}
 
 
 __all__ = ["router"]

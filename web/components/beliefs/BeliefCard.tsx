@@ -18,9 +18,10 @@ interface BeliefCardProps {
     metadata: Record<string, any>;
     created_at: string;
   };
+  onUseBelief?: (belief: BeliefCardProps["belief"]) => void;
 }
 
-export function BeliefCard({ belief }: BeliefCardProps) {
+export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getConfidenceColor = (confidence: number): string => {
@@ -59,6 +60,15 @@ export function BeliefCard({ belief }: BeliefCardProps) {
           <h5>{belief.recommendation}</h5>
           <span className="belief-card__date">{formatDate(belief.created_at)}</span>
         </div>
+        {typeof belief.metadata?.support === "boolean" ? (
+          <span
+            className={`belief-card__support ${
+              belief.metadata.support ? "is-supported" : "is-rejected"
+            }`}
+          >
+            {belief.metadata.support ? "Supported" : "Not supported"}
+          </span>
+        ) : null}
         <div
           className="belief-card__confidence"
           style={{ borderColor: confidenceColor }}
@@ -78,6 +88,15 @@ export function BeliefCard({ belief }: BeliefCardProps) {
               ? String(belief.metadata.summary)
               : "No summary yet."}
           </p>
+          {onUseBelief ? (
+            <button
+              type="button"
+              className="belief-cta"
+              onClick={() => onUseBelief(belief)}
+            >
+              Use as hypothesis
+            </button>
+          ) : null}
         </div>
 
         <div className="belief-structure">
@@ -197,6 +216,31 @@ export function BeliefCard({ belief }: BeliefCardProps) {
           background: rgba(0, 0, 0, 0.2);
         }
 
+        .belief-card__support {
+          align-self: flex-start;
+          padding: 0.2rem 0.6rem;
+          border-radius: 999px;
+          font-size: 0.65rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.06);
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        .belief-card__support.is-supported {
+          border-color: rgba(28, 200, 134, 0.5);
+          background: rgba(28, 200, 134, 0.12);
+          color: #1cc886;
+        }
+
+        .belief-card__support.is-rejected {
+          border-color: rgba(239, 68, 68, 0.4);
+          background: rgba(239, 68, 68, 0.12);
+          color: #f87171;
+        }
+
         .confidence-value {
           font-size: 1.25rem;
           font-weight: 700;
@@ -216,6 +260,24 @@ export function BeliefCard({ belief }: BeliefCardProps) {
           font-size: 0.9rem;
           color: rgba(255, 255, 255, 0.75);
           line-height: 1.4;
+        }
+
+        .belief-cta {
+          margin-top: 0.75rem;
+          background: rgba(28, 200, 134, 0.15);
+          border: 1px solid rgba(28, 200, 134, 0.5);
+          color: #1cc886;
+          font-size: 0.7rem;
+          padding: 0.35rem 0.75rem;
+          border-radius: 999px;
+          cursor: pointer;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          font-weight: 600;
+        }
+
+        .belief-cta:hover {
+          background: rgba(28, 200, 134, 0.25);
         }
 
         .belief-section--summary {

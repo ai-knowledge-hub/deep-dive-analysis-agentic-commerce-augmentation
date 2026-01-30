@@ -32,6 +32,7 @@ import {
   ExperimentMetricListResponse,
   ExperimentRunResponse,
   NextTestRecommendationResponse,
+  ExperimentRecommendationListResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
@@ -474,6 +475,21 @@ export async function getNextTestRecommendation(
   if (userId) params.set("user_id", userId);
   return request<NextTestRecommendationResponse>(
     `/experiments/${experimentId}/next-test?${params.toString()}`,
+  );
+}
+
+export async function listExperimentRecommendations(
+  experimentId: string,
+  userId?: string | null,
+  limit = 25,
+): Promise<ExperimentRecommendationListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  if (limit) params.set("limit", String(limit));
+  return request<ExperimentRecommendationListResponse>(
+    `/experiments/${experimentId}/recommendations?${params.toString()}`,
   );
 }
 

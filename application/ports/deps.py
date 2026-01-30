@@ -173,6 +173,12 @@ class ExperimentRunsStore(Protocol):
     def list_metrics(self, **kwargs: Any) -> list[dict]: ...
 
 
+class ExperimentRecommendationsStore(Protocol):
+    def create_recommendation(self, **kwargs: Any) -> dict: ...
+
+    def list_recommendations(self, **kwargs: Any) -> list[dict]: ...
+
+
 class BrandBeliefsStore(Protocol):
     def create_belief(self, **kwargs: Any) -> dict: ...
 
@@ -207,6 +213,7 @@ class AppDeps:
     query_batteries: QueryBatteriesStore
     experiments: ExperimentsStore
     experiment_runs: ExperimentRunsStore
+    experiment_recommendations: ExperimentRecommendationsStore
     brand_beliefs: BrandBeliefsStore
 
     # Semantic memory

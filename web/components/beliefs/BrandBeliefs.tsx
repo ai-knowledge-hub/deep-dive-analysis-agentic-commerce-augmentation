@@ -29,6 +29,7 @@ interface BrandBeliefsProps {
   clientId?: string;
   userId?: string;
   limit?: number;
+  onUseBelief?: (belief: Belief) => void;
 }
 
 export function BrandBeliefs({
@@ -36,6 +37,7 @@ export function BrandBeliefs({
   clientId,
   userId,
   limit = 50,
+  onUseBelief,
 }: BrandBeliefsProps) {
   const [beliefs, setBeliefs] = useState<Belief[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,7 +195,7 @@ export function BrandBeliefs({
                   {index < beliefs.length - 1 && <div className="timeline-line" />}
                 </div>
                 <div className="timeline-content">
-                  <BeliefCard belief={belief} />
+                  <BeliefCard belief={belief} onUseBelief={onUseBelief} />
                 </div>
               </div>
             ))}
@@ -204,7 +206,11 @@ export function BrandBeliefs({
         {viewMode === "list" && (
           <div className="beliefs__list">
             {beliefs.map((belief) => (
-              <BeliefCard key={belief.id} belief={belief} />
+              <BeliefCard
+                key={belief.id}
+                belief={belief}
+                onUseBelief={onUseBelief}
+              />
             ))}
           </div>
         )}
