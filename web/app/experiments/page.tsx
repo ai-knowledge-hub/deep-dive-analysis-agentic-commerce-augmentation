@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
-  BrandBelief,
   Experiment,
   ExperimentMetric,
   ExperimentRun,
@@ -33,19 +32,19 @@ import {
   runExperiment,
   updateExperimentSchedule,
   backfillExperiment,
-  getLatestBrandBelief,
   getNextTestRecommendation,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
 
 export default function ExperimentsPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
-  const { productId, productName, brandId, brandName } = useTenant();
+  const { productId, productName, brandId } = useTenant();
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -53,7 +52,6 @@ export default function ExperimentsPage() {
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [labMode, setLabMode] = useState<"lab" | "manual">("lab");
-  const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
 
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
@@ -136,16 +134,6 @@ export default function ExperimentsPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("experiments_mode", labMode);
   }, [labMode]);
-
-  useEffect(() => {
-    if (!brandId) {
-      setLatestBelief(null);
-      return;
-    }
-    void getLatestBrandBelief(brandId, userId).then((response) => {
-      setLatestBelief(response.belief ?? null);
-    });
-  }, [brandId, userId]);
 
   useEffect(() => {
     void listBatteries(userId, productId ?? undefined).then((response) => {
@@ -841,44 +829,12 @@ export default function ExperimentsPage() {
           />
           <div className="detail__stack">
           {brandId ? (
-            <section className="panel__card">
-              <div className="panel__header">
-                <h3>Brand Belief</h3>
-                {brandName ? (
-                  <span className="panel__badge panel__badge--secondary">
-                    {brandName}
-                  </span>
-                ) : null}
-              </div>
-              {latestBelief ? (
-                <div className="panel__form">
-                  <p className="panel__muted">
-                    Latest update:{" "}
-                    {latestBelief.created_at
-                      ? new Date(latestBelief.created_at).toLocaleString()
-                      : "—"}
-                  </p>
-                  <p className="panel__muted">
-                    Confidence:{" "}
-                    {latestBelief.confidence !== undefined
-                      ? `${Math.round(latestBelief.confidence * 100)}%`
-                      : "—"}
-                  </p>
-                  {latestBelief.summary ? (
-                    <p className="panel__muted">{latestBelief.summary}</p>
-                  ) : null}
-                  {latestBelief.recommendation ? (
-                    <div className="panel__notice">
-                      {latestBelief.recommendation}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="panel__empty">
-                  No beliefs recorded yet. Run a variant to generate one.
-                </p>
-              )}
-            </section>
+            <BrandBeliefs
+              brandId={brandId}
+              clientId={productId ?? undefined}
+              userId={userId ?? undefined}
+              limit={50}
+            />
           ) : null}
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
