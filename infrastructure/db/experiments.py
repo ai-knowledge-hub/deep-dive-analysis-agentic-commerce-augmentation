@@ -220,6 +220,30 @@ def list_due_experiments(
     return [_experiment_row(row) for row in rows]
 
 
+def list_all_experiments(
+    *,
+    status: Optional[str] = None,
+    limit: int = 1000,
+) -> List[Dict[str, Any]]:
+    """List all experiments across all clients (for ML training).
+
+    WARNING: This bypasses tenant isolation. Only use for ML training.
+    """
+    conn = get_connection()
+    query = "SELECT * FROM experiments"
+    params: list[Any] = []
+
+    if status:
+        query += " WHERE status = ?"
+        params.append(status)
+
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+
+    rows = conn.execute(query, params).fetchall()
+    return [_experiment_row(row) for row in rows]
+
+
 def _experiment_row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -257,6 +281,7 @@ __all__ = [
     "create_experiment",
     "get_experiment",
     "list_experiments",
+    "list_all_experiments",
     "update_experiment",
     "add_variant",
     "get_variant",

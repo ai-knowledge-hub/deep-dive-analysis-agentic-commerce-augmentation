@@ -31,10 +31,13 @@ import {
   ExperimentRunListResponse,
   ExperimentMetricListResponse,
   ExperimentRunResponse,
+  NextTestRecommendationResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
   QueryBatteryQuery,
+  BrandBeliefListResponse,
+  BrandBeliefResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -343,6 +346,30 @@ export async function listExperiments(
   return request<ExperimentListResponse>(`/experiments?${params.toString()}`);
 }
 
+export async function listBrandBeliefs(
+  brandId: string,
+  userId?: string | null,
+): Promise<BrandBeliefListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("brand_id", brandId);
+  return request<BrandBeliefListResponse>(`/beliefs?${params.toString()}`);
+}
+
+export async function getLatestBrandBelief(
+  brandId: string,
+  userId?: string | null,
+): Promise<BrandBeliefResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("brand_id", brandId);
+  return request<BrandBeliefResponse>(`/beliefs/latest?${params.toString()}`);
+}
+
 export async function createExperiment(payload: {
   name: string;
   product_id: string;
@@ -434,6 +461,19 @@ export async function listExperimentMetrics(
   if (variantId) params.set("variant_id", variantId);
   return request<ExperimentMetricListResponse>(
     `/experiments/${experimentId}/metrics?${params.toString()}`,
+  );
+}
+
+export async function getNextTestRecommendation(
+  experimentId: string,
+  userId?: string | null,
+): Promise<NextTestRecommendationResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<NextTestRecommendationResponse>(
+    `/experiments/${experimentId}/next-test?${params.toString()}`,
   );
 }
 

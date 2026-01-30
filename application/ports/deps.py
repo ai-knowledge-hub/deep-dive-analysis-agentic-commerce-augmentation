@@ -150,6 +150,8 @@ class ExperimentsStore(Protocol):
 
     def list_experiments(self, **kwargs: Any) -> list[dict]: ...
 
+    def list_all_experiments(self, **kwargs: Any) -> list[dict]: ...
+
     def update_experiment(self, **kwargs: Any) -> dict | None: ...
 
     def add_variant(self, **kwargs: Any) -> dict: ...
@@ -169,6 +171,14 @@ class ExperimentRunsStore(Protocol):
     def create_metric(self, **kwargs: Any) -> dict: ...
 
     def list_metrics(self, **kwargs: Any) -> list[dict]: ...
+
+
+class BrandBeliefsStore(Protocol):
+    def create_belief(self, **kwargs: Any) -> dict: ...
+
+    def list_beliefs(self, **kwargs: Any) -> list[dict]: ...
+
+    def latest_belief(self, **kwargs: Any) -> dict | None: ...
 
 
 class SemanticMemory(Protocol):
@@ -197,6 +207,7 @@ class AppDeps:
     query_batteries: QueryBatteriesStore
     experiments: ExperimentsStore
     experiment_runs: ExperimentRunsStore
+    brand_beliefs: BrandBeliefsStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

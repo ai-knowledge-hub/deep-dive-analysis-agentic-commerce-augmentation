@@ -1011,6 +1011,12 @@ ul { list-style: none; }
   gap: 16px;
 }
 
+.detail__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .detail__title {
   display: flex;
   flex-direction: column;

@@ -10,6 +10,7 @@ from api.composition import default_deps
 from application.services.experiment_service import ExperimentService
 from application.services.experiment_runner import ExperimentRunner
 from application.services.experiment_scheduler import ExperimentScheduler
+from application.services.experiment_orchestrator import ExperimentOrchestrator
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -17,6 +18,7 @@ DEPS = default_deps()
 SERVICE = ExperimentService(repo=DEPS.experiments)
 RUNNER = ExperimentRunner(deps=DEPS)
 SCHEDULER = ExperimentScheduler(deps=DEPS)
+ORCHESTRATOR = ExperimentOrchestrator(deps=DEPS)
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -208,6 +210,17 @@ def backfill_experiment(
         "next_run_at": result.next_run_at,
         "runs": [r.__dict__ for r in result.runs],
     }
+
+
+@router.get("/{experiment_id}/next-test")
+def next_test(
+    experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    recommendation = ORCHESTRATOR.suggest_next_test(
+        experiment_id=experiment_id, client_id=scoped_client_id, user_id=user_id
+    )
+    return {"recommendation": recommendation.to_dict()}
 
 
 @router.get("/{experiment_id}/runs")
