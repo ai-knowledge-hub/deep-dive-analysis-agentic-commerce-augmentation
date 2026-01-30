@@ -351,6 +351,8 @@ class ConversationService:
             last_intent=intent,
             last_query=plan.get("query"),
             last_alignment=plan.get("alignment"),
+            last_products=plan.get("products") or [],
+            last_product_id=(plan.get("products") or [{}])[0].get("id"),
         )
 
         goal_signals = extract_intent_goals(intent, explicit_goals=goals)

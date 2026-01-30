@@ -10,6 +10,7 @@ import type {
   ExperimentRecommendation,
   ExperimentRun,
   ExperimentVariant,
+  NextTestRecommendation,
   QueryBattery,
   QueryBatteryQuery,
   SessionSummary,
@@ -47,6 +48,8 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
+import { MLPrediction } from "../../components/experiments/MLPrediction";
+import { ThompsonSamplingGauge } from "../../components/experiments/ThompsonSamplingGauge";
 
 export default function ExperimentsPage() {
   const router = useRouter();
@@ -119,14 +122,7 @@ export default function ExperimentsPage() {
   const [metricsTrendMetric, setMetricsTrendMetric] = useState<
     "win_rate" | "avg_score"
   >("win_rate");
-  const [nextTest, setNextTest] = useState<{
-    action: "run_variant" | "create_variant" | "none";
-    reason: string;
-    variant_id?: string | null;
-    suggested_label?: string | null;
-    suggested_type?: string | null;
-    suggested_payload?: Record<string, unknown> | null;
-  } | null>(null);
+  const [nextTest, setNextTest] = useState<NextTestRecommendation | null>(null);
   const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
   const [jsonErrors, setJsonErrors] = useState({
@@ -1917,6 +1913,20 @@ export default function ExperimentsPage() {
                       >
                         Create suggested variant
                       </button>
+                    </div>
+                  ) : null}
+                  {nextTest.ml_prediction ? (
+                    <div className="panel__meta panel__meta--stack">
+                      <MLPrediction prediction={nextTest.ml_prediction} />
+                    </div>
+                  ) : null}
+                  {typeof nextTest.exploration_score === "number" &&
+                  typeof nextTest.exploitation_score === "number" ? (
+                    <div className="panel__meta panel__meta--stack">
+                      <ThompsonSamplingGauge
+                        explorationScore={nextTest.exploration_score}
+                        exploitationScore={nextTest.exploitation_score}
+                      />
                     </div>
                   ) : null}
                 </div>

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   analyzeEvidence,
   createBattery,
   deleteConversationSession,
   getConversationSnapshot,
   listConversationSessions,
+  refreshResearch,
   optimizeRepresentation,
   listSimulationRuns,
   listSimulationLessons,
@@ -75,11 +76,14 @@ export default function HomePage() {
   const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
+  const [researchStatus, setResearchStatus] = useState<string | null>(null);
   const [latestExperimentId, setLatestExperimentId] = useState<string | null>(null);
+  const [researchRefreshing, setResearchRefreshing] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { user } = useUser();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const userId = user?.id ?? null;
   const { brandId, productId, clientId } = useTenant();
   const storageKey = useMemo(
@@ -156,6 +160,31 @@ export default function HomePage() {
     },
     [brandId, userId],
   );
+
+  const handleRefreshResearch = useCallback(async () => {
+    if (!sessionId || !userId) {
+      setResearchStatus("Start a chat first to refresh research.");
+      window.setTimeout(() => setResearchStatus(null), 4000);
+      return;
+    }
+    setResearchRefreshing(true);
+    try {
+      const response = await refreshResearch(sessionId, userId, lastQuery ?? undefined);
+      setResearchResults(response.research_results ?? []);
+      if (response.query) {
+        setLastQuery(response.query);
+      }
+      setResearchStatus("Research refreshed.");
+      window.setTimeout(() => setResearchStatus(null), 4000);
+    } catch (error) {
+      setResearchStatus(
+        error instanceof Error ? error.message : "Unable to refresh research.",
+      );
+      window.setTimeout(() => setResearchStatus(null), 4000);
+    } finally {
+      setResearchRefreshing(false);
+    }
+  }, [lastQuery, sessionId, userId]);
 
   const resetConversation = useCallback(() => {
     setSessionId(null);
@@ -394,19 +423,22 @@ export default function HomePage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const fallbackScenario = simulationScenario.trim() || lastQuery || "";
     const payload = {
-      scenario: simulationScenario,
+      scenario: fallbackScenario,
       products: simulationProducts,
       selected_product_id: selectedSimulationProductId,
       tone: simulationTone,
     };
     localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
+    localStorage.setItem("intentionality.simulation.latest", JSON.stringify(payload));
   }, [
     simulationProducts,
     simulationScenario,
     simulationStorageKey,
     simulationTone,
     selectedSimulationProductId,
+    lastQuery,
   ]);
 
   useEffect(() => {
@@ -462,14 +494,35 @@ export default function HomePage() {
       setLastQuery(state.last_query ?? null);
       setSimulationScenario(state.last_query ?? "");
       setSimulationScenarioDirty(false);
+      const sessionProducts = (state.last_products as SimulationProduct[]) ?? [];
+      setSimulationProducts(sessionProducts);
+      setSelectedSimulationProductId(
+        (state.last_product_id as string) ??
+          (sessionProducts[0]?.id ?? null),
+      );
+      if (typeof window !== "undefined") {
+        const payload = {
+          scenario: state.last_query ?? "",
+          products: sessionProducts,
+          selected_product_id:
+            (state.last_product_id as string) ?? sessionProducts[0]?.id ?? null,
+          tone: "",
+        };
+        localStorage.setItem(
+          simulationStorageKey,
+          JSON.stringify(payload),
+        );
+        localStorage.setItem(
+          "intentionality.simulation.latest",
+          JSON.stringify(payload),
+        );
+      }
       setPlan(undefined);
       setClarifications([]);
       setProductReasoning([]);
       setEvidenceAnalysis(null);
       setEvidenceOptimization(null);
       setEvidenceVerification(null);
-      setSimulationProducts([]);
-      setSelectedSimulationProductId(null);
       setSimulationTone("");
     },
     [userId],
@@ -497,6 +550,33 @@ export default function HomePage() {
     },
     [],
   );
+
+  const handleOpenSimulation = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const fallbackScenario = simulationScenario.trim() || lastQuery || "";
+    const payload = {
+      scenario: fallbackScenario,
+      products: simulationProducts,
+      selected_product_id: selectedSimulationProductId,
+      tone: simulationTone,
+    };
+    localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
+    localStorage.setItem(
+      "intentionality.simulation.latest",
+      JSON.stringify(payload),
+    );
+    const target = sessionId ? `/simulation?session=${sessionId}` : "/simulation";
+    router.push(target);
+  }, [
+    lastQuery,
+    router,
+    selectedSimulationProductId,
+    simulationProducts,
+    simulationScenario,
+    simulationStorageKey,
+    simulationTone,
+    sessionId,
+  ]);
 
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
@@ -691,8 +771,11 @@ export default function HomePage() {
               products={researchResults}
               badge="Research"
               disclaimer="Research insights are synthesized from external sources; verify before purchase."
+              actionLabel={researchRefreshing ? "Refreshing..." : "Refresh"}
+              onAction={handleRefreshResearch}
+              actionDisabled={researchRefreshing || !sessionId}
               onQuickCreateBattery={handleQuickCreateBattery}
-              statusMessage={batteryStatus}
+              statusMessage={batteryStatus ?? researchStatus}
             />
             <div className="insights__summary">
               <div className="summary-card summary-card--header">
@@ -709,9 +792,13 @@ export default function HomePage() {
               <div className="summary-card">
                 <div className="summary-card__header">
                   <h4>Simulation Sandbox</h4>
-                  <Link href="/simulation" className="summary-card__link">
+                  <button
+                    type="button"
+                    className="summary-card__link"
+                    onClick={handleOpenSimulation}
+                  >
                     Open
-                  </Link>
+                  </button>
                 </div>
                 <p className="summary-card__text">
                   {simulationScenario.trim() || lastQuery

@@ -37,6 +37,25 @@ To make this repeatable, we attach a per‑product **query battery** and run str
 
 ---
 
+## Lab Operator (Chat)
+
+The chat doubles as a **Lab Operator** for experiments:
+
+- Ask “Why did Variant B win?” → summary + belief evidence
+- Ask “Run next test” → orchestrator recommendation + run confirmation
+- Ask “What if we change pricing?” → hypothesis template
+
+Quick commands:
+
+```
+/lab next
+/lab why
+/lab belief
+/lab what if {json}
+```
+
+---
+
 ## Simulation Sandbox
 
 ### Core Loop

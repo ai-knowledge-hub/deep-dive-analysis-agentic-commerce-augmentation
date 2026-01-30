@@ -50,13 +50,20 @@ export function HistoryDrawer({
             <p className="panel__empty">No conversations yet.</p>
           ) : (
             sessions.map((session) => (
-              <button
+              <div
                 key={session.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 className={`history-panel__item ${
                   session.id === activeSessionId ? "is-active" : ""
                 }`}
                 onClick={() => onSelect(session.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(session.id);
+                  }
+                }}
               >
                 <div className="history-panel__row">
                   <span
@@ -88,7 +95,7 @@ export function HistoryDrawer({
                     {new Date(session.last_turn_at).toLocaleDateString()}
                   </span>
                 )}
-              </button>
+              </div>
             ))
           )}
         </div>

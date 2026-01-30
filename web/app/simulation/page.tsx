@@ -11,6 +11,7 @@ import type {
   SimulationRunResponse,
   SimulationRunSummary,
   SessionSummary,
+  ConversationResponse,
 } from "../../lib/types";
 import {
   listSimulationLessons,
@@ -19,6 +20,7 @@ import {
   retestSimulation,
   runSimulation,
   getSimulationRun,
+  getConversationSnapshot,
   requestBrandTone,
   updateSimulationTone,
   attachSimulationProduct,
@@ -67,7 +69,12 @@ export default function SimulationPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = localStorage.getItem(storageKey);
+    const keys = [
+      storageKey,
+      "intentionality.simulation.latest",
+      "intentionality.simulation.anonymous",
+    ];
+    const raw = keys.map((key) => localStorage.getItem(key)).find(Boolean);
     if (!raw) return;
     try {
       const data = JSON.parse(raw) as Record<string, unknown>;
@@ -153,6 +160,35 @@ export default function SimulationPage() {
       cancelled = true;
     };
   }, [searchParams, setProductId, simulationRun?.run_id, simulationTone, userId]);
+
+  useEffect(() => {
+    const runIdParam = searchParams.get("run_id");
+    if (runIdParam) return;
+    const sessionParam = searchParams.get("session");
+    if (!sessionParam) return;
+    let cancelled = false;
+    void getConversationSnapshot(sessionParam, userId).then((response) => {
+      if (cancelled) return;
+      const state = response.snapshot?.session?.state as
+        | Record<string, unknown>
+        | undefined;
+      if (!state) return;
+      const scenario = (state.last_query as string) ?? "";
+      const products = (state.last_products as SimulationProduct[]) ?? [];
+      setSimulationScenario(scenario);
+      setSimulationScenarioDirty(false);
+      setSimulationProducts(products);
+      const selected =
+        (state.last_product_id as string) ?? products[0]?.id ?? null;
+      setSelectedSimulationProductId(selected);
+      if (selected) {
+        setProductId(selected);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setProductId, userId]);
 
   const handleRunSimulation = useCallback(async () => {
     if (!simulationScenario.trim()) return;

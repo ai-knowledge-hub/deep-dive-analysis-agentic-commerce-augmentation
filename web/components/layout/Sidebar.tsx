@@ -76,19 +76,6 @@ export function Sidebar({
       ),
     },
     {
-      href: "/",
-      label: "Current chat",
-      shortLabel: "C",
-      icon: (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
-            fill="currentColor"
-          />
-        </svg>
-      ),
-    },
-    {
       href: "/simulation",
       label: "Simulation",
       shortLabel: "S",

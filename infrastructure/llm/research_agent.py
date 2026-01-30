@@ -27,8 +27,15 @@ from shared.replay.versions import default_versions
 RESEARCH_PROMPT = """You are a product gap research agent.
 
 Goal: Provide neutral discovery research when product data is thin.
-Return a concise bullet summary with citations, plus risks and uncertainty.
+Never ask the user follow-up questions. Use the provided query/goals/context.
+Return concise bullet insights with citations and short notes on risks/uncertainty.
 Never fabricate sources. If data is unavailable, say so explicitly.
+
+Query: {query}
+Goals:
+{goals_block}
+Context:
+{context}
 """
 
 

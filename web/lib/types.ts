@@ -537,6 +537,16 @@ export type NextTestRecommendation = {
   suggested_label?: string | null;
   suggested_type?: string | null;
   suggested_payload?: Record<string, unknown> | null;
+  statistical_analysis?: Record<string, unknown> | null;
+  ml_prediction?: {
+    hypothesis_type: string;
+    predicted_lift: number;
+    confidence: number;
+    rationale: string;
+    similar_experiments?: string[];
+  } | null;
+  exploration_score?: number | null;
+  exploitation_score?: number | null;
 };
 
 export type NextTestRecommendationResponse = {

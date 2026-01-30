@@ -41,7 +41,33 @@ import {
   BrandBeliefResponse,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+let warnedApiBase = false;
+const DEFAULT_API_BASE = "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" ? window.location.origin : DEFAULT_API_BASE);
+
+function resolveApiBase(): string {
+  if (typeof window !== "undefined") {
+    const localOverride = window.localStorage.getItem("api_base");
+    if (localOverride) return localOverride;
+  }
+  if (
+    API_BASE.includes("localhost:3000") ||
+    API_BASE.includes("127.0.0.1:3000")
+  ) {
+    if (typeof window !== "undefined" && !warnedApiBase) {
+      warnedApiBase = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `API base resolved to ${API_BASE}; falling back to ${DEFAULT_API_BASE}. ` +
+          "Set NEXT_PUBLIC_API_URL in web/.env.local and restart Next to silence this warning.",
+      );
+    }
+    return DEFAULT_API_BASE;
+  }
+  return API_BASE;
+}
 const CLIENT_ID_STORAGE_KEY = "client_id";
 const BRAND_ID_STORAGE_KEY = "brand_id";
 const PRODUCT_ID_STORAGE_KEY = "product_id";
@@ -77,7 +103,7 @@ function getProductId(): string | undefined {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${resolveApiBase()}${path}`, {
     headers: {
       "Content-Type": "application/json",
     },
