@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
   BrandBelief,
@@ -13,6 +13,8 @@ import type {
   QueryBattery,
   QueryBatteryQuery,
   SessionSummary,
+  SimulationGapReport,
+  SimulationRunDetailResponse,
 } from "../../lib/types";
 import {
   createBattery,
@@ -38,6 +40,7 @@ import {
   listExperimentRecommendations,
   getLatestBrandBelief,
   listBrandBeliefs,
+  getSimulationRun,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -47,6 +50,7 @@ import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
 
 export default function ExperimentsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, clientId } = useTenant();
@@ -69,6 +73,9 @@ export default function ExperimentsPage() {
   const [recommendations, setRecommendations] = useState<
     ExperimentRecommendation[]
   >([]);
+  const [simulationDetails, setSimulationDetails] = useState<
+    Record<string, SimulationRunDetailResponse["run"]>
+  >({});
   const [beliefCount, setBeliefCount] = useState<number>(0);
   const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
@@ -161,6 +168,16 @@ export default function ExperimentsPage() {
     });
   }, [productId, selectedExperimentId, userId]);
 
+  useEffect(() => {
+    const targetId = searchParams.get("experiment_id");
+    if (!targetId) return;
+    if (selectedExperimentId === targetId) return;
+    const match = experiments.find((item) => item.id === targetId);
+    if (match) {
+      setSelectedExperimentId(match.id);
+    }
+  }, [experiments, searchParams, selectedExperimentId]);
+
   const selectedExperiment = useMemo(
     () => experiments.find((item) => item.id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
@@ -189,6 +206,40 @@ export default function ExperimentsPage() {
       },
     );
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+
+  useEffect(() => {
+    if (!runs.length) return;
+    const runIds = runs
+      .map((run) => run.simulation_run_id)
+      .filter((runId): runId is string => Boolean(runId));
+    const pending = runIds.filter((id) => !simulationDetails[id]);
+    if (!pending.length) return;
+    let cancelled = false;
+    Promise.all(
+      pending.slice(0, 12).map(async (runId) => {
+        try {
+          const response = await getSimulationRun(runId, userId);
+          return [runId, response.run] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const updates: Record<string, SimulationRunDetailResponse["run"]> = {};
+      entries.forEach((entry) => {
+        if (entry) {
+          updates[entry[0]] = entry[1];
+        }
+      });
+      if (Object.keys(updates).length) {
+        setSimulationDetails((prev) => ({ ...prev, ...updates }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [runs, simulationDetails, userId]);
 
   useEffect(() => {
     if (!brandId) {
@@ -520,6 +571,55 @@ export default function ExperimentsPage() {
     setExperimentStatus(null);
     setSubmitting(true);
     try {
+      let hypothesis: Record<string, unknown> = {};
+      let competitorPolicy: Record<string, unknown> = {};
+      if (experimentForm.hypothesis.trim() !== "") {
+        hypothesis = JSON.parse(experimentForm.hypothesis);
+      }
+      if (experimentForm.competitorPolicy.trim() !== "") {
+        competitorPolicy = JSON.parse(experimentForm.competitorPolicy);
+      }
+
+      const buildSeedQueries = (): string[] => {
+        const seeds: string[] = [];
+        const rationale = String((hypothesis as Record<string, unknown>)?.rationale ?? "");
+        const payload = (hypothesis as Record<string, unknown>)?.variant_payload;
+        const lowered = rationale.toLowerCase();
+        const productLabel = productName ?? "product";
+
+        const keywords = lowered
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((word) => word.length > 3)
+          .slice(0, 4);
+
+        keywords.forEach((keyword) => {
+          seeds.push(`best ${productLabel} for ${keyword}`);
+          seeds.push(`${productLabel} that improves ${keyword}`);
+        });
+
+        if (lowered.includes("price") || lowered.includes("pricing") || typeof payload === "object" && payload && "pricing" in payload) {
+          seeds.push(`${productLabel} under budget with strong value`);
+          seeds.push(`${productLabel} on sale with best price`);
+        }
+
+        if (lowered.includes("delivery") || lowered.includes("shipping") || typeof payload === "object" && payload && "fulfillment" in payload) {
+          seeds.push(`${productLabel} with fast delivery options`);
+          seeds.push(`${productLabel} available for delivery this week`);
+        }
+
+        if (lowered.includes("tone") || lowered.includes("voice") || typeof payload === "object" && payload && "copy" in payload) {
+          seeds.push(`${productLabel} with premium positioning`);
+          seeds.push(`${productLabel} focused on outcomes and benefits`);
+        }
+
+        if (seeds.length === 0 && productLabel) {
+          seeds.push(`best ${productLabel} for everyday use`);
+        }
+
+        return Array.from(new Set(seeds)).slice(0, 8);
+      };
+
       let batteryId = experimentForm.batteryId;
       if (labMode === "lab" && !batteryId) {
         const confirmCreate = window.confirm(
@@ -530,31 +630,26 @@ export default function ExperimentsPage() {
           return;
         }
         const autoBatteryName = `${productName ?? "Product"} Battery`;
+        const seedQueries =
+          Object.keys(hypothesis).length > 0 ? buildSeedQueries() : [];
+        const generationMode =
+          seedQueries.length > 0 ? "hybrid" : batteryForm.generationMode;
         const batteryResponse = await createBattery({
           name: autoBatteryName,
           product_id: productId,
           purpose: experimentForm.hypothesis ? "Hypothesis-driven battery" : undefined,
-          generation_mode: batteryForm.generationMode,
+          generation_mode: generationMode,
           user_id: userId,
         });
         batteryId = batteryResponse.battery.id;
         await generateBatteryQueries(batteryId, {
-          source: batteryForm.generationMode,
-          seed_queries: undefined,
+          source: generationMode,
+          seed_queries: seedQueries.length > 0 ? seedQueries : undefined,
           user_id: userId,
         });
         const refreshedBatteries = await listBatteries(userId, productId);
         setBatteries(refreshedBatteries.batteries ?? []);
         setExperimentForm((prev) => ({ ...prev, batteryId }));
-      }
-
-      let hypothesis: Record<string, unknown> = {};
-      let competitorPolicy: Record<string, unknown> = {};
-      if (experimentForm.hypothesis.trim() !== "") {
-        hypothesis = JSON.parse(experimentForm.hypothesis);
-      }
-      if (experimentForm.competitorPolicy.trim() !== "") {
-        competitorPolicy = JSON.parse(experimentForm.competitorPolicy);
       }
       const response = await createExperiment({
         name: experimentForm.name.trim(),
@@ -924,6 +1019,92 @@ export default function ExperimentsPage() {
       (b.created_at || "").localeCompare(a.created_at || ""),
     )[0];
   }, [runs]);
+
+  const experimentGapSummary = useMemo(() => {
+    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
+    if (!targetProductId) return null;
+    const missingCounts = new Map<string, number>();
+    const winnerCounts = new Map<string, number>();
+    const summaries: string[] = [];
+    let sampleCount = 0;
+
+    runs.forEach((run) => {
+      if (!run.simulation_run_id) return;
+      const detail = simulationDetails[run.simulation_run_id];
+      if (!detail?.result?.gap_analysis) return;
+      const gap =
+        detail.result.gap_analysis.find(
+          (item) => item.product_id === targetProductId,
+        ) ?? detail.result.gap_analysis[0];
+      if (!gap) return;
+      (gap.missing_signals ?? []).forEach((signal: string) => {
+        missingCounts.set(signal, (missingCounts.get(signal) ?? 0) + 1);
+      });
+      (gap.winner_signals ?? []).forEach((signal: string) => {
+        winnerCounts.set(signal, (winnerCounts.get(signal) ?? 0) + 1);
+      });
+      if (gap.competitor_summary && sampleCount < 3) {
+        summaries.push(gap.competitor_summary);
+        sampleCount += 1;
+      }
+    });
+
+    const sortCounts = (map: Map<string, number>) =>
+      [...map.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([signal, count]) => ({ signal, count }));
+
+    return {
+      missing: sortCounts(missingCounts),
+      winner: sortCounts(winnerCounts),
+      summaries,
+      total: runs.filter((run) => Boolean(run.simulation_run_id)).length,
+    };
+  }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
+
+  const perVariantGaps = useMemo(() => {
+    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
+    if (!targetProductId) return new Map<string, SimulationGapReport>();
+    const result = new Map<string, SimulationGapReport>();
+    metricsByVariant.forEach((metric, variantId) => {
+      const runsForVariant = runs.filter(
+        (run) => run.variant_id === variantId && run.simulation_run_id,
+      );
+      for (const run of runsForVariant) {
+        const detail = simulationDetails[run.simulation_run_id as string];
+        if (!detail?.result?.gap_analysis) continue;
+        const gap =
+          detail.result.gap_analysis.find(
+            (item) => item.product_id === targetProductId,
+          ) ?? detail.result.gap_analysis[0];
+        if (gap) {
+          result.set(variantId, gap as SimulationGapReport);
+          break;
+        }
+      }
+    });
+    return result;
+  }, [metricsByVariant, productId, runs, selectedExperiment?.product_id, simulationDetails]);
+
+  const runGapDetails = useMemo(() => {
+    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
+    if (!targetProductId) return new Map<string, SimulationGapReport>();
+    const result = new Map<string, SimulationGapReport>();
+    runs.forEach((run) => {
+      if (!run.simulation_run_id) return;
+      const detail = simulationDetails[run.simulation_run_id];
+      if (!detail?.result?.gap_analysis) return;
+      const gap =
+        detail.result.gap_analysis.find(
+          (item) => item.product_id === targetProductId,
+        ) ?? detail.result.gap_analysis[0];
+      if (gap) {
+        result.set(run.id, gap as SimulationGapReport);
+      }
+    });
+    return result;
+  }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
 
   const handleOpenBeliefsTimeline = useCallback(() => {
     setBeliefsViewMode("timeline");
@@ -1848,6 +2029,7 @@ export default function ExperimentsPage() {
                 {variants.map((variant) => {
                   const metric = metricsByVariant.get(variant.id);
                   const values = (metric?.metrics ?? {}) as Record<string, unknown>;
+                  const gap = perVariantGaps.get(variant.id);
                   return (
                     <li key={variant.id}>
                       <div className="panel__meta">
@@ -1855,6 +2037,13 @@ export default function ExperimentsPage() {
                         <span className="panel__badge panel__badge--secondary">
                           {variant.type}
                         </span>
+                        {gap?.severity ? (
+                          <span
+                            className={`panel__badge panel__badge--severity-${gap.severity}`}
+                          >
+                            {gap.severity} gap
+                          </span>
+                        ) : null}
                       </div>
                       <div className="panel__meta">
                         <span className="panel__muted">
@@ -1867,6 +2056,11 @@ export default function ExperimentsPage() {
                           Runs: {values.total_runs ?? "—"}
                         </span>
                       </div>
+                      {gap ? (
+                        <div className="panel__muted">
+                          Missing: {(gap.missing_signals ?? []).slice(0, 3).join(", ") || "—"}
+                        </div>
+                      ) : null}
                       {metric?.created_at ? (
                         <span className="panel__muted">
                           Last run:{" "}
@@ -1877,6 +2071,63 @@ export default function ExperimentsPage() {
                   );
                 })}
               </ul>
+            )}
+          </section>
+
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Why we lost (experiment deltas)</h3>
+              {experimentGapSummary?.total ? (
+                <span className="panel__badge panel__badge--secondary">
+                  {experimentGapSummary.total} linked runs
+                </span>
+              ) : null}
+            </div>
+            {!experimentGapSummary || experimentGapSummary.total === 0 ? (
+              <p className="panel__empty">
+                Run a variant with linked simulations to see gap signals.
+              </p>
+            ) : (
+              <div className="panel__grid">
+                <div className="panel__column">
+                  <h4 className="panel__subtitle">Top missing signals</h4>
+                  {experimentGapSummary.missing.length === 0 ? (
+                    <p className="panel__muted">No missing signals yet.</p>
+                  ) : (
+                    <ul className="panel__list panel__list--compact">
+                      {experimentGapSummary.missing.map((item) => (
+                        <li key={`missing-${item.signal}`}>
+                          {item.signal} · {item.count}x
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="panel__column">
+                  <h4 className="panel__subtitle">Winner signals</h4>
+                  {experimentGapSummary.winner.length === 0 ? (
+                    <p className="panel__muted">No winner signals yet.</p>
+                  ) : (
+                    <ul className="panel__list panel__list--compact">
+                      {experimentGapSummary.winner.map((item) => (
+                        <li key={`winner-${item.signal}`}>
+                          {item.signal} · {item.count}x
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {experimentGapSummary.summaries.length > 0 ? (
+                  <div className="panel__column">
+                    <h4 className="panel__subtitle">Gap summaries</h4>
+                    <ul className="panel__list panel__list--compact">
+                      {experimentGapSummary.summaries.map((summary, index) => (
+                        <li key={`summary-${index}`}>{summary}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
             )}
           </section>
 
@@ -1899,9 +2150,31 @@ export default function ExperimentsPage() {
                         {run.simulation_run_id ? "linked" : "pending"}
                       </span>
                     </div>
-                    <span className="history-panel__meta">
-                      Variant: {run.variant_id}
-                    </span>
+                    <div className="panel__meta panel__meta--stack">
+                      <span className="history-panel__meta">
+                        Variant: {run.variant_id}
+                      </span>
+                      {run.simulation_run_id ? (
+                        <span className="history-panel__meta">
+                          Run ID:{" "}
+                          <a
+                            className="panel__link"
+                            href={`/simulation?run_id=${run.simulation_run_id}`}
+                          >
+                            {run.simulation_run_id}
+                          </a>
+                        </span>
+                      ) : null}
+                      {runGapDetails.get(run.id) ? (
+                        <span className="history-panel__meta">
+                          Gap:{" "}
+                          {runGapDetails
+                            .get(run.id)
+                            ?.missing_signals?.slice(0, 3)
+                            .join(", ") || "—"}
+                        </span>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ul>

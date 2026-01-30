@@ -141,7 +141,7 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
                   .map(([key, value]) => (
                     <div key={key} className="belief-item">
                       <span className="item-key">{key}:</span>
-                      <span className="item-value">{String(value)}</span>
+                      <span className="item-value">{formatValue(value)}</span>
                     </div>
                   ))}
                 {Object.keys(belief.evidence).length > 2 && (
@@ -157,6 +157,25 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
                         } more`}
                   </button>
                 )}
+                <div className="belief-links">
+                  {belief.evidence?.experiment_id && (
+                    <a
+                      className="belief-link"
+                      href={`/experiments?experiment_id=${belief.evidence.experiment_id}`}
+                    >
+                      Open experiment
+                    </a>
+                  )}
+                  {Array.isArray(belief.evidence?.runs) &&
+                    belief.evidence.runs[0]?.run_id && (
+                      <a
+                        className="belief-link"
+                        href={`/simulation?run_id=${belief.evidence.runs[0].run_id}`}
+                      >
+                        Open linked run
+                      </a>
+                    )}
+                </div>
               </div>
             </div>
           )}
@@ -338,6 +357,23 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
           display: flex;
           flex-direction: column;
           gap: 0.5rem;
+        }
+
+        .belief-links {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          margin-top: 0.5rem;
+        }
+
+        .belief-link {
+          font-size: 0.75rem;
+          color: #1cc886;
+          text-decoration: none;
+        }
+
+        .belief-link:hover {
+          text-decoration: underline;
         }
 
         .belief-item {

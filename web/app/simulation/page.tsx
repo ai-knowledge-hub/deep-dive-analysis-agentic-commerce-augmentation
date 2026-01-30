@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
   SimulationLesson,
@@ -35,6 +35,7 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 
 export default function SimulationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, setProductId } = useTenant();
@@ -121,6 +122,37 @@ export default function SimulationPage() {
       });
     }
   }, [userId]);
+
+  useEffect(() => {
+    const runIdParam = searchParams.get("run_id");
+    if (!runIdParam) return;
+    if (simulationRun?.run_id === runIdParam) return;
+    let cancelled = false;
+    void getSimulationRun(runIdParam, userId).then((response) => {
+      if (cancelled) return;
+      setSimulationRun({ run_id: response.run.id, result: response.run.result });
+      setSimulationRetest(
+        response.run.retest
+          ? { run_id: response.run.id, result: response.run.retest }
+          : null,
+      );
+      setSimulationOptimized(null);
+      setSimulationScenario(response.run.query ?? "");
+      setSimulationScenarioDirty(false);
+      setSimulationProducts(response.run.products ?? []);
+      if (response.run.product_id) {
+        setSelectedSimulationProductId(response.run.product_id);
+        setProductId(response.run.product_id);
+      }
+      setSimulationToneSuggestion(response.run.result?.tone?.summary ?? null);
+      if (!simulationTone) {
+        setSimulationTone(response.run.result?.tone?.summary ?? "");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setProductId, simulationRun?.run_id, simulationTone, userId]);
 
   const handleRunSimulation = useCallback(async () => {
     if (!simulationScenario.trim()) return;

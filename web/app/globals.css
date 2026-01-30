@@ -765,6 +765,13 @@ ul { list-style: none; }
   margin-bottom: 12px;
 }
 
+.chat__lab-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .chat__quick-action {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1229,6 +1236,21 @@ ul { list-style: none; }
   color: var(--text-muted);
 }
 
+.panel__badge--severity-high {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.panel__badge--severity-medium {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.panel__badge--severity-low {
+  background: rgba(28, 200, 134, 0.12);
+  color: #1cc886;
+}
+
 .panel__subtitle {
   font-size: 11px;
   color: var(--text-muted);
@@ -1239,6 +1261,10 @@ ul { list-style: none; }
   padding-left: 14px;
   list-style: disc;
   overflow-wrap: anywhere;
+}
+
+.panel__list--compact li {
+  margin-bottom: 2px;
 }
 
 .panel__list li {
@@ -1565,6 +1591,33 @@ input[type="checkbox"]:focus-visible {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.panel__meta--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.panel__column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel__link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.panel__link:hover {
+  text-decoration: underline;
 }
 
 .panel__action {

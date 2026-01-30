@@ -61,6 +61,9 @@ export default function HomePage() {
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
+  const [labOperator, setLabOperator] = useState<ConversationResponse["lab_operator"] | null>(
+    null,
+  );
   const [selectedSimulationProductId, setSelectedSimulationProductId] =
     useState<string | null>(null);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
@@ -232,6 +235,7 @@ export default function HomePage() {
             ...prev,
             { role: "agent", content: response.lab_operator.message as string },
           ]);
+          setLabOperator(response.lab_operator ?? null);
         }
 
         if (response.explanation) {
@@ -619,6 +623,37 @@ export default function HomePage() {
                 Create hypothesis from belief
               </button>
             </div>
+            {labOperator?.experiment_id || labOperator?.evidence ? (
+              <div className="chat__lab-links">
+                {labOperator?.experiment_id ? (
+                  <button
+                    type="button"
+                    className="chat__quick-action"
+                    onClick={() =>
+                      router.push(
+                        `/experiments?experiment_id=${labOperator.experiment_id}`,
+                      )
+                    }
+                  >
+                    Open experiment
+                  </button>
+                ) : null}
+                {Array.isArray(labOperator?.evidence?.runs) &&
+                labOperator?.evidence?.runs?.[0]?.run_id ? (
+                  <button
+                    type="button"
+                    className="chat__quick-action"
+                    onClick={() =>
+                      router.push(
+                        `/simulation?run_id=${labOperator?.evidence?.runs?.[0]?.run_id}`,
+                      )
+                    }
+                  >
+                    Open linked run
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
             <form className="chat__input" onSubmit={handleSubmit}>
               <textarea
