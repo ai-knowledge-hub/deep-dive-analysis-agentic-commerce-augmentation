@@ -71,48 +71,61 @@ export function BeliefCard({ belief }: BeliefCardProps) {
       </div>
 
       <div className="belief-card__body">
-        {/* Hypothesis */}
-        {belief.hypothesis && Object.keys(belief.hypothesis).length > 0 && (
-          <div className="belief-section">
-            <h6>Hypothesis</h6>
-            <div className="belief-content">
-              {Object.entries(belief.hypothesis).map(([key, value]) => (
-                <div key={key} className="belief-item">
-                  <span className="item-key">{key}:</span>
-                  <span className="item-value">{String(value)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="belief-section belief-section--summary">
+          <h6>Summary</h6>
+          <p className="belief-summary">
+            {belief.metadata?.summary
+              ? String(belief.metadata.summary)
+              : "No summary yet."}
+          </p>
+        </div>
 
-        {/* Evidence Summary */}
-        {belief.evidence && Object.keys(belief.evidence).length > 0 && (
-          <div className="belief-section">
-            <h6>Evidence</h6>
-            <div className="belief-content">
-              {Object.entries(belief.evidence)
-                .slice(0, isExpanded ? undefined : 2)
-                .map(([key, value]) => (
+        <div className="belief-structure">
+          {/* Hypothesis */}
+          {belief.hypothesis && Object.keys(belief.hypothesis).length > 0 && (
+            <div className="belief-section">
+              <h6>Hypothesis</h6>
+              <div className="belief-content">
+                {Object.entries(belief.hypothesis).map(([key, value]) => (
                   <div key={key} className="belief-item">
                     <span className="item-key">{key}:</span>
                     <span className="item-value">{String(value)}</span>
                   </div>
                 ))}
-              {Object.keys(belief.evidence).length > 2 && (
-                <button
-                  type="button"
-                  className="expand-btn"
-                  onClick={() => setIsExpanded(!isExpanded)}
-                >
-                  {isExpanded
-                    ? "Show less"
-                    : `Show ${Object.keys(belief.evidence).length - 2} more`}
-                </button>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Evidence Summary */}
+          {belief.evidence && Object.keys(belief.evidence).length > 0 && (
+            <div className="belief-section">
+              <h6>Evidence</h6>
+              <div className="belief-content">
+                {Object.entries(belief.evidence)
+                  .slice(0, isExpanded ? undefined : 2)
+                  .map(([key, value]) => (
+                    <div key={key} className="belief-item">
+                      <span className="item-key">{key}:</span>
+                      <span className="item-value">{String(value)}</span>
+                    </div>
+                  ))}
+                {Object.keys(belief.evidence).length > 2 && (
+                  <button
+                    type="button"
+                    className="expand-btn"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                  >
+                    {isExpanded
+                      ? "Show less"
+                      : `Show ${
+                          Object.keys(belief.evidence).length - 2
+                        } more`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Metadata */}
         {belief.metadata && Object.keys(belief.metadata).length > 0 && (
@@ -196,6 +209,27 @@ export function BeliefCard({ belief }: BeliefCardProps) {
           text-transform: uppercase;
           color: rgba(255, 255, 255, 0.6);
           margin-top: 0.25rem;
+        }
+
+        .belief-summary {
+          margin: 0;
+          font-size: 0.9rem;
+          color: rgba(255, 255, 255, 0.75);
+          line-height: 1.4;
+        }
+
+        .belief-section--summary {
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          background: rgba(28, 200, 134, 0.06);
+          border: 1px solid rgba(28, 200, 134, 0.2);
+        }
+
+        .belief-structure {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 1rem;
+          margin-top: 1rem;
         }
 
         .belief-card__body {

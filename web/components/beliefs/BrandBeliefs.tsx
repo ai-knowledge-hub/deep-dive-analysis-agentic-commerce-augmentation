@@ -117,7 +117,10 @@ export function BrandBeliefs({
   return (
     <div className="panel__card">
       <div className="panel__header">
-        <h4>Brand Beliefs</h4>
+        <div className="beliefs__header">
+          <h4>Brand Beliefs</h4>
+          <span className="beliefs__badge">Belief Update Agent</span>
+        </div>
         <div className="beliefs__view-toggle">
           <button
             type="button"
@@ -208,6 +211,26 @@ export function BrandBeliefs({
       </div>
 
       <style jsx>{`
+        .beliefs__header {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .beliefs__badge {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 0.25rem 0.6rem;
+          font-size: 0.65rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+          color: #1cc886;
+          border: 1px solid rgba(28, 200, 134, 0.4);
+          background: rgba(28, 200, 134, 0.08);
+        }
+
         .beliefs__view-toggle {
           display: flex;
           gap: 0.5rem;

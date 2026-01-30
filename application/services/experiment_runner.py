@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from application.ports.deps import AppDeps
 from application.services.simulation_service import SimulationService
 from application.services.brand_belief_service import BrandBeliefService
+from application.services.belief_update_agent import BeliefUpdateAgent
 from domain.simulation.ranking import score_for_product
 from domain.simulation.types import SimulationProduct
 
@@ -23,6 +24,7 @@ class ExperimentRunner:
         self._deps = deps
         self._simulation = SimulationService(deps=deps)
         self._beliefs = BrandBeliefService(repo=deps.brand_beliefs)
+        self._belief_agent = BeliefUpdateAgent()
 
     def run_experiment(
         self,
@@ -156,12 +158,8 @@ class ExperimentRunner:
         brand_id = experiment.get("brand_id")
         if not brand_id:
             return
-        win_rate = float(metrics.get("win_rate") or 0.0)
-        avg_score = float(metrics.get("avg_score") or 0.0)
-        recommendation = (
-            f"Variant '{variant.get('label')}' outperformed baseline."
-            if win_rate >= 0.5
-            else f"Variant '{variant.get('label')}' underperformed; revise hypothesis."
+        update = self._belief_agent.build_update(
+            experiment=experiment, variant=variant, metrics=metrics
         )
         self._beliefs.create_belief(
             client_id=client_id,
@@ -173,11 +171,13 @@ class ExperimentRunner:
                 "variant_id": variant.get("id"),
                 "metrics": metrics,
             },
-            recommendation=recommendation,
-            confidence=round((win_rate + avg_score) / 2, 3),
+            recommendation=update.recommendation,
+            confidence=update.confidence,
             metadata={
                 "experiment_name": experiment.get("name"),
                 "variant_label": variant.get("label"),
+                "variant_type": variant.get("type"),
+                **update.metadata,
             },
         )
 

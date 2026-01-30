@@ -44,7 +44,7 @@ export default function ExperimentsPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
-  const { productId, productName, brandId } = useTenant();
+  const { productId, productName, brandId, clientId } = useTenant();
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -831,7 +831,7 @@ export default function ExperimentsPage() {
           {brandId ? (
             <BrandBeliefs
               brandId={brandId}
-              clientId={productId ?? undefined}
+              clientId={clientId ?? undefined}
               userId={userId ?? undefined}
               limit={50}
             />
