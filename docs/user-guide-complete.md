@@ -40,14 +40,18 @@ When AI agents (ChatGPT, Gemini, Claude) recommend products to users, they strug
 
 ### The Solution
 
-This platform provides a **complete optimization cycle** for AI commerce discovery:
+This platform provides a **complete optimization loop** for AI commerce discovery.
+You can run it manually or let the lab automate it:
 
-1. **Intent Inference** — Understand what users actually want (not just what they said)
-2. **Product Profiling** — Transform specs into capability-based representations
-3. **Alignment Scoring** — Rate how well products match inferred goals
-4. **Simulation Testing** — Test improvements before deployment
-5. **Verification** — Measure discoverability lift (before/after)
-6. **Automated Experimentation** — Systematically A/B test product descriptions
+**Manual mode (hands-on):**
+1. **Intent Inference** — understand what users want
+2. **Product Profiling** — translate specs into capabilities
+3. **Alignment Scoring** — score intent match
+4. **Simulation Testing** — test improvements before deployment
+5. **Verification** — measure lift
+
+**Lab mode (automated loop):**
+**World State → Hypothesis → Query Battery → Run → Analyze → Belief → Next Test**
 
 ---
 
@@ -95,46 +99,6 @@ This platform provides a **complete optimization cycle** for AI commerce discove
 - Review alignment scores across products
 - Analyze simulation lessons to identify patterns
 - Monitor experiment trends for category insights
-
----
-
-## Getting Started
-
-### Step 1: Sign In
-
-Navigate to `http://localhost:3000` and sign in with Clerk authentication.
-
-**What you'll see:**
-- Sidebar with navigation to all features
-- Home page with chat interface
-- Product selector (if you have multiple brands)
-
----
-
-### Step 2: Select Your Brand/Product Context
-
-**Top Navigation:**
-- **Client** — Your organization (e.g., "Nike")
-- **Brand** — Product line (e.g., "Air Max")
-- **Product** — Specific item (optional, for product-specific work)
-
-This context determines which products appear in search results and experiments.
-
----
-
-### Step 3: Try the Chat Interface (Quickest Way to Understand)
-
-**What to do:**
-1. Type a query: _"What TV works well in bright rooms?"_
-2. Watch the platform:
-   - Infer your goal ("reduce glare in bright environment")
-   - Clarify missing context ("What room size?", "Budget?")
-   - Search your product catalog
-   - Score products by alignment
-   - Show reasoning ("This TV has 3000 nits → reduces glare")
-
-**Why this matters:**
-This is what AI shopping agents do when customers ask questions. The platform shows you exactly how your products perform.
 
 ---
 
@@ -211,7 +175,8 @@ This is what AI shopping agents do when customers ask questions. The platform sh
 3. **Create Battery:**
    - Name: "Bright Room TV Tests"
    - Purpose: "Test TV descriptions for bright room scenarios"
-   - Generation mode: "Bottom-up" (generates from product) or "Top-down" (from seed queries)
+   - Generation mode: "Bottom-up" (from product features) or "Top-down" (from seed queries)
+   - **Lab mode** can auto-build a battery from your hypothesis + product
 
 4. **Generate Queries:**
    - Platform creates test scenarios:
@@ -237,8 +202,8 @@ This is what AI shopping agents do when customers ask questions. The platform sh
    - (Optional) Competitor Policy: Which competitor products to hold constant
 
 3. **Lab Mode vs Manual:**
-   - **Lab Mode** (recommended): Platform auto-creates control + hypothesis variants and runs tests
-   - **Manual Mode**: You create variants yourself
+   - **Lab Mode** (recommended): Platform auto-creates variants, builds a battery, and proposes an immediate run
+   - **Manual Mode**: You create variants and run tests yourself
 
 ---
 
@@ -272,21 +237,21 @@ This is what AI shopping agents do when customers ask questions. The platform sh
    - Avg score: Mean alignment score
    - Trend: Sparkline showing performance over time
 
-2. **Get AI Recommendation:**
+2. **Get Next-Test Recommendation:**
    - Click **"Recommend Next Test"**
    - Platform analyzes:
-     - Statistical significance
-     - ML pattern recognition
-     - Thompson Sampling (exploration/exploitation)
-   - Suggests: _"Create new variant testing technical detail reduction (confidence: 73%)"_
+     - Statistical comparisons (if data is sufficient)
+     - ML pattern matches (if historical data exists)
+     - Thompson sampling (explore vs. exploit)
+   - Suggests: _"Create a new variant to test outcome framing"_
 
 3. **Schedule Recurring Runs:**
    - Enable schedule
    - Set interval (e.g., daily)
    - Platform auto-runs and tracks trends
 
-**Time:** ~15 minutes setup, ongoing monitoring
-**Output:** Systematic optimization with trend analysis
+**Time:** ~15 minutes setup, ongoing monitoring  
+**Output:** Systematic optimization with belief updates and trend analysis
 
 ---
 
@@ -342,7 +307,7 @@ This is what AI shopping agents do when customers ask questions. The platform sh
 - **Experiments**
   - Active experiments count
   - Win rate trend (sparkline)
-  - Latest recommendation
+  - Latest belief update
 - **Alignment**
   - Total products scored
   - Average alignment
@@ -352,6 +317,25 @@ This is what AI shopping agents do when customers ask questions. The platform sh
 - Check daily to monitor trends
 - Click sparklines to drill into experiments
 - Review top lessons to identify patterns
+
+---
+
+### Lab Operator (Chat)
+
+**Purpose:** Use chat as the control plane for the lab loop.
+
+**What you can ask:**
+- “Why did Variant B win?” → summarizes metrics + belief evidence
+- “Run next test” → triggers orchestrator recommendation
+- “What if we change pricing?” → generates a hypothesis template
+
+**Quick Commands:**
+- `/lab next`
+- `/lab why`
+- `/lab belief`
+- `/lab what if {json}`
+
+**Tip:** These commands are available from the chat quick‑action buttons.
 
 ---
 
@@ -413,8 +397,8 @@ Week 2: Monitoring → "Confirmed: +45% win rate improvement"
 
 **Why:**
 - Platform auto-generates control + hypothesis variants
-- Runs tests immediately
-- Provides ML-based next-test recommendations
+- Proposes an immediate run
+- Provides statistical + ML-assisted next-test recommendations (when data exists)
 
 **When to use Manual Mode:**
 - You have very specific variants to test
@@ -508,7 +492,7 @@ Week 2: Monitoring → "Confirmed: +45% win rate improvement"
 
 ---
 
-### Q: Experiment shows no statistically significant difference
+### Q: Experiment shows no clear winner
 
 **A:** This could mean:
 1. **Variants are too similar** — Try a more dramatic change
@@ -553,7 +537,7 @@ Week 2: Monitoring → "Confirmed: +45% win rate improvement"
 | **Speed** | Instant | Recurring over time |
 | **Data** | Single run | Trend analysis |
 | **Use Case** | "Does this idea work?" | "Which variant performs best?" |
-| **Output** | Gap analysis + optimization | Win rate, statistical significance |
+| **Output** | Gap analysis + optimization | Win rate, avg score, belief update |
 
 ---
 
@@ -585,38 +569,20 @@ This holds competitor products constant while testing your variants.
 
 ## Advanced Features
 
-### Thompson Sampling (Exploration/Exploitation)
+### Next-Test Recommendations (Stats + ML + Thompson)
 
-**What it does:** Balances testing new variants vs. exploiting known winners
-
-**How to see it:**
-- Click "Recommend Next Test" in experiments
-- View "Thompson Sampling Gauge"
-- Shows: Exploration score vs. Exploitation score
-
-**When to trust it:**
-- High exploration score → Platform recommends testing a new variant
-- High exploitation score → Platform recommends running the current winner more
-
----
-
-### ML-Based Recommendations
-
-**What it does:** Learns from past experiments to predict promising variants
+**What it does:** Chooses the next best action using statistical analysis, ML patterns, and Thompson sampling.
 
 **How it works:**
-1. Platform analyzes all historical experiments
-2. Finds patterns (e.g., "outcome framing works well for electronics")
-3. Recommends next variant with predicted lift
-
-**Requirements:**
-- At least 5 completed experiments
-- Experiments with 2+ variants
-- Metrics data (win rate, avg score)
+1. **Statistical tests** compare top variants (effect size + confidence)
+2. **ML engine** learns from historical experiments to suggest hypotheses
+3. **Thompson sampling** balances exploration vs. exploitation
+4. **Fallback rules** apply when data is sparse
 
 **Where to see:**
 - Experiments page → "Recommend Next Test" button
-- Shows: Confidence, predicted lift, rationale
+- Shows: action + rationale + confidence
+- API returns: `ml_prediction`, `exploration_score`, `exploitation_score`
 
 ---
 
@@ -684,14 +650,14 @@ curl -X POST http://localhost:8000/experiments \
 
 ## Conclusion
 
-This platform provides a **complete optimization cycle** for AI commerce discovery:
+This platform provides a **complete optimization loop** for AI commerce discovery:
 
 1. **Understand** user intent (chat interface)
 2. **Profile** your products (intentionality profiling)
 3. **Test** improvements (simulation sandbox)
 4. **Validate** systematically (controlled experiments)
 5. **Monitor** trends (metrics & beliefs)
-6. **Iterate** with AI guidance (ML recommendations)
+6. **Iterate** with next-test recommendations
 
 **Next Steps:**
 1. Try the chat interface with a real customer query

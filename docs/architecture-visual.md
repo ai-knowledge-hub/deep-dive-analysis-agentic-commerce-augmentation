@@ -1,11 +1,15 @@
 # Platform Architecture - Visual Guide
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** 2026-01-29
 
 ---
 
-## System Architecture Overview
+## System Architecture Overview (Unified Lab Loop)
+
+The app is now framed as an **automated experimentation lab** with two modes:
+**Manual** (hands-on simulation) and **Lab** (hypothesis → battery → run → belief).
+Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -15,7 +19,7 @@
 │                                                                           │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
 │  │   Chat   │  │ Evidence │  │Simulation│  │Experiments│  │ Overview │  │
-│  │    /     │  │/evidence │  │/simulation│  │/experiments│  │/overview │  │
+│  │ Lab Op   │  │/evidence │  │/simulation│  │/experiments│  │/overview │  │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │
 │       │             │              │             │             │         │
 └───────┼─────────────┼──────────────┼─────────────┼─────────────┼─────────┘
@@ -102,7 +106,27 @@
 
 ---
 
-## Data Flow: Chat Query
+## Data Flow: Lab Loop (Primary)
+
+```
+World State (Brand Beliefs + Protocol Readiness)
+        ↓
+Hypothesis (from chat or experiment form)
+        ↓
+Query Battery (auto‑generated from hypothesis + product)
+        ↓
+Run Simulation (per query, per variant)
+        ↓
+Analyze Results (scores + gaps + lessons + protocol readiness)
+        ↓
+Belief Update (summary + evidence links)
+        ↓
+Next Test Recommendation (or auto‑create variant in Lab mode)
+```
+
+Manual mode still exists, but the lab loop is the canonical flow.
+
+## Data Flow: Chat Query (Manual / discovery)
 
 ```
 User Types Query: "TV for bright room"

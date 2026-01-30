@@ -1,15 +1,15 @@
-# Product Workflow: Simulation + Protocol Readiness
+# Product Workflow: Automated Lab Loop + Protocol Readiness
 
-**Purpose**: Describe the v1 user journey centered on simulation, query batteries, and
-protocol readiness (ACP/UCP).
+**Purpose**: Describe the v1 user journey as an **automated lab loop** centered on
+simulation, query batteries, and protocol readiness (ACP/UCP).
 
 ---
 
 ## Overview
 
-The product has a single v1 mode:
+The product has two **modes** in v1:
 
-### Simulation Sandbox + Query Batteries
+### Manual Mode (Simulation Sandbox)
 
 ```
 SET UP SCENARIO → SIMULATE → SEE RESULTS → LESSONS → CONFIRM TONE → OPTIMIZE → RE‑TEST
@@ -17,12 +17,23 @@ SET UP SCENARIO → SIMULATE → SEE RESULTS → LESSONS → CONFIRM TONE → OP
       └──────────────────────────────────────────────────┘
 ```
 
+### Lab Mode (Automated Loop)
+
+Lab mode turns experimentation into a repeatable loop:
+
+```
+WORLD STATE → HYPOTHESIS → BATTERY → RUN → ANALYZE → BELIEF → NEXT TEST
+```
+
 To make this repeatable, we attach a per‑product **query battery** and run structured experiments:
 
-- **Create battery** from product panels (chat or alignment) → generate queries (bottom‑up/top‑down/hybrid).
+- **Hypothesis**: created by user or Lab Operator chat.
+- **Auto battery**: Lab mode auto‑generates batteries from hypothesis + product.
 - **Edit battery**: enable/disable queries, adjust weights, review coverage metrics.
-- **Create experiment**: hypothesis + competitor policy + variants (A/B/C).
+- **Variants**: control + hypothesis variant (auto‑created in Lab mode).
 - **Run battery** against each variant to compare win‑rate and score lift.
+- **Belief update**: results generate a belief with evidence links.
+- **Next test**: orchestrator recommends the next run or variant.
 
 ---
 
@@ -70,15 +81,15 @@ Output is surfaced as a readiness score + a list of issues and fixes.
 
 ### Battery Lifecycle
 
-1. **Create**: from a product panel (quick‑create) or from experiments page
-2. **Generate**: produce a battery of test queries
+1. **Create**: from product panel or experiments page
+2. **Generate**: auto (Lab) or manual (Manual) query battery
 3. **Curate**: enable/disable queries, adjust weights
 4. **Run**: compare variants with structured experiments
 
 ### Experiments Loop
 
 ```
-HYPOTHESIS → RUN BATTERY → COMPARE VARIANTS → CAPTURE LESSONS → RE‑RUN
+HYPOTHESIS → RUN BATTERY → COMPARE VARIANTS → BELIEF UPDATE → NEXT TEST
 ```
 
 Metrics tracked:
