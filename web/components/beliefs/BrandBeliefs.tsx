@@ -30,6 +30,8 @@ interface BrandBeliefsProps {
   userId?: string;
   limit?: number;
   onUseBelief?: (belief: Belief) => void;
+  viewMode?: "list" | "timeline" | "trends";
+  onViewModeChange?: (mode: "list" | "timeline" | "trends") => void;
 }
 
 export function BrandBeliefs({
@@ -38,11 +40,24 @@ export function BrandBeliefs({
   userId,
   limit = 50,
   onUseBelief,
+  viewMode,
+  onViewModeChange,
 }: BrandBeliefsProps) {
   const [beliefs, setBeliefs] = useState<Belief[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "timeline" | "trends">("list");
+  const [internalViewMode, setInternalViewMode] = useState<
+    "list" | "timeline" | "trends"
+  >("list");
+  const activeViewMode = viewMode ?? internalViewMode;
+
+  const handleViewModeChange = (mode: "list" | "timeline" | "trends") => {
+    if (onViewModeChange) {
+      onViewModeChange(mode);
+    } else {
+      setInternalViewMode(mode);
+    }
+  };
 
   useEffect(() => {
     const fetchBeliefs = async () => {
@@ -126,22 +141,22 @@ export function BrandBeliefs({
         <div className="beliefs__view-toggle">
           <button
             type="button"
-            className={`toggle-btn ${viewMode === "list" ? "active" : ""}`}
-            onClick={() => setViewMode("list")}
+            className={`toggle-btn ${activeViewMode === "list" ? "active" : ""}`}
+            onClick={() => handleViewModeChange("list")}
           >
             List
           </button>
           <button
             type="button"
-            className={`toggle-btn ${viewMode === "timeline" ? "active" : ""}`}
-            onClick={() => setViewMode("timeline")}
+            className={`toggle-btn ${activeViewMode === "timeline" ? "active" : ""}`}
+            onClick={() => handleViewModeChange("timeline")}
           >
             Timeline
           </button>
           <button
             type="button"
-            className={`toggle-btn ${viewMode === "trends" ? "active" : ""}`}
-            onClick={() => setViewMode("trends")}
+            className={`toggle-btn ${activeViewMode === "trends" ? "active" : ""}`}
+            onClick={() => handleViewModeChange("trends")}
           >
             Trends
           </button>
@@ -173,10 +188,10 @@ export function BrandBeliefs({
         </div>
 
         {/* Trend Chart View */}
-        {viewMode === "trends" && <BeliefTrendChart beliefs={beliefs} />}
+        {activeViewMode === "trends" && <BeliefTrendChart beliefs={beliefs} />}
 
         {/* Timeline View */}
-        {viewMode === "timeline" && (
+        {activeViewMode === "timeline" && (
           <div className="beliefs__timeline">
             {beliefs.map((belief, index) => (
               <div key={belief.id} className="timeline-item">
@@ -203,7 +218,7 @@ export function BrandBeliefs({
         )}
 
         {/* List View */}
-        {viewMode === "list" && (
+        {activeViewMode === "list" && (
           <div className="beliefs__list">
             {beliefs.map((belief) => (
               <BeliefCard

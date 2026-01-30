@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
@@ -36,6 +36,8 @@ import {
   backfillExperiment,
   getNextTestRecommendation,
   listExperimentRecommendations,
+  getLatestBrandBelief,
+  listBrandBeliefs,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -55,6 +57,9 @@ export default function ExperimentsPage() {
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [labMode, setLabMode] = useState<"lab" | "manual">("lab");
+  const [beliefsViewMode, setBeliefsViewMode] = useState<
+    "list" | "timeline" | "trends"
+  >("list");
 
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
@@ -64,6 +69,8 @@ export default function ExperimentsPage() {
   const [recommendations, setRecommendations] = useState<
     ExperimentRecommendation[]
   >([]);
+  const [beliefCount, setBeliefCount] = useState<number>(0);
+  const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [batteries, setBatteries] = useState<QueryBattery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
@@ -182,6 +189,24 @@ export default function ExperimentsPage() {
       },
     );
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+
+  useEffect(() => {
+    if (!brandId) {
+      setBeliefCount(0);
+      setLatestBelief(null);
+      return;
+    }
+    void listBrandBeliefs(brandId, userId, 25)
+      .then((response) => {
+        setBeliefCount((response.beliefs ?? []).length);
+      })
+      .catch(() => setBeliefCount(0));
+    void getLatestBrandBelief(brandId, userId)
+      .then((response) => {
+        setLatestBelief(response.belief ?? null);
+      })
+      .catch(() => setLatestBelief(null));
+  }, [brandId, userId]);
 
   useEffect(() => {
     const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
@@ -734,6 +759,55 @@ export default function ExperimentsPage() {
     }
   }, [labMode, nextTest, selectedExperimentId, userId]);
 
+  const handleCreateVariantFromRecommendation = useCallback(
+    async (recommendation: NextTestRecommendation) => {
+      if (!selectedExperimentId || recommendation.action !== "create_variant") {
+        return;
+      }
+      if (labMode === "lab") {
+        const ok = window.confirm("Create and run the suggested variant now?");
+        if (!ok) return;
+      }
+      setFormError(null);
+      setSubmitting(true);
+      try {
+        const response = await createExperimentVariant(selectedExperimentId, {
+          label: recommendation.suggested_label ?? "Hypothesis (next)",
+          type: recommendation.suggested_type ?? "copy",
+          payload:
+            recommendation.suggested_payload &&
+            typeof recommendation.suggested_payload === "object"
+              ? recommendation.suggested_payload
+              : {},
+          user_id: userId,
+        });
+        const refreshed = await listExperimentVariants(selectedExperimentId, userId);
+        setVariants(refreshed.variants ?? []);
+        if (labMode === "lab") {
+          await runExperiment(selectedExperimentId, response.variant.id, userId);
+          const [runsResponse, metricsResponse] = await Promise.all([
+            listExperimentRuns(selectedExperimentId, userId),
+            listExperimentMetrics(selectedExperimentId, userId),
+          ]);
+          setRuns(runsResponse.runs ?? []);
+          setMetrics(metricsResponse.metrics ?? []);
+          setNextTestStatus(
+            `Created and ran variant ${response.variant.label}.`,
+          );
+        } else {
+          setNextTestStatus(`Created variant ${response.variant.label}.`);
+        }
+      } catch (error) {
+        setFormError(
+          error instanceof Error ? error.message : "Unable to create variant.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [labMode, selectedExperimentId, userId],
+  );
+
   const handleRunRecommendation = useCallback(
     async (variantId: string | null | undefined) => {
       if (!selectedExperimentId || !variantId) return;
@@ -759,6 +833,7 @@ export default function ExperimentsPage() {
   );
 
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
+  const beliefsRef = useRef<HTMLDivElement | null>(null);
   const metricsByVariant = useMemo(() => {
     const map = new Map<string, ExperimentMetric>();
     metrics.forEach((metric) => {
@@ -771,12 +846,100 @@ export default function ExperimentsPage() {
     return map;
   }, [metrics]);
 
+  const labLoopSteps = useMemo(() => {
+    const hypothesisReady = Boolean(
+      selectedExperiment?.hypothesis ||
+        experimentForm.hypothesis.trim().length > 0,
+    );
+    const batteryReady = Boolean(
+      selectedExperiment?.battery_id || experimentForm.batteryId,
+    );
+    const runActive = Boolean(runningVariantId);
+    const runReady = runs.length > 0 || Boolean(selectedExperiment?.last_run_at);
+    const analyzeReady = metrics.length > 0;
+    const beliefReady = analyzeReady;
+    const nextReady = Boolean(nextTest || recommendations.length > 0);
+
+    return [
+      {
+        label: "World state",
+        status: brandId ? "Ready" : "Select brand",
+        tone: brandId ? "ready" : "pending",
+      },
+      {
+        label: "Hypothesis",
+        status: hypothesisReady ? "Ready" : "Draft",
+        tone: hypothesisReady ? "ready" : "pending",
+      },
+      {
+        label: "Battery",
+        status: batteryReady ? "Linked" : "Pending",
+        tone: batteryReady ? "ready" : "pending",
+      },
+      {
+        label: "Run",
+        status: runActive ? "Running" : runReady ? "Ready" : "Pending",
+        tone: runActive ? "active" : runReady ? "ready" : "pending",
+      },
+      {
+        label: "Analyze",
+        status: analyzeReady ? "Ready" : "Pending",
+        tone: analyzeReady ? "ready" : "pending",
+      },
+      {
+        label: "Belief",
+        status: beliefReady ? "Updated" : "Pending",
+        tone: beliefReady ? "ready" : "pending",
+      },
+      {
+        label: "Next test",
+        status: nextReady ? "Queued" : "Pending",
+        tone: nextReady ? "ready" : "pending",
+      },
+    ];
+  }, [
+    brandId,
+    experimentForm.batteryId,
+    experimentForm.hypothesis,
+    metrics.length,
+    nextTest,
+    recommendations.length,
+    runningVariantId,
+    runs.length,
+    selectedExperiment?.battery_id,
+    selectedExperiment?.hypothesis,
+    selectedExperiment?.last_run_at,
+  ]);
+
   const metricsHistory = useMemo(() => {
     return [...metrics]
       .filter((metric) => metric.variant_id)
       .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
       .slice(0, 10);
   }, [metrics]);
+
+  const lastRun = useMemo(() => {
+    if (!runs.length) return null;
+    return [...runs].sort((a, b) =>
+      (b.created_at || "").localeCompare(a.created_at || ""),
+    )[0];
+  }, [runs]);
+
+  const handleOpenBeliefsTimeline = useCallback(() => {
+    setBeliefsViewMode("timeline");
+    if (beliefsRef.current) {
+      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [beliefsRef]);
+
+  const handleUseLatestBelief = useCallback(() => {
+    if (!latestBelief) return;
+    handleUseBelief(latestBelief);
+    setBeliefsViewMode("list");
+    if (beliefsRef.current) {
+      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [handleUseBelief, latestBelief, beliefsRef]);
 
   const metricsTrend = useMemo(() => {
     if (!metrics.length) return [];
@@ -889,14 +1052,115 @@ export default function ExperimentsPage() {
             }
           />
           <div className="detail__stack">
+          <section className="panel__card lab-loop">
+            <div className="panel__header">
+              <h3>Lab Loop</h3>
+              <div className="lab-loop__badges">
+                <span className="panel__badge">
+                  {labMode === "lab" ? "Lab mode" : "Manual mode"}
+                </span>
+                {selectedExperimentId ? (
+                  <span className="panel__badge panel__badge--secondary">
+                    Experiment active
+                  </span>
+                ) : null}
+                {selectedExperiment?.battery_id ? (
+                  <span className="panel__badge panel__badge--secondary">
+                    Battery linked
+                  </span>
+                ) : null}
+                <span className="panel__badge panel__badge--secondary">
+                  {variants.length} variants
+                </span>
+                <span className="panel__badge panel__badge--secondary">
+                  {runs.length} runs
+                </span>
+                <span className="panel__badge panel__badge--secondary">
+                  {metrics.length} metrics
+                </span>
+                <span className="panel__badge panel__badge--secondary">
+                  {beliefCount} beliefs
+                </span>
+              </div>
+            </div>
+            <p className="lab-loop__hint">
+              The lab loop turns hypotheses into evidence and updates brand
+              beliefs with every run.
+            </p>
+            <div className="lab-loop__steps">
+              {labLoopSteps.map((step) => (
+                <div key={step.label} className="lab-loop__step">
+                  <span className={`lab-loop__status lab-loop__status--${step.tone}`}>
+                    {step.status}
+                  </span>
+                  <span className="lab-loop__label">{step.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="lab-loop__summary">
+              <div className="lab-loop__summary-card">
+                <div className="lab-loop__summary-title">Last run</div>
+                <div className="lab-loop__summary-value">
+                  {lastRun?.created_at
+                    ? new Date(lastRun.created_at).toLocaleString()
+                    : "No runs yet"}
+                </div>
+                <div className="lab-loop__summary-meta">
+                  {lastRun?.variant_id
+                    ? `Variant: ${lastRun.variant_id}`
+                    : "Run a variant to start"}
+                </div>
+              </div>
+              <div className="lab-loop__summary-card">
+                <div className="lab-loop__summary-title">Last belief</div>
+                <div className="lab-loop__summary-value">
+                  {latestBelief?.created_at
+                    ? new Date(latestBelief.created_at).toLocaleString()
+                    : "No beliefs yet"}
+                </div>
+                <button
+                  type="button"
+                  className="lab-loop__summary-meta lab-loop__summary-link"
+                  onClick={handleOpenBeliefsTimeline}
+                  disabled={!latestBelief}
+                >
+                  {latestBelief?.metadata?.summary ??
+                    latestBelief?.recommendation ??
+                    "Beliefs appear after results are analyzed."}
+                </button>
+                <div className="lab-loop__summary-actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleOpenBeliefsTimeline}
+                    disabled={!latestBelief}
+                  >
+                    View timeline
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleUseLatestBelief}
+                    disabled={!latestBelief}
+                  >
+                    Use latest belief
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
           {brandId ? (
-            <BrandBeliefs
-              brandId={brandId}
-              clientId={clientId ?? undefined}
-              userId={userId ?? undefined}
-              limit={50}
-              onUseBelief={handleUseBelief}
-            />
+            <div ref={(node) => (beliefsRef.current = node)}>
+              <BrandBeliefs
+                brandId={brandId}
+                clientId={clientId ?? undefined}
+                userId={userId ?? undefined}
+                limit={50}
+                onUseBelief={handleUseBelief}
+                viewMode={beliefsViewMode}
+                onViewModeChange={setBeliefsViewMode}
+              />
+            </div>
           ) : null}
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
@@ -1734,6 +1998,21 @@ export default function ExperimentsPage() {
                           {runningVariantId === rec.recommendation.variant_id
                             ? "Running…"
                             : "Run next test"}
+                        </button>
+                      </div>
+                    ) : rec.recommendation.action === "create_variant" ? (
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() =>
+                            handleCreateVariantFromRecommendation(
+                              rec.recommendation,
+                            )
+                          }
+                          disabled={submitting}
+                        >
+                          {submitting ? "Creating…" : "Create + run variant"}
                         </button>
                       </div>
                     ) : null}

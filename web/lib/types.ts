@@ -354,6 +354,17 @@ export type ConversationResponse = {
     confidence?: number;
   }[];
   explanation?: string;
+  lab_operator?: {
+    action?: string;
+    message?: string;
+    hypothesis?: Record<string, unknown>;
+    variant_payload?: Record<string, unknown>;
+    metrics?: Record<string, unknown>;
+    belief_summary?: string | null;
+    evidence?: Record<string, unknown> | null;
+    experiment_id?: string;
+    variant_id?: string | null;
+  };
   intentionality_profiles?: {
     product_id?: string;
     capabilities_enabled?: string[];

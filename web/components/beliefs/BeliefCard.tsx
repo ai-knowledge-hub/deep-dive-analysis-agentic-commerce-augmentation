@@ -53,6 +53,22 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
     return date.toLocaleDateString();
   };
 
+  const formatValue = (value: unknown): string => {
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    try {
+      const json = JSON.stringify(value);
+      if (json.length > 140) {
+        return `${json.slice(0, 140)}…`;
+      }
+      return json;
+    } catch {
+      return String(value);
+    }
+  };
+
   return (
     <div className="belief-card">
       <div className="belief-card__header">
@@ -108,7 +124,7 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
                 {Object.entries(belief.hypothesis).map(([key, value]) => (
                   <div key={key} className="belief-item">
                     <span className="item-key">{key}:</span>
-                    <span className="item-value">{String(value)}</span>
+                    <span className="item-value">{formatValue(value)}</span>
                   </div>
                 ))}
               </div>

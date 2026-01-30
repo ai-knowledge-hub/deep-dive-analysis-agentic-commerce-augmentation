@@ -2228,6 +2228,131 @@ input[type="checkbox"]:focus-visible {
   color: var(--accent);
 }
 
+.lab-loop {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lab-loop__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.lab-loop__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.lab-loop__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.lab-loop__step {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lab-loop__status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  align-self: flex-start;
+  letter-spacing: 0.02em;
+}
+
+.lab-loop__status--ready {
+  background: rgba(28, 200, 134, 0.15);
+  color: #1cc886;
+  border: 1px solid rgba(28, 200, 134, 0.3);
+}
+
+.lab-loop__status--pending {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.lab-loop__status--active {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.lab-loop__label {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.lab-loop__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.lab-loop__summary-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lab-loop__summary-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.lab-loop__summary-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lab-loop__summary-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.lab-loop__summary-link {
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.lab-loop__summary-link:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.lab-loop__summary-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lab-loop__summary-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
 /* =============================================================================
    RESPONSIVE
    ============================================================================= */

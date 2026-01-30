@@ -227,6 +227,13 @@ export default function HomePage() {
           setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
         }
 
+        if (response.lab_operator?.message) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "agent", content: response.lab_operator.message as string },
+          ]);
+        }
+
         if (response.explanation) {
           setMessages((prev) => [...prev, { role: "agent", content: response.explanation! }]);
         }

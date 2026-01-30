@@ -464,20 +464,111 @@ class ConversationService:
                 )
                 variant_id = match.get("id") if match else None
             metrics = self._deps.experiment_runs.list_metrics(
-                experiment_id=experiment_id, variant_id=variant_id, limit=1
+                experiment_id=experiment_id, variant_id=variant_id, limit=10
             )
             if not metrics:
                 return {
                     "action": "explain_variant",
                     "message": "No metrics found for that variant yet.",
                 }
-            latest = metrics[0].get("metrics") or {}
+            latest_metric = metrics[0].get("metrics") or {}
+            if not variant_id:
+                best = max(
+                    metrics,
+                    key=lambda m: (m.get("metrics") or {}).get("win_rate") or 0,
+                )
+                variant_id = best.get("variant_id")
+                latest_metric = best.get("metrics") or latest_metric
+
+            belief_summary = None
+            evidence_payload = None
+            brand_id = metadata.get("brand_id") or manager.brand_id
+            if brand_id:
+                beliefs = self._deps.brand_beliefs.list_beliefs(
+                    client_id=manager.client_id,
+                    brand_id=brand_id,
+                    limit=10,
+                )
+                for belief in beliefs:
+                    evidence = belief.get("evidence") or {}
+                    if (
+                        evidence.get("experiment_id") == experiment_id
+                        and evidence.get("variant_id") == variant_id
+                    ):
+                        belief_summary = belief.get("metadata", {}).get(
+                            "summary"
+                        ) or belief.get("recommendation")
+                        evidence_payload = evidence
+                        break
+
+            detail_parts = [
+                f"win rate {latest_metric.get('win_rate')}",
+                f"avg score {latest_metric.get('avg_score')}",
+            ]
+            if evidence_payload:
+                query_count = evidence_payload.get("query_count")
+                if query_count:
+                    detail_parts.append(f"{query_count} queries")
+            message = "Latest results: " + " · ".join(detail_parts)
+            if belief_summary:
+                message += f". Belief: {belief_summary}"
             return {
                 "action": "explain_variant",
                 "experiment_id": experiment_id,
                 "variant_id": variant_id,
-                "metrics": latest,
-                "message": f"Latest results: win rate {latest.get('win_rate')} · avg score {latest.get('avg_score')}",
+                "metrics": latest_metric,
+                "evidence": evidence_payload,
+                "belief_summary": belief_summary,
+                "message": message,
+            }
+
+        if text.startswith("/lab what") or "what if" in text:
+            prompt = text.lower()
+            variant_payload: Dict[str, Any] = {}
+            rationale = "Test a targeted change to improve alignment."
+            if "price" in prompt or "pricing" in prompt or "discount" in prompt:
+                variant_payload = {
+                    "pricing": {
+                        "strategy": "decrease",
+                        "note": "Apply a sharper price signal",
+                    }
+                }
+                rationale = "Test whether sharper pricing improves intent match."
+            elif "shipping" in prompt or "delivery" in prompt:
+                variant_payload = {
+                    "fulfillment": {
+                        "speed": "faster",
+                        "note": "Highlight faster delivery options",
+                    }
+                }
+                rationale = "Test whether faster delivery improves conversion intent."
+            elif "tone" in prompt or "voice" in prompt:
+                variant_payload = {
+                    "copy": {
+                        "tone": "premium",
+                        "note": "Shift to a clearer premium tone",
+                    }
+                }
+                rationale = "Test whether tone changes lift perceived fit."
+            elif "feature" in prompt or "benefit" in prompt:
+                variant_payload = {
+                    "copy": {
+                        "emphasis": "outcomes",
+                        "note": "Emphasize human outcomes first",
+                    }
+                }
+                rationale = "Test whether outcome framing lifts relevance."
+            hypothesis = {
+                "metric": "win_rate",
+                "direction": "increase",
+                "rationale": rationale,
+                "variant_payload": variant_payload,
+            }
+            return {
+                "action": "what_if_hypothesis",
+                "hypothesis": hypothesis,
+                "variant_payload": variant_payload,
+                "message": "Drafted a what‑if hypothesis and variant payload.",
             }
 
         if text.startswith("/lab belief") or "create hypothesis from belief" in text:

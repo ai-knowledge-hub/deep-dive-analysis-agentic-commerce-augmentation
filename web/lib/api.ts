@@ -354,11 +354,13 @@ export async function listExperiments(
 export async function listBrandBeliefs(
   brandId: string,
   userId?: string | null,
+  limit?: number,
 ): Promise<BrandBeliefListResponse> {
   const params = new URLSearchParams();
   const clientId = getClientId();
   if (clientId) params.set("client_id", clientId);
   if (userId) params.set("user_id", userId);
+  if (typeof limit === "number") params.set("limit", String(limit));
   params.set("brand_id", brandId);
   return request<BrandBeliefListResponse>(`/beliefs?${params.toString()}`);
 }
