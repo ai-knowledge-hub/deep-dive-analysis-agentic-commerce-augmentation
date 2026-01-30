@@ -14,6 +14,7 @@ import {
   sendConversationMessage,
   startConversation,
   verifyRecommendation,
+  listExperiments,
 } from "../lib/api";
 import type {
   ConversationResponse,
@@ -71,12 +72,13 @@ export default function HomePage() {
   const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
+  const [latestExperimentId, setLatestExperimentId] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { user } = useUser();
   const searchParams = useSearchParams();
   const userId = user?.id ?? null;
-  const { brandId } = useTenant();
+  const { brandId, productId, clientId } = useTenant();
   const storageKey = useMemo(
     () => (userId ? `intentionality.sessions.${userId}` : "intentionality.sessions.anonymous"),
     [userId],
@@ -111,6 +113,14 @@ export default function HomePage() {
     },
     [storageKey, userId],
   );
+
+  useEffect(() => {
+    if (!userId) return;
+    void listExperiments(userId, productId ?? undefined).then((response) => {
+      const first = response.experiments?.[0]?.id ?? null;
+      setLatestExperimentId(first);
+    });
+  }, [productId, userId]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -174,14 +184,27 @@ export default function HomePage() {
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, opts?: { skipEcho?: boolean }) => {
       if (!text.trim()) return;
-      setMessages((prev) => [...prev, { role: "user", content: text }]);
+      const isLabCommand =
+        /^\/lab\b/i.test(text) ||
+        /run next test/i.test(text) ||
+        /why did variant/i.test(text) ||
+        /create hypothesis from belief/i.test(text);
+      if (!opts?.skipEcho) {
+        setMessages((prev) => [...prev, { role: "user", content: text }]);
+      }
       setLoading(true);
+      const metadata = {
+        experiment_id: latestExperimentId ?? undefined,
+        brand_id: brandId ?? undefined,
+        product_id: productId ?? undefined,
+        client_id: clientId ?? undefined,
+      };
       try {
         let response: ConversationResponse;
         if (!sessionId) {
-          response = await startConversation(text, userId);
+          response = await startConversation(text, userId, metadata);
           setSessionId(response.session_id);
           upsertSession({
             id: response.session_id,
@@ -190,7 +213,7 @@ export default function HomePage() {
             last_turn_at: new Date().toISOString(),
           });
         } else {
-          response = await sendConversationMessage(sessionId, text, userId);
+          response = await sendConversationMessage(sessionId, text, userId, metadata);
           upsertSession({
             id: sessionId,
             preview: text,
@@ -217,6 +240,10 @@ export default function HomePage() {
         setLastQuery(nextQuery);
         if (!simulationScenarioDirty) {
           setSimulationScenario(nextQuery);
+        }
+
+        if (isLabCommand) {
+          return;
         }
 
         const analysis = await analyzeEvidence(text);
@@ -253,7 +280,17 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [sessionId, simulationScenarioDirty, simulationTone, upsertSession, userId],
+    [
+      brandId,
+      clientId,
+      latestExperimentId,
+      productId,
+      sessionId,
+      simulationScenarioDirty,
+      simulationTone,
+      upsertSession,
+      userId,
+    ],
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -547,6 +584,33 @@ export default function HomePage() {
           <div className="chat">
             <div className="chat__messages" ref={chatContainerRef}>
               <ChatWindow messages={messages} />
+            </div>
+
+            <div className="chat__quick-actions">
+              <button
+                type="button"
+                className="chat__quick-action"
+                disabled={loading || !latestExperimentId}
+                onClick={() => void sendMessage("/lab next", { skipEcho: true })}
+              >
+                Run next test
+              </button>
+              <button
+                type="button"
+                className="chat__quick-action"
+                disabled={loading || !latestExperimentId}
+                onClick={() => void sendMessage("/lab why", { skipEcho: true })}
+              >
+                Explain last variant
+              </button>
+              <button
+                type="button"
+                className="chat__quick-action"
+                disabled={loading}
+                onClick={() => void sendMessage("/lab belief", { skipEcho: true })}
+              >
+                Create hypothesis from belief
+              </button>
             </div>
 
             <form className="chat__input" onSubmit={handleSubmit}>

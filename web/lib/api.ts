@@ -92,6 +92,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function startConversation(
   message: string,
   userId?: string | null,
+  metadata?: Record<string, unknown>,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -102,6 +103,7 @@ export async function startConversation(
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
+      metadata: metadata ?? undefined,
     }),
   });
 }
@@ -110,6 +112,7 @@ export async function sendConversationMessage(
   sessionId: string,
   message: string,
   userId?: string | null,
+  metadata?: Record<string, unknown>,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -120,6 +123,7 @@ export async function sendConversationMessage(
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
+      metadata: metadata ?? undefined,
     }),
   });
 }
