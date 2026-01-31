@@ -233,16 +233,6 @@ def continue_conversation_stream(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.get("/{session_id}")
-def get_session_snapshot(
-    session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
-) -> Dict[str, Any]:
-    client_scope = require_client_id(client_id, user_id)
-    return SERVICE.get_snapshot(
-        session_id=session_id, user_id=user_id, client_id=client_scope
-    )
-
-
 @router.get("/sessions")
 def list_sessions(
     user_id: Optional[str] = None,
@@ -251,6 +241,16 @@ def list_sessions(
 ) -> Dict[str, Any]:
     client_scope = require_client_id(client_id, user_id)
     return SERVICE.list_sessions(user_id=user_id, limit=limit, client_id=client_scope)
+
+
+@router.get("/{session_id}")
+def get_session_snapshot(
+    session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
+) -> Dict[str, Any]:
+    client_scope = require_client_id(client_id, user_id)
+    return SERVICE.get_snapshot(
+        session_id=session_id, user_id=user_id, client_id=client_scope
+    )
 
 
 @router.delete("/{session_id}")

@@ -111,10 +111,12 @@ export default function HomePage() {
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
     [userId],
   );
-  const evidenceStorageKey = useMemo(
-    () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
-    [userId],
-  );
+  const evidenceStorageKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.evidence.${userId}${clientTag}`
+      : `intentionality.evidence.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
   const alignmentStorageKey = useMemo(
     () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
     [userId],
@@ -484,12 +486,22 @@ export default function HomePage() {
   }, [storageKey, updateSessions, userId]);
 
   useEffect(() => {
-    void listSimulationRuns(userId).then((response) => {
-      setSimulationRuns(response.runs ?? []);
-    });
-    void listSimulationLessons(userId).then((response) => {
-      setSimulationLessons(response.lessons ?? []);
-    });
+    if (!userId) return;
+    const loadSimulationData = async () => {
+      try {
+        const runs = await listSimulationRuns(userId);
+        setSimulationRuns(runs.runs ?? []);
+      } catch (error) {
+        console.warn("Failed to load simulation runs", error);
+      }
+      try {
+        const lessons = await listSimulationLessons(userId);
+        setSimulationLessons(lessons.lessons ?? []);
+      } catch (error) {
+        console.warn("Failed to load simulation lessons", error);
+      }
+    };
+    void loadSimulationData();
   }, [userId]);
 
   useEffect(() => {
@@ -591,12 +603,51 @@ export default function HomePage() {
       setPlan(undefined);
       setClarifications([]);
       setProductReasoning([]);
-      setEvidenceAnalysis(null);
-      setEvidenceOptimization(null);
-      setEvidenceVerification(null);
+      const evidenceItems = state.last_research?.items ?? [];
+      if (evidenceItems.length) {
+        const evidenceProducts = evidenceItems.map((item: any) => ({
+          id: item.id ?? item.name,
+          name: item.name,
+          description: item.description ?? item.name,
+          source: item.source ?? "research",
+          url: item.offer_url,
+          price: item.price,
+          confidence: item.confidence,
+          metadata: {
+            alignment_score: item.alignment_score,
+            alignment_reasoning: item.alignment_reasoning,
+          },
+        }));
+        const alignmentScores =
+          state.last_research?.alignment?.per_item?.map((score: any) => ({
+            product_id: score.product_id ?? "",
+            score: score.score ?? 0,
+            alignment_reasoning: score.alignment_reasoning,
+          })) ?? [];
+        const nextAnalysis: EvidenceAnalyzeResponse = {
+          intent: state.last_intent as EvidenceAnalyzeResponse["intent"],
+          goals: state.clarification_state?.extracted_goals ?? [],
+          evidence_products: evidenceProducts,
+          profiles: state.last_profiles ?? [],
+          alignment_scores: alignmentScores,
+        };
+        setEvidenceAnalysis(nextAnalysis);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            evidenceStorageKey,
+            JSON.stringify({ analysis: nextAnalysis }),
+          );
+        }
+        setEvidenceOptimization(null);
+        setEvidenceVerification(null);
+      } else {
+        setEvidenceAnalysis(null);
+        setEvidenceOptimization(null);
+        setEvidenceVerification(null);
+      }
       setSimulationTone("");
     },
-    [userId],
+    [evidenceStorageKey, userId],
   );
 
   useEffect(() => {

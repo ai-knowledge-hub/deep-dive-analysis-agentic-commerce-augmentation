@@ -47,53 +47,17 @@ const CLIENT_STORAGE_KEY = "client_id";
 const BRAND_STORAGE_KEY = "brand_id";
 const PRODUCT_STORAGE_KEY = "product_id";
 
-const DEFAULT_CLIENTS: TenantClient[] = [
-  {
-    id: "client-samsung",
-    name: "Samsung",
-    brands: [
-      {
-        id: "brand-samsung",
-        name: "Samsung",
-        products: [{ id: "prod-qn90b", name: "QN90B QLED TV" }],
-      },
-    ],
-  },
-  {
-    id: "client-under-armour",
-    name: "Under Armour",
-    brands: [
-      {
-        id: "brand-under-armour",
-        name: "Under Armour",
-        products: [{ id: "prod-ua-backpack", name: "UA Storm 40L Backpack" }],
-      },
-    ],
-  },
-  {
-    id: "client-ikea",
-    name: "IKEA",
-    brands: [
-      {
-        id: "brand-ikea",
-        name: "IKEA",
-        products: [{ id: "prod-markus", name: "MARKUS Chair" }],
-      },
-    ],
-  },
-];
-
 const TenantContext = createContext<TenantState | null>(null);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const userId = user?.id ?? null;
   const [clientId, setClientIdState] = useState(
-    process.env.NEXT_PUBLIC_CLIENT_ID ?? DEFAULT_CLIENTS[0]?.id ?? "client-samsung",
+    process.env.NEXT_PUBLIC_CLIENT_ID ?? "",
   );
   const [brandId, setBrandIdState] = useState<string | null>(null);
   const [productId, setProductIdState] = useState<string | null>(null);
-  const [clients, setClients] = useState<TenantClient[]>(DEFAULT_CLIENTS);
+  const [clients, setClients] = useState<TenantClient[]>([]);
   const isAdminMode = process.env.NEXT_PUBLIC_ADMIN_MODE === "true";
 
   useEffect(() => {
@@ -101,7 +65,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const storedClient = window.localStorage.getItem(CLIENT_STORAGE_KEY);
     const storedBrand = window.localStorage.getItem(BRAND_STORAGE_KEY);
     const storedProduct = window.localStorage.getItem(PRODUCT_STORAGE_KEY);
-    const fallbackClient = clients[0]?.id ?? "client-samsung";
+    if (clients.length === 0) return;
+    const fallbackClient = clients[0]?.id ?? "";
     const nextClient =
       storedClient && clients.some((client) => client.id === storedClient)
         ? storedClient
@@ -109,11 +74,16 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     setClientIdState(nextClient);
     if (storedBrand) setBrandIdState(storedBrand);
     if (storedProduct) setProductIdState(storedProduct);
-    window.localStorage.setItem(CLIENT_STORAGE_KEY, nextClient);
+    if (nextClient) {
+      window.localStorage.setItem(CLIENT_STORAGE_KEY, nextClient);
+    }
   }, [clients]);
 
+  const allowDevCatalog = process.env.NODE_ENV !== "production";
+  const shouldLoadCatalog = isAdminMode || allowDevCatalog;
+
   useEffect(() => {
-    if (!isAdminMode || !userId) return;
+    if (!shouldLoadCatalog || !userId) return;
     let isActive = true;
     (async () => {
       try {
@@ -123,14 +93,20 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           name: client.name,
           brands: [],
         }));
-        if (!isActive || adminClients.length === 0) return;
+        if (!isActive) return;
         setClients(adminClients);
+        if (adminClients.length === 0) {
+          setClientIdState("");
+          return;
+        }
         if (!adminClients.find((client) => client.id === clientId)) {
           setClientIdState(adminClients[0].id);
         }
       } catch (error) {
-        // Falls back to DEFAULT_CLIENTS when admin mode isn't authorized (403) or backend is unreachable.
-        console.warn("Admin client list unavailable; using default tenant list.", error);
+        console.warn("Admin client list unavailable; leaving tenant list empty.", error);
+        if (!isActive) return;
+        setClients([]);
+        setClientIdState("");
       }
     })();
     return () => {
@@ -139,7 +115,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, [clientId, isAdminMode, userId]);
 
   useEffect(() => {
-    if (!isAdminMode || !userId || !clientId) return;
+    if (!shouldLoadCatalog || !userId || !clientId) return;
     let isActive = true;
     (async () => {
       const response = await listAdminBrands(clientId, userId);

@@ -137,7 +137,7 @@ You can run it manually or let the lab automate it:
 
 3. **Review Gap Analysis:**
    - See what capabilities are missing
-   - Example: "Product lacks outcome signals for 'endurance support'"
+   - Example: "Product lacks outcome signals for 'endurance support'"great tahnk
 
 4. **Optimize Description:**
    - Click **"Optimize Against Gap"**

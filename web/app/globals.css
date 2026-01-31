@@ -586,6 +586,17 @@ ul { list-style: none; }
   color: #07130f;
 }
 
+.button--primary-subtle {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.button--primary-subtle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
 .button--ghost {
   background: var(--bg-tertiary);
   color: var(--text-primary);
@@ -1077,6 +1088,7 @@ ul { list-style: none; }
   gap: 16px;
   padding: 24px 24px 40px;
   min-width: 0;
+  min-height: 0;
 }
 
 .detail__header {

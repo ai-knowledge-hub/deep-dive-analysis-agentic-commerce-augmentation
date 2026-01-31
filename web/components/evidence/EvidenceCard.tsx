@@ -23,6 +23,8 @@ interface EvidenceCardProps {
   optimizedDescription?: string | null;
   showOptimization?: boolean;
   index?: number;
+  whySummary?: string;
+  highlightSignals?: string[];
 }
 
 export function EvidenceCard({
@@ -30,22 +32,30 @@ export function EvidenceCard({
   optimizedDescription,
   showOptimization = false,
   index,
+  whySummary,
+  highlightSignals = [],
 }: EvidenceCardProps) {
-  const getConfidenceColor = (confidence: number): string => {
-    if (confidence >= 0.7) return "#1cc886"; // green - high
-    if (confidence >= 0.5) return "#fbbf24"; // yellow - medium
-    return "#fb923c"; // orange - low
+  const alignmentScore =
+    typeof product.metadata?.alignment_score === "number"
+      ? product.metadata.alignment_score
+      : null;
+  const getScoreColor = (score: number): string => {
+    if (score >= 0.7) return "#1cc886"; // green - high
+    if (score >= 0.5) return "rgba(255, 255, 255, 0.7)"; // neutral - medium
+    return "rgba(255, 255, 255, 0.45)"; // neutral - low
   };
 
-  const getConfidenceLabel = (confidence: number): string => {
-    if (confidence >= 0.7) return "High";
-    if (confidence >= 0.5) return "Medium";
+  const getScoreLabel = (score: number): string => {
+    if (score >= 0.7) return "High";
+    if (score >= 0.5) return "Medium";
     return "Low";
   };
 
-  const confidenceColor = getConfidenceColor(product.confidence);
-  const confidenceLabel = getConfidenceLabel(product.confidence);
-  const confidencePercentage = Math.round(product.confidence * 100);
+  const displayScore = alignmentScore ?? product.confidence ?? 0;
+  const scoreColor = getScoreColor(displayScore);
+  const scoreLabel = getScoreLabel(displayScore);
+  const badgeLabel = alignmentScore !== null ? "ALIGN" : scoreLabel;
+  const scorePercentage = Math.round(displayScore * 100);
 
   return (
     <div className="evidence-card">
@@ -58,15 +68,15 @@ export function EvidenceCard({
         </div>
         <div
           className="evidence-card__confidence"
-          style={{ borderColor: confidenceColor }}
+          style={{ borderColor: scoreColor }}
         >
           <span
             className="confidence-value"
-            style={{ color: confidenceColor }}
+            style={{ color: scoreColor }}
           >
-            {confidencePercentage}%
+            {scorePercentage}%
           </span>
-          <span className="confidence-label">{confidenceLabel}</span>
+          <span className="confidence-label">{badgeLabel}</span>
         </div>
       </div>
 
@@ -92,6 +102,32 @@ export function EvidenceCard({
 
         {/* Metadata */}
         <div className="evidence-metadata">
+          {whySummary && (
+            <div className="metadata-row metadata-row--stacked">
+              <span className="metadata-label">Why they win</span>
+              <span className="metadata-value">{whySummary}</span>
+            </div>
+          )}
+          {highlightSignals.length > 0 && (
+            <div className="metadata-row metadata-row--stacked">
+              <span className="metadata-label">Top signals</span>
+              <div className="metadata-chips">
+                {highlightSignals.slice(0, 3).map((signal) => (
+                  <span key={signal} className="metadata-chip">
+                    {signal}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {alignmentScore !== null && (
+            <div className="metadata-row">
+              <span className="metadata-label">Alignment:</span>
+              <span className="metadata-value">
+                {Math.round(alignmentScore * 100)}%
+              </span>
+            </div>
+          )}
           <div className="metadata-row">
             <span className="metadata-label">Source:</span>
             <span className="metadata-value">{product.source}</span>
@@ -124,8 +160,11 @@ export function EvidenceCard({
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 8px;
-          padding: 1.5rem;
+          padding: 1.1rem;
           transition: all 0.2s;
+          max-height: 320px;
+          display: flex;
+          flex-direction: column;
         }
 
         .evidence-card:hover {
@@ -139,8 +178,8 @@ export function EvidenceCard({
           justify-content: space-between;
           align-items: flex-start;
           gap: 1rem;
-          margin-bottom: 1rem;
-          padding-bottom: 1rem;
+          margin-bottom: 0.75rem;
+          padding-bottom: 0.75rem;
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
@@ -155,37 +194,39 @@ export function EvidenceCard({
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 32px;
-          height: 32px;
-          background: rgba(28, 200, 134, 0.1);
-          border: 1px solid rgba(28, 200, 134, 0.3);
+          width: 28px;
+          height: 28px;
+          background: rgba(28, 200, 134, 0.08);
+          border: 1px solid rgba(28, 200, 134, 0.2);
           border-radius: 50%;
-          font-size: 0.875rem;
+          font-size: 0.8rem;
           font-weight: 700;
-          color: #1cc886;
+          color: rgba(140, 255, 208, 0.9);
         }
 
         .evidence-card__title h5 {
           margin: 0;
-          font-size: 1rem;
+          font-size: 0.95rem;
           font-weight: 600;
           color: rgba(255, 255, 255, 0.95);
           line-height: 1.4;
+          word-break: break-word;
         }
 
         .evidence-card__confidence {
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          padding: 0.5rem 1rem;
-          border: 2px solid;
+          padding: 0.4rem 0.8rem;
+          border: 1.5px solid;
           border-radius: 8px;
           background: rgba(0, 0, 0, 0.2);
-          min-width: 80px;
+          min-width: 72px;
+          text-transform: uppercase;
         }
 
         .confidence-value {
-          font-size: 1.25rem;
+          font-size: 1.1rem;
           font-weight: 700;
           line-height: 1;
         }
@@ -202,6 +243,8 @@ export function EvidenceCard({
           display: flex;
           flex-direction: column;
           gap: 1rem;
+          overflow-y: auto;
+          padding-right: 0.25rem;
         }
 
         .evidence-section {
@@ -213,8 +256,8 @@ export function EvidenceCard({
         .evidence-section--optimized {
           position: relative;
           padding: 1rem;
-          background: rgba(28, 200, 134, 0.05);
-          border: 1px solid rgba(28, 200, 134, 0.2);
+          background: rgba(28, 200, 134, 0.04);
+          border: 1px solid rgba(28, 200, 134, 0.18);
           border-radius: 6px;
         }
 
@@ -231,10 +274,17 @@ export function EvidenceCard({
           font-size: 0.875rem;
           line-height: 1.6;
           color: rgba(255, 255, 255, 0.85);
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          display: -webkit-box;
+          -webkit-line-clamp: 6;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
 
         .description-text--optimized {
           color: rgba(255, 255, 255, 0.95);
+          -webkit-line-clamp: 8;
         }
 
         .optimization-badge {
@@ -242,8 +292,8 @@ export function EvidenceCard({
           top: -10px;
           right: 1rem;
           padding: 0.25rem 0.75rem;
-          background: #1cc886;
-          color: white;
+          background: rgba(28, 200, 134, 0.2);
+          color: rgba(140, 255, 208, 0.95);
           font-size: 0.65rem;
           font-weight: 700;
           text-transform: uppercase;
@@ -267,6 +317,12 @@ export function EvidenceCard({
           font-size: 0.8125rem;
         }
 
+        .metadata-row--stacked {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.35rem;
+        }
+
         .metadata-label {
           font-weight: 600;
           color: rgba(255, 255, 255, 0.5);
@@ -277,15 +333,45 @@ export function EvidenceCard({
         }
 
         .metadata-link {
-          color: #1cc886;
+          color: rgba(140, 255, 208, 0.9);
           text-decoration: none;
           font-weight: 600;
           transition: color 0.2s;
         }
 
         .metadata-link:hover {
-          color: #2dd89c;
+          color: rgba(140, 255, 208, 1);
           text-decoration: underline;
+        }
+
+        .metadata-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+        }
+
+        .metadata-chip {
+          padding: 0.2rem 0.5rem;
+          border-radius: 999px;
+          background: rgba(28, 200, 134, 0.1);
+          border: 1px solid rgba(28, 200, 134, 0.25);
+          color: rgba(140, 255, 208, 0.9);
+          font-size: 0.65rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .evidence-card__body::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .evidence-card__body::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.12);
+          border-radius: 6px;
+        }
+
+        .evidence-card__body::-webkit-scrollbar-track {
+          background: transparent;
         }
       `}</style>
     </div>
