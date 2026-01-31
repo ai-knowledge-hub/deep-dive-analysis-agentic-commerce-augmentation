@@ -133,6 +133,9 @@ class ExperimentRunner:
                 experiment=experiment,
                 variant=variant,
                 metrics=metrics,
+                queries=enabled_queries,
+                runs=runs_payload,
+                product=product,
                 client_id=client_id,
             )
 
@@ -153,6 +156,9 @@ class ExperimentRunner:
         experiment: Dict[str, Any],
         variant: Dict[str, Any],
         metrics: Dict[str, Any],
+        queries: List[Dict[str, Any]],
+        runs: List[Dict[str, Any]],
+        product: Dict[str, Any],
         client_id: str,
     ) -> None:
         brand_id = experiment.get("brand_id")
@@ -167,9 +173,20 @@ class ExperimentRunner:
             product_id=experiment.get("product_id"),
             hypothesis=experiment.get("hypothesis") or {},
             evidence={
+                "win_rate": metrics.get("win_rate"),
+                "avg_score": metrics.get("avg_score"),
+                "wins": metrics.get("wins"),
+                "total_runs": metrics.get("total_runs"),
+                "query_count": len(queries),
+                "query_ids": [q.get("id") for q in queries],
+                "queries": [
+                    {"id": q.get("id"), "text": q.get("query_text")} for q in queries
+                ],
+                "runs": runs,
                 "experiment_id": experiment.get("id"),
                 "variant_id": variant.get("id"),
-                "metrics": metrics,
+                "winner_product_id": product.get("id"),
+                "metric_id": metrics.get("metric_id"),
             },
             recommendation=update.recommendation,
             confidence=update.confidence,

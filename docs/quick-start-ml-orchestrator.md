@@ -4,6 +4,9 @@
 
 ---
 
+> Note: The ML engine ships with a safe fallback by default. This guide wires
+> the optional trainer so the orchestrator can learn from historical experiments.
+
 ## Prerequisites
 
 - ✅ Experiment Orchestrator enhancements installed

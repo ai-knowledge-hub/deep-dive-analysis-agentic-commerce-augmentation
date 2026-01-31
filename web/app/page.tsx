@@ -1,19 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   analyzeEvidence,
   createBattery,
   deleteConversationSession,
   getConversationSnapshot,
   listConversationSessions,
+  refreshResearch,
   optimizeRepresentation,
   listSimulationRuns,
   listSimulationLessons,
   sendConversationMessage,
   startConversation,
   verifyRecommendation,
+  listExperiments,
 } from "../lib/api";
 import type {
   ConversationResponse,
@@ -60,6 +62,9 @@ export default function HomePage() {
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
+  const [labOperator, setLabOperator] = useState<ConversationResponse["lab_operator"] | null>(
+    null,
+  );
   const [selectedSimulationProductId, setSelectedSimulationProductId] =
     useState<string | null>(null);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
@@ -71,24 +76,37 @@ export default function HomePage() {
   const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
+  const [researchStatus, setResearchStatus] = useState<string | null>(null);
+  const [latestExperimentId, setLatestExperimentId] = useState<string | null>(null);
+  const [researchRefreshing, setResearchRefreshing] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { user } = useUser();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const userId = user?.id ?? null;
-  const { brandId } = useTenant();
-  const storageKey = useMemo(
-    () => (userId ? `intentionality.sessions.${userId}` : "intentionality.sessions.anonymous"),
-    [userId],
-  );
-  const lastSessionKey = useMemo(
-    () =>
-      userId ? `intentionality.last_session.${userId}` : "intentionality.last_session.anonymous",
-    [userId],
-  );
+  const { brandId, productId, clientId } = useTenant();
+  const storageClientId =
+    clientId ??
+    (typeof window !== "undefined"
+      ? window.localStorage.getItem("client_id")
+      : null) ??
+    undefined;
+  const storageKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.sessions.${userId}${clientTag}`
+      : `intentionality.sessions.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
+  const lastSessionKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.last_session.${userId}${clientTag}`
+      : `intentionality.last_session.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
   const simulationStorageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [userId],
+    [simulationStorageKey, userId],
   );
   const evidenceStorageKey = useMemo(
     () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
@@ -111,6 +129,14 @@ export default function HomePage() {
     },
     [storageKey, userId],
   );
+
+  useEffect(() => {
+    if (!userId) return;
+    void listExperiments(userId, productId ?? undefined).then((response) => {
+      const first = response.experiments?.[0]?.id ?? null;
+      setLatestExperimentId(first);
+    });
+  }, [productId, userId]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -144,6 +170,31 @@ export default function HomePage() {
     [brandId, userId],
   );
 
+  const handleRefreshResearch = useCallback(async () => {
+    if (!sessionId || !userId) {
+      setResearchStatus("Start a chat first to refresh research.");
+      window.setTimeout(() => setResearchStatus(null), 4000);
+      return;
+    }
+    setResearchRefreshing(true);
+    try {
+      const response = await refreshResearch(sessionId, userId, lastQuery ?? undefined);
+      setResearchResults(response.research_results ?? []);
+      if (response.query) {
+        setLastQuery(response.query);
+      }
+      setResearchStatus("Research refreshed.");
+      window.setTimeout(() => setResearchStatus(null), 4000);
+    } catch (error) {
+      setResearchStatus(
+        error instanceof Error ? error.message : "Unable to refresh research.",
+      );
+      window.setTimeout(() => setResearchStatus(null), 4000);
+    } finally {
+      setResearchRefreshing(false);
+    }
+  }, [lastQuery, sessionId, userId]);
+
   const resetConversation = useCallback(() => {
     setSessionId(null);
     setMessages([]);
@@ -174,14 +225,27 @@ export default function HomePage() {
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, opts?: { skipEcho?: boolean }) => {
       if (!text.trim()) return;
-      setMessages((prev) => [...prev, { role: "user", content: text }]);
+      const isLabCommand =
+        /^\/lab\b/i.test(text) ||
+        /run next test/i.test(text) ||
+        /why did variant/i.test(text) ||
+        /create hypothesis from belief/i.test(text);
+      if (!opts?.skipEcho) {
+        setMessages((prev) => [...prev, { role: "user", content: text }]);
+      }
       setLoading(true);
+      const metadata = {
+        experiment_id: latestExperimentId ?? undefined,
+        brand_id: brandId ?? undefined,
+        product_id: productId ?? undefined,
+        client_id: clientId ?? undefined,
+      };
       try {
         let response: ConversationResponse;
         if (!sessionId) {
-          response = await startConversation(text, userId);
+          response = await startConversation(text, userId, metadata);
           setSessionId(response.session_id);
           upsertSession({
             id: response.session_id,
@@ -190,7 +254,7 @@ export default function HomePage() {
             last_turn_at: new Date().toISOString(),
           });
         } else {
-          response = await sendConversationMessage(sessionId, text, userId);
+          response = await sendConversationMessage(sessionId, text, userId, metadata);
           upsertSession({
             id: sessionId,
             preview: text,
@@ -202,6 +266,14 @@ export default function HomePage() {
         const clarification = response.clarification;
         if (clarification) {
           setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
+        }
+
+        if (response.lab_operator?.message) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "agent", content: response.lab_operator.message as string },
+          ]);
+          setLabOperator(response.lab_operator ?? null);
         }
 
         if (response.explanation) {
@@ -217,6 +289,10 @@ export default function HomePage() {
         setLastQuery(nextQuery);
         if (!simulationScenarioDirty) {
           setSimulationScenario(nextQuery);
+        }
+
+        if (isLabCommand) {
+          return;
         }
 
         const analysis = await analyzeEvidence(text);
@@ -253,7 +329,17 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [sessionId, simulationScenarioDirty, simulationTone, upsertSession, userId],
+    [
+      brandId,
+      clientId,
+      latestExperimentId,
+      productId,
+      sessionId,
+      simulationScenarioDirty,
+      simulationTone,
+      upsertSession,
+      userId,
+    ],
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -322,6 +408,8 @@ export default function HomePage() {
       } catch {
         localStorage.removeItem(storageKey);
       }
+    } else {
+      setSessions([]);
     }
     void listConversationSessions(userId).then((response) => {
       const merged = new Map<string, SessionSummary>();
@@ -346,19 +434,22 @@ export default function HomePage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const fallbackScenario = simulationScenario.trim() || lastQuery || "";
     const payload = {
-      scenario: simulationScenario,
+      scenario: fallbackScenario,
       products: simulationProducts,
       selected_product_id: selectedSimulationProductId,
       tone: simulationTone,
     };
     localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
+    localStorage.setItem("intentionality.simulation.latest", JSON.stringify(payload));
   }, [
     simulationProducts,
     simulationScenario,
     simulationStorageKey,
     simulationTone,
     selectedSimulationProductId,
+    lastQuery,
   ]);
 
   useEffect(() => {
@@ -414,14 +505,35 @@ export default function HomePage() {
       setLastQuery(state.last_query ?? null);
       setSimulationScenario(state.last_query ?? "");
       setSimulationScenarioDirty(false);
+      const sessionProducts = (state.last_products as SimulationProduct[]) ?? [];
+      setSimulationProducts(sessionProducts);
+      setSelectedSimulationProductId(
+        (state.last_product_id as string) ??
+          (sessionProducts[0]?.id ?? null),
+      );
+      if (typeof window !== "undefined") {
+        const payload = {
+          scenario: state.last_query ?? "",
+          products: sessionProducts,
+          selected_product_id:
+            (state.last_product_id as string) ?? sessionProducts[0]?.id ?? null,
+          tone: "",
+        };
+        localStorage.setItem(
+          simulationStorageKey,
+          JSON.stringify(payload),
+        );
+        localStorage.setItem(
+          "intentionality.simulation.latest",
+          JSON.stringify(payload),
+        );
+      }
       setPlan(undefined);
       setClarifications([]);
       setProductReasoning([]);
       setEvidenceAnalysis(null);
       setEvidenceOptimization(null);
       setEvidenceVerification(null);
-      setSimulationProducts([]);
-      setSelectedSimulationProductId(null);
       setSimulationTone("");
     },
     [userId],
@@ -449,6 +561,33 @@ export default function HomePage() {
     },
     [],
   );
+
+  const handleOpenSimulation = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const fallbackScenario = simulationScenario.trim() || lastQuery || "";
+    const payload = {
+      scenario: fallbackScenario,
+      products: simulationProducts,
+      selected_product_id: selectedSimulationProductId,
+      tone: simulationTone,
+    };
+    localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
+    localStorage.setItem(
+      "intentionality.simulation.latest",
+      JSON.stringify(payload),
+    );
+    const target = sessionId ? `/simulation?session=${sessionId}` : "/simulation";
+    router.push(target);
+  }, [
+    lastQuery,
+    router,
+    selectedSimulationProductId,
+    simulationProducts,
+    simulationScenario,
+    simulationStorageKey,
+    simulationTone,
+    sessionId,
+  ]);
 
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
@@ -549,6 +688,64 @@ export default function HomePage() {
               <ChatWindow messages={messages} />
             </div>
 
+            <div className="chat__quick-actions">
+              <button
+                type="button"
+                className="chat__quick-action"
+                disabled={loading || !latestExperimentId}
+                onClick={() => void sendMessage("/lab next", { skipEcho: true })}
+              >
+                Run next test
+              </button>
+              <button
+                type="button"
+                className="chat__quick-action"
+                disabled={loading || !latestExperimentId}
+                onClick={() => void sendMessage("/lab why", { skipEcho: true })}
+              >
+                Explain last variant
+              </button>
+              <button
+                type="button"
+                className="chat__quick-action"
+                disabled={loading}
+                onClick={() => void sendMessage("/lab belief", { skipEcho: true })}
+              >
+                Create hypothesis from belief
+              </button>
+            </div>
+            {labOperator?.experiment_id || labOperator?.evidence ? (
+              <div className="chat__lab-links">
+                {labOperator?.experiment_id ? (
+                  <button
+                    type="button"
+                    className="chat__quick-action"
+                    onClick={() =>
+                      router.push(
+                        `/experiments?experiment_id=${labOperator.experiment_id}`,
+                      )
+                    }
+                  >
+                    Open experiment
+                  </button>
+                ) : null}
+                {Array.isArray(labOperator?.evidence?.runs) &&
+                labOperator?.evidence?.runs?.[0]?.run_id ? (
+                  <button
+                    type="button"
+                    className="chat__quick-action"
+                    onClick={() =>
+                      router.push(
+                        `/simulation?run_id=${labOperator?.evidence?.runs?.[0]?.run_id}`,
+                      )
+                    }
+                  >
+                    Open linked run
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
             <form className="chat__input" onSubmit={handleSubmit}>
               <textarea
                 ref={inputRef}
@@ -585,8 +782,11 @@ export default function HomePage() {
               products={researchResults}
               badge="Research"
               disclaimer="Research insights are synthesized from external sources; verify before purchase."
+              actionLabel={researchRefreshing ? "Refreshing..." : "Refresh"}
+              onAction={handleRefreshResearch}
+              actionDisabled={researchRefreshing || !sessionId}
               onQuickCreateBattery={handleQuickCreateBattery}
-              statusMessage={batteryStatus}
+              statusMessage={batteryStatus ?? researchStatus}
             />
             <div className="insights__summary">
               <div className="summary-card summary-card--header">
@@ -603,9 +803,13 @@ export default function HomePage() {
               <div className="summary-card">
                 <div className="summary-card__header">
                   <h4>Simulation Sandbox</h4>
-                  <Link href="/simulation" className="summary-card__link">
+                  <button
+                    type="button"
+                    className="summary-card__link"
+                    onClick={handleOpenSimulation}
+                  >
                     Open
-                  </Link>
+                  </button>
                 </div>
                 <p className="summary-card__text">
                   {simulationScenario.trim() || lastQuery

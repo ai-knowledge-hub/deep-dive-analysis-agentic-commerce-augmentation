@@ -387,16 +387,98 @@ class SimulationService:
         run_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        run_record = None
+        scenario: Dict[str, Any] = {}
         if run_id:
             run_record = _get_run(
                 self._deps, run_id, user_id=user_id, client_id=client_id
             )
             scenario = run_record.get("scenario") or {}
-            scenario["tone_source"] = "brand_site"
+
+        brand_id = (run_record or {}).get("brand_id") or scenario.get("brand_id")
+        product_id = (run_record or {}).get("product_id") or scenario.get("product_id")
+
+        if not brand_id and product_id:
+            product = self._deps.clients.get_product_for_client(
+                client_id=client_id, product_id=product_id
+            )
+            brand_id = (product or {}).get("brand_id")
+
+        if not brand_id:
+            return {
+                "status": "missing_brand",
+                "message": "Select a brand (or attach a product) to derive brand tone.",
+            }
+
+        brand = self._deps.clients.get_brand(brand_id=brand_id)
+        if not brand:
+            return {
+                "status": "missing_brand",
+                "message": "Brand not found.",
+            }
+
+        brand_meta = brand.get("metadata") or {}
+        product = None
+        if product_id:
+            product = self._deps.clients.get_product_for_client(
+                client_id=client_id, product_id=product_id
+            )
+
+        sources: list[str] = []
+        brand_copy = str(brand_meta.get("brand_copy") or "").strip()
+        if brand_copy:
+            sources.append(brand_copy)
+        if product and product.get("description"):
+            sources.append(str(product.get("description")))
+        product_meta = (product or {}).get("metadata") or {}
+        for key in ("product_copy", "description_source_text"):
+            value = str(product_meta.get(key) or "").strip()
+            if value:
+                sources.append(value)
+
+        if not sources:
+            return {
+                "status": "missing_copy",
+                "message": "Add brand copy or a product description to derive tone.",
+            }
+
+        from shared.llm.prompts import build_brand_tone_prompt
+
+        prompt = build_brand_tone_prompt(
+            brand_name=brand.get("name") or "Brand", sources=sources
+        )
+        try:
+            tone_summary = self._deps.generate(prompt).strip()
+        except Exception:
+            tone_summary = ""
+
+        if not tone_summary:
+            return {
+                "status": "failed",
+                "message": "Unable to derive brand tone from available copy.",
+            }
+
+        brand_meta = dict(brand_meta)
+        brand_meta["tone_summary"] = tone_summary
+        brand_meta["tone_source"] = "llm"
+        brand_meta["tone_updated_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+        )
+        self._deps.clients.update_brand_metadata(
+            brand_id=brand_id,
+            metadata=brand_meta,
+        )
+
+        if run_id:
+            scenario["tone_source"] = "brand_profile"
+            scenario["tone_suggestion"] = tone_summary
+            scenario["brand_id"] = brand_id
             self._deps.simulation_runs.update_scenario(run_id, scenario)
+
         return {
-            "status": "coming_soon",
-            "message": "Brand tone import requires product data integration.",
+            "status": "ok",
+            "message": "Brand tone loaded from stored copy.",
+            "tone": tone_summary,
         }
 
     def attach(

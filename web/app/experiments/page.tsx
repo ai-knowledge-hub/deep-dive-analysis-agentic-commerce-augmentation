@@ -1,16 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
+  BrandBelief,
   Experiment,
   ExperimentMetric,
+  ExperimentRecommendation,
   ExperimentRun,
   ExperimentVariant,
+  NextTestRecommendation,
   QueryBattery,
   QueryBatteryQuery,
   SessionSummary,
+  SimulationGapReport,
+  SimulationRunDetailResponse,
 } from "../../lib/types";
 import {
   createBattery,
@@ -33,15 +38,22 @@ import {
   updateExperimentSchedule,
   backfillExperiment,
   getNextTestRecommendation,
+  listExperimentRecommendations,
+  getLatestBrandBelief,
+  listBrandBeliefs,
+  getSimulationRun,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
+import { MLPrediction } from "../../components/experiments/MLPrediction";
+import { ThompsonSamplingGauge } from "../../components/experiments/ThompsonSamplingGauge";
 
 export default function ExperimentsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, clientId } = useTenant();
@@ -52,12 +64,23 @@ export default function ExperimentsPage() {
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [labMode, setLabMode] = useState<"lab" | "manual">("lab");
+  const [beliefsViewMode, setBeliefsViewMode] = useState<
+    "list" | "timeline" | "trends"
+  >("list");
 
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
   const [variants, setVariants] = useState<ExperimentVariant[]>([]);
   const [runs, setRuns] = useState<ExperimentRun[]>([]);
   const [metrics, setMetrics] = useState<ExperimentMetric[]>([]);
+  const [recommendations, setRecommendations] = useState<
+    ExperimentRecommendation[]
+  >([]);
+  const [simulationDetails, setSimulationDetails] = useState<
+    Record<string, SimulationRunDetailResponse["run"]>
+  >({});
+  const [beliefCount, setBeliefCount] = useState<number>(0);
+  const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [batteries, setBatteries] = useState<QueryBattery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
@@ -99,14 +122,7 @@ export default function ExperimentsPage() {
   const [metricsTrendMetric, setMetricsTrendMetric] = useState<
     "win_rate" | "avg_score"
   >("win_rate");
-  const [nextTest, setNextTest] = useState<{
-    action: "run_variant" | "create_variant" | "none";
-    reason: string;
-    variant_id?: string | null;
-    suggested_label?: string | null;
-    suggested_type?: string | null;
-    suggested_payload?: Record<string, unknown> | null;
-  } | null>(null);
+  const [nextTest, setNextTest] = useState<NextTestRecommendation | null>(null);
   const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
   const [jsonErrors, setJsonErrors] = useState({
@@ -148,6 +164,16 @@ export default function ExperimentsPage() {
     });
   }, [productId, selectedExperimentId, userId]);
 
+  useEffect(() => {
+    const targetId = searchParams.get("experiment_id");
+    if (!targetId) return;
+    if (selectedExperimentId === targetId) return;
+    const match = experiments.find((item) => item.id === targetId);
+    if (match) {
+      setSelectedExperimentId(match.id);
+    }
+  }, [experiments, searchParams, selectedExperimentId]);
+
   const selectedExperiment = useMemo(
     () => experiments.find((item) => item.id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
@@ -158,6 +184,7 @@ export default function ExperimentsPage() {
       setVariants([]);
       setRuns([]);
       setMetrics([]);
+      setRecommendations([]);
       return;
     }
     void listExperimentVariants(selectedExperimentId, userId).then((response) => {
@@ -169,7 +196,64 @@ export default function ExperimentsPage() {
     void listExperimentMetrics(selectedExperimentId, userId).then((response) => {
       setMetrics(response.metrics ?? []);
     });
+    void listExperimentRecommendations(selectedExperimentId, userId).then(
+      (response) => {
+        setRecommendations(response.recommendations ?? []);
+      },
+    );
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+
+  useEffect(() => {
+    if (!runs.length) return;
+    const runIds = runs
+      .map((run) => run.simulation_run_id)
+      .filter((runId): runId is string => Boolean(runId));
+    const pending = runIds.filter((id) => !simulationDetails[id]);
+    if (!pending.length) return;
+    let cancelled = false;
+    Promise.all(
+      pending.slice(0, 12).map(async (runId) => {
+        try {
+          const response = await getSimulationRun(runId, userId);
+          return [runId, response.run] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const updates: Record<string, SimulationRunDetailResponse["run"]> = {};
+      entries.forEach((entry) => {
+        if (entry) {
+          updates[entry[0]] = entry[1];
+        }
+      });
+      if (Object.keys(updates).length) {
+        setSimulationDetails((prev) => ({ ...prev, ...updates }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [runs, simulationDetails, userId]);
+
+  useEffect(() => {
+    if (!brandId) {
+      setBeliefCount(0);
+      setLatestBelief(null);
+      return;
+    }
+    void listBrandBeliefs(brandId, userId, 25)
+      .then((response) => {
+        setBeliefCount((response.beliefs ?? []).length);
+      })
+      .catch(() => setBeliefCount(0));
+    void getLatestBrandBelief(brandId, userId)
+      .then((response) => {
+        setLatestBelief(response.belief ?? null);
+      })
+      .catch(() => setLatestBelief(null));
+  }, [brandId, userId]);
 
   useEffect(() => {
     const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
@@ -483,6 +567,55 @@ export default function ExperimentsPage() {
     setExperimentStatus(null);
     setSubmitting(true);
     try {
+      let hypothesis: Record<string, unknown> = {};
+      let competitorPolicy: Record<string, unknown> = {};
+      if (experimentForm.hypothesis.trim() !== "") {
+        hypothesis = JSON.parse(experimentForm.hypothesis);
+      }
+      if (experimentForm.competitorPolicy.trim() !== "") {
+        competitorPolicy = JSON.parse(experimentForm.competitorPolicy);
+      }
+
+      const buildSeedQueries = (): string[] => {
+        const seeds: string[] = [];
+        const rationale = String((hypothesis as Record<string, unknown>)?.rationale ?? "");
+        const payload = (hypothesis as Record<string, unknown>)?.variant_payload;
+        const lowered = rationale.toLowerCase();
+        const productLabel = productName ?? "product";
+
+        const keywords = lowered
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((word) => word.length > 3)
+          .slice(0, 4);
+
+        keywords.forEach((keyword) => {
+          seeds.push(`best ${productLabel} for ${keyword}`);
+          seeds.push(`${productLabel} that improves ${keyword}`);
+        });
+
+        if (lowered.includes("price") || lowered.includes("pricing") || typeof payload === "object" && payload && "pricing" in payload) {
+          seeds.push(`${productLabel} under budget with strong value`);
+          seeds.push(`${productLabel} on sale with best price`);
+        }
+
+        if (lowered.includes("delivery") || lowered.includes("shipping") || typeof payload === "object" && payload && "fulfillment" in payload) {
+          seeds.push(`${productLabel} with fast delivery options`);
+          seeds.push(`${productLabel} available for delivery this week`);
+        }
+
+        if (lowered.includes("tone") || lowered.includes("voice") || typeof payload === "object" && payload && "copy" in payload) {
+          seeds.push(`${productLabel} with premium positioning`);
+          seeds.push(`${productLabel} focused on outcomes and benefits`);
+        }
+
+        if (seeds.length === 0 && productLabel) {
+          seeds.push(`best ${productLabel} for everyday use`);
+        }
+
+        return Array.from(new Set(seeds)).slice(0, 8);
+      };
+
       let batteryId = experimentForm.batteryId;
       if (labMode === "lab" && !batteryId) {
         const confirmCreate = window.confirm(
@@ -493,31 +626,26 @@ export default function ExperimentsPage() {
           return;
         }
         const autoBatteryName = `${productName ?? "Product"} Battery`;
+        const seedQueries =
+          Object.keys(hypothesis).length > 0 ? buildSeedQueries() : [];
+        const generationMode =
+          seedQueries.length > 0 ? "hybrid" : batteryForm.generationMode;
         const batteryResponse = await createBattery({
           name: autoBatteryName,
           product_id: productId,
           purpose: experimentForm.hypothesis ? "Hypothesis-driven battery" : undefined,
-          generation_mode: batteryForm.generationMode,
+          generation_mode: generationMode,
           user_id: userId,
         });
         batteryId = batteryResponse.battery.id;
         await generateBatteryQueries(batteryId, {
-          source: batteryForm.generationMode,
-          seed_queries: undefined,
+          source: generationMode,
+          seed_queries: seedQueries.length > 0 ? seedQueries : undefined,
           user_id: userId,
         });
         const refreshedBatteries = await listBatteries(userId, productId);
         setBatteries(refreshedBatteries.batteries ?? []);
         setExperimentForm((prev) => ({ ...prev, batteryId }));
-      }
-
-      let hypothesis: Record<string, unknown> = {};
-      let competitorPolicy: Record<string, unknown> = {};
-      if (experimentForm.hypothesis.trim() !== "") {
-        hypothesis = JSON.parse(experimentForm.hypothesis);
-      }
-      if (experimentForm.competitorPolicy.trim() !== "") {
-        competitorPolicy = JSON.parse(experimentForm.competitorPolicy);
       }
       const response = await createExperiment({
         name: experimentForm.name.trim(),
@@ -625,6 +753,21 @@ export default function ExperimentsPage() {
     }
   }, [jsonErrors.variantPayload, selectedExperimentId, userId, variantForm]);
 
+  const handleUseBelief = useCallback((belief: BrandBelief) => {
+    const metric = belief?.metadata?.metric ?? "win_rate";
+    const direction = belief?.metadata?.direction ?? "increase";
+    const hypothesisPayload = {
+      metric,
+      direction,
+      rationale: belief?.metadata?.summary ?? belief?.recommendation ?? "",
+      belief_id: belief?.id,
+    };
+    setExperimentForm((prev) => ({
+      ...prev,
+      hypothesis: JSON.stringify(hypothesisPayload, null, 2),
+    }));
+  }, []);
+
   const handleRecommendNextTest = useCallback(async () => {
     if (!selectedExperimentId) return;
     setNextTestStatus(null);
@@ -707,7 +850,81 @@ export default function ExperimentsPage() {
     }
   }, [labMode, nextTest, selectedExperimentId, userId]);
 
+  const handleCreateVariantFromRecommendation = useCallback(
+    async (recommendation: NextTestRecommendation) => {
+      if (!selectedExperimentId || recommendation.action !== "create_variant") {
+        return;
+      }
+      if (labMode === "lab") {
+        const ok = window.confirm("Create and run the suggested variant now?");
+        if (!ok) return;
+      }
+      setFormError(null);
+      setSubmitting(true);
+      try {
+        const response = await createExperimentVariant(selectedExperimentId, {
+          label: recommendation.suggested_label ?? "Hypothesis (next)",
+          type: recommendation.suggested_type ?? "copy",
+          payload:
+            recommendation.suggested_payload &&
+            typeof recommendation.suggested_payload === "object"
+              ? recommendation.suggested_payload
+              : {},
+          user_id: userId,
+        });
+        const refreshed = await listExperimentVariants(selectedExperimentId, userId);
+        setVariants(refreshed.variants ?? []);
+        if (labMode === "lab") {
+          await runExperiment(selectedExperimentId, response.variant.id, userId);
+          const [runsResponse, metricsResponse] = await Promise.all([
+            listExperimentRuns(selectedExperimentId, userId),
+            listExperimentMetrics(selectedExperimentId, userId),
+          ]);
+          setRuns(runsResponse.runs ?? []);
+          setMetrics(metricsResponse.metrics ?? []);
+          setNextTestStatus(
+            `Created and ran variant ${response.variant.label}.`,
+          );
+        } else {
+          setNextTestStatus(`Created variant ${response.variant.label}.`);
+        }
+      } catch (error) {
+        setFormError(
+          error instanceof Error ? error.message : "Unable to create variant.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [labMode, selectedExperimentId, userId],
+  );
+
+  const handleRunRecommendation = useCallback(
+    async (variantId: string | null | undefined) => {
+      if (!selectedExperimentId || !variantId) return;
+      if (labMode === "lab") {
+        const ok = window.confirm("Run this recommended test now?");
+        if (!ok) return;
+      }
+      setRunningVariantId(variantId);
+      try {
+        await runExperiment(selectedExperimentId, variantId, userId);
+        const [runsResponse, metricsResponse] = await Promise.all([
+          listExperimentRuns(selectedExperimentId, userId),
+          listExperimentMetrics(selectedExperimentId, userId),
+        ]);
+        setRuns(runsResponse.runs ?? []);
+        setMetrics(metricsResponse.metrics ?? []);
+        setNextTestStatus("Recommended test run completed.");
+      } finally {
+        setRunningVariantId(null);
+      }
+    },
+    [labMode, selectedExperimentId, userId],
+  );
+
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
+  const beliefsRef = useRef<HTMLDivElement | null>(null);
   const metricsByVariant = useMemo(() => {
     const map = new Map<string, ExperimentMetric>();
     metrics.forEach((metric) => {
@@ -720,12 +937,186 @@ export default function ExperimentsPage() {
     return map;
   }, [metrics]);
 
+  const labLoopSteps = useMemo(() => {
+    const hypothesisReady = Boolean(
+      selectedExperiment?.hypothesis ||
+        experimentForm.hypothesis.trim().length > 0,
+    );
+    const batteryReady = Boolean(
+      selectedExperiment?.battery_id || experimentForm.batteryId,
+    );
+    const runActive = Boolean(runningVariantId);
+    const runReady = runs.length > 0 || Boolean(selectedExperiment?.last_run_at);
+    const analyzeReady = metrics.length > 0;
+    const beliefReady = analyzeReady;
+    const nextReady = Boolean(nextTest || recommendations.length > 0);
+
+    return [
+      {
+        label: "World state",
+        status: brandId ? "Ready" : "Select brand",
+        tone: brandId ? "ready" : "pending",
+      },
+      {
+        label: "Hypothesis",
+        status: hypothesisReady ? "Ready" : "Draft",
+        tone: hypothesisReady ? "ready" : "pending",
+      },
+      {
+        label: "Battery",
+        status: batteryReady ? "Linked" : "Pending",
+        tone: batteryReady ? "ready" : "pending",
+      },
+      {
+        label: "Run",
+        status: runActive ? "Running" : runReady ? "Ready" : "Pending",
+        tone: runActive ? "active" : runReady ? "ready" : "pending",
+      },
+      {
+        label: "Analyze",
+        status: analyzeReady ? "Ready" : "Pending",
+        tone: analyzeReady ? "ready" : "pending",
+      },
+      {
+        label: "Belief",
+        status: beliefReady ? "Updated" : "Pending",
+        tone: beliefReady ? "ready" : "pending",
+      },
+      {
+        label: "Next test",
+        status: nextReady ? "Queued" : "Pending",
+        tone: nextReady ? "ready" : "pending",
+      },
+    ];
+  }, [
+    brandId,
+    experimentForm.batteryId,
+    experimentForm.hypothesis,
+    metrics.length,
+    nextTest,
+    recommendations.length,
+    runningVariantId,
+    runs.length,
+    selectedExperiment?.battery_id,
+    selectedExperiment?.hypothesis,
+    selectedExperiment?.last_run_at,
+  ]);
+
   const metricsHistory = useMemo(() => {
     return [...metrics]
       .filter((metric) => metric.variant_id)
       .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
       .slice(0, 10);
   }, [metrics]);
+
+  const lastRun = useMemo(() => {
+    if (!runs.length) return null;
+    return [...runs].sort((a, b) =>
+      (b.created_at || "").localeCompare(a.created_at || ""),
+    )[0];
+  }, [runs]);
+
+  const experimentGapSummary = useMemo(() => {
+    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
+    if (!targetProductId) return null;
+    const missingCounts = new Map<string, number>();
+    const winnerCounts = new Map<string, number>();
+    const summaries: string[] = [];
+    let sampleCount = 0;
+
+    runs.forEach((run) => {
+      if (!run.simulation_run_id) return;
+      const detail = simulationDetails[run.simulation_run_id];
+      if (!detail?.result?.gap_analysis) return;
+      const gap =
+        detail.result.gap_analysis.find(
+          (item) => item.product_id === targetProductId,
+        ) ?? detail.result.gap_analysis[0];
+      if (!gap) return;
+      (gap.missing_signals ?? []).forEach((signal: string) => {
+        missingCounts.set(signal, (missingCounts.get(signal) ?? 0) + 1);
+      });
+      (gap.winner_signals ?? []).forEach((signal: string) => {
+        winnerCounts.set(signal, (winnerCounts.get(signal) ?? 0) + 1);
+      });
+      if (gap.competitor_summary && sampleCount < 3) {
+        summaries.push(gap.competitor_summary);
+        sampleCount += 1;
+      }
+    });
+
+    const sortCounts = (map: Map<string, number>) =>
+      [...map.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([signal, count]) => ({ signal, count }));
+
+    return {
+      missing: sortCounts(missingCounts),
+      winner: sortCounts(winnerCounts),
+      summaries,
+      total: runs.filter((run) => Boolean(run.simulation_run_id)).length,
+    };
+  }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
+
+  const perVariantGaps = useMemo(() => {
+    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
+    if (!targetProductId) return new Map<string, SimulationGapReport>();
+    const result = new Map<string, SimulationGapReport>();
+    metricsByVariant.forEach((metric, variantId) => {
+      const runsForVariant = runs.filter(
+        (run) => run.variant_id === variantId && run.simulation_run_id,
+      );
+      for (const run of runsForVariant) {
+        const detail = simulationDetails[run.simulation_run_id as string];
+        if (!detail?.result?.gap_analysis) continue;
+        const gap =
+          detail.result.gap_analysis.find(
+            (item) => item.product_id === targetProductId,
+          ) ?? detail.result.gap_analysis[0];
+        if (gap) {
+          result.set(variantId, gap as SimulationGapReport);
+          break;
+        }
+      }
+    });
+    return result;
+  }, [metricsByVariant, productId, runs, selectedExperiment?.product_id, simulationDetails]);
+
+  const runGapDetails = useMemo(() => {
+    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
+    if (!targetProductId) return new Map<string, SimulationGapReport>();
+    const result = new Map<string, SimulationGapReport>();
+    runs.forEach((run) => {
+      if (!run.simulation_run_id) return;
+      const detail = simulationDetails[run.simulation_run_id];
+      if (!detail?.result?.gap_analysis) return;
+      const gap =
+        detail.result.gap_analysis.find(
+          (item) => item.product_id === targetProductId,
+        ) ?? detail.result.gap_analysis[0];
+      if (gap) {
+        result.set(run.id, gap as SimulationGapReport);
+      }
+    });
+    return result;
+  }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
+
+  const handleOpenBeliefsTimeline = useCallback(() => {
+    setBeliefsViewMode("timeline");
+    if (beliefsRef.current) {
+      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [beliefsRef]);
+
+  const handleUseLatestBelief = useCallback(() => {
+    if (!latestBelief) return;
+    handleUseBelief(latestBelief);
+    setBeliefsViewMode("list");
+    if (beliefsRef.current) {
+      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [handleUseBelief, latestBelief, beliefsRef]);
 
   const metricsTrend = useMemo(() => {
     if (!metrics.length) return [];
@@ -769,6 +1160,16 @@ export default function ExperimentsPage() {
       </svg>
     );
   };
+
+  const hypothesisBeliefId = useMemo(() => {
+    if (!experimentForm.hypothesis.trim()) return null;
+    try {
+      const parsed = JSON.parse(experimentForm.hypothesis);
+      return typeof parsed?.belief_id === "string" ? parsed.belief_id : null;
+    } catch {
+      return null;
+    }
+  }, [experimentForm.hypothesis]);
 
   return (
     <div className="app">
@@ -828,13 +1229,115 @@ export default function ExperimentsPage() {
             }
           />
           <div className="detail__stack">
+          <section className="panel__card lab-loop">
+            <div className="panel__header">
+              <h3>Lab Loop</h3>
+              <div className="lab-loop__badges">
+                <span className="panel__badge">
+                  {labMode === "lab" ? "Lab mode" : "Manual mode"}
+                </span>
+                {selectedExperimentId ? (
+                  <span className="panel__badge panel__badge--secondary">
+                    Experiment active
+                  </span>
+                ) : null}
+                {selectedExperiment?.battery_id ? (
+                  <span className="panel__badge panel__badge--secondary">
+                    Battery linked
+                  </span>
+                ) : null}
+                <span className="panel__badge panel__badge--secondary">
+                  {variants.length} variants
+                </span>
+                <span className="panel__badge panel__badge--secondary">
+                  {runs.length} runs
+                </span>
+                <span className="panel__badge panel__badge--secondary">
+                  {metrics.length} metrics
+                </span>
+                <span className="panel__badge panel__badge--secondary">
+                  {beliefCount} beliefs
+                </span>
+              </div>
+            </div>
+            <p className="lab-loop__hint">
+              The lab loop turns hypotheses into evidence and updates brand
+              beliefs with every run.
+            </p>
+            <div className="lab-loop__steps">
+              {labLoopSteps.map((step) => (
+                <div key={step.label} className="lab-loop__step">
+                  <span className={`lab-loop__status lab-loop__status--${step.tone}`}>
+                    {step.status}
+                  </span>
+                  <span className="lab-loop__label">{step.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="lab-loop__summary">
+              <div className="lab-loop__summary-card">
+                <div className="lab-loop__summary-title">Last run</div>
+                <div className="lab-loop__summary-value">
+                  {lastRun?.created_at
+                    ? new Date(lastRun.created_at).toLocaleString()
+                    : "No runs yet"}
+                </div>
+                <div className="lab-loop__summary-meta">
+                  {lastRun?.variant_id
+                    ? `Variant: ${lastRun.variant_id}`
+                    : "Run a variant to start"}
+                </div>
+              </div>
+              <div className="lab-loop__summary-card">
+                <div className="lab-loop__summary-title">Last belief</div>
+                <div className="lab-loop__summary-value">
+                  {latestBelief?.created_at
+                    ? new Date(latestBelief.created_at).toLocaleString()
+                    : "No beliefs yet"}
+                </div>
+                <button
+                  type="button"
+                  className="lab-loop__summary-meta lab-loop__summary-link"
+                  onClick={handleOpenBeliefsTimeline}
+                  disabled={!latestBelief}
+                >
+                  {latestBelief?.metadata?.summary ??
+                    latestBelief?.recommendation ??
+                    "Beliefs appear after results are analyzed."}
+                </button>
+                <div className="lab-loop__summary-actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleOpenBeliefsTimeline}
+                    disabled={!latestBelief}
+                  >
+                    View timeline
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleUseLatestBelief}
+                    disabled={!latestBelief}
+                  >
+                    Use latest belief
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
           {brandId ? (
-            <BrandBeliefs
-              brandId={brandId}
-              clientId={clientId ?? undefined}
-              userId={userId ?? undefined}
-              limit={50}
-            />
+            <div ref={(node) => (beliefsRef.current = node)}>
+              <BrandBeliefs
+                brandId={brandId}
+                clientId={clientId ?? undefined}
+                userId={userId ?? undefined}
+                limit={50}
+                onUseBelief={handleUseBelief}
+                viewMode={beliefsViewMode}
+                onViewModeChange={setBeliefsViewMode}
+              />
+            </div>
           ) : null}
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
@@ -1162,6 +1665,11 @@ export default function ExperimentsPage() {
                       Use template
                     </button>
                   </div>
+                  {hypothesisBeliefId ? (
+                    <span className="panel__success">
+                      Created from belief: {hypothesisBeliefId}
+                    </span>
+                  ) : null}
                   {jsonErrors.hypothesis ? (
                     <span className="panel__error">{jsonErrors.hypothesis}</span>
                   ) : null}
@@ -1407,6 +1915,20 @@ export default function ExperimentsPage() {
                       </button>
                     </div>
                   ) : null}
+                  {nextTest.ml_prediction ? (
+                    <div className="panel__meta panel__meta--stack">
+                      <MLPrediction prediction={nextTest.ml_prediction} />
+                    </div>
+                  ) : null}
+                  {typeof nextTest.exploration_score === "number" &&
+                  typeof nextTest.exploitation_score === "number" ? (
+                    <div className="panel__meta panel__meta--stack">
+                      <ThompsonSamplingGauge
+                        explorationScore={nextTest.exploration_score}
+                        exploitationScore={nextTest.exploitation_score}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {nextTestStatus ? (
@@ -1517,6 +2039,7 @@ export default function ExperimentsPage() {
                 {variants.map((variant) => {
                   const metric = metricsByVariant.get(variant.id);
                   const values = (metric?.metrics ?? {}) as Record<string, unknown>;
+                  const gap = perVariantGaps.get(variant.id);
                   return (
                     <li key={variant.id}>
                       <div className="panel__meta">
@@ -1524,6 +2047,13 @@ export default function ExperimentsPage() {
                         <span className="panel__badge panel__badge--secondary">
                           {variant.type}
                         </span>
+                        {gap?.severity ? (
+                          <span
+                            className={`panel__badge panel__badge--severity-${gap.severity}`}
+                          >
+                            {gap.severity} gap
+                          </span>
+                        ) : null}
                       </div>
                       <div className="panel__meta">
                         <span className="panel__muted">
@@ -1536,6 +2066,11 @@ export default function ExperimentsPage() {
                           Runs: {values.total_runs ?? "—"}
                         </span>
                       </div>
+                      {gap ? (
+                        <div className="panel__muted">
+                          Missing: {(gap.missing_signals ?? []).slice(0, 3).join(", ") || "—"}
+                        </div>
+                      ) : null}
                       {metric?.created_at ? (
                         <span className="panel__muted">
                           Last run:{" "}
@@ -1546,6 +2081,63 @@ export default function ExperimentsPage() {
                   );
                 })}
               </ul>
+            )}
+          </section>
+
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Why we lost (experiment deltas)</h3>
+              {experimentGapSummary?.total ? (
+                <span className="panel__badge panel__badge--secondary">
+                  {experimentGapSummary.total} linked runs
+                </span>
+              ) : null}
+            </div>
+            {!experimentGapSummary || experimentGapSummary.total === 0 ? (
+              <p className="panel__empty">
+                Run a variant with linked simulations to see gap signals.
+              </p>
+            ) : (
+              <div className="panel__grid">
+                <div className="panel__column">
+                  <h4 className="panel__subtitle">Top missing signals</h4>
+                  {experimentGapSummary.missing.length === 0 ? (
+                    <p className="panel__muted">No missing signals yet.</p>
+                  ) : (
+                    <ul className="panel__list panel__list--compact">
+                      {experimentGapSummary.missing.map((item) => (
+                        <li key={`missing-${item.signal}`}>
+                          {item.signal} · {item.count}x
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="panel__column">
+                  <h4 className="panel__subtitle">Winner signals</h4>
+                  {experimentGapSummary.winner.length === 0 ? (
+                    <p className="panel__muted">No winner signals yet.</p>
+                  ) : (
+                    <ul className="panel__list panel__list--compact">
+                      {experimentGapSummary.winner.map((item) => (
+                        <li key={`winner-${item.signal}`}>
+                          {item.signal} · {item.count}x
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {experimentGapSummary.summaries.length > 0 ? (
+                  <div className="panel__column">
+                    <h4 className="panel__subtitle">Gap summaries</h4>
+                    <ul className="panel__list panel__list--compact">
+                      {experimentGapSummary.summaries.map((summary, index) => (
+                        <li key={`summary-${index}`}>{summary}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
             )}
           </section>
 
@@ -1568,9 +2160,31 @@ export default function ExperimentsPage() {
                         {run.simulation_run_id ? "linked" : "pending"}
                       </span>
                     </div>
-                    <span className="history-panel__meta">
-                      Variant: {run.variant_id}
-                    </span>
+                    <div className="panel__meta panel__meta--stack">
+                      <span className="history-panel__meta">
+                        Variant: {run.variant_id}
+                      </span>
+                      {run.simulation_run_id ? (
+                        <span className="history-panel__meta">
+                          Run ID:{" "}
+                          <a
+                            className="panel__link"
+                            href={`/simulation?run_id=${run.simulation_run_id}`}
+                          >
+                            {run.simulation_run_id}
+                          </a>
+                        </span>
+                      ) : null}
+                      {runGapDetails.get(run.id) ? (
+                        <span className="history-panel__meta">
+                          Gap:{" "}
+                          {runGapDetails
+                            .get(run.id)
+                            ?.missing_signals?.slice(0, 3)
+                            .join(", ") || "—"}
+                        </span>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -1632,6 +2246,61 @@ export default function ExperimentsPage() {
                     </li>
                   );
                 })}
+              </ul>
+            )}
+            <div className="panel__meta">
+              <h4 className="panel__subtitle">Orchestrator Recommendations</h4>
+            </div>
+            {recommendations.length === 0 ? (
+              <p className="panel__empty">No recommendations yet.</p>
+            ) : (
+              <ul className="panel__list panel__list--compact">
+                {recommendations.map((rec) => (
+                  <li key={rec.id}>
+                    <div className="panel__meta">
+                      <span>{rec.recommendation.reason}</span>
+                      <span className="panel__badge panel__badge--secondary">
+                        {rec.recommendation.action}
+                      </span>
+                    </div>
+                    <span className="panel__muted">
+                      {rec.created_at
+                        ? new Date(rec.created_at).toLocaleDateString()
+                        : ""}
+                    </span>
+                    {rec.recommendation.action === "run_variant" ? (
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() =>
+                            handleRunRecommendation(rec.recommendation.variant_id)
+                          }
+                          disabled={runningVariantId === rec.recommendation.variant_id}
+                        >
+                          {runningVariantId === rec.recommendation.variant_id
+                            ? "Running…"
+                            : "Run next test"}
+                        </button>
+                      </div>
+                    ) : rec.recommendation.action === "create_variant" ? (
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() =>
+                            handleCreateVariantFromRecommendation(
+                              rec.recommendation,
+                            )
+                          }
+                          disabled={submitting}
+                        >
+                          {submitting ? "Creating…" : "Create + run variant"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
             )}
           </section>

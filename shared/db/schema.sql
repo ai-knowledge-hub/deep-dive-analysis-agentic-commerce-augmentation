@@ -282,6 +282,14 @@ CREATE TABLE IF NOT EXISTS brand_beliefs (
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS experiment_recommendations (
+    id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL,
+    recommendation_json TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_client ON sessions(client_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
@@ -308,6 +316,8 @@ CREATE INDEX IF NOT EXISTS idx_brand_beliefs_client ON brand_beliefs(client_id);
 CREATE INDEX IF NOT EXISTS idx_brand_beliefs_brand ON brand_beliefs(brand_id);
 CREATE INDEX IF NOT EXISTS idx_brand_beliefs_product ON brand_beliefs(product_id);
 CREATE INDEX IF NOT EXISTS idx_brand_beliefs_created ON brand_beliefs(created_at);
+CREATE INDEX IF NOT EXISTS idx_experiment_recommendations_experiment
+ON experiment_recommendations(experiment_id);
 
 CREATE TABLE IF NOT EXISTS replay_records (
     id TEXT PRIMARY KEY,

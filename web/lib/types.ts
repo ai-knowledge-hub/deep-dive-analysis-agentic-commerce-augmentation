@@ -354,6 +354,17 @@ export type ConversationResponse = {
     confidence?: number;
   }[];
   explanation?: string;
+  lab_operator?: {
+    action?: string;
+    message?: string;
+    hypothesis?: Record<string, unknown>;
+    variant_payload?: Record<string, unknown>;
+    metrics?: Record<string, unknown>;
+    belief_summary?: string | null;
+    evidence?: Record<string, unknown> | null;
+    experiment_id?: string;
+    variant_id?: string | null;
+  };
   intentionality_profiles?: {
     product_id?: string;
     capabilities_enabled?: string[];
@@ -526,10 +537,31 @@ export type NextTestRecommendation = {
   suggested_label?: string | null;
   suggested_type?: string | null;
   suggested_payload?: Record<string, unknown> | null;
+  statistical_analysis?: Record<string, unknown> | null;
+  ml_prediction?: {
+    hypothesis_type: string;
+    predicted_lift: number;
+    confidence: number;
+    rationale: string;
+    similar_experiments?: string[];
+  } | null;
+  exploration_score?: number | null;
+  exploitation_score?: number | null;
 };
 
 export type NextTestRecommendationResponse = {
   recommendation: NextTestRecommendation;
+};
+
+export type ExperimentRecommendation = {
+  id: string;
+  experiment_id: string;
+  recommendation: NextTestRecommendation;
+  created_at?: string;
+};
+
+export type ExperimentRecommendationListResponse = {
+  recommendations: ExperimentRecommendation[];
 };
 
 export type ExperimentRunResponse = {

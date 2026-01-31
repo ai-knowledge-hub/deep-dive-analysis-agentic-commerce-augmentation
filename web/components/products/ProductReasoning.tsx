@@ -27,6 +27,7 @@ type MergedProduct = {
   capabilities_enabled?: string[];
   description?: string;
   reasoning?: string;
+  offer_url?: string;
 };
 
 function mergeProducts(products?: Product[], explanations?: ProductExplanation[]) {
@@ -64,6 +65,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
       capabilities_enabled: product.capabilities_enabled ?? explanation?.capabilities_enabled,
       description: product.description,
       reasoning: product.reasoning ?? explanation?.reasoning,
+      offer_url: product.offer_url,
     };
   });
 
@@ -73,6 +75,7 @@ function mergeProducts(products?: Product[], explanations?: ProductExplanation[]
     confidence: explanation.confidence,
     capabilities_enabled: explanation.capabilities_enabled,
     reasoning: explanation.reasoning,
+    offer_url: undefined,
   }));
 
   return [...merged, ...remaining];
@@ -167,6 +170,16 @@ export function ProductReasoning({
                   product.description ??
                   "Reasoning pending..."}
               </p>
+              {product.offer_url ? (
+                <a
+                  className="product__link"
+                  href={product.offer_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View source
+                </a>
+              ) : null}
               {product.alignment_reasoning && product.reasoning ? (
                 <p className="product__alignment">
                   {product.alignment_reasoning}

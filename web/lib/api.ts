@@ -32,18 +32,68 @@ import {
   ExperimentMetricListResponse,
   ExperimentRunResponse,
   NextTestRecommendationResponse,
+  ExperimentRecommendationListResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
   QueryBatteryQuery,
   BrandBeliefListResponse,
   BrandBeliefResponse,
+  SessionSummary,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+let warnedApiBase = false;
+const DEFAULT_API_BASE = "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" ? window.location.origin : DEFAULT_API_BASE);
+
+function resolveApiBase(): string {
+  if (typeof window !== "undefined") {
+    const localOverride = window.localStorage.getItem("api_base");
+    if (localOverride) return localOverride;
+  }
+  if (
+    API_BASE.includes("localhost:3000") ||
+    API_BASE.includes("127.0.0.1:3000")
+  ) {
+    if (typeof window !== "undefined" && !warnedApiBase) {
+      warnedApiBase = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `API base resolved to ${API_BASE}; falling back to ${DEFAULT_API_BASE}. ` +
+          "Set NEXT_PUBLIC_API_URL in web/.env.local and restart Next to silence this warning.",
+      );
+    }
+    return DEFAULT_API_BASE;
+  }
+  return API_BASE;
+}
 const CLIENT_ID_STORAGE_KEY = "client_id";
 const BRAND_ID_STORAGE_KEY = "brand_id";
 const PRODUCT_ID_STORAGE_KEY = "product_id";
+
+function getSessionsStorageKey(userId: string, clientId?: string): string {
+  const clientTag = clientId ? `.${clientId}` : "";
+  return `intentionality.sessions.${userId}${clientTag}`;
+}
+
+function readCachedSessions(key: string): SessionSummary[] {
+  if (typeof window === "undefined") return [];
+  const storedRaw = window.localStorage.getItem(key);
+  if (!storedRaw) return [];
+  try {
+    return JSON.parse(storedRaw) as SessionSummary[];
+  } catch {
+    window.localStorage.removeItem(key);
+    return [];
+  }
+}
+
+function writeCachedSessions(key: string, sessions: SessionSummary[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(sessions));
+}
 
 function getClientId(): string | undefined {
   if (typeof window !== "undefined") {
@@ -76,7 +126,7 @@ function getProductId(): string | undefined {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${resolveApiBase()}${path}`, {
     headers: {
       "Content-Type": "application/json",
     },
@@ -91,6 +141,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function startConversation(
   message: string,
   userId?: string | null,
+  metadata?: Record<string, unknown>,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -101,6 +152,7 @@ export async function startConversation(
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
+      metadata: metadata ?? undefined,
     }),
   });
 }
@@ -109,6 +161,7 @@ export async function sendConversationMessage(
   sessionId: string,
   message: string,
   userId?: string | null,
+  metadata?: Record<string, unknown>,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -119,6 +172,7 @@ export async function sendConversationMessage(
       user_id: userId ?? undefined,
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
+      metadata: metadata ?? undefined,
     }),
   });
 }
@@ -143,7 +197,28 @@ export async function listConversationSessions(
   params.set("user_id", userId);
   const clientId = getClientId();
   if (clientId) params.set("client_id", clientId);
-  return request<SessionListResponse>(`/conversation/sessions?${params.toString()}`);
+  const cacheKey = getSessionsStorageKey(userId, clientId);
+  const cached = readCachedSessions(cacheKey);
+  try {
+    const response = await request<SessionListResponse>(
+      `/conversation/sessions?${params.toString()}`,
+    );
+    const merged = new Map<string, SessionSummary>();
+    response.sessions.forEach((session) => merged.set(session.id, session));
+    cached.forEach((session) => {
+      if (!merged.has(session.id)) {
+        merged.set(session.id, session);
+      }
+    });
+    const sessions = Array.from(merged.values());
+    writeCachedSessions(cacheKey, sessions);
+    return { sessions };
+  } catch (error) {
+    if (cached.length > 0) {
+      return { sessions: cached };
+    }
+    throw error;
+  }
 }
 
 export async function refreshResearch(
@@ -189,6 +264,50 @@ export async function listBatteries(
   if (userId) params.set("user_id", userId);
   if (productId) params.set("product_id", productId);
   return request<QueryBatteryListResponse>(`/batteries?${params.toString()}`);
+}
+
+export async function listProductsByBrand(
+  brandId: string,
+  userId?: string | null,
+): Promise<{ products: AdminProduct[] }> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  params.set("brand_id", brandId);
+  return request<{ products: AdminProduct[] }>(`/products/by-brand?${params.toString()}`);
+}
+
+export async function updateProductCopy(
+  payload: {
+    product_id: string;
+    description: string;
+    source_url?: string | null;
+  },
+  userId?: string | null,
+): Promise<{ product?: AdminProduct }> {
+  const clientId = getClientId();
+  return request<{ product?: AdminProduct }>("/products/update-copy", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
+export async function getBrand(
+  brandId: string,
+  userId?: string | null,
+): Promise<{ brand?: AdminBrand }> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<{ brand?: AdminBrand }>(`/brands/${brandId}${suffix}`);
 }
 
 export async function createBattery(payload: {
@@ -349,11 +468,13 @@ export async function listExperiments(
 export async function listBrandBeliefs(
   brandId: string,
   userId?: string | null,
+  limit?: number,
 ): Promise<BrandBeliefListResponse> {
   const params = new URLSearchParams();
   const clientId = getClientId();
   if (clientId) params.set("client_id", clientId);
   if (userId) params.set("user_id", userId);
+  if (typeof limit === "number") params.set("limit", String(limit));
   params.set("brand_id", brandId);
   return request<BrandBeliefListResponse>(`/beliefs?${params.toString()}`);
 }
@@ -474,6 +595,21 @@ export async function getNextTestRecommendation(
   if (userId) params.set("user_id", userId);
   return request<NextTestRecommendationResponse>(
     `/experiments/${experimentId}/next-test?${params.toString()}`,
+  );
+}
+
+export async function listExperimentRecommendations(
+  experimentId: string,
+  userId?: string | null,
+  limit = 25,
+): Promise<ExperimentRecommendationListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  if (limit) params.set("limit", String(limit));
+  return request<ExperimentRecommendationListResponse>(
+    `/experiments/${experimentId}/recommendations?${params.toString()}`,
   );
 }
 
@@ -681,10 +817,12 @@ export async function updateSimulationTone(
 export async function requestBrandTone(
   runId?: string | null,
   userId?: string | null,
-): Promise<{ status: string; message: string }> {
+): Promise<{ status: string; message: string; tone?: string }> {
   const clientId = getClientId();
   const brandId = getBrandId();
-  return request<{ status: string; message: string }>("/simulation/tone/from-brand", {
+  return request<{ status: string; message: string; tone?: string }>(
+    "/simulation/tone/from-brand",
+    {
     method: "POST",
     body: JSON.stringify({
       run_id: runId ?? undefined,
@@ -692,7 +830,8 @@ export async function requestBrandTone(
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
     }),
-  });
+    },
+  );
 }
 
 export async function listAdminClients(

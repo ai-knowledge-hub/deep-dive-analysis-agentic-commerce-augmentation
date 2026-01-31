@@ -33,6 +33,7 @@ const emptyForm = {
   id: "",
   name: "",
   description: "",
+  productUrl: "",
   role: "analyst",
   memberUserId: "",
 };
@@ -182,12 +183,17 @@ export default function AdminPage() {
   const handleCreateProduct = useCallback(async () => {
     if (!userId || !activeBrandId || !productForm.id.trim() || !productForm.name.trim())
       return;
+    const metadata: Record<string, unknown> = {};
+    if (productForm.productUrl?.trim()) {
+      metadata.product_url = productForm.productUrl.trim();
+    }
     const response = await createAdminProduct(
       activeBrandId,
       {
         id: productForm.id.trim(),
         name: productForm.name.trim(),
         description: productForm.description?.trim() || undefined,
+        metadata: Object.keys(metadata).length ? metadata : undefined,
       },
       userId,
     );
@@ -532,6 +538,17 @@ export default function AdminPage() {
                         setProductForm((current) => ({
                           ...current,
                           description: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="url"
+                      placeholder="Product URL (optional)"
+                      value={productForm.productUrl}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          productUrl: event.target.value,
                         }))
                       }
                     />

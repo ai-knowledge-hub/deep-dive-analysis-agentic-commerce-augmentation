@@ -30,6 +30,14 @@ run-backend:
 run-frontend:
 	cd web && pnpm dev
 
+.PHONY: web-lint
+web-lint:
+	cd web && pnpm lint
+
+.PHONY: web-test
+web-test:
+	cd web && pnpm test
+
 .PHONY: lint
 lint:
 	@if [ -x ./.venv/bin/python ]; then \

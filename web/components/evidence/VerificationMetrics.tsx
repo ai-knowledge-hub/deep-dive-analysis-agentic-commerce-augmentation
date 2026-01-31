@@ -115,7 +115,7 @@ export function VerificationMetrics({
               {" "}were successfully discovered by AI shopping agents, representing a
               {" "}<strong>{liftPercentage}% increase</strong> in discoverability.
               This demonstrates that outcome-focused language significantly improves
-              your products' visibility to AI-powered search.
+              your products&apos; visibility to AI-powered search.
             </>
           ) : liftPercentage === 0 ? (
             <>

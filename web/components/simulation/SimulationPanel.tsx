@@ -12,6 +12,11 @@ type Props = {
   query?: string | null;
   scenarioValue?: string;
   onScenarioChange?: (value: string) => void;
+  productCopy?: string;
+  onProductCopyChange?: (value: string) => void;
+  onProductCopySave?: () => void;
+  productCopySaved?: string | null;
+  brandToneSummary?: string | null;
   toneSuggestion?: string | null;
   toneValue?: string;
   toneNotice?: string | null;
@@ -58,6 +63,11 @@ export function SimulationPanel({
   query,
   scenarioValue,
   onScenarioChange,
+  productCopy,
+  onProductCopyChange,
+  onProductCopySave,
+  productCopySaved,
+  brandToneSummary,
   toneSuggestion,
   toneValue,
   toneNotice,
@@ -137,6 +147,34 @@ export function SimulationPanel({
           onChange={(event) => onScenarioChange?.(event.target.value)}
           placeholder="Describe the buyer intent you want to simulate."
         />
+      </div>
+
+      <div className="simulation__copy">
+        <span className="simulation__diff-label">Product copy</span>
+        {brandToneSummary && (
+          <p className="simulation__tone-suggestion">
+            Current brand tone: {brandToneSummary}
+          </p>
+        )}
+        <textarea
+          rows={3}
+          value={productCopy ?? ""}
+          onChange={(event) => onProductCopyChange?.(event.target.value)}
+          placeholder="Add or edit the product description used for optimization."
+        />
+        <div className="simulation__tone-actions">
+          <button
+            type="button"
+            className="button button--primary"
+            onClick={onProductCopySave}
+            disabled={!productCopy?.trim()}
+          >
+            Save copy
+          </button>
+          {productCopySaved ? (
+            <span className="simulation__notice">{productCopySaved}</span>
+          ) : null}
+        </div>
       </div>
 
       {scores.length === 0 ? (

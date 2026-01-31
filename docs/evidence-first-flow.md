@@ -8,7 +8,7 @@
 
 ## Overview
 
-The Evidence-First Flow provides a comprehensive interface for analyzing product evidence, optimizing representations for AI agent discovery, and verifying discoverability improvements. This implementation transforms a basic evidence display into a polished, production-ready experience.
+The Evidence-First Flow provides a comprehensive interface for analyzing product evidence, optimizing representations for AI agent discovery, and verifying discoverability improvements. It now sits inside the **Automated Lab** narrative as a supporting analysis layer: evidence informs hypotheses, and verification confirms belief updates.
 
 ---
 

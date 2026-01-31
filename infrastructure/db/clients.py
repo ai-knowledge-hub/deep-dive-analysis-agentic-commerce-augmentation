@@ -104,6 +104,41 @@ def get_brand(*, brand_id: str) -> Dict[str, Any] | None:
     return _brand_row(row) if row else None
 
 
+def update_brand_metadata(*, brand_id: str, metadata: Dict[str, Any]) -> Dict[str, Any] | None:
+    conn = get_connection()
+    conn.execute(
+        "UPDATE brands SET metadata_json = json(?) WHERE id = ?",
+        (to_json(metadata) or to_json({}), brand_id),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM brands WHERE id = ?", (brand_id,)).fetchone()
+    return _brand_row(row) if row else None
+
+
+def update_product(
+    *,
+    product_id: str,
+    description: str | None = None,
+    metadata: Dict[str, Any] | None = None,
+) -> Dict[str, Any] | None:
+    if description is None and metadata is None:
+        return get_product(product_id=product_id)
+    conn = get_connection()
+    if metadata is None:
+        conn.execute(
+            "UPDATE products SET description = ? WHERE id = ?",
+            (description, product_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE products SET description = ?, metadata_json = json(?) WHERE id = ?",
+            (description, to_json(metadata) or to_json({}), product_id),
+        )
+    conn.commit()
+    row = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    return _product_row(row) if row else None
+
+
 def get_product_for_client(*, client_id: str, product_id: str) -> Dict[str, Any] | None:
     row = (
         get_connection()
@@ -235,6 +270,8 @@ __all__ = [
     "get_product",
     "get_product_for_client",
     "search_products_for_client",
+    "update_brand_metadata",
+    "update_product",
     "add_client_user",
     "list_client_users",
 ]

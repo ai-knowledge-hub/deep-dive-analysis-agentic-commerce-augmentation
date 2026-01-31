@@ -148,6 +148,21 @@ Rules:
 """
 
 
+BRAND_TONE_PROMPT = """You are extracting a concise brand tone profile.
+Return 1-2 short sentences that describe the brand voice and style.
+Then provide 3-6 comma-separated adjectives on a new line prefixed with "Adjectives:".
+Do not invent facts beyond the provided copy.
+"""
+
+
+def build_brand_tone_prompt(
+    brand_name: str,
+    sources: list[str],
+) -> str:
+    joined = "\n\n".join(text.strip() for text in sources if text.strip())
+    return f"{BRAND_TONE_PROMPT}\nBrand: {brand_name}\nCopy excerpts:\n{joined}\n"
+
+
 def build_optimization_prompt(
     name: str,
     description: str,
@@ -176,4 +191,6 @@ __all__ = [
     "INTENT_CLASSIFICATION_PROMPT",
     "OPTIMIZATION_REWRITE_INSTRUCTIONS",
     "build_optimization_prompt",
+    "BRAND_TONE_PROMPT",
+    "build_brand_tone_prompt",
 ]

@@ -22,6 +22,7 @@ from api.routes import simulation as simulation_route
 from api.routes import batteries as batteries_route
 from api.routes import experiments as experiments_route
 from api.routes import beliefs as beliefs_route
+from api.routes import brands as brands_route
 from api.routes import webhooks as webhooks_route
 from api.routes import admin as admin_route
 from api.routes import replay as replay_route
@@ -45,6 +46,8 @@ if FastAPI:
     app.include_router(evidence_route.router)
     app.include_router(evidence_route.representation_router)
     app.include_router(evidence_route.recommendation_router)
+    if brands_route.router:
+        app.include_router(brands_route.router)
     app.include_router(simulation_route.router)
     app.include_router(batteries_route.router)
     app.include_router(experiments_route.router)

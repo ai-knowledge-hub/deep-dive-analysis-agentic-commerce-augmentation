@@ -20,6 +20,7 @@ from infrastructure.db import (
     episodes as episodes_repo,
     experiments as experiments_repo,
     experiment_runs as experiment_runs_repo,
+    experiment_recommendations as experiment_recommendations_repo,
     brand_beliefs as brand_beliefs_repo,
     goals as goals_repo,
     platform_profiles as platform_profiles_repo,
@@ -60,6 +61,7 @@ def default_deps() -> AppDeps:
         query_batteries=query_batteries_repo,
         experiments=experiments_repo,
         experiment_runs=experiment_runs_repo,
+        experiment_recommendations=experiment_recommendations_repo,
         brand_beliefs=brand_beliefs_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id

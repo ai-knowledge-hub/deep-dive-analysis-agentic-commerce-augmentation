@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
   SimulationLesson,
@@ -11,6 +11,7 @@ import type {
   SimulationRunResponse,
   SimulationRunSummary,
   SessionSummary,
+  ConversationResponse,
 } from "../../lib/types";
 import {
   listSimulationLessons,
@@ -19,8 +20,12 @@ import {
   retestSimulation,
   runSimulation,
   getSimulationRun,
+  getConversationSnapshot,
   requestBrandTone,
   updateSimulationTone,
+  listProductsByBrand,
+  updateProductCopy,
+  getBrand,
   attachSimulationProduct,
   listConversationSessions,
   deleteConversationSession,
@@ -35,6 +40,7 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 
 export default function SimulationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, setProductId } = useTenant();
@@ -58,6 +64,9 @@ export default function SimulationPage() {
   const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
   const [simulationTone, setSimulationTone] = useState("");
   const [simulationToneNotice, setSimulationToneNotice] = useState<string | null>(null);
+  const [productCopy, setProductCopy] = useState("");
+  const [productCopySaved, setProductCopySaved] = useState<string | null>(null);
+  const [brandToneSummary, setBrandToneSummary] = useState<string | null>(null);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
@@ -66,7 +75,12 @@ export default function SimulationPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = localStorage.getItem(storageKey);
+    const keys = [
+      storageKey,
+      "intentionality.simulation.latest",
+      "intentionality.simulation.anonymous",
+    ];
+    const raw = keys.map((key) => localStorage.getItem(key)).find(Boolean);
     if (!raw) return;
     try {
       const data = JSON.parse(raw) as Record<string, unknown>;
@@ -121,6 +135,143 @@ export default function SimulationPage() {
       });
     }
   }, [userId]);
+
+  useEffect(() => {
+    if (!brandId || simulationProducts.length > 0) return;
+    let cancelled = false;
+    void listProductsByBrand(brandId, userId).then((response) => {
+      if (cancelled) return;
+      const items = response.products ?? [];
+      const mapped = items.map((product) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description ?? product.metadata?.description ?? product.name,
+        source: "catalog",
+        url: (product.metadata?.product_url as string | undefined) ?? undefined,
+        price:
+          typeof product.metadata?.price === "number"
+            ? product.metadata?.price
+            : undefined,
+        confidence: 0.6,
+        metadata: product.metadata ?? {},
+      }));
+      setSimulationProducts(mapped);
+      if (mapped.length > 0) {
+        const initial =
+          productId && mapped.some((p) => p.id === productId)
+            ? productId
+            : mapped[0].id;
+        setSelectedSimulationProductId(initial);
+        setProductId(initial);
+        const selected = mapped.find((item) => item.id === initial) ?? mapped[0];
+        const creative = (selected?.metadata as Record<string, unknown> | undefined)?.creative as
+          | Record<string, unknown>
+          | undefined;
+        setProductCopy(
+          (creative?.manual_copy as string | undefined) ??
+            selected?.description ??
+            "",
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, productId, setProductId, simulationProducts.length, userId]);
+
+  useEffect(() => {
+    if (!brandId) {
+      setBrandToneSummary(null);
+      return;
+    }
+    let cancelled = false;
+    void getBrand(brandId, userId).then((response) => {
+      if (cancelled) return;
+      const tone = (response.brand?.metadata as Record<string, unknown> | undefined)?.tone as
+        | Record<string, unknown>
+        | undefined;
+      setBrandToneSummary((tone?.summary as string | undefined) ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, userId]);
+
+  useEffect(() => {
+    if (!selectedSimulationProductId) return;
+    const selected = simulationProducts.find(
+      (item) => item.id === selectedSimulationProductId,
+    );
+    if (!selected) return;
+    const creative = (selected.metadata as Record<string, unknown> | undefined)?.creative as
+      | Record<string, unknown>
+      | undefined;
+    setProductCopy(
+      (creative?.manual_copy as string | undefined) ??
+        selected.description ??
+        "",
+    );
+  }, [selectedSimulationProductId, simulationProducts]);
+
+  useEffect(() => {
+    const runIdParam = searchParams.get("run_id");
+    if (!runIdParam) return;
+    if (simulationRun?.run_id === runIdParam) return;
+    let cancelled = false;
+    void getSimulationRun(runIdParam, userId).then((response) => {
+      if (cancelled) return;
+      setSimulationRun({ run_id: response.run.id, result: response.run.result });
+      setSimulationRetest(
+        response.run.retest
+          ? { run_id: response.run.id, result: response.run.retest }
+          : null,
+      );
+      setSimulationOptimized(null);
+      setSimulationScenario(response.run.query ?? "");
+      setSimulationScenarioDirty(false);
+      setSimulationProducts(response.run.products ?? []);
+      if (response.run.product_id) {
+        setSelectedSimulationProductId(response.run.product_id);
+        setProductId(response.run.product_id);
+      }
+      setSimulationToneSuggestion(response.run.result?.tone?.summary ?? null);
+      if (!simulationTone) {
+        setSimulationTone(response.run.result?.tone?.summary ?? "");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setProductId, simulationRun?.run_id, simulationTone, userId]);
+
+  useEffect(() => {
+    const runIdParam = searchParams.get("run_id");
+    if (runIdParam) return;
+    const sessionParam = searchParams.get("session");
+    if (!sessionParam) return;
+    let cancelled = false;
+    void getConversationSnapshot(sessionParam, userId).then((response) => {
+      if (cancelled) return;
+      const state = response.snapshot?.session?.state as
+        | Record<string, unknown>
+        | undefined;
+      if (!state) return;
+      const scenario = (state.last_query as string) ?? "";
+      const products = (state.last_products as SimulationProduct[]) ?? [];
+      setSimulationScenario(scenario);
+      setSimulationScenarioDirty(false);
+      setSimulationProducts(products);
+      const selected =
+        (state.last_product_id as string) ?? products[0]?.id ?? null;
+      setSelectedSimulationProductId(selected);
+      if (selected) {
+        setProductId(selected);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setProductId, userId]);
 
   const handleRunSimulation = useCallback(async () => {
     if (!simulationScenario.trim()) return;
@@ -235,15 +386,48 @@ export default function SimulationPage() {
     await updateSimulationTone(simulationRun.run_id, "", userId);
   }, [simulationRun, userId]);
 
+  const handleSaveProductCopy = useCallback(async () => {
+    if (!selectedSimulationProductId) return;
+    const response = await updateProductCopy(
+      {
+        product_id: selectedSimulationProductId,
+        description: productCopy.trim(),
+      },
+      userId,
+    );
+    const updated = response.product;
+    if (updated) {
+      setSimulationProducts((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? {
+                ...item,
+                description: updated.description ?? item.description,
+                metadata: updated.metadata ?? item.metadata,
+              }
+            : item,
+        ),
+      );
+    }
+    setProductCopySaved("Product copy saved.");
+    window.setTimeout(() => setProductCopySaved(null), 2500);
+  }, [productCopy, selectedSimulationProductId, userId]);
+
   const handleToneFromBrand = useCallback(async () => {
     try {
       const response = await requestBrandTone(simulationRun?.run_id, userId);
       setSimulationToneNotice(response.message);
+      if (response.tone) {
+        setSimulationToneSuggestion(response.tone);
+        if (!simulationTone) {
+          setSimulationTone(response.tone);
+        }
+      }
       window.setTimeout(() => setSimulationToneNotice(null), 2600);
     } catch {
       setSimulationToneNotice("Brand tone import is not ready yet.");
     }
-  }, [simulationRun, userId]);
+  }, [simulationRun, simulationTone, userId]);
 
   const handleAttachRun = useCallback(
     async (runId: string) => {
@@ -361,6 +545,11 @@ export default function SimulationPage() {
               setSimulationScenario(value);
               setSimulationScenarioDirty(true);
             }}
+            productCopy={productCopy}
+            onProductCopyChange={setProductCopy}
+            onProductCopySave={handleSaveProductCopy}
+            productCopySaved={productCopySaved}
+            brandToneSummary={brandToneSummary}
             toneSuggestion={simulationToneSuggestion}
             toneValue={simulationTone}
             toneNotice={simulationToneNotice}

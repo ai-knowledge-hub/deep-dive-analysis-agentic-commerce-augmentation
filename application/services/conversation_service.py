@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
+from application.services.experiment_orchestrator import ExperimentOrchestrator
+from application.services.experiment_runner import ExperimentRunner
 from application.services.context_builder import context_for
 from application.services.session_manager import SessionManager
 from domain.intent.goals import extract_intent_goals
@@ -37,6 +39,8 @@ class _ExplainAgent(Protocol):
 class ConversationService:
     def __init__(self, *, deps: AppDeps) -> None:
         self._deps = deps
+        self._orchestrator = ExperimentOrchestrator(deps=deps)
+        self._experiment_runner = ExperimentRunner(deps=deps)
 
     def start(
         self,
@@ -269,6 +273,22 @@ class ConversationService:
 
         manager.record_turn("user", message, metadata=metadata or {})
 
+        lab_response = self._handle_lab_operator(
+            manager=manager,
+            message=message,
+            metadata=metadata or {},
+        )
+        if lab_response:
+            manager.record_turn(
+                "agent",
+                lab_response["message"],
+                metadata={"type": "lab_operator", "payload": lab_response},
+            )
+            return self._session_response(
+                manager,
+                lab_operator=lab_response,
+            )
+
         clarification_state, clarification_reply = self._handle_goal_dialogue(
             manager=manager,
             message=message,
@@ -331,6 +351,8 @@ class ConversationService:
             last_intent=intent,
             last_query=plan.get("query"),
             last_alignment=plan.get("alignment"),
+            last_products=plan.get("products") or [],
+            last_product_id=(plan.get("products") or [{}])[0].get("id"),
         )
 
         goal_signals = extract_intent_goals(intent, explicit_goals=goals)
@@ -367,6 +389,220 @@ class ConversationService:
             if clarification_state
             else manager.get_state().get("clarification_state"),
         )
+
+    def _handle_lab_operator(
+        self,
+        *,
+        manager: SessionManager,
+        message: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any] | None:
+        text = (message or "").strip().lower()
+        if not text:
+            return None
+
+        if text.startswith("/lab next") or "run next test" in text:
+            experiment_id = metadata.get("experiment_id")
+            if not experiment_id:
+                experiments = self._deps.experiments.list_experiments(
+                    client_id=manager.client_id,
+                    product_id=metadata.get("product_id"),
+                    brand_id=metadata.get("brand_id") or manager.brand_id,
+                    limit=1,
+                )
+                experiment_id = experiments[0]["id"] if experiments else None
+            if not experiment_id:
+                return {
+                    "action": "run_next_test",
+                    "message": "No experiment found to run next test.",
+                }
+
+            recommendation = self._orchestrator.suggest_next_test(
+                experiment_id=experiment_id, client_id=manager.client_id
+            )
+            if recommendation.action == "run_variant" and recommendation.variant_id:
+                result = self._experiment_runner.run_experiment(
+                    experiment_id=experiment_id,
+                    variant_id=recommendation.variant_id,
+                    client_id=manager.client_id,
+                    user_id=manager.user_id,
+                )
+                return {
+                    "action": "run_next_test",
+                    "experiment_id": experiment_id,
+                    "variant_id": recommendation.variant_id,
+                    "metrics": result.metrics,
+                    "message": f"Ran next test: {recommendation.reason}",
+                }
+            if recommendation.action == "create_variant":
+                return {
+                    "action": "recommend_variant",
+                    "experiment_id": experiment_id,
+                    "recommendation": recommendation.to_dict(),
+                    "message": recommendation.reason,
+                }
+            return {
+                "action": "recommendation",
+                "experiment_id": experiment_id,
+                "recommendation": recommendation.to_dict(),
+                "message": recommendation.reason,
+            }
+
+        if text.startswith("/lab why") or "why did" in text and "variant" in text:
+            experiment_id = metadata.get("experiment_id")
+            variant_id = metadata.get("variant_id")
+            variant_label = metadata.get("variant_label")
+            if not experiment_id:
+                return {
+                    "action": "explain_variant",
+                    "message": "Provide an experiment_id to explain a variant.",
+                }
+            if not variant_id and variant_label:
+                variants = self._deps.experiments.list_variants(
+                    experiment_id=experiment_id
+                )
+                match = next(
+                    (v for v in variants if v.get("label") == variant_label), None
+                )
+                variant_id = match.get("id") if match else None
+            metrics = self._deps.experiment_runs.list_metrics(
+                experiment_id=experiment_id, variant_id=variant_id, limit=10
+            )
+            if not metrics:
+                return {
+                    "action": "explain_variant",
+                    "message": "No metrics found for that variant yet.",
+                }
+            latest_metric = metrics[0].get("metrics") or {}
+            if not variant_id:
+                best = max(
+                    metrics,
+                    key=lambda m: (m.get("metrics") or {}).get("win_rate") or 0,
+                )
+                variant_id = best.get("variant_id")
+                latest_metric = best.get("metrics") or latest_metric
+
+            belief_summary = None
+            evidence_payload = None
+            brand_id = metadata.get("brand_id") or manager.brand_id
+            if brand_id:
+                beliefs = self._deps.brand_beliefs.list_beliefs(
+                    client_id=manager.client_id,
+                    brand_id=brand_id,
+                    limit=10,
+                )
+                for belief in beliefs:
+                    evidence = belief.get("evidence") or {}
+                    if (
+                        evidence.get("experiment_id") == experiment_id
+                        and evidence.get("variant_id") == variant_id
+                    ):
+                        belief_summary = belief.get("metadata", {}).get(
+                            "summary"
+                        ) or belief.get("recommendation")
+                        evidence_payload = evidence
+                        break
+
+            detail_parts = [
+                f"win rate {latest_metric.get('win_rate')}",
+                f"avg score {latest_metric.get('avg_score')}",
+            ]
+            if evidence_payload:
+                query_count = evidence_payload.get("query_count")
+                if query_count:
+                    detail_parts.append(f"{query_count} queries")
+            message = "Latest results: " + " · ".join(detail_parts)
+            if belief_summary:
+                message += f". Belief: {belief_summary}"
+            return {
+                "action": "explain_variant",
+                "experiment_id": experiment_id,
+                "variant_id": variant_id,
+                "metrics": latest_metric,
+                "evidence": evidence_payload,
+                "belief_summary": belief_summary,
+                "message": message,
+            }
+
+        if text.startswith("/lab what") or "what if" in text:
+            prompt = text.lower()
+            variant_payload: Dict[str, Any] = {}
+            rationale = "Test a targeted change to improve alignment."
+            if "price" in prompt or "pricing" in prompt or "discount" in prompt:
+                variant_payload = {
+                    "pricing": {
+                        "strategy": "decrease",
+                        "note": "Apply a sharper price signal",
+                    }
+                }
+                rationale = "Test whether sharper pricing improves intent match."
+            elif "shipping" in prompt or "delivery" in prompt:
+                variant_payload = {
+                    "fulfillment": {
+                        "speed": "faster",
+                        "note": "Highlight faster delivery options",
+                    }
+                }
+                rationale = "Test whether faster delivery improves conversion intent."
+            elif "tone" in prompt or "voice" in prompt:
+                variant_payload = {
+                    "copy": {
+                        "tone": "premium",
+                        "note": "Shift to a clearer premium tone",
+                    }
+                }
+                rationale = "Test whether tone changes lift perceived fit."
+            elif "feature" in prompt or "benefit" in prompt:
+                variant_payload = {
+                    "copy": {
+                        "emphasis": "outcomes",
+                        "note": "Emphasize human outcomes first",
+                    }
+                }
+                rationale = "Test whether outcome framing lifts relevance."
+            hypothesis = {
+                "metric": "win_rate",
+                "direction": "increase",
+                "rationale": rationale,
+                "variant_payload": variant_payload,
+            }
+            return {
+                "action": "what_if_hypothesis",
+                "hypothesis": hypothesis,
+                "variant_payload": variant_payload,
+                "message": "Drafted a what‑if hypothesis and variant payload.",
+            }
+
+        if text.startswith("/lab belief") or "create hypothesis from belief" in text:
+            brand_id = metadata.get("brand_id") or manager.brand_id
+            if not brand_id:
+                return {
+                    "action": "belief_to_hypothesis",
+                    "message": "Select a brand to derive hypothesis from belief.",
+                }
+            belief = self._deps.brand_beliefs.latest_belief(
+                client_id=manager.client_id, brand_id=brand_id
+            )
+            if not belief:
+                return {
+                    "action": "belief_to_hypothesis",
+                    "message": "No beliefs recorded yet for this brand.",
+                }
+            hypothesis = {
+                "metric": belief.get("metadata", {}).get("metric") or "win_rate",
+                "direction": belief.get("metadata", {}).get("direction") or "increase",
+                "rationale": belief.get("metadata", {}).get("summary")
+                or belief.get("recommendation")
+                or "",
+                "belief_id": belief.get("id"),
+            }
+            return {
+                "action": "belief_to_hypothesis",
+                "hypothesis": hypothesis,
+                "message": "Drafted hypothesis from latest belief.",
+            }
+
+        return None
 
     def _session_response(
         self, manager: SessionManager, **payload: Any
@@ -559,6 +795,7 @@ class ConversationService:
                     "description": summary,
                     "confidence": insight.get("confidence", 0.35),
                     "source": "research",
+                    "offer_url": insight.get("url") or insight.get("source_url"),
                     "capabilities_enabled": [],
                     "tags": ["research"],
                 }
