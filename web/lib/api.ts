@@ -138,6 +138,122 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+async function requestStream<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${resolveApiBase()}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+    ...init,
+  });
+  if (!response.ok) {
+    throw new Error(`API error ${response.status}`);
+  }
+  if (!response.body) {
+    return response.json();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let lastPayload: T | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const lines = part.split("\n");
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.replace(/^data:\s*/, "").trim();
+        if (!data) continue;
+        try {
+          lastPayload = JSON.parse(data) as T;
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+  }
+
+  if (lastPayload) {
+    return lastPayload;
+  }
+  return response.json();
+}
+
+type StreamHandlers<T> = {
+  onDelta?: (delta: string) => void;
+  onStatus?: (status: string) => void;
+  onPayload?: (payload: T) => void;
+};
+
+async function requestStreamWithEvents<T>(
+  path: string,
+  init: RequestInit | undefined,
+  handlers: StreamHandlers<T>,
+): Promise<T> {
+  const response = await fetch(`${resolveApiBase()}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+    ...init,
+  });
+  if (!response.ok) {
+    throw new Error(`API error ${response.status}`);
+  }
+  if (!response.body) {
+    return response.json();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let lastPayload: T | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) {
+      const lines = block.split("\n");
+      let eventName = "message";
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventName = line.replace("event:", "").trim();
+        }
+      }
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.replace(/^data:\s*/, "").trim();
+        if (!data) continue;
+        try {
+          const parsed = JSON.parse(data);
+          if (eventName === "delta") {
+            handlers.onDelta?.(parsed.content ?? "");
+          } else if (eventName === "status") {
+            handlers.onStatus?.(parsed.phase ?? "");
+          } else if (eventName === "conversation") {
+            lastPayload = parsed as T;
+            handlers.onPayload?.(parsed as T);
+          }
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+  }
+
+  if (lastPayload) {
+    return lastPayload;
+  }
+  return response.json();
+}
+
 export async function startConversation(
   message: string,
   userId?: string | null,
@@ -157,6 +273,49 @@ export async function startConversation(
   });
 }
 
+export async function startConversationStream(
+  message: string,
+  userId?: string | null,
+  metadata?: Record<string, unknown>,
+): Promise<ConversationResponse> {
+  const clientId = getClientId();
+  const brandId = getBrandId();
+  return requestStream<ConversationResponse>("/conversation/start/stream", {
+    method: "POST",
+    body: JSON.stringify({
+      opening_message: message,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
+      metadata: metadata ?? undefined,
+    }),
+  });
+}
+
+export async function startConversationStreamWithEvents(
+  message: string,
+  userId: string | null | undefined,
+  metadata: Record<string, unknown> | undefined,
+  handlers: StreamHandlers<ConversationResponse>,
+): Promise<ConversationResponse> {
+  const clientId = getClientId();
+  const brandId = getBrandId();
+  return requestStreamWithEvents<ConversationResponse>(
+    "/conversation/start/stream",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        opening_message: message,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+        brand_id: brandId ?? undefined,
+        metadata: metadata ?? undefined,
+      }),
+    },
+    handlers,
+  );
+}
+
 export async function sendConversationMessage(
   sessionId: string,
   message: string,
@@ -166,6 +325,51 @@ export async function sendConversationMessage(
   const clientId = getClientId();
   const brandId = getBrandId();
   return request<ConversationResponse>(`/conversation/${sessionId}/message`, {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+      brand_id: brandId ?? undefined,
+      metadata: metadata ?? undefined,
+    }),
+  });
+}
+
+export async function sendConversationMessageStreamWithEvents(
+  sessionId: string,
+  message: string,
+  userId: string | null | undefined,
+  metadata: Record<string, unknown> | undefined,
+  handlers: StreamHandlers<ConversationResponse>,
+): Promise<ConversationResponse> {
+  const clientId = getClientId();
+  const brandId = getBrandId();
+  return requestStreamWithEvents<ConversationResponse>(
+    `/conversation/${sessionId}/stream`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+        brand_id: brandId ?? undefined,
+        metadata: metadata ?? undefined,
+      }),
+    },
+    handlers,
+  );
+}
+
+export async function sendConversationMessageStream(
+  sessionId: string,
+  message: string,
+  userId?: string | null,
+  metadata?: Record<string, unknown>,
+): Promise<ConversationResponse> {
+  const clientId = getClientId();
+  const brandId = getBrandId();
+  return requestStream<ConversationResponse>(`/conversation/${sessionId}/stream`, {
     method: "POST",
     body: JSON.stringify({
       message,

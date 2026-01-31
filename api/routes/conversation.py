@@ -121,6 +121,12 @@ def _sse_event(data: Dict[str, Any], event: str | None = None) -> str:
     return f"data: {payload}\n\n"
 
 
+def _chunk_text(text: str, size: int = 24) -> List[str]:
+    if not text:
+        return []
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
 @router.post("/start")
 def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
     client_id = require_client_id(request.client_id, request.user_id)
@@ -148,6 +154,7 @@ def start_conversation_stream(
     client_id = require_client_id(request.client_id, request.user_id)
 
     def event_stream():
+        yield _sse_event({"phase": "processing"}, event="status")
         payload = SERVICE.start(
             user_id=request.user_id,
             client_id=client_id,
@@ -163,6 +170,10 @@ def start_conversation_stream(
             score_alignment_fn=ALIGNMENT.score_products,
             build_profile_with_llm_fn=build_profile_with_llm,
         )
+        explanation = payload.get("explanation") or ""
+        for chunk in _chunk_text(str(explanation)):
+            yield _sse_event({"content": chunk}, event="delta")
+        yield _sse_event({"phase": "finalizing"}, event="status")
         yield _sse_event(payload, event="conversation")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -196,6 +207,7 @@ def continue_conversation_stream(
     client_id = require_client_id(request.client_id, request.user_id)
 
     def event_stream():
+        yield _sse_event({"phase": "processing"}, event="status")
         payload = SERVICE.continue_message(
             session_id=session_id,
             user_id=request.user_id,
@@ -212,19 +224,13 @@ def continue_conversation_stream(
             score_alignment_fn=ALIGNMENT.score_products,
             build_profile_with_llm_fn=build_profile_with_llm,
         )
+        explanation = payload.get("explanation") or ""
+        for chunk in _chunk_text(str(explanation)):
+            yield _sse_event({"content": chunk}, event="delta")
+        yield _sse_event({"phase": "finalizing"}, event="status")
         yield _sse_event(payload, event="conversation")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@router.get("/{session_id}")
-def get_session_snapshot(
-    session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
-) -> Dict[str, Any]:
-    client_scope = require_client_id(client_id, user_id)
-    return SERVICE.get_snapshot(
-        session_id=session_id, user_id=user_id, client_id=client_scope
-    )
 
 
 @router.get("/sessions")
@@ -235,6 +241,16 @@ def list_sessions(
 ) -> Dict[str, Any]:
     client_scope = require_client_id(client_id, user_id)
     return SERVICE.list_sessions(user_id=user_id, limit=limit, client_id=client_scope)
+
+
+@router.get("/{session_id}")
+def get_session_snapshot(
+    session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
+) -> Dict[str, Any]:
+    client_scope = require_client_id(client_id, user_id)
+    return SERVICE.get_snapshot(
+        session_id=session_id, user_id=user_id, client_id=client_scope
+    )
 
 
 @router.delete("/{session_id}")

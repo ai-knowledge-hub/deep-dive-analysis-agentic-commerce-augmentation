@@ -108,53 +108,31 @@ interface EvidenceCardProps {
   - **Evidence**: Grid of evidence cards
   - **Optimization**: Before/after comparisons
   - **Verification**: Discoverability metrics
-- **Empty state** with demo data loading button
+- **Empty state** prompting the user to run a chat query
 - **Tab badges** showing counts
 - **Disabled state handling** for tabs without data
 - **Responsive grid layout** for evidence cards
 
 **New Features:**
-- `onLoadDemo` prop for loading demo data
+- Evidence panel reads the latest chat-derived payload
 - Tab state management
 - Optimization mapping (links products to their optimized descriptions)
 - Polished header with product count badge
 
 ---
 
-### 2. **Demo Data Loading** ✅ Complete
+### 2. **Chat-Derived Evidence Payload** ✅ Complete
 
-**File:** [`data/evidence_demo.json`](../data/evidence_demo.json)
-
-**Sample Products:**
-1. Aurora QLED 65 - TV for bright rooms
-2. LumenView 65 - High-brightness TV
-3. Align Pro Chair - Ergonomic office chair
-4. CanvasBook 14 - Design laptop
-5. StrideFlex Trainer - Running shoes
-
-**Each product includes:**
-- Original description (spec-focused)
-- Optimized description (intent-optimized)
-- Confidence score (0.66 - 0.74)
-- Price, URL, source metadata
+Evidence data is now sourced from the latest chat session and cached per client.
 
 **Loading Mechanism:**
 ```typescript
-const loadDemoData = async () => {
-  // Fetch demo JSON
-  const response = await fetch('/data/evidence_demo.json');
-  const demoProducts = await response.json();
-
-  // Transform into expected format
-  const analysis = { evidence_products: [...], goals: [...], ... };
-  const optimization = { optimized: [...], alignment_deltas: [...] };
-  const verification = { predicted: [...], actual: [...], lift: 0.67 };
-
-  // Save to state and localStorage
-  setAnalysis(analysis);
-  setOptimization(optimization);
-  setVerification(verification);
-};
+const payload = JSON.parse(
+  localStorage.getItem("intentionality.evidence.<user>.<client>") ?? "{}"
+);
+setAnalysis(payload.analysis ?? null);
+setOptimization(payload.optimization ?? null);
+setVerification(payload.verification ?? null);
 ```
 
 ---
@@ -164,10 +142,9 @@ const loadDemoData = async () => {
 **File:** [`web/app/evidence/page.tsx`](../web/app/evidence/page.tsx)
 
 **Changes Made:**
-1. **Added demo data loading**
-   - `loadDemoData` callback
-   - Proper type mapping for all response types
-   - Goals and alignment scores generation
+1. **Removed demo data loading**
+   - Evidence now only reflects the latest chat run
+   - No static demo payloads
 2. **Passed onLoadDemo prop to EvidencePanel**
 3. **LocalStorage persistence**
    - Saves all three datasets (analysis, optimization, verification)

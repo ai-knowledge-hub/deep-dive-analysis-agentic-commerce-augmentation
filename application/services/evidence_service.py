@@ -48,6 +48,19 @@ class EvidenceService:
         score_start = time.perf_counter()
         alignment_scores = self._alignment.score_products(goals, products)
         score_ms = int((time.perf_counter() - score_start) * 1000)
+        score_map = {score.product_id: score for score in alignment_scores}
+        for item in evidence_products:
+            score = score_map.get(item.id)
+            if score:
+                item.metadata["alignment_score"] = score.score
+                item.metadata["alignment_reasoning"] = score.alignment_reasoning
+                item.metadata["alignment_confidence"] = score.confidence
+                item.confidence = _blend_confidence(
+                    base=item.confidence,
+                    alignment_score=score.score,
+                    alignment_confidence=score.confidence,
+                    item=item,
+                )
 
         replay = ReplayRecord(
             run_type="evidence.analyze",
@@ -271,6 +284,31 @@ def _evidence_to_dict(item: EvidenceProduct) -> Dict[str, Any]:
         "raw_text": item.raw_text,
         "metadata": item.metadata,
     }
+
+
+def _blend_confidence(
+    *,
+    base: float,
+    alignment_score: float,
+    alignment_confidence: float,
+    item: EvidenceProduct,
+) -> float:
+    def clamp(value: float) -> float:
+        return max(0.0, min(1.0, value))
+
+    description = item.description or ""
+    desc_signal = min(len(description) / 200.0, 1.0) if description else 0.0
+    url_signal = 1.0 if item.url else 0.0
+    price_signal = 1.0 if item.price is not None else 0.0
+    completeness = (0.6 * desc_signal) + (0.25 * url_signal) + (0.15 * price_signal)
+
+    blended = (
+        0.15 * clamp(base)
+        + 0.45 * clamp(alignment_score)
+        + 0.2 * clamp(alignment_confidence)
+        + 0.2 * clamp(completeness)
+    )
+    return round(clamp(blended), 3)
 
 
 def _product_with_description(product, description: str):

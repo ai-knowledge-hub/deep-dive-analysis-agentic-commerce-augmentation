@@ -13,7 +13,9 @@ import {
   listSimulationRuns,
   listSimulationLessons,
   sendConversationMessage,
+  sendConversationMessageStreamWithEvents,
   startConversation,
+  startConversationStreamWithEvents,
   verifyRecommendation,
   listExperiments,
 } from "../lib/api";
@@ -41,6 +43,7 @@ import { useTenant } from "../components/tenant/TenantProvider";
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const [plan, setPlan] = useState<ConversationResponse["plan"]>();
   const [clarifications, setClarifications] = useState<string[]>([]);
   const [productReasoning, setProductReasoning] = useState<
@@ -106,12 +109,14 @@ export default function HomePage() {
   }, [storageClientId, userId]);
   const simulationStorageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [simulationStorageKey, userId],
-  );
-  const evidenceStorageKey = useMemo(
-    () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
     [userId],
   );
+  const evidenceStorageKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.evidence.${userId}${clientTag}`
+      : `intentionality.evidence.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
   const alignmentStorageKey = useMemo(
     () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
     [userId],
@@ -236,6 +241,25 @@ export default function HomePage() {
         setMessages((prev) => [...prev, { role: "user", content: text }]);
       }
       setLoading(true);
+      setThinkingMessage("Synthesizing the intent graph");
+      let agentIndex: number | null = null;
+      let receivedDelta = false;
+      const applyDelta = (delta: string) => {
+        if (!delta) return;
+        receivedDelta = true;
+        setMessages((prev) => {
+          const next = [...prev];
+          if (agentIndex === null) {
+            agentIndex = next.length;
+            next.push({ role: "agent", content: delta });
+            return next;
+          }
+          const current = next[agentIndex];
+          if (!current) return next;
+          next[agentIndex] = { ...current, content: `${current.content}${delta}` };
+          return next;
+        });
+      };
       const metadata = {
         experiment_id: latestExperimentId ?? undefined,
         brand_id: brandId ?? undefined,
@@ -245,7 +269,16 @@ export default function HomePage() {
       try {
         let response: ConversationResponse;
         if (!sessionId) {
-          response = await startConversation(text, userId, metadata);
+          try {
+            response = await startConversationStreamWithEvents(
+              text,
+              userId,
+              metadata,
+              { onDelta: applyDelta },
+            );
+          } catch {
+            response = await startConversation(text, userId, metadata);
+          }
           setSessionId(response.session_id);
           upsertSession({
             id: response.session_id,
@@ -254,7 +287,17 @@ export default function HomePage() {
             last_turn_at: new Date().toISOString(),
           });
         } else {
-          response = await sendConversationMessage(sessionId, text, userId, metadata);
+          try {
+            response = await sendConversationMessageStreamWithEvents(
+              sessionId,
+              text,
+              userId,
+              metadata,
+              { onDelta: applyDelta },
+            );
+          } catch {
+            response = await sendConversationMessage(sessionId, text, userId, metadata);
+          }
           upsertSession({
             id: sessionId,
             preview: text,
@@ -276,7 +319,7 @@ export default function HomePage() {
           setLabOperator(response.lab_operator ?? null);
         }
 
-        if (response.explanation) {
+        if (response.explanation && !receivedDelta) {
           setMessages((prev) => [...prev, { role: "agent", content: response.explanation! }]);
         }
         setPlan(response.plan);
@@ -327,6 +370,7 @@ export default function HomePage() {
         setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
       } finally {
         setLoading(false);
+        setThinkingMessage(null);
       }
     },
     [
@@ -341,6 +385,24 @@ export default function HomePage() {
       userId,
     ],
   );
+
+  useEffect(() => {
+    if (!loading) return;
+    const phrases = [
+      "Synthesizing the intent graph",
+      "Negotiating with the future you",
+      "Asking the shoes nicely",
+      "Calibrating the hypothesis engine",
+      "Rehearsing the experiment",
+      "Consulting the discovery oracle",
+    ];
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index = (index + 1) % phrases.length;
+      setThinkingMessage(phrases[index]);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -424,12 +486,22 @@ export default function HomePage() {
   }, [storageKey, updateSessions, userId]);
 
   useEffect(() => {
-    void listSimulationRuns(userId).then((response) => {
-      setSimulationRuns(response.runs ?? []);
-    });
-    void listSimulationLessons(userId).then((response) => {
-      setSimulationLessons(response.lessons ?? []);
-    });
+    if (!userId) return;
+    const loadSimulationData = async () => {
+      try {
+        const runs = await listSimulationRuns(userId);
+        setSimulationRuns(runs.runs ?? []);
+      } catch (error) {
+        console.warn("Failed to load simulation runs", error);
+      }
+      try {
+        const lessons = await listSimulationLessons(userId);
+        setSimulationLessons(lessons.lessons ?? []);
+      } catch (error) {
+        console.warn("Failed to load simulation lessons", error);
+      }
+    };
+    void loadSimulationData();
   }, [userId]);
 
   useEffect(() => {
@@ -531,12 +603,51 @@ export default function HomePage() {
       setPlan(undefined);
       setClarifications([]);
       setProductReasoning([]);
-      setEvidenceAnalysis(null);
-      setEvidenceOptimization(null);
-      setEvidenceVerification(null);
+      const evidenceItems = state.last_research?.items ?? [];
+      if (evidenceItems.length) {
+        const evidenceProducts = evidenceItems.map((item: any) => ({
+          id: item.id ?? item.name,
+          name: item.name,
+          description: item.description ?? item.name,
+          source: item.source ?? "research",
+          url: item.offer_url,
+          price: item.price,
+          confidence: item.confidence,
+          metadata: {
+            alignment_score: item.alignment_score,
+            alignment_reasoning: item.alignment_reasoning,
+          },
+        }));
+        const alignmentScores =
+          state.last_research?.alignment?.per_item?.map((score: any) => ({
+            product_id: score.product_id ?? "",
+            score: score.score ?? 0,
+            alignment_reasoning: score.alignment_reasoning,
+          })) ?? [];
+        const nextAnalysis: EvidenceAnalyzeResponse = {
+          intent: state.last_intent as EvidenceAnalyzeResponse["intent"],
+          goals: state.clarification_state?.extracted_goals ?? [],
+          evidence_products: evidenceProducts,
+          profiles: state.last_profiles ?? [],
+          alignment_scores: alignmentScores,
+        };
+        setEvidenceAnalysis(nextAnalysis);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            evidenceStorageKey,
+            JSON.stringify({ analysis: nextAnalysis }),
+          );
+        }
+        setEvidenceOptimization(null);
+        setEvidenceVerification(null);
+      } else {
+        setEvidenceAnalysis(null);
+        setEvidenceOptimization(null);
+        setEvidenceVerification(null);
+      }
       setSimulationTone("");
     },
-    [userId],
+    [evidenceStorageKey, userId],
   );
 
   useEffect(() => {
@@ -685,7 +796,11 @@ export default function HomePage() {
           </div>
           <div className="chat">
             <div className="chat__messages" ref={chatContainerRef}>
-              <ChatWindow messages={messages} />
+              <ChatWindow
+                messages={messages}
+                isThinking={loading}
+                thinkingMessage={thinkingMessage ?? undefined}
+              />
             </div>
 
             <div className="chat__quick-actions">

@@ -201,7 +201,7 @@ See [docs/terminology.md](docs/terminology.md) for complete definitions.
 | **Dev** | `gemini` | Preview deployments |
 | **Prod** | `gemini` | Production with full telemetry |
 
-Evidence-first demo data loads from `data/evidence_demo.json` when `EVIDENCE_DEMO=true`
+Evidence data is generated from the latest chat session and stored per client.
 (default). Override with `EVIDENCE_DEMO_PATH` if you want a different dataset.
 
 Protocol readiness (UCP/ACP) is computed from brand profiles + feed metadata and shown in the

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 from typing import Callable, List
 
 from domain.evidence.types import EvidenceProduct
@@ -15,10 +13,6 @@ def retrieve(
     *,
     run_research_fn: Callable[..., dict],
 ) -> List[EvidenceProduct]:
-    demo_products = _load_demo_products()
-    if demo_products:
-        return demo_products[:max_items]
-
     research = run_research_fn(query=query, goals=[query], context=None)
     insights = research.get("insights", []) or []
     if not insights:
@@ -43,7 +37,7 @@ def retrieve(
         )
 
     if not evidence:
-        return (demo_products or _fallback_products(query))[:max_items]
+        return _fallback_products(query)[:max_items]
     return evidence
 
 
@@ -70,34 +64,6 @@ def _fallback_products(query: str) -> List[EvidenceProduct]:
             raw_text=query,
         )
     ]
-
-
-def _load_demo_products() -> List[EvidenceProduct]:
-    path = os.getenv("EVIDENCE_DEMO_PATH", "data/evidence_demo.json")
-    enabled = os.getenv("EVIDENCE_DEMO", "true").lower() == "true"
-    if not enabled or not os.path.exists(path):
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except Exception:
-        return []
-    products: List[EvidenceProduct] = []
-    for item in payload or []:
-        products.append(
-            EvidenceProduct(
-                id=str(item.get("id") or ""),
-                name=str(item.get("name") or "Evidence product"),
-                description=str(item.get("description") or ""),
-                source=str(item.get("source") or "web"),
-                url=item.get("url"),
-                price=item.get("price"),
-                confidence=float(item.get("confidence") or 0.3),
-                raw_text=str(item.get("raw_text") or item.get("description") or ""),
-                metadata={"optimized_description": item.get("optimized_description")},
-            )
-        )
-    return products
 
 
 __all__ = ["retrieve"]

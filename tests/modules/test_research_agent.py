@@ -22,7 +22,7 @@ def test_research_agent_executes_tool_calls(monkeypatch, tmp_path):
                     },
                 }
             ],
-            "content": "Stub research summary",
+            "text": "Stub research summary",
         }
 
     monkeypatch.setattr(

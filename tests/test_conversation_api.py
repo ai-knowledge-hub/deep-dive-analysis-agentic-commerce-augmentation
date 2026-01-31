@@ -464,3 +464,20 @@ def test_research_fallback_returns_payload(client, monkeypatch):
     assert data["research"]["query"] == "workspace chair"
     assert "Verify data" in data["research"]["goals"]
     assert data["plan"]["research_results"] is not None
+
+
+def test_conversation_stream_includes_events(client, monkeypatch):
+    _configure_research_pipeline(monkeypatch)
+
+    response = client.post(
+        "/conversation/start/stream",
+        json={
+            "opening_message": "Need a chair",
+            "user_id": "stream-user",
+            "client_id": CLIENT_ID,
+        },
+    )
+    assert response.status_code == 200
+    body = response.text
+    assert "event: status" in body
+    assert "event: conversation" in body
