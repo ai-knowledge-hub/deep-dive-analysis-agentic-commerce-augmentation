@@ -57,6 +57,13 @@ if APIRouter:
         user_id: str | None = None
         client_id: str | None = None
 
+    class UpdateCopyRequest(BaseModel):
+        product_id: str = Field(..., min_length=1)
+        description: str = Field(..., min_length=1)
+        source_url: str | None = None
+        user_id: str | None = None
+        client_id: str | None = None
+
     @router.get("/search")
     def search_products(
         query: str = Query("", max_length=128),
@@ -66,6 +73,39 @@ if APIRouter:
         require_client_id(client_id, user_id)
         products = _search_products(query, client_id=client_id)
         return [product.__dict__ for product in products]
+
+    @router.get("/by-brand")
+    def list_products_by_brand(
+        brand_id: str = Query(..., min_length=1),
+        client_id: str | None = None,
+        user_id: str | None = None,
+    ):
+        require_client_id(client_id, user_id)
+        products = default_deps().clients.list_products(brand_id=brand_id)
+        return {"products": products}
+
+    @router.post("/update-copy")
+    def update_product_copy(payload: UpdateCopyRequest):
+        require_client_id(payload.client_id, payload.user_id)
+        deps = default_deps()
+        product = deps.clients.get_product_for_client(
+            client_id=payload.client_id, product_id=payload.product_id
+        )
+        if not product:
+            return {"error": "product not found"}
+        metadata = product.get("metadata") or {}
+        creative = dict(metadata.get("creative") or {})
+        creative["manual_copy"] = payload.description
+        if payload.source_url:
+            creative["source_url"] = payload.source_url
+        creative["last_imported_at"] = creative.get("last_imported_at")
+        metadata["creative"] = creative
+        updated = deps.clients.update_product(
+            product_id=payload.product_id,
+            description=payload.description,
+            metadata=metadata,
+        )
+        return {"product": updated}
 
     @router.post("/profile")
     def profile_product(payload: ProfileRequest):

@@ -1175,6 +1175,11 @@ ul { list-style: none; }
   color: var(--text-secondary);
 }
 
+.profile-card__hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 .profile-card__delta-value {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.88);
@@ -1536,6 +1541,21 @@ input[type="checkbox"]:focus-visible {
   word-break: break-word;
 }
 
+.product__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(140, 255, 208, 0.9);
+  text-decoration: none;
+}
+
+.product__link:hover {
+  color: rgba(140, 255, 208, 1);
+  text-decoration: underline;
+}
+
 .product__tooltip {
   position: relative;
 }
@@ -1879,6 +1899,16 @@ input[type="checkbox"]:focus-visible {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+
+.simulation__copy {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.simulation__copy textarea {
+  min-height: 110px;
 }
 
 .simulation__actions {

@@ -39,6 +39,7 @@ import {
   QueryBatteryQuery,
   BrandBeliefListResponse,
   BrandBeliefResponse,
+  SessionSummary,
 } from "./types";
 
 let warnedApiBase = false;
@@ -71,6 +72,28 @@ function resolveApiBase(): string {
 const CLIENT_ID_STORAGE_KEY = "client_id";
 const BRAND_ID_STORAGE_KEY = "brand_id";
 const PRODUCT_ID_STORAGE_KEY = "product_id";
+
+function getSessionsStorageKey(userId: string, clientId?: string): string {
+  const clientTag = clientId ? `.${clientId}` : "";
+  return `intentionality.sessions.${userId}${clientTag}`;
+}
+
+function readCachedSessions(key: string): SessionSummary[] {
+  if (typeof window === "undefined") return [];
+  const storedRaw = window.localStorage.getItem(key);
+  if (!storedRaw) return [];
+  try {
+    return JSON.parse(storedRaw) as SessionSummary[];
+  } catch {
+    window.localStorage.removeItem(key);
+    return [];
+  }
+}
+
+function writeCachedSessions(key: string, sessions: SessionSummary[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(sessions));
+}
 
 function getClientId(): string | undefined {
   if (typeof window !== "undefined") {
@@ -174,7 +197,28 @@ export async function listConversationSessions(
   params.set("user_id", userId);
   const clientId = getClientId();
   if (clientId) params.set("client_id", clientId);
-  return request<SessionListResponse>(`/conversation/sessions?${params.toString()}`);
+  const cacheKey = getSessionsStorageKey(userId, clientId);
+  const cached = readCachedSessions(cacheKey);
+  try {
+    const response = await request<SessionListResponse>(
+      `/conversation/sessions?${params.toString()}`,
+    );
+    const merged = new Map<string, SessionSummary>();
+    response.sessions.forEach((session) => merged.set(session.id, session));
+    cached.forEach((session) => {
+      if (!merged.has(session.id)) {
+        merged.set(session.id, session);
+      }
+    });
+    const sessions = Array.from(merged.values());
+    writeCachedSessions(cacheKey, sessions);
+    return { sessions };
+  } catch (error) {
+    if (cached.length > 0) {
+      return { sessions: cached };
+    }
+    throw error;
+  }
 }
 
 export async function refreshResearch(
@@ -220,6 +264,50 @@ export async function listBatteries(
   if (userId) params.set("user_id", userId);
   if (productId) params.set("product_id", productId);
   return request<QueryBatteryListResponse>(`/batteries?${params.toString()}`);
+}
+
+export async function listProductsByBrand(
+  brandId: string,
+  userId?: string | null,
+): Promise<{ products: AdminProduct[] }> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  params.set("brand_id", brandId);
+  return request<{ products: AdminProduct[] }>(`/products/by-brand?${params.toString()}`);
+}
+
+export async function updateProductCopy(
+  payload: {
+    product_id: string;
+    description: string;
+    source_url?: string | null;
+  },
+  userId?: string | null,
+): Promise<{ product?: AdminProduct }> {
+  const clientId = getClientId();
+  return request<{ product?: AdminProduct }>("/products/update-copy", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
+export async function getBrand(
+  brandId: string,
+  userId?: string | null,
+): Promise<{ brand?: AdminBrand }> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<{ brand?: AdminBrand }>(`/brands/${brandId}${suffix}`);
 }
 
 export async function createBattery(payload: {
@@ -729,10 +817,12 @@ export async function updateSimulationTone(
 export async function requestBrandTone(
   runId?: string | null,
   userId?: string | null,
-): Promise<{ status: string; message: string }> {
+): Promise<{ status: string; message: string; tone?: string }> {
   const clientId = getClientId();
   const brandId = getBrandId();
-  return request<{ status: string; message: string }>("/simulation/tone/from-brand", {
+  return request<{ status: string; message: string; tone?: string }>(
+    "/simulation/tone/from-brand",
+    {
     method: "POST",
     body: JSON.stringify({
       run_id: runId ?? undefined,
@@ -740,7 +830,8 @@ export async function requestBrandTone(
       client_id: clientId ?? undefined,
       brand_id: brandId ?? undefined,
     }),
-  });
+    },
+  );
 }
 
 export async function listAdminClients(

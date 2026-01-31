@@ -23,6 +23,9 @@ import {
   getConversationSnapshot,
   requestBrandTone,
   updateSimulationTone,
+  listProductsByBrand,
+  updateProductCopy,
+  getBrand,
   attachSimulationProduct,
   listConversationSessions,
   deleteConversationSession,
@@ -61,6 +64,9 @@ export default function SimulationPage() {
   const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
   const [simulationTone, setSimulationTone] = useState("");
   const [simulationToneNotice, setSimulationToneNotice] = useState<string | null>(null);
+  const [productCopy, setProductCopy] = useState("");
+  const [productCopySaved, setProductCopySaved] = useState<string | null>(null);
+  const [brandToneSummary, setBrandToneSummary] = useState<string | null>(null);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
@@ -129,6 +135,83 @@ export default function SimulationPage() {
       });
     }
   }, [userId]);
+
+  useEffect(() => {
+    if (!brandId || simulationProducts.length > 0) return;
+    let cancelled = false;
+    void listProductsByBrand(brandId, userId).then((response) => {
+      if (cancelled) return;
+      const items = response.products ?? [];
+      const mapped = items.map((product) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description ?? product.metadata?.description ?? product.name,
+        source: "catalog",
+        url: (product.metadata?.product_url as string | undefined) ?? undefined,
+        price:
+          typeof product.metadata?.price === "number"
+            ? product.metadata?.price
+            : undefined,
+        confidence: 0.6,
+        metadata: product.metadata ?? {},
+      }));
+      setSimulationProducts(mapped);
+      if (mapped.length > 0) {
+        const initial =
+          productId && mapped.some((p) => p.id === productId)
+            ? productId
+            : mapped[0].id;
+        setSelectedSimulationProductId(initial);
+        setProductId(initial);
+        const selected = mapped.find((item) => item.id === initial) ?? mapped[0];
+        const creative = (selected?.metadata as Record<string, unknown> | undefined)?.creative as
+          | Record<string, unknown>
+          | undefined;
+        setProductCopy(
+          (creative?.manual_copy as string | undefined) ??
+            selected?.description ??
+            "",
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, productId, setProductId, simulationProducts.length, userId]);
+
+  useEffect(() => {
+    if (!brandId) {
+      setBrandToneSummary(null);
+      return;
+    }
+    let cancelled = false;
+    void getBrand(brandId, userId).then((response) => {
+      if (cancelled) return;
+      const tone = (response.brand?.metadata as Record<string, unknown> | undefined)?.tone as
+        | Record<string, unknown>
+        | undefined;
+      setBrandToneSummary((tone?.summary as string | undefined) ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, userId]);
+
+  useEffect(() => {
+    if (!selectedSimulationProductId) return;
+    const selected = simulationProducts.find(
+      (item) => item.id === selectedSimulationProductId,
+    );
+    if (!selected) return;
+    const creative = (selected.metadata as Record<string, unknown> | undefined)?.creative as
+      | Record<string, unknown>
+      | undefined;
+    setProductCopy(
+      (creative?.manual_copy as string | undefined) ??
+        selected.description ??
+        "",
+    );
+  }, [selectedSimulationProductId, simulationProducts]);
 
   useEffect(() => {
     const runIdParam = searchParams.get("run_id");
@@ -303,15 +386,48 @@ export default function SimulationPage() {
     await updateSimulationTone(simulationRun.run_id, "", userId);
   }, [simulationRun, userId]);
 
+  const handleSaveProductCopy = useCallback(async () => {
+    if (!selectedSimulationProductId) return;
+    const response = await updateProductCopy(
+      {
+        product_id: selectedSimulationProductId,
+        description: productCopy.trim(),
+      },
+      userId,
+    );
+    const updated = response.product;
+    if (updated) {
+      setSimulationProducts((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? {
+                ...item,
+                description: updated.description ?? item.description,
+                metadata: updated.metadata ?? item.metadata,
+              }
+            : item,
+        ),
+      );
+    }
+    setProductCopySaved("Product copy saved.");
+    window.setTimeout(() => setProductCopySaved(null), 2500);
+  }, [productCopy, selectedSimulationProductId, userId]);
+
   const handleToneFromBrand = useCallback(async () => {
     try {
       const response = await requestBrandTone(simulationRun?.run_id, userId);
       setSimulationToneNotice(response.message);
+      if (response.tone) {
+        setSimulationToneSuggestion(response.tone);
+        if (!simulationTone) {
+          setSimulationTone(response.tone);
+        }
+      }
       window.setTimeout(() => setSimulationToneNotice(null), 2600);
     } catch {
       setSimulationToneNotice("Brand tone import is not ready yet.");
     }
-  }, [simulationRun, userId]);
+  }, [simulationRun, simulationTone, userId]);
 
   const handleAttachRun = useCallback(
     async (runId: string) => {
@@ -429,6 +545,11 @@ export default function SimulationPage() {
               setSimulationScenario(value);
               setSimulationScenarioDirty(true);
             }}
+            productCopy={productCopy}
+            onProductCopyChange={setProductCopy}
+            onProductCopySave={handleSaveProductCopy}
+            productCopySaved={productCopySaved}
+            brandToneSummary={brandToneSummary}
             toneSuggestion={simulationToneSuggestion}
             toneValue={simulationTone}
             toneNotice={simulationToneNotice}

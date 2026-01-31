@@ -11,7 +11,6 @@ import { IntentDisplay } from "../../components/intent/IntentDisplay";
 import { IntentionalityProfileCard } from "../../components/products/IntentionalityProfileCard";
 import { GoalClarificationPanel } from "../../components/values/GoalClarificationPanel";
 import { ProductReasoning } from "../../components/products/ProductReasoning";
-import { ProtocolReadinessPanel } from "../../components/simulation/ProtocolReadinessPanel";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import {
   createBattery,
@@ -44,7 +43,7 @@ export default function AlignmentPage() {
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
-  const { brandId } = useTenant();
+  const { brandId, brandName, productName } = useTenant();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -109,6 +108,37 @@ export default function AlignmentPage() {
   const plan = snapshot.plan;
   const products = plan?.products ?? [];
   const research = snapshot.research_results ?? plan?.research_results ?? [];
+  const normalizedBrand = useMemo(
+    () => (brandName ? brandName.toLowerCase().trim() : ""),
+    [brandName],
+  );
+  const normalizedProduct = useMemo(
+    () => (productName ? productName.toLowerCase().trim() : ""),
+    [productName],
+  );
+  const matchedResearch = useMemo(() => {
+    if (!research.length) return null;
+    const clean = (value?: string) =>
+      value
+        ? value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim()
+        : "";
+    return (
+      research.find((item) => {
+        const name = clean(item.name);
+        const merchant = clean(item.merchant_name);
+        const byProduct =
+          normalizedProduct && name.includes(clean(normalizedProduct));
+        const byBrand =
+          normalizedBrand &&
+          (name.includes(clean(normalizedBrand)) ||
+            merchant.includes(clean(normalizedBrand)));
+        return Boolean(byProduct || byBrand);
+      }) ?? null
+    );
+  }, [normalizedBrand, normalizedProduct, research]);
 
   return (
     <div className="app">
@@ -189,10 +219,44 @@ export default function AlignmentPage() {
           </div>
 
           <div className="detail__grid">
-            <ProtocolReadinessPanel
-              issues={(snapshot as any)?.protocol_readiness ?? []}
-              onAction={() => router.push("/simulation")}
-            />
+            <div className="profile-card">
+              <div className="profile-card__title">Brand Presence</div>
+              {!brandName && !productName ? (
+                <p className="profile-card__value">
+                  Select a brand or product to check whether it appears in the
+                  research results.
+                </p>
+              ) : matchedResearch ? (
+                <>
+                  <p className="profile-card__value">
+                    ✅ Your{" "}
+                    {productName ? "product" : "brand"} appears in the research
+                    results.
+                  </p>
+                  <p className="profile-card__hint">
+                    Matched: {matchedResearch.name}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="profile-card__value">
+                    Your {productName ? "product" : "brand"} did not appear in
+                    the research results.
+                  </p>
+                  <p className="profile-card__hint">
+                    Run a simulation to improve copy + ACP/UCP readiness so the
+                    product surfaces in real‑world discovery.
+                  </p>
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={() => router.push("/simulation")}
+                  >
+                    Open Simulation
+                  </button>
+                </>
+              )}
+            </div>
             <div id="alignment-research">
               <ProductReasoning
                 title="Research insights"
@@ -206,7 +270,8 @@ export default function AlignmentPage() {
           </div>
 
           <div className="detail__note">
-            Alignment data reflects the latest chat session. Ask a new question to update.
+            Alignment data reflects the latest chat session. Ask a new question
+            to update.
           </div>
         </div>
       </main>

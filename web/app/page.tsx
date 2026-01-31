@@ -86,18 +86,27 @@ export default function HomePage() {
   const router = useRouter();
   const userId = user?.id ?? null;
   const { brandId, productId, clientId } = useTenant();
-  const storageKey = useMemo(
-    () => (userId ? `intentionality.sessions.${userId}` : "intentionality.sessions.anonymous"),
-    [userId],
-  );
-  const lastSessionKey = useMemo(
-    () =>
-      userId ? `intentionality.last_session.${userId}` : "intentionality.last_session.anonymous",
-    [userId],
-  );
+  const storageClientId =
+    clientId ??
+    (typeof window !== "undefined"
+      ? window.localStorage.getItem("client_id")
+      : null) ??
+    undefined;
+  const storageKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.sessions.${userId}${clientTag}`
+      : `intentionality.sessions.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
+  const lastSessionKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.last_session.${userId}${clientTag}`
+      : `intentionality.last_session.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
   const simulationStorageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [userId],
+    [simulationStorageKey, userId],
   );
   const evidenceStorageKey = useMemo(
     () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
@@ -399,6 +408,8 @@ export default function HomePage() {
       } catch {
         localStorage.removeItem(storageKey);
       }
+    } else {
+      setSessions([]);
     }
     void listConversationSessions(userId).then((response) => {
       const merged = new Map<string, SessionSummary>();

@@ -795,6 +795,7 @@ class ConversationService:
                     "description": summary,
                     "confidence": insight.get("confidence", 0.35),
                     "source": "research",
+                    "offer_url": insight.get("url") or insight.get("source_url"),
                     "capabilities_enabled": [],
                     "tags": ["research"],
                 }

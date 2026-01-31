@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import re
 from typing import Dict, List
+import json
 from urllib.parse import urlparse
 
 
@@ -89,6 +90,9 @@ def build_insights(
     tool_outputs: List[dict],
 ) -> List[dict]:
     text = extract_text(response)
+    parsed = _extract_product_json(text)
+    if parsed:
+        return parsed
     lines = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
     if not lines:
         fallback = fallback_insights(
@@ -110,7 +114,8 @@ def build_insights(
             }
         ]
     insights: List[dict] = []
-    for idx, line in enumerate(lines):
+    filtered_lines = _filter_prompt_lines(lines)
+    for idx, line in enumerate(filtered_lines):
         insights.append(
             {
                 "id": f"research-{idx + 1}",
@@ -121,6 +126,83 @@ def build_insights(
             }
         )
     return insights
+
+
+def _extract_product_json(text: str) -> List[dict]:
+    if not text:
+        return []
+    candidate = _extract_json_block(text)
+    if not candidate:
+        return []
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return []
+
+    products = []
+    if isinstance(parsed, dict):
+        products = parsed.get("products") or []
+    elif isinstance(parsed, list):
+        products = parsed
+
+    insights: List[dict] = []
+    for idx, item in enumerate(products):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or item.get("title") or "").strip()
+        url = str(item.get("source_url") or item.get("url") or "").strip()
+        summary = str(item.get("summary") or "").strip()
+        if not name or not url:
+            continue
+        insights.append(
+            {
+                "id": item.get("id") or f"research-{idx + 1}",
+                "title": name,
+                "summary": summary or name,
+                "confidence": item.get("confidence"),
+                "source": item.get("source") or "research",
+                "url": url,
+                "price": item.get("price"),
+            }
+        )
+    return insights
+
+
+def _extract_json_block(text: str) -> str | None:
+    if "```" in text:
+        matches = re.findall(r"```(?:json)?\\s*([\\s\\S]*?)```", text)
+        for match in matches:
+            candidate = match.strip()
+            if candidate.startswith("{") or candidate.startswith("["):
+                return candidate
+    trimmed = text.strip()
+    if trimmed.startswith("{") or trimmed.startswith("["):
+        return trimmed
+    return None
+
+
+def _filter_prompt_lines(lines: List[str]) -> List[str]:
+    filtered: List[str] = []
+    prompt_markers = (
+        "understood",
+        "please provide",
+        "once i have",
+        "i will return",
+        "to deliver",
+        "create battery",
+    )
+    for line in lines:
+        lower = line.lower()
+        if lower.startswith("###"):
+            continue
+        if lower.startswith("|") and "---" in lower:
+            continue
+        if any(marker in lower for marker in prompt_markers):
+            continue
+        if lower.startswith("research insight"):
+            continue
+        filtered.append(line)
+    return filtered
 
 
 def fallback_insights(

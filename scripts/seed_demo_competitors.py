@@ -342,6 +342,11 @@ def seed_demo_competitors() -> Dict[str, int]:
                 "ucp_version": PINNED_UCP_VERSION,
                 "ucp_profile_source": "seed",
                 "ucp_profile": _build_ucp_profile(tenant["site"]),
+                "tone": {
+                    "summary": "Clear, performance-led, supportive tone with practical benefits.",
+                    "sources": [],
+                    "updated_at": None,
+                },
                 "acp_profile": {
                     "checkout": {
                         "endpoints": {
@@ -373,6 +378,12 @@ def seed_demo_competitors() -> Dict[str, int]:
                 "source": "product",
                 "merchant_name": tenant["name"],
                 "offer_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
+                "product_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
+                "creative": {
+                    "manual_copy": product["description"],
+                    "source_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
+                    "last_imported_at": None,
+                },
                 "availability": "in_stock",
                 "price": 99.0,
                 "acp": {
