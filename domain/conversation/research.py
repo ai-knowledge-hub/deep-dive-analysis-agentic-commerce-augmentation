@@ -94,6 +94,10 @@ def build_insights(
     if parsed:
         return parsed
     lines = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
+    if lines:
+        json_products = _extract_json_products_from_lines(lines)
+        if json_products:
+            return json_products
     if not lines:
         fallback = fallback_insights(
             response=response,
@@ -193,6 +197,8 @@ def _filter_prompt_lines(lines: List[str]) -> List[str]:
     )
     for line in lines:
         lower = line.lower()
+        if _looks_like_json_scaffold(lower):
+            continue
         if lower.startswith("###"):
             continue
         if lower.startswith("|") and "---" in lower:
@@ -203,6 +209,70 @@ def _filter_prompt_lines(lines: List[str]) -> List[str]:
             continue
         filtered.append(line)
     return filtered
+
+
+def _looks_like_json_scaffold(line: str) -> bool:
+    if line in {"{", "}", "[", "]"}:
+        return True
+    if line.startswith('"products"') or line.startswith('"notes"'):
+        return True
+    if line.startswith('"name"') or line.startswith('"price"'):
+        return True
+    if line.startswith('"source_url"') or line.startswith('"summary"'):
+        return True
+    return False
+
+
+def _extract_json_products_from_lines(lines: List[str]) -> List[dict]:
+    current: dict = {}
+    products: List[dict] = []
+
+    def commit():
+        nonlocal current
+        if current.get("name") and current.get("url"):
+            products.append(
+                {
+                    "id": current.get("id"),
+                    "title": current.get("name"),
+                    "summary": current.get("summary") or current.get("name"),
+                    "confidence": current.get("confidence"),
+                    "source": "research",
+                    "url": current.get("url"),
+                    "price": current.get("price"),
+                }
+            )
+        current = {}
+
+    for raw in lines:
+        line = raw.strip().rstrip(",")
+        lower = line.lower()
+        if line == "{":
+            current = {}
+            continue
+        if line == "}":
+            commit()
+            continue
+        if lower.startswith('"name"') or lower.startswith("name"):
+            current["name"] = _strip_json_value(line)
+        elif lower.startswith('"price"') or lower.startswith("price"):
+            current["price"] = _strip_json_value(line)
+        elif lower.startswith('"source_url"') or lower.startswith("source_url"):
+            current["url"] = _strip_json_value(line)
+        elif lower.startswith('"summary"') or lower.startswith("summary"):
+            current["summary"] = _strip_json_value(line)
+
+    if current:
+        commit()
+    return products
+
+
+def _strip_json_value(line: str) -> str:
+    if ":" not in line:
+        return line.strip().strip('"')
+    value = line.split(":", 1)[1].strip().strip(",")
+    if value.startswith('"') and value.endswith('"'):
+        return value[1:-1]
+    return value
 
 
 def fallback_insights(

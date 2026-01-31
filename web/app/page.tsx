@@ -13,7 +13,9 @@ import {
   listSimulationRuns,
   listSimulationLessons,
   sendConversationMessage,
+  sendConversationMessageStreamWithEvents,
   startConversation,
+  startConversationStreamWithEvents,
   verifyRecommendation,
   listExperiments,
 } from "../lib/api";
@@ -41,6 +43,7 @@ import { useTenant } from "../components/tenant/TenantProvider";
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const [plan, setPlan] = useState<ConversationResponse["plan"]>();
   const [clarifications, setClarifications] = useState<string[]>([]);
   const [productReasoning, setProductReasoning] = useState<
@@ -106,7 +109,7 @@ export default function HomePage() {
   }, [storageClientId, userId]);
   const simulationStorageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [simulationStorageKey, userId],
+    [userId],
   );
   const evidenceStorageKey = useMemo(
     () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
@@ -236,6 +239,25 @@ export default function HomePage() {
         setMessages((prev) => [...prev, { role: "user", content: text }]);
       }
       setLoading(true);
+      setThinkingMessage("Synthesizing the intent graph");
+      let agentIndex: number | null = null;
+      let receivedDelta = false;
+      const applyDelta = (delta: string) => {
+        if (!delta) return;
+        receivedDelta = true;
+        setMessages((prev) => {
+          const next = [...prev];
+          if (agentIndex === null) {
+            agentIndex = next.length;
+            next.push({ role: "agent", content: delta });
+            return next;
+          }
+          const current = next[agentIndex];
+          if (!current) return next;
+          next[agentIndex] = { ...current, content: `${current.content}${delta}` };
+          return next;
+        });
+      };
       const metadata = {
         experiment_id: latestExperimentId ?? undefined,
         brand_id: brandId ?? undefined,
@@ -245,7 +267,16 @@ export default function HomePage() {
       try {
         let response: ConversationResponse;
         if (!sessionId) {
-          response = await startConversation(text, userId, metadata);
+          try {
+            response = await startConversationStreamWithEvents(
+              text,
+              userId,
+              metadata,
+              { onDelta: applyDelta },
+            );
+          } catch {
+            response = await startConversation(text, userId, metadata);
+          }
           setSessionId(response.session_id);
           upsertSession({
             id: response.session_id,
@@ -254,7 +285,17 @@ export default function HomePage() {
             last_turn_at: new Date().toISOString(),
           });
         } else {
-          response = await sendConversationMessage(sessionId, text, userId, metadata);
+          try {
+            response = await sendConversationMessageStreamWithEvents(
+              sessionId,
+              text,
+              userId,
+              metadata,
+              { onDelta: applyDelta },
+            );
+          } catch {
+            response = await sendConversationMessage(sessionId, text, userId, metadata);
+          }
           upsertSession({
             id: sessionId,
             preview: text,
@@ -276,7 +317,7 @@ export default function HomePage() {
           setLabOperator(response.lab_operator ?? null);
         }
 
-        if (response.explanation) {
+        if (response.explanation && !receivedDelta) {
           setMessages((prev) => [...prev, { role: "agent", content: response.explanation! }]);
         }
         setPlan(response.plan);
@@ -327,6 +368,7 @@ export default function HomePage() {
         setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
       } finally {
         setLoading(false);
+        setThinkingMessage(null);
       }
     },
     [
@@ -341,6 +383,24 @@ export default function HomePage() {
       userId,
     ],
   );
+
+  useEffect(() => {
+    if (!loading) return;
+    const phrases = [
+      "Synthesizing the intent graph",
+      "Negotiating with the future you",
+      "Asking the shoes nicely",
+      "Calibrating the hypothesis engine",
+      "Rehearsing the experiment",
+      "Consulting the discovery oracle",
+    ];
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index = (index + 1) % phrases.length;
+      setThinkingMessage(phrases[index]);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -685,7 +745,11 @@ export default function HomePage() {
           </div>
           <div className="chat">
             <div className="chat__messages" ref={chatContainerRef}>
-              <ChatWindow messages={messages} />
+              <ChatWindow
+                messages={messages}
+                isThinking={loading}
+                thinkingMessage={thinkingMessage ?? undefined}
+              />
             </div>
 
             <div className="chat__quick-actions">

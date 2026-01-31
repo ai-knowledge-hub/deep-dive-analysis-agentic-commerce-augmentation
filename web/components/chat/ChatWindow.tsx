@@ -5,7 +5,15 @@ type Message = {
   content: string;
 };
 
-export function ChatWindow({ messages }: { messages: Message[] }) {
+export function ChatWindow({
+  messages,
+  isThinking,
+  thinkingMessage,
+}: {
+  messages: Message[];
+  isThinking?: boolean;
+  thinkingMessage?: string;
+}) {
   if (messages.length === 0) {
     return (
       <div className="chat__empty">
@@ -37,6 +45,22 @@ export function ChatWindow({ messages }: { messages: Message[] }) {
           </div>
         </div>
       ))}
+      {isThinking ? (
+        <div className="message message--agent message--thinking">
+          <div className="message__avatar">E</div>
+          <div className="message__content">
+            <span className="message__role">Intentionality Agent</span>
+            <p className="message__text">
+              {thinkingMessage || "Thinking"}
+              <span className="thinking-dots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
