@@ -18,8 +18,8 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │   Chat   │  │ Evidence │  │Simulation│  │Experiments│  │ Overview │  │
-│  │ Lab Op   │  │/evidence │  │/simulation│  │/experiments│  │/overview │  │
+│  │   Chat   │  │ Alignment│  │ Evidence │  │Simulation│  │Experiments│  │
+│  │ Lab Op   │  │/alignment│  │/evidence │  │/simulation│  │/experiments│  │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │
 │       │             │              │             │             │         │
 └───────┼─────────────┼──────────────┼─────────────┼─────────────┼─────────┘
@@ -31,8 +31,8 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
-│  │Conversation │  │  Evidence   │  │ Simulation  │  │ Experiments │   │
-│  │    API      │  │     API     │  │     API     │  │     API     │   │
+│  │Conversation │  │ Alignment   │  │  Evidence   │  │ Simulation  │   │
+│  │    API      │  │    API      │  │     API     │  │     API     │   │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘   │
 │         │                │                │                │            │
 └─────────┼────────────────┼────────────────┼────────────────┼────────────┘
@@ -44,26 +44,38 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │
-│  │ Conversation    │  │  Evidence       │  │  Simulation     │         │
+│  │ Conversation    │  │  Alignment      │  │  Evidence       │         │
 │  │  Service        │  │   Service       │  │   Service       │         │
 │  │ ┌─────────────┐ │  │ ┌─────────────┐ │  │ ┌─────────────┐ │         │
-│  │ │Intent Infer │ │  │ │Research     │ │  │ │Gap Analysis │ │         │
-│  │ │Goal Clarify │ │  │ │Profile      │ │  │ │Optimize     │ │         │
-│  │ │Product Search│ │  │ │Optimize     │ │  │ │Retest       │ │         │
-│  │ │Alignment    │ │  │ │Verify Lift  │ │  │ │Save Lesson  │ │         │
+│  │ │Intent Infer │ │  │ │Score &      │ │  │ │Open‑web     │ │         │
+│  │ │Goal Clarify │ │  │ │Explain      │ │  │ │Evidence     │ │         │
+│  │ │Research     │ │  │ │Presence     │ │  │ │Signals      │ │         │
+│  │ │Alignment    │ │  │ │CTA to Sim   │ │  │ │Next Actions │ │         │
 │  │ └─────────────┘ │  │ └─────────────┘ │  │ └─────────────┘ │         │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘         │
 │                                                                           │
+│  ┌─────────────────┐                                                     │
+│  │  Simulation     │                                                     │
+│  │   Service       │                                                     │
+│  │ ┌─────────────┐ │                                                     │
+│  │ │Gap Analysis │ │                                                     │
+│  │ │Optimize     │ │                                                     │
+│  │ │Retest       │ │                                                     │
+│  │ │Save Lesson  │ │                                                     │
+│  │ └─────────────┘ │                                                     │
+│  └─────────────────┘                                                     │
+│                                                                           │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │
-│  │  Experiment     │  │   Alignment     │  │   Battery       │         │
-│  │   Service       │  │    Service      │  │   Builder       │         │
-│  │ ┌─────────────┐ │  │ ┌─────────────┐ │  │ ┌─────────────┐ │         │
-│  │ │Create Exp   │ │  │ │Score Product│ │  │ │Generate     │ │         │
-│  │ │Add Variants │ │  │ │vs Goals     │ │  │ │Scenarios    │ │         │
-│  │ │Run Tests    │ │  │ │Explain      │ │  │ │Bottom-up    │ │         │
-│  │ │Track Metrics│ │  │ │Reasoning    │ │  │ │Top-down     │ │         │
-│  │ │ML Recommend │ │  │ └─────────────┘ │  │ └─────────────┘ │         │
-│  │ └─────────────┘ │  └─────────────────┘  └─────────────────┘         │
+│  ┌─────────────────┐  ┌─────────────────┐                              │
+│  │  Experiment     │  │   Battery       │                              │
+│  │   Service       │  │   Builder       │                              │
+│  │ ┌─────────────┐ │  │ ┌─────────────┐ │                              │
+│  │ │Create Exp   │ │  │ │Generate     │ │                              │
+│  │ │Add Variants │ │  │ │Scenarios    │ │                              │
+│  │ │Run Tests    │ │  │ │Bottom-up    │ │                              │
+│  │ │Track Metrics│ │  │ │Top-down     │ │                              │
+│  │ │ML Recommend │ │  │ └─────────────┘ │                              │
+│  │ └─────────────┘ │  └─────────────────┘                              │
 │  └─────────────────┘                                                     │
 │                                                                           │
 └───────────────────────────┬───────────────────────────────────────────────┘

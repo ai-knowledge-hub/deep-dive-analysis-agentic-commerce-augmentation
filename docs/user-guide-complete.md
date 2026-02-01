@@ -113,10 +113,10 @@ You can run it manually or let the lab automate it:
 2. Enter a user query (e.g., "laptop for video editing")
 3. Review:
    - **Inferred Goals** — What the AI understood
-   - **Product Results** — Your products ranked by alignment
-   - **Reasoning** — Why each product scored high/low
-4. Click **"Run Evidence Analysis"** to see open-web comparisons
-5. Click **"Optimize Description"** to get improvement suggestions
+   - **Research Results** — External products surfaced for the query
+   - **Alignment** — How well those results match the inferred intent
+4. Open **Evidence** to see how your product compares to the open‑web set
+5. Open **Simulation** to optimize your product copy for intent fit
 
 **Time:** ~2 minutes
 **Output:** Immediate insight into product discoverability
@@ -263,26 +263,21 @@ You can run it manually or let the lab automate it:
 
 1. **Go to Evidence Page** (`/evidence`)
 
-2. **Load Demo Data** (or run from chat):
-   - Click **"Load Demo Data"** to explore
-   - Or: Run evidence analysis from chat interface
+2. **Review Evidence Tab:**
+   - See products ranked by **alignment score**
+   - Inspect the **winner summaries** and sources
+   - Compare your product’s presence in the open‑web set
 
-3. **Review Evidence Tab:**
-   - See products ranked by confidence
-   - View current descriptions
-   - See optimized descriptions (green highlight)
+3. **Switch to Explanation Tab:**
+   - See **score distribution**
+   - Read **why they win** summary
+   - Review **signal deltas** (missing vs unique)
+   - Inspect **3‑path signal model** (intent, evidence, copy)
 
-4. **Switch to Optimization Tab:**
-   - See before/after comparisons
-   - View improvement scores
-   - Understand spec → outcome transformation
-
-5. **Switch to Verification Tab:**
-   - See discoverability metrics:
-     - Before: 3 products discovered
-     - After: 5 products discovered
-     - **+67% lift**
-   - Read insight panel for explanation
+4. **Switch to Next Actions Tab:**
+   - Get recommended next test
+   - See **counterfactual lift** estimate
+   - Jump to **Simulation** to optimize copy
 
 **Time:** ~3 minutes
 **Output:** Evidence-based optimization recommendations
@@ -341,18 +336,16 @@ You can run it manually or let the lab automate it:
 
 ### Alignment Page (`/alignment`)
 
-**Purpose:** Full alignment analysis and research results
+**Purpose:** Intent inference + research alignment results
 
 **What you see:**
-- Product alignment scores across queries
-- Goal breakdowns
-- Research evidence
-- Capability gaps
+- Inferred intent + goal clarifications
+- Research results + alignment explanations
+- “Is our product present?” check with CTA to Simulation
 
 **When to use:**
-- Deep-dive analysis of specific products
-- Understanding why alignment is low
-- Researching competitor positioning
+- Quick interpretation of the chat output
+- Decide whether to run Simulation
 
 ---
 

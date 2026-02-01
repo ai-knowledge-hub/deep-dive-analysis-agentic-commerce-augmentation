@@ -154,16 +154,16 @@ make test
 
 | Document | Purpose |
 |----------|---------|
-| [docs/architecture.md](docs/architecture.md) | Intentionality optimization architecture |
-| [docs/strategic-positioning.md](docs/strategic-positioning.md) | Market positioning, UCP/ACP integration |
-| [docs/build-plan.md](docs/build-plan.md) | Execution plan for the pivot |
-| [docs/product-workflow.md](docs/product-workflow.md) | Brand workflow: connect → analyze → optimize → deploy → verify |
-| [docs/roadmap-protocol-layer.md](docs/roadmap-protocol-layer.md) | Protocol-layer roadmap (ACP/UCP) |
+| [docs/user-guide-complete.md](docs/user-guide-complete.md) | Full user manual |
+| [docs/product-workflow.md](docs/product-workflow.md) | Automated lab workflow |
+| [docs/architecture-visual.md](docs/architecture-visual.md) | System diagrams |
+| [docs/evidence-first-flow.md](docs/evidence-first-flow.md) | Evidence + explanation UX |
+| [docs/brand-belief-system.md](docs/brand-belief-system.md) | Belief updates & memory |
+| [docs/experiment-orchestrator-enhancements.md](docs/experiment-orchestrator-enhancements.md) | Orchestrator logic |
+| [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features |
+| [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
 | [docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md](docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md) | Why + what to change for agentic clean architecture |
 | [docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md](docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md) | Step-by-step execution plan (incremental) |
-| [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
-| [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
-| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product data pipeline |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
 ---
@@ -271,15 +271,6 @@ UCP and ACP define *how* transactions flow. We define *why* a product gets recom
 
 See [docs/strategic-positioning.md](docs/strategic-positioning.md) for the full positioning narrative.
 
----
-
-## Research Foundation
-
-This implementation builds on:
-
-- **Intent inference / theory of mind in LLMs** — LLMs model goals and can align products to those goals.
-- **Active inference / free energy** — recommendations that fit context reduce uncertainty.
-- **Computational Intentionality Theory (CIT)** — products become discoverable when mapped to human capabilities *(paper forthcoming)*.
 
 ---
 

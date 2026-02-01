@@ -240,7 +240,8 @@ export default function EvidencePage() {
             onOpenSimulation={() => router.push("/simulation")}
           />
           <div className="detail__note">
-            Evidence runs sync from the latest chat query. Run a new query to refresh.
+            Evidence runs sync from the latest chat query. Run a new query to
+            refresh.
           </div>
         </div>
       </main>

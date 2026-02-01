@@ -791,7 +791,11 @@ export default function HomePage() {
               onClick={() => setSidebarOpen(true)}
               aria-label="Open menu"
             >
-              Menu
+              <span className="mobile-toggle__icon" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
             </button>
           </div>
           <div className="chat">

@@ -373,6 +373,22 @@ export function EvidenceCard({
         .evidence-card__body::-webkit-scrollbar-track {
           background: transparent;
         }
+
+        @media (max-width: 768px) {
+          .evidence-card {
+            max-height: none;
+          }
+
+          .evidence-card__body {
+            overflow: visible;
+            padding-right: 0;
+          }
+
+          .description-text {
+            display: block;
+            -webkit-line-clamp: unset;
+          }
+        }
       `}</style>
     </div>
   );

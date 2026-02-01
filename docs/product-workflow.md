@@ -1,7 +1,7 @@
 # Product Workflow: Automated Lab Loop + Protocol Readiness
 
 **Purpose**: Describe the v1 user journey as an **automated lab loop** centered on
-simulation, query batteries, and protocol readiness (ACP/UCP).
+chat → evidence → simulation → experiments.
 
 ---
 
@@ -9,12 +9,12 @@ simulation, query batteries, and protocol readiness (ACP/UCP).
 
 The product has two **modes** in v1:
 
-### Manual Mode (Simulation Sandbox)
+### Manual Mode (Guided by Chat)
 
 ```
-SET UP SCENARIO → SIMULATE → SEE RESULTS → LESSONS → CONFIRM TONE → OPTIMIZE → RE‑TEST
-      ↑                                                  │
-      └──────────────────────────────────────────────────┘
+CHAT → ALIGNMENT → EVIDENCE → SIMULATION → LESSONS → OPTIMIZE → RE‑TEST
+   ↑                                                     │
+   └─────────────────────────────────────────────────────┘
 ```
 
 ### Lab Mode (Automated Loop)
@@ -60,12 +60,11 @@ Quick commands:
 
 ### Core Loop
 
-1. **Scenario Setup**: query + your product + competitors
+1. **Scenario Setup**: inferred intent + your product + competitors
 2. **Run Simulation**: LLM‑style intent inference + alignment scoring
 3. **Why You Lost**: missing framing, context fit, outcome language
-4. **Protocol Readiness**: UCP/ACP readiness issues (profiles + feed freshness)
-5. **Optimize**: suggested copy rewrite + tone confirmation
-6. **Re‑test**: verify lift
+4. **Optimize**: suggested copy rewrite + tone confirmation
+5. **Re‑test**: verify lift
 
 ### API Endpoints
 
@@ -92,7 +91,21 @@ We evaluate **ACP** and **UCP** readiness for each product/brand:
 - **UCP**: business profile presence, capability intersection, missing fields
 - **ACP**: feed freshness + required fields for discovery
 
-Output is surfaced as a readiness score + a list of issues and fixes.
+Output is surfaced during Simulation runs as a readiness score + issue list.
+
+---
+
+## Alignment + Evidence (Manual Flow)
+
+### Alignment Page
+- Shows inferred intent + clarifications.
+- Shows research results with alignment explanations.
+- Includes “Is our product present?” check → CTA to Simulation.
+
+### Evidence Page
+- **Evidence** tab: open‑web results ranked by alignment score.
+- **Explanation** tab: score distribution, “why they win”, signal deltas, 3‑path model.
+- **Next actions** tab: recommended next test + counterfactual lift → CTA to Simulation.
 
 ---
 

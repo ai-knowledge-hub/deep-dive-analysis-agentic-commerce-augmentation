@@ -29,7 +29,11 @@ export function DetailHeader({
             onClick={onMenu}
             aria-label="Open menu"
           >
-            Menu
+            <span className="mobile-toggle__icon" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
           </button>
         ) : null}
         <h2>{title}</h2>

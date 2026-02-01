@@ -17,6 +17,7 @@ type Props = {
   targetProductCopy?: string;
   targetProductUrl?: string;
   onOpenSimulation?: () => void;
+  usePageScroll?: boolean;
 };
 
 export function EvidencePanel({
@@ -26,6 +27,7 @@ export function EvidencePanel({
   targetProductCopy,
   targetProductUrl,
   onOpenSimulation,
+  usePageScroll = false,
 }: Props) {
   const [activeTab, setActiveTab] = useState<
     "evidence" | "explanation" | "actions"
@@ -273,8 +275,8 @@ export function EvidencePanel({
   });
 
   return (
-    <div className="evidence-panel">
-      <div className="evidence-panel__summary">
+    <>
+      <div className="evidence-summary">
         <div className="summary-card">
           <div className="summary-card__title">Evidence Set</div>
           <div className="summary-card__value">
@@ -383,305 +385,317 @@ export function EvidencePanel({
           )}
         </div>
       </div>
-      {/* Header with Tabs */}
-      <div className="evidence-panel__header">
-        <div className="header-title">
-          <h3>Evidence Discovery</h3>
-          <span className="header-badge">{evidenceProducts.length} products</span>
-        </div>
-        <div className="header-tabs">
-          <button
-            type="button"
-            className={`tab ${activeTab === "evidence" ? "tab--active" : ""}`}
-            onClick={() => setActiveTab("evidence")}
-          >
-            Evidence
-            {evidenceProducts.length > 0 && (
-              <span className="tab-badge">{evidenceProducts.length}</span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "explanation" ? "tab--active" : ""}`}
-            onClick={() => setActiveTab("explanation")}
-          >
-            Explanation
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "actions" ? "tab--active" : ""}`}
-            onClick={() => setActiveTab("actions")}
-          >
-            Next actions
-          </button>
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className="evidence-panel__content">
-        {/* Evidence Tab */}
-        {activeTab === "evidence" && (
-          <div className="evidence-grid">
-            {normalizedEvidenceProducts.map((product, index) => {
-              const productScore = scoreMap.get(product.id);
-              const whySummary =
-                productScore?.alignment_reasoning ?? "Aligned with core intent signals.";
-              const highlights = productScore?.matched_capabilities ?? [];
-              return (
-                <EvidenceCard
-                  key={product.id}
-                  product={product}
-                  optimizedDescription={undefined}
-                  showOptimization={false}
-                  index={index}
-                  whySummary={whySummary}
-                  highlightSignals={highlights}
-                />
-              );
-            })}
+      <div
+        className={`evidence-panel${usePageScroll ? " evidence-panel--page" : ""}`}
+      >
+        <div className="evidence-panel__header">
+          <div className="header-title">
+            <h3>Evidence Discovery</h3>
+            <span className="header-badge">
+              {evidenceProducts.length} products
+            </span>
           </div>
-        )}
+          <div className="header-tabs">
+            <button
+              type="button"
+              className={`tab ${activeTab === "evidence" ? "tab--active" : ""}`}
+              onClick={() => setActiveTab("evidence")}
+            >
+              Evidence
+              {evidenceProducts.length > 0 && (
+                <span className="tab-badge">{evidenceProducts.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`tab ${activeTab === "explanation" ? "tab--active" : ""}`}
+              onClick={() => setActiveTab("explanation")}
+            >
+              Explanation
+            </button>
+            <button
+              type="button"
+              className={`tab ${activeTab === "actions" ? "tab--active" : ""}`}
+              onClick={() => setActiveTab("actions")}
+            >
+              Next actions
+            </button>
+          </div>
+        </div>
 
-        {activeTab === "explanation" && (
-          <div className="explanation-content">
-            <div className="explain-grid">
-              <div className="explain-card">
-                <div className="explain-card__title">Score distribution</div>
-                <div className="histogram">
-                  {histogram.map((bucket) => (
-                    <div key={bucket.label} className="histogram__row">
-                      <span className="histogram__label">{bucket.label}</span>
-                      <div className="histogram__bar">
-                        <span
-                          className="histogram__fill"
-                          style={{
-                            width: `${(bucket.count / maxBucket) * 100}%`,
-                          }}
-                        />
-                      </div>
-                      <span className="histogram__count">{bucket.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        <div className="evidence-panel__content">
+          {activeTab === "evidence" && (
+            <div className="evidence-grid">
+              {normalizedEvidenceProducts.map((product, index) => {
+                const productScore = scoreMap.get(product.id);
+                const whySummary =
+                  productScore?.alignment_reasoning ??
+                  "Aligned with core intent signals.";
+                const highlights = productScore?.matched_capabilities ?? [];
+                return (
+                  <EvidenceCard
+                    key={product.id}
+                    product={product}
+                    optimizedDescription={undefined}
+                    showOptimization={false}
+                    index={index}
+                    whySummary={whySummary}
+                    highlightSignals={highlights}
+                  />
+                );
+              })}
+            </div>
+          )}
 
-              <div className="explain-card">
-                <div className="explain-card__title">Why they win</div>
-                <div className="winner-list">
-                  {winners.map((winner) => (
-                    <div key={winner.id} className="winner-item">
-                      <div className="winner-item__header">
-                        <span className="winner-item__name">{winner.name}</span>
-                        <span className="winner-item__score">
-                          {(winner.score * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <p className="winner-item__reason">{winner.reasoning}</p>
-                      {winner.matched.length > 0 && (
-                        <div className="signal-list">
-                          {winner.matched.slice(0, 4).map((signal) => (
-                            <span
-                              key={signal}
-                              className="signal-chip"
-                              title={signal}
-                            >
-                              {signal}
-                            </span>
-                          ))}
+          {activeTab === "explanation" && (
+            <div className="explanation-content">
+              <div className="explain-grid">
+                <div className="explain-card">
+                  <div className="explain-card__title">Score distribution</div>
+                  <div className="histogram">
+                    {histogram.map((bucket) => (
+                      <div key={bucket.label} className="histogram__row">
+                        <span className="histogram__label">{bucket.label}</span>
+                        <div className="histogram__bar">
+                          <span
+                            className="histogram__fill"
+                            style={{
+                              width: `${(bucket.count / maxBucket) * 100}%`,
+                            }}
+                          />
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="explain-card">
-                <div className="explain-card__title">Signal deltas</div>
-                <div className="signal-columns">
-                  <div>
-                    <div className="signal-heading">Missing in our copy</div>
-                    <div className="signal-list">
-                      {(missingGoalSignals.length
-                        ? missingGoalSignals
-                        : ["No gaps detected"]
-                      ).map((signal) => (
-                        <span
-                          key={signal}
-                          className="signal-chip muted"
-                          title={signal}
-                        >
-                          {signal}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="signal-heading">Unique to our copy</div>
-                    <div className="signal-list">
-                      {(extraSignals.length
-                        ? extraSignals
-                        : ["No unique signals"]
-                      ).map((signal) => (
-                        <span
-                          key={signal}
-                          className="signal-chip neutral"
-                          title={signal}
-                        >
-                          {signal}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="explain-card">
-                <div className="explain-card__title">Our copy snapshot</div>
-                <p className="copy-block">
-                  {targetProductCopy
-                    ? targetProductCopy
-                    : "No stored copy found for this product yet."}
-                </p>
-                {targetProductUrl && (
-                  <a
-                    className="copy-link"
-                    href={targetProductUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Source URL →
-                  </a>
-                )}
-                <div>
-                  <div className="signal-heading">Signals detected</div>
-                  <div className="signal-list">
-                    {(detectedSignals.length
-                      ? detectedSignals
-                      : ["No clear signals detected"]
-                    ).map((signal) => (
-                      <span
-                        key={signal}
-                        className="signal-chip neutral"
-                        title={signal}
-                      >
-                        {signal}
-                      </span>
+                        <span className="histogram__count">{bucket.count}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="explain-card">
-                <div className="explain-card__title">Signal model (3-path)</div>
-                <div className="signal-columns">
-                  <div>
-                    <div className="signal-heading">Intent/Goal signals</div>
-                    <div className="signal-list">
-                      {(intentSignalsWeighted.length
-                        ? intentSignalsWeighted
-                        : [{ signal: "No intent signals", weight: 0 }]
-                      ).map((item) => (
-                        <span
-                          key={item.signal}
-                          className="signal-chip"
-                          title={item.signal}
-                        >
-                          {item.signal} · {Math.round(item.weight * 100)}%
-                        </span>
-                      ))}
+                <div className="explain-card">
+                  <div className="explain-card__title">Why they win</div>
+                  <div className="winner-list">
+                    {winners.map((winner) => (
+                      <div key={winner.id} className="winner-item">
+                        <div className="winner-item__header">
+                          <span className="winner-item__name">{winner.name}</span>
+                          <span className="winner-item__score">
+                            {(winner.score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <p className="winner-item__reason">{winner.reasoning}</p>
+                        {winner.matched.length > 0 && (
+                          <div className="signal-list">
+                            {winner.matched.slice(0, 4).map((signal) => (
+                              <span
+                                key={signal}
+                                className="signal-chip"
+                                title={signal}
+                              >
+                                {signal}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="explain-card">
+                  <div className="explain-card__title">Signal deltas</div>
+                  <div className="signal-columns">
+                    <div>
+                      <div className="signal-heading">Missing in our copy</div>
+                      <div className="signal-list">
+                        {(missingGoalSignals.length
+                          ? missingGoalSignals
+                          : ["No gaps detected"]
+                        ).map((signal) => (
+                          <span
+                            key={signal}
+                            className="signal-chip muted"
+                            title={signal}
+                          >
+                            {signal}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="signal-heading">Unique to our copy</div>
+                      <div className="signal-list">
+                        {(extraSignals.length
+                          ? extraSignals
+                          : ["No unique signals"]
+                        ).map((signal) => (
+                          <span
+                            key={signal}
+                            className="signal-chip neutral"
+                            title={signal}
+                          >
+                            {signal}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                </div>
+
+                <div className="explain-card">
+                  <div className="explain-card__title">Our copy snapshot</div>
+                  <p className="copy-block">
+                    {targetProductCopy
+                      ? targetProductCopy
+                      : "No stored copy found for this product yet."}
+                  </p>
+                  {targetProductUrl && (
+                    <a
+                      className="copy-link"
+                      href={targetProductUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Source URL →
+                    </a>
+                  )}
                   <div>
-                    <div className="signal-heading">Evidence signals</div>
+                    <div className="signal-heading">Signals detected</div>
                     <div className="signal-list">
-                      {(evidenceSignalsWeighted.length
-                        ? evidenceSignalsWeighted
-                        : [{ signal: "No evidence signals", weight: 0 }]
-                      ).map((item) => (
+                      {(detectedSignals.length
+                        ? detectedSignals
+                        : ["No clear signals detected"]
+                      ).map((signal) => (
                         <span
-                          key={item.signal}
+                          key={signal}
                           className="signal-chip neutral"
-                          title={item.signal}
+                          title={signal}
                         >
-                          {item.signal} · {Math.round(item.weight * 100)}%
+                          {signal}
                         </span>
                       ))}
                     </div>
                   </div>
                 </div>
-                <div className="signal-columns">
-                  <div>
-                    <div className="signal-heading">Copy presence</div>
-                    <div className="signal-list">
-                      {(copyPresenceWeighted.length
-                        ? copyPresenceWeighted
-                        : [{ signal: "No copy signals", present: false }]
-                      ).map((item) => (
-                        <span
-                          key={item.signal}
-                          className={`signal-chip ${item.present ? "" : "muted"}`}
-                          title={item.signal}
-                        >
-                          {item.signal} · {item.present ? "Yes" : "No"}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="signal-heading">Specificity vs Breadth</div>
-                    <div className="signal-list">
-                      <span className="signal-chip">
-                        Specificity · {Math.round(specificityRatio * 100)}%
-                      </span>
-                      <span className="signal-chip neutral">
-                        Breadth · {Math.round((1 - specificityRatio) * 100)}%
-                      </span>
-                    </div>
-                    <p className="summary-card__note">
-                      Intent signals drive specificity; evidence signals drive breadth.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === "actions" && (
-          <div className="actions-content">
-            <div className="action-card">
-              <div className="action-card__title">Recommended next test</div>
-              <p className="action-card__text">
-                Prioritize the top missing signals, then re-run simulation to
-                validate lift.
-              </p>
-              <div className="signal-list">
-                {missingSignals.slice(0, 4).map((signal) => (
-                  <span key={signal} className="signal-chip" title={signal}>
-                    {signal}
-                  </span>
-                ))}
+                <div className="explain-card">
+                  <div className="explain-card__title">Signal model (3-path)</div>
+                  <div className="signal-columns">
+                    <div>
+                      <div className="signal-heading">Intent/Goal signals</div>
+                      <div className="signal-list">
+                        {(intentSignalsWeighted.length
+                          ? intentSignalsWeighted
+                          : [{ signal: "No intent signals", weight: 0 }]
+                        ).map((item) => (
+                          <span
+                            key={item.signal}
+                            className="signal-chip"
+                            title={item.signal}
+                          >
+                            {item.signal} · {Math.round(item.weight * 100)}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="signal-heading">Evidence signals</div>
+                      <div className="signal-list">
+                        {(evidenceSignalsWeighted.length
+                          ? evidenceSignalsWeighted
+                          : [{ signal: "No evidence signals", weight: 0 }]
+                        ).map((item) => (
+                          <span
+                            key={item.signal}
+                            className="signal-chip neutral"
+                            title={item.signal}
+                          >
+                            {item.signal} · {Math.round(item.weight * 100)}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="signal-columns">
+                    <div>
+                      <div className="signal-heading">Copy presence</div>
+                      <div className="signal-list">
+                        {(copyPresenceWeighted.length
+                          ? copyPresenceWeighted
+                          : [{ signal: "No copy signals", present: false }]
+                        ).map((item) => (
+                          <span
+                            key={item.signal}
+                            className={`signal-chip ${item.present ? "" : "muted"}`}
+                            title={item.signal}
+                          >
+                            {item.signal} · {item.present ? "Yes" : "No"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="signal-heading">Specificity vs Breadth</div>
+                      <div className="signal-list">
+                        <span className="signal-chip">
+                          Specificity · {Math.round(specificityRatio * 100)}%
+                        </span>
+                        <span className="signal-chip neutral">
+                          Breadth · {Math.round((1 - specificityRatio) * 100)}%
+                        </span>
+                      </div>
+                      <p className="summary-card__note">
+                        Intent signals drive specificity; evidence signals drive breadth.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {counterfactualLift !== null && (
-                <p className="action-card__note">
-                  Estimated lift: +{Math.round(counterfactualLift * 100)}%
-                </p>
-              )}
-              {onOpenSimulation && (
-                <button
-                  type="button"
-                  className="button button--primary-subtle"
-                  onClick={onOpenSimulation}
-                >
-                  Open simulation
-                </button>
-              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {activeTab === "actions" && (
+            <div className="actions-content">
+              <div className="action-card">
+                <div className="action-card__title">Recommended next test</div>
+                <p className="action-card__text">
+                  Prioritize the top missing signals, then re-run simulation to
+                  validate lift.
+                </p>
+                <div className="signal-list">
+                  {missingSignals.slice(0, 4).map((signal) => (
+                    <span key={signal} className="signal-chip" title={signal}>
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+                {counterfactualLift !== null && (
+                  <p className="action-card__note">
+                    Estimated lift: +{Math.round(counterfactualLift * 100)}%
+                  </p>
+                )}
+                {onOpenSimulation && (
+                  <button
+                    type="button"
+                    className="button button--primary-subtle"
+                    onClick={onOpenSimulation}
+                  >
+                    Open simulation
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <style jsx>{`
+        .evidence-summary {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+
         .evidence-panel {
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(255, 255, 255, 0.1);
@@ -690,14 +704,7 @@ export function EvidencePanel({
           display: flex;
           flex-direction: column;
           min-height: 0;
-        }
-
-        .evidence-panel__summary {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 16px;
-          padding: 16px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          width: 100%;
         }
 
         .summary-card {
@@ -855,6 +862,56 @@ export function EvidencePanel({
 
         .evidence-panel__content {
           scrollbar-width: none;
+        }
+
+        .evidence-panel--page .evidence-panel__content {
+          overflow: visible;
+          flex: none;
+          max-height: none;
+        }
+
+        .evidence-panel--page {
+          overflow: visible;
+        }
+
+        @media (max-width: 1024px) {
+          .evidence-panel__content {
+            padding: 1.5rem;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .evidence-panel {
+            overflow: visible;
+          }
+
+          .evidence-panel__content {
+            overflow: visible;
+            padding: 1.25rem;
+          }
+
+          .evidence-summary {
+            grid-template-columns: 1fr;
+          }
+
+          .evidence-panel__header {
+            padding: 1.25rem;
+          }
+
+          .header-tabs {
+            flex-wrap: wrap;
+          }
+        }
+
+        @media (max-height: 820px) {
+          .evidence-panel {
+            overflow: visible;
+          }
+
+          .evidence-panel__content {
+            max-height: none;
+            overflow: visible;
+          }
         }
 
         .explanation-content,
@@ -1056,6 +1113,6 @@ export function EvidencePanel({
           color: rgba(255, 255, 255, 0.4);
         }
       `}</style>
-    </div>
+    </>
   );
 }

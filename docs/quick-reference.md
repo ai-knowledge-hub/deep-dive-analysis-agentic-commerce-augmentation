@@ -167,7 +167,7 @@ curl "http://localhost:8000/products/search?q=TV&client_id=client_abc"
 | **Low alignment scores** | Run simulation → see gap → optimize |
 | **No stat significance** | Need more data or bigger variant difference |
 | **Empty results** | Check product context (client/brand selected?) |
-| **404 on demo data** | File must be in `web/public/data/` |
+| **Evidence page empty** | Run a chat query first; Evidence syncs from latest session |
 | **Chat doesn't understand** | Be specific: "TV for bright room" not just "TV" |
 
 ---
@@ -226,7 +226,7 @@ curl "http://localhost:8000/products/search?q=TV&client_id=client_abc"
 ## 🆘 Getting Help
 
 1. **Check documentation** (you're here!)
-2. **Try demo data** (Evidence page → Load Demo)
+2. **Run a chat query** to generate evidence data
 3. **Review error logs** (console in browser DevTools)
 4. **Check API docs** (http://localhost:8000/docs)
 
@@ -237,8 +237,7 @@ curl "http://localhost:8000/products/search?q=TV&client_id=client_abc"
 **Day 1: Exploration**
 - [ ] Start with chat interface
 - [ ] Try multiple queries
-- [ ] Load evidence demo data
-- [ ] Explore all 3 tabs
+- [ ] Open Evidence + Explanation + Next actions tabs
 
 **Day 2: Simulation**
 - [ ] Create first simulation
