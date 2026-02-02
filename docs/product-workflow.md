@@ -62,9 +62,12 @@ Quick commands:
 
 1. **Scenario Setup**: inferred intent + your product + competitors
 2. **Run Simulation**: LLM‑style intent inference + alignment scoring
-3. **Why You Lost**: missing framing, context fit, outcome language
+3. **Why You Lost**: missing framing, context fit, outcome language (signals from skill)
 4. **Optimize**: suggested copy rewrite + tone confirmation
 5. **Re‑test**: verify lift
+
+**Note:** Signal deltas and missing concepts are generated via the
+**Signal Extraction skill** stored in the DB and editable in Admin.
 
 ### API Endpoints
 

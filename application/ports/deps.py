@@ -195,6 +195,14 @@ class BrandBeliefsStore(Protocol):
     def latest_belief(self, **kwargs: Any) -> dict | None: ...
 
 
+class SkillsStore(Protocol):
+    def get_skill(self, **kwargs: Any) -> dict | None: ...
+
+    def upsert_skill(self, **kwargs: Any) -> dict: ...
+
+    def list_skill_history(self, **kwargs: Any) -> list[dict]: ...
+
+
 class SemanticMemory(Protocol):
     def get(self, key: str) -> list[str]: ...
 
@@ -223,6 +231,7 @@ class AppDeps:
     experiment_runs: ExperimentRunsStore
     experiment_recommendations: ExperimentRecommendationsStore
     brand_beliefs: BrandBeliefsStore
+    skills: SkillsStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

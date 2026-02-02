@@ -96,11 +96,33 @@ class GeminiLLMClient(LLMClient):
         if rate_headers:
             logger.info("Gemini rate limits: %s", rate_headers)
 
-    def _generation_config(self) -> genai_types.GenerateContentConfig:
-        return genai_types.GenerateContentConfig(
+    def _generation_config(
+        self, system_instruction: str | None = None
+    ) -> genai_types.GenerateContentConfig:
+        config = genai_types.GenerateContentConfig(
             temperature=self.config.temperature,
             max_output_tokens=self.config.max_output_tokens,
         )
+        if system_instruction and hasattr(config, "system_instruction"):
+            try:
+                setattr(config, "system_instruction", system_instruction)
+            except Exception:
+                pass
+        return config
+
+    def _apply_system_instruction_to_prompt(
+        self, prompt: str, system_instruction: str | None
+    ) -> str:
+        if not system_instruction:
+            return prompt
+        return f"{system_instruction}\n\n{prompt}"
+
+    def _apply_system_instruction_to_messages(
+        self, messages: list[dict[str, str]], system_instruction: str | None
+    ) -> list[dict[str, str]]:
+        if not system_instruction:
+            return messages
+        return [{"role": "user", "content": system_instruction}, *messages]
 
     def _select_model_name(self) -> str:
         if self._active_model_name:
@@ -110,9 +132,14 @@ class GeminiLLMClient(LLMClient):
     def _format_messages(self, messages: list[dict[str, str]]) -> list[dict[str, Any]]:
         formatted: list[dict[str, Any]] = []
         for msg in messages:
+            role = msg.get("role")
+            if role == "assistant":
+                role = "model"
+            elif role not in {"user", "model"}:
+                role = "user"
             formatted.append(
                 {
-                    "role": msg["role"],
+                    "role": role,
                     "parts": [{"text": msg["content"]}],
                 }
             )
@@ -158,11 +185,11 @@ class GeminiLLMClient(LLMClient):
         def _generate():
             kwargs = {
                 "model": self._select_model_name(),
-                "contents": prompt,
-                "config": self._generation_config(),
+                "contents": self._apply_system_instruction_to_prompt(
+                    prompt, system_instruction
+                ),
+                "config": self._generation_config(system_instruction),
             }
-            if system_instruction:
-                kwargs["system_instruction"] = system_instruction
             response = self._client.models.generate_content(**kwargs)  # type: ignore[call-arg]
             self._log_rate_limits(response)
             return response.text
@@ -177,11 +204,13 @@ class GeminiLLMClient(LLMClient):
         def _chat():
             kwargs = {
                 "model": self._select_model_name(),
-                "contents": self._format_messages(messages),
-                "config": self._generation_config(),
+                "contents": self._format_messages(
+                    self._apply_system_instruction_to_messages(
+                        messages, system_instruction
+                    )
+                ),
+                "config": self._generation_config(system_instruction),
             }
-            if system_instruction:
-                kwargs["system_instruction"] = system_instruction
             response = self._client.models.generate_content(**kwargs)  # type: ignore[call-arg]
             self._log_rate_limits(response)
             return response.text
@@ -197,17 +226,17 @@ class GeminiLLMClient(LLMClient):
         self._ensure_initialized()
 
         def _generate_with_tools():
-            config = self._generation_config()
+            config = self._generation_config(system_instruction)
             converted_tools = self._convert_tools(tools)
             if converted_tools:
                 config.tools = converted_tools  # type: ignore[attr-defined]
             kwargs = {
                 "model": self._select_model_name(),
-                "contents": prompt,
+                "contents": self._apply_system_instruction_to_prompt(
+                    prompt, system_instruction
+                ),
                 "config": config,
             }
-            if system_instruction:
-                kwargs["system_instruction"] = system_instruction
             response = self._client.models.generate_content(**kwargs)  # type: ignore[call-arg]
 
             candidates = getattr(response, "candidates", None)
@@ -219,10 +248,12 @@ class GeminiLLMClient(LLMClient):
                     function_call = getattr(part, "function_call", None)
                     if function_call:
                         return {
-                            "function_call": {
-                                "name": function_call.name,
-                                "args": dict(function_call.args),
-                            }
+                            "tool_calls": [
+                                {
+                                    "name": function_call.name,
+                                    "args": dict(function_call.args),
+                                }
+                            ]
                         }
 
             self._log_rate_limits(response)

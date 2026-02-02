@@ -46,6 +46,7 @@ export type EvidenceAnalyzeResponse = {
   intent?: ConversationResponse["intent"];
   goals: string[];
   evidence_products: EvidenceProduct[];
+  signal_extraction?: EvidenceSignalExtraction;
   profiles: {
     product_id?: string;
     capabilities_enabled?: string[];
@@ -226,6 +227,38 @@ export type AdminPlatformProfileResponse = {
   profile: AdminPlatformProfile;
 };
 
+export type AdminSkill = {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  content: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AdminSkillResponse = {
+  skill: AdminSkill | null;
+};
+
+export type AdminSkillHistoryItem = {
+  id: number;
+  skill_id: string;
+  name: string;
+  description?: string;
+  version?: string;
+  content: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+  changed_at?: string;
+};
+
+export type AdminSkillHistoryResponse = {
+  history: AdminSkillHistoryItem[];
+};
+
 export type SimulationAttachResponse = {
   run_id: string;
   product_id?: string | null;
@@ -290,6 +323,16 @@ export type AdminProductListResponse = {
 
 export type AdminClientUserListResponse = {
   users: AdminClientUser[];
+};
+
+export type EvidenceSignalExtraction = {
+  intent_signals: string[];
+  winner_signals: string[];
+  missing_signals: string[];
+};
+
+export type EvidenceSignalResponse = {
+  signals: EvidenceSignalExtraction;
 };
 
 export type ConversationResponse = {

@@ -23,6 +23,7 @@ from infrastructure.db import (
     experiment_recommendations as experiment_recommendations_repo,
     brand_beliefs as brand_beliefs_repo,
     goals as goals_repo,
+    skills as skills_repo,
     platform_profiles as platform_profiles_repo,
     query_batteries as query_batteries_repo,
     replays as replays_repo,
@@ -63,6 +64,7 @@ def default_deps() -> AppDeps:
         experiment_runs=experiment_runs_repo,
         experiment_recommendations=experiment_recommendations_repo,
         brand_beliefs=brand_beliefs_repo,
+        skills=skills_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),

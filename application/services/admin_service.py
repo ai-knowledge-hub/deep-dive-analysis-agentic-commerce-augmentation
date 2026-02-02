@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from application.ports.deps import ClientsStore, PlatformProfilesStore
+from application.ports.deps import ClientsStore, PlatformProfilesStore, SkillsStore
+from application.services.skill_defaults import (
+    ensure_default_skill,
+    default_skill_names,
+)
 
 
 class AdminService:
@@ -13,9 +17,11 @@ class AdminService:
         *,
         clients_repo: ClientsStore,
         platform_profiles_repo: PlatformProfilesStore,
+        skills_repo: SkillsStore,
     ) -> None:
         self._clients = clients_repo
         self._platform_profiles = platform_profiles_repo
+        self._skills = skills_repo
 
     def create_client(
         self, *, client_id: str, name: str, metadata: Optional[Dict[str, Any]] = None
@@ -98,6 +104,39 @@ class AdminService:
         return self._platform_profiles.upsert_platform_profile(
             name=name, version=version, profile=profile
         )
+
+    def list_skill_names(self) -> list[str]:
+        return default_skill_names()
+
+    def get_skill(self, *, name: str) -> Dict[str, Any] | None:
+        return ensure_default_skill(skills_repo=self._skills, name=name)
+
+    def update_skill(
+        self,
+        *,
+        name: str,
+        description: str,
+        version: str,
+        content: str,
+        enabled: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        existing = self._skills.get_skill(name=name, include_disabled=True)
+        skill_id = existing.get("id") if existing else name
+        return self._skills.upsert_skill(
+            skill_id=skill_id,
+            name=name,
+            description=description,
+            version=version,
+            content=content,
+            enabled=enabled,
+            metadata=metadata or {},
+        )
+
+    def list_skill_history(self, *, name: str, limit: int = 10) -> list[Dict[str, Any]]:
+        if hasattr(self._skills, "list_skill_history"):
+            return self._skills.list_skill_history(name=name, limit=limit)  # type: ignore[no-any-return]
+        return []
 
 
 def _load_default_platform_profile() -> Dict[str, Any] | None:

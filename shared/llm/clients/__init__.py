@@ -13,6 +13,7 @@ from shared.llm.clients.openrouter import (
 
 if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from shared.llm.clients.gemini import GeminiLLMClient
+    from shared.llm.clients.gemini_cli import GeminiCLILLMClient
 
 
 def _get_gemini_client() -> "GeminiLLMClient":
@@ -20,11 +21,18 @@ def _get_gemini_client() -> "GeminiLLMClient":
 
     return get_gemini_client()
 
+def _get_gemini_cli_client() -> "GeminiCLILLMClient":
+    from shared.llm.clients.gemini_cli import get_client as get_gemini_cli_client
+
+    return get_gemini_cli_client()
+
 
 def get_llm_client(provider: str | None = None) -> LLMClient:
     provider_name = (provider or settings.llm_provider).lower()
     if provider_name == "gemini":
         return _get_gemini_client()
+    if provider_name in {"gemini_cli", "gemini-cli"}:
+        return _get_gemini_cli_client()
     if provider_name == "openrouter":
         return get_openrouter_client()
     raise ValueError(f"Unsupported LLM provider: {provider_name}")

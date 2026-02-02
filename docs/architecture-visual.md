@@ -65,6 +65,16 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 │  │ └─────────────┘ │                                                     │
 │  └─────────────────┘                                                     │
 │                                                                           │
+│  ┌─────────────────┐                                                     │
+│  │  Skill Engine   │                                                     │
+│  │   (DB + LLM)    │                                                     │
+│  │ ┌─────────────┐ │                                                     │
+│  │ │Signal       │ │                                                     │
+│  │ │Extractor    │ │                                                     │
+│  │ │Copy Skill   │ │                                                     │
+│  │ └─────────────┘ │                                                     │
+│  └─────────────────┘                                                     │
+│                                                                           │
 │  ┌─────────────────┐  ┌─────────────────┐                              │
 │  │  Experiment     │  │   Battery       │                              │
 │  │   Service       │  │   Builder       │                              │
@@ -110,6 +120,8 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 │  │• OpenRouter │  │• Products   │  │• ACP        │  │• Embeddings │   │
 │  │• Claude     │  │• Experiments│  │• Validation │  │• Similarity │   │
 │  │• Templates  │  │• Metrics    │  │             │  │             │   │
+│  │             │  │• Skills     │  │             │  │             │   │
+│  │             │  │• Skill Hist │  │             │  │             │   │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘   │
 │                                                                           │
 └─────────────────────────────────────────────────────────────────────────┘

@@ -73,6 +73,9 @@ def tool_summary(tool_outputs: List[dict]) -> str:
             lines.append(
                 f"- web_fetch: status={output.get('status')} url={output.get('url')}"
             )
+        elif name == "serp_search" and isinstance(output, dict):
+            results = output.get("results") or []
+            lines.append(f"- serp_search: results={len(results)}")
         elif name == "product_search" and isinstance(output, dict):
             results = output.get("results") or []
             lines.append(f"- product_search: results={len(results)}")
@@ -98,6 +101,16 @@ def build_insights(
         json_products = _extract_json_products_from_lines(lines)
         if json_products:
             return json_products
+        # If tools returned product_search results, use them instead of raw lines.
+        fallback = fallback_insights(
+            response=response,
+            query=query,
+            goals=goals,
+            tool_outputs=tool_outputs,
+            confidence=confidence,
+        )
+        if fallback:
+            return fallback
     if not lines:
         fallback = fallback_insights(
             response=response,
@@ -178,11 +191,28 @@ def _extract_json_block(text: str) -> str | None:
         for match in matches:
             candidate = match.strip()
             if candidate.startswith("{") or candidate.startswith("["):
-                return candidate
+                if _is_valid_json(candidate):
+                    return candidate
     trimmed = text.strip()
     if trimmed.startswith("{") or trimmed.startswith("["):
-        return trimmed
+        if _is_valid_json(trimmed):
+            return trimmed
+    for start_char, end_char in (("{", "}"), ("[", "]")):
+        start = trimmed.find(start_char)
+        end = trimmed.rfind(end_char)
+        if start != -1 and end != -1 and end > start:
+            candidate = trimmed[start : end + 1]
+            if _is_valid_json(candidate):
+                return candidate
     return None
+
+
+def _is_valid_json(candidate: str) -> bool:
+    try:
+        json.loads(candidate)
+        return True
+    except json.JSONDecodeError:
+        return False
 
 
 def _filter_prompt_lines(lines: List[str]) -> List[str]:
@@ -285,17 +315,25 @@ def fallback_insights(
 ) -> List[dict]:
     inferred_conf = confidence if confidence is not None else 0.2
     insights: List[dict] = []
+    tool_errors: List[str] = []
 
     for entry in tool_outputs:
         output = entry.get("output") if isinstance(entry, dict) else None
         if not isinstance(output, dict):
             continue
+        if output.get("error"):
+            tool_errors.append(str(output.get("error")))
         results = output.get("results")
         if isinstance(results, list) and results:
             for idx, item in enumerate(results[:3]):
                 name = item.get("name") or "Research result"
-                source = item.get("source") or "product"
-                summary = f"{name} surfaced for intent matching (source: {source})."
+                source = item.get("source") or entry.get("name") or "search"
+                url = item.get("url")
+                summary = (
+                    f"{name} surfaced for intent matching (source: {source})."
+                    if not url
+                    else f"{name} surfaced for intent matching (source: {source}). {url}"
+                )
                 insights.append(
                     {
                         "id": f"research-tool-{idx + 1}",
@@ -326,6 +364,8 @@ def fallback_insights(
     error = ""
     if isinstance(response, dict):
         error = str(response.get("error") or "").strip()
+    if tool_errors:
+        error = f"{error} Tool errors: {'; '.join(tool_errors)}".strip()
     summary = (
         f"Research unavailable: {error}"
         if error

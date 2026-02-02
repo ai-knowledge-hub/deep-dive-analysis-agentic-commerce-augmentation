@@ -9,6 +9,7 @@ import type {
   AdminClientUser,
   AdminProduct,
   AdminPlatformProfile,
+  AdminSkill,
   SessionSummary,
 } from "../../lib/types";
 import {
@@ -17,12 +18,15 @@ import {
   createAdminClient,
   createAdminProduct,
   deleteConversationSession,
+  getAdminSkill,
   getAdminPlatformProfile,
   listAdminBrands,
   listAdminClientUsers,
   listAdminClients,
   listAdminProducts,
+  listAdminSkillHistory,
   listConversationSessions,
+  updateAdminSkill,
   updateAdminPlatformProfile,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
@@ -62,6 +66,19 @@ export default function AdminPage() {
   const [activeClientId, setActiveClientId] = useState<string>("");
   const [activeBrandId, setActiveBrandId] = useState<string>("");
 
+  const skillNames = useMemo(() => ["signal_extractor", "copy_generator"], []);
+  const [activeSkillName, setActiveSkillName] = useState<string>("signal_extractor");
+  const [activeSkill, setActiveSkill] = useState<AdminSkill | null>(null);
+  const [skillDescription, setSkillDescription] = useState<string>("");
+  const [skillVersion, setSkillVersion] = useState<string>("");
+  const [skillContent, setSkillContent] = useState<string>("");
+  const [skillEnabled, setSkillEnabled] = useState<boolean>(true);
+  const [skillError, setSkillError] = useState<string | null>(null);
+  const [skillSaved, setSkillSaved] = useState<boolean>(false);
+  const [skillHistory, setSkillHistory] = useState<
+    { id: number; version?: string; changed_at?: string }[]
+  >([]);
+
   const [clientForm, setClientForm] = useState({ ...emptyForm });
   const [brandForm, setBrandForm] = useState({ ...emptyForm });
   const [productForm, setProductForm] = useState({ ...emptyForm });
@@ -90,6 +107,21 @@ export default function AdminPage() {
       setPlatformProfileVersion(response.profile.version ?? "2026-01-11");
     });
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !activeSkillName) return;
+    void getAdminSkill(activeSkillName, userId).then((response) => {
+      if (!response.skill) return;
+      setActiveSkill(response.skill);
+      setSkillDescription(response.skill.description ?? "");
+      setSkillVersion(response.skill.version ?? "");
+      setSkillContent(response.skill.content ?? "");
+      setSkillEnabled(response.skill.enabled ?? true);
+    });
+    void listAdminSkillHistory(activeSkillName, userId, 5).then((response) => {
+      setSkillHistory(response.history ?? []);
+    });
+  }, [activeSkillName, userId]);
 
   useEffect(() => {
     if (!activeClientId || !userId) {
@@ -240,6 +272,35 @@ export default function AdminPage() {
       setPlatformProfileError("Invalid JSON. Please fix the profile JSON.");
     }
   }, [platformProfile, platformProfileName, platformProfileText, platformProfileVersion, userId]);
+
+  const handleSaveSkill = useCallback(async () => {
+    if (!userId || !activeSkillName) return;
+    if (!skillContent.trim()) {
+      setSkillError("Skill content cannot be empty.");
+      return;
+    }
+    try {
+      const response = await updateAdminSkill(
+        activeSkillName,
+        {
+          description: skillDescription || activeSkillName,
+          version: skillVersion || "2026-02-01",
+          content: skillContent,
+          enabled: skillEnabled,
+        },
+        userId,
+      );
+      setActiveSkill(response.skill ?? null);
+      setSkillError(null);
+      setSkillSaved(true);
+      void listAdminSkillHistory(activeSkillName, userId, 5).then((next) => {
+        setSkillHistory(next.history ?? []);
+      });
+      window.setTimeout(() => setSkillSaved(false), 1500);
+    } catch (error) {
+      setSkillError("Failed to save skill.");
+    }
+  }, [activeSkillName, skillContent, skillDescription, skillEnabled, skillVersion, userId]);
 
   return (
     <div className="app">
@@ -419,6 +480,86 @@ export default function AdminPage() {
                     </button>
                   </div>
                 </>
+              )}
+            </section>
+
+            <section className="panel__card admin__panel">
+              <div className="panel__header">
+                <h3>Agent skills</h3>
+                <span className="panel__meta">Runtime prompt recipes</span>
+              </div>
+              {!userId ? (
+                <p className="panel__empty">Sign in to edit skills.</p>
+              ) : (
+                <div className="admin__form">
+                  <span className="panel__label">Skill</span>
+                  <select
+                    value={activeSkillName}
+                    onChange={(event) => setActiveSkillName(event.target.value)}
+                  >
+                    {skillNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  {activeSkill?.updated_at && (
+                    <p className="panel__meta">
+                      Updated: {activeSkill.updated_at}
+                    </p>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="Description"
+                    value={skillDescription}
+                    onChange={(event) => setSkillDescription(event.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Version"
+                    value={skillVersion}
+                    onChange={(event) => setSkillVersion(event.target.value)}
+                  />
+                  <label className="panel__label panel__label--inline">
+                    <input
+                      type="checkbox"
+                      checked={skillEnabled}
+                      onChange={(event) => setSkillEnabled(event.target.checked)}
+                    />
+                    Enabled
+                  </label>
+                  <textarea
+                    rows={10}
+                    value={skillContent}
+                    onChange={(event) => setSkillContent(event.target.value)}
+                  />
+                  {skillHistory.length > 0 && (
+                    <div className="admin__history">
+                      <span className="panel__label">Recent versions</span>
+                      <ul className="admin__list">
+                        {skillHistory.map((item) => (
+                          <li key={item.id}>
+                            <span>{item.version ?? "n/a"}</span>
+                            <span className="admin__meta">
+                              {item.changed_at ?? ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {skillError && <p className="panel__error">{skillError}</p>}
+                  {skillSaved && (
+                    <p className="panel__success">Saved skill.</p>
+                  )}
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={handleSaveSkill}
+                  >
+                    Save skill
+                  </button>
+                </div>
               )}
             </section>
 

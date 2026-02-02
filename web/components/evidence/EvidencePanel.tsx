@@ -7,11 +7,12 @@
 "use client";
 
 import React, { useState } from "react";
-import type { EvidenceAnalyzeResponse } from "../../lib/types";
+import type { EvidenceAnalyzeResponse, EvidenceSignalExtraction } from "../../lib/types";
 import { EvidenceCard } from "./EvidenceCard";
 
 type Props = {
   analysis?: EvidenceAnalyzeResponse | null;
+  signalExtraction?: EvidenceSignalExtraction | null;
   targetProductId?: string;
   targetProductName?: string;
   targetProductCopy?: string;
@@ -22,6 +23,7 @@ type Props = {
 
 export function EvidencePanel({
   analysis,
+  signalExtraction,
   targetProductId,
   targetProductName,
   targetProductCopy,
@@ -150,22 +152,11 @@ export function EvidencePanel({
     (scoreMap.get(topScore?.product_id ?? "")?.matched_capabilities ?? []).filter(
       Boolean,
     );
-  const missingSignals = winnerCapabilities.filter(
-    (cap) => !matchedCapabilities.includes(cap),
-  );
-  const extraSignals = matchedCapabilities.filter(
-    (cap) => !winnerCapabilities.includes(cap),
-  );
-  const scoreDeficit =
-    matchedScore !== null && topScore?.score
-      ? Math.max(topScore.score - matchedScore, 0)
-      : topScore?.score ?? null;
-  const counterfactualLift =
-    scoreDeficit !== null
-      ? Math.min(scoreDeficit * 0.6 + missingSignals.length * 0.05, 0.4)
-      : null;
-
   const goalSignals = analysis?.goals ?? [];
+  const intentSignals =
+    signalExtraction?.intent_signals?.length
+      ? signalExtraction.intent_signals
+      : goalSignals;
   const copyText = (targetProductCopy ?? "").toLowerCase();
   const detectSignal = (signal: string) => {
     const tokens = signal
@@ -175,10 +166,31 @@ export function EvidencePanel({
     if (!tokens.length) return false;
     return tokens.every((token) => copyText.includes(token));
   };
-  const detectedSignals = goalSignals.filter((signal) => detectSignal(signal));
-  const missingGoalSignals = goalSignals.filter(
+  const detectedSignals = intentSignals.filter((signal) => detectSignal(signal));
+  const missingGoalSignals = intentSignals.filter(
     (signal) => !detectedSignals.includes(signal),
   );
+  const winnerSignals =
+    signalExtraction?.winner_signals?.length
+      ? signalExtraction.winner_signals
+      : winnerCapabilities;
+
+  const missingSignals =
+    signalExtraction?.missing_signals?.length
+      ? signalExtraction.missing_signals
+      : winnerCapabilities.filter((cap) => !matchedCapabilities.includes(cap));
+  const extraSignals =
+    signalExtraction?.winner_signals?.length
+      ? detectedSignals.filter((signal) => !winnerSignals.includes(signal))
+      : matchedCapabilities.filter((cap) => !winnerCapabilities.includes(cap));
+  const scoreDeficit =
+    matchedScore !== null && topScore?.score
+      ? Math.max(topScore.score - matchedScore, 0)
+      : topScore?.score ?? null;
+  const counterfactualLift =
+    scoreDeficit !== null
+      ? Math.min(scoreDeficit * 0.6 + missingSignals.length * 0.05, 0.4)
+      : null;
 
   const intentConfidence = analysis?.intent?.confidence ?? 0.6;
   const explicitnessScore = (signal: string) => {
@@ -191,12 +203,12 @@ export function EvidencePanel({
     return Math.min(1, 0.3 + length + numericBoost + unitBoost);
   };
 
-  const intentSignalsWeighted = goalSignals.map((signal) => ({
+  const intentSignalsWeighted = intentSignals.map((signal) => ({
     signal,
     weight: Math.min(1, intentConfidence * explicitnessScore(signal)),
   }));
 
-  const evidenceSignalsWeighted = winnerCapabilities.map((signal) => {
+  const evidenceSignalsWeighted = winnerSignals.map((signal) => {
     const frequency = alignmentScores.filter((score) =>
       (score.matched_capabilities ?? []).includes(signal),
     ).length;
@@ -210,7 +222,9 @@ export function EvidencePanel({
     };
   });
 
-  const copyPresenceWeighted = [...new Set([...goalSignals, ...winnerCapabilities])].map(
+  const copyPresenceWeighted = [
+    ...new Set([...intentSignals, ...winnerSignals]),
+  ].map(
     (signal) => ({
       signal,
       present: detectSignal(signal),
@@ -576,77 +590,111 @@ export function EvidencePanel({
                     </div>
                   </div>
                 </div>
+              </div>
 
+              <div className="explain-grid explain-grid--signals">
                 <div className="explain-card">
-                  <div className="explain-card__title">Signal model (3-path)</div>
-                  <div className="signal-columns">
-                    <div>
-                      <div className="signal-heading">Intent/Goal signals</div>
-                      <div className="signal-list">
-                        {(intentSignalsWeighted.length
-                          ? intentSignalsWeighted
-                          : [{ signal: "No intent signals", weight: 0 }]
-                        ).map((item) => (
-                          <span
-                            key={item.signal}
-                            className="signal-chip"
-                            title={item.signal}
-                          >
-                            {item.signal} · {Math.round(item.weight * 100)}%
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="signal-heading">Evidence signals</div>
-                      <div className="signal-list">
-                        {(evidenceSignalsWeighted.length
-                          ? evidenceSignalsWeighted
-                          : [{ signal: "No evidence signals", weight: 0 }]
-                        ).map((item) => (
-                          <span
-                            key={item.signal}
-                            className="signal-chip neutral"
-                            title={item.signal}
-                          >
-                            {item.signal} · {Math.round(item.weight * 100)}%
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="explain-card__title">Intent/Goal signals</div>
+                  <p className="explain-card__note">
+                    Derived from the clarified intent. Higher weight = more explicit in
+                    the query.
+                  </p>
+                  <div className="signal-list">
+                    {(intentSignalsWeighted.length
+                      ? intentSignalsWeighted
+                      : [{ signal: "No intent signals", weight: 0 }]
+                    ).map((item) => (
+                      <span
+                        key={item.signal}
+                        className="signal-chip"
+                        title={item.signal}
+                      >
+                        {item.signal} · {Math.round(item.weight * 100)}%
+                      </span>
+                    ))}
                   </div>
-                  <div className="signal-columns">
-                    <div>
-                      <div className="signal-heading">Copy presence</div>
-                      <div className="signal-list">
-                        {(copyPresenceWeighted.length
-                          ? copyPresenceWeighted
-                          : [{ signal: "No copy signals", present: false }]
-                        ).map((item) => (
-                          <span
-                            key={item.signal}
-                            className={`signal-chip ${item.present ? "" : "muted"}`}
-                            title={item.signal}
-                          >
-                            {item.signal} · {item.present ? "Yes" : "No"}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="signal-heading">Specificity vs Breadth</div>
-                      <div className="signal-list">
-                        <span className="signal-chip">
-                          Specificity · {Math.round(specificityRatio * 100)}%
-                        </span>
-                        <span className="signal-chip neutral">
-                          Breadth · {Math.round((1 - specificityRatio) * 100)}%
-                        </span>
-                      </div>
-                      <p className="summary-card__note">
-                        Intent signals drive specificity; evidence signals drive breadth.
-                      </p>
-                    </div>
+                  <div className="signal-legend">
+                    <span className="signal-legend__label">Weight</span>
+                    <span className="signal-legend__detail">
+                      Confidence × explicitness in the query
+                    </span>
+                  </div>
+                </div>
+                <div className="explain-card">
+                  <div className="explain-card__title">Evidence signals</div>
+                  <p className="explain-card__note">
+                    Extracted from top-ranked products. Higher weight = more frequent
+                    among winners.
+                  </p>
+                  <div className="signal-list">
+                    {(evidenceSignalsWeighted.length
+                      ? evidenceSignalsWeighted
+                      : [{ signal: "No evidence signals", weight: 0 }]
+                    ).map((item) => (
+                      <span
+                        key={item.signal}
+                        className="signal-chip neutral"
+                        title={item.signal}
+                      >
+                        {item.signal} · {Math.round(item.weight * 100)}%
+                      </span>
+                    ))}
+                  </div>
+                  <div className="signal-legend">
+                    <span className="signal-legend__label">Weight</span>
+                    <span className="signal-legend__detail">
+                      Frequency among winners × alignment score
+                    </span>
+                  </div>
+                </div>
+                <div className="explain-card">
+                  <div className="explain-card__title">Copy presence</div>
+                  <p className="explain-card__note">
+                    Whether our current copy already contains each signal.
+                  </p>
+                  <div className="signal-list">
+                    {(copyPresenceWeighted.length
+                      ? copyPresenceWeighted
+                      : [{ signal: "No copy signals", present: false }]
+                    ).map((item) => (
+                      <span
+                        key={item.signal}
+                        className={`signal-chip ${item.present ? "" : "muted"}`}
+                        title={item.signal}
+                      >
+                        {item.signal} · {item.present ? "Yes" : "No"}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="signal-legend">
+                    <span className="signal-legend__label">Signal check</span>
+                    <span className="signal-legend__detail">
+                      Phrase-level coverage in current copy
+                    </span>
+                  </div>
+                </div>
+                <div className="explain-card">
+                  <div className="explain-card__title">Specificity vs breadth</div>
+                  <p className="explain-card__note">
+                    Specificity helps you win the exact intent; breadth expands adjacent
+                    discovery.
+                  </p>
+                  <div className="signal-list">
+                    <span className="signal-chip">
+                      Specificity · {Math.round(specificityRatio * 100)}%
+                    </span>
+                    <span className="signal-chip neutral">
+                      Breadth · {Math.round((1 - specificityRatio) * 100)}%
+                    </span>
+                  </div>
+                  <p className="summary-card__note">
+                    Intent signals drive specificity; evidence signals drive breadth.
+                  </p>
+                  <div className="signal-legend">
+                    <span className="signal-legend__label">Interpretation</span>
+                    <span className="signal-legend__detail">
+                      High specificity = tight intent fit; high breadth = wider reach
+                    </span>
                   </div>
                 </div>
               </div>
@@ -705,6 +753,7 @@ export function EvidencePanel({
           flex-direction: column;
           min-height: 0;
           width: 100%;
+          flex: 1;
         }
 
         .summary-card {
@@ -715,6 +764,53 @@ export function EvidencePanel({
           display: flex;
           flex-direction: column;
           gap: 8px;
+        }
+
+        .explain-grid {
+          display: grid;
+          gap: 16px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .explain-grid--signals {
+          margin-top: 16px;
+        }
+
+        @media (max-width: 1200px) {
+          .explain-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 720px) {
+          .explain-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .explain-card__note {
+          margin: 0 0 10px;
+          font-size: 0.82rem;
+          color: rgba(255, 255, 255, 0.6);
+          line-height: 1.45;
+        }
+
+        .signal-legend {
+          margin-top: 10px;
+          padding-top: 10px;
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          font-size: 0.78rem;
+          color: rgba(255, 255, 255, 0.55);
+        }
+
+        .signal-legend__label {
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          font-size: 0.68rem;
+          color: rgba(255, 255, 255, 0.45);
         }
 
         .summary-card__title {
@@ -866,12 +962,14 @@ export function EvidencePanel({
 
         .evidence-panel--page .evidence-panel__content {
           overflow: visible;
-          flex: none;
+          flex: 0 0 auto;
           max-height: none;
         }
 
         .evidence-panel--page {
           overflow: visible;
+          flex: 0 0 auto;
+          min-height: auto;
         }
 
         @media (max-width: 1024px) {
@@ -916,15 +1014,11 @@ export function EvidencePanel({
 
         .explanation-content,
         .actions-content {
-          max-width: 1200px;
+          max-width: 100%;
           margin: 0 auto;
+          width: 100%;
         }
 
-        .explain-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 1.25rem;
-        }
 
         .explain-card,
         .action-card {

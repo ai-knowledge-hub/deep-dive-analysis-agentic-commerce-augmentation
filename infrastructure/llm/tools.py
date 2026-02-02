@@ -71,11 +71,52 @@ MEMORY_WRITE_TOOL = {
     },
 }
 
+PRODUCT_SEARCH_TOOL = {
+    "name": "product_search",
+    "description": (
+        "Search the web for product pages using a query and return top URLs."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query string."},
+            "limit": {
+                "type": "integer",
+                "description": "Max number of result URLs (default 5).",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+SERP_SEARCH_TOOL = {
+    "name": "serp_search",
+    "description": "Search Google via SerpAPI and return top organic result URLs.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query string."},
+            "location": {
+                "type": "string",
+                "description": "Optional location string (e.g., 'Austin, Texas, United States').",
+            },
+            "gl": {"type": "string", "description": "Country code (e.g., us)."},
+            "hl": {"type": "string", "description": "Language code (e.g., en)."},
+            "limit": {
+                "type": "integer",
+                "description": "Max number of result URLs (default 5).",
+            },
+        },
+        "required": ["query"],
+    },
+}
 
 ALL_TOOLS = [
     WEB_FETCH_TOOL,
     IMAGE_ANALYZE_TOOL,
     MEMORY_WRITE_TOOL,
+    PRODUCT_SEARCH_TOOL,
+    SERP_SEARCH_TOOL,
 ]
 
 
@@ -94,6 +135,20 @@ def execute_tool(name: str, args: Dict[str, Any]) -> dict:
                 a.get("values"),
                 a.get("value"),
                 a.get("mode", "append"),
+            ),
+        ),
+        "product_search": (
+            "product_search",
+            lambda a: (a["query"], a.get("limit", 5)),
+        ),
+        "serp_search": (
+            "serp_search",
+            lambda a: (
+                a["query"],
+                a.get("location"),
+                a.get("gl"),
+                a.get("hl"),
+                a.get("limit", 5),
             ),
         ),
     }

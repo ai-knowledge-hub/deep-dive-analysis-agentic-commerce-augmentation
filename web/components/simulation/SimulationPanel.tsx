@@ -259,56 +259,31 @@ export function SimulationPanel({
         </div>
       </div>
 
-      {products.length > 0 && (
-        <div className="simulation__picker">
-          <span className="simulation__diff-label">
-            Product to optimize
-          </span>
-          <p className="simulation__intro-text">
-            Defaults to the product selected in the client panel.
-          </p>
-          <div className="simulation__picker-actions">
-            <button
-              type="button"
-              className="button button--primary-subtle"
-              onClick={() => {
-                if (bestScore?.product_id) {
-                  onSelectProduct(bestScore.product_id);
-                } else {
-                  setBestMatchPending(true);
-                  onRun();
-                }
-              }}
-              disabled={!canRun || loading}
-            >
-              {loading && bestMatchPending ? (
-                <>
-                  Finding match<span className="button__dots" />
-                </>
-              ) : (
-                "Find best matching product"
-              )}
-            </button>
-          </div>
-          <div className="simulation__picker-buttons">
-            {products.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                className={`simulation__picker-button ${
-                  selectedProductId === product.id ? "is-active" : ""
-                }`}
-                onClick={() => onSelectProduct(product.id)}
-              >
-                {product.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="simulation__run">
+        <span className="simulation__diff-label">Step 1: Run simulation</span>
+        <p className="simulation__intro-text">
+          Generate alignment scores across all products for the current intent.
+        </p>
+        <button
+          type="button"
+          className="button button--primary-subtle"
+          onClick={onRun}
+          disabled={!canRun || loading}
+        >
+          {loading ? (
+            <>
+              Running simulation<span className="button__dots" />
+            </>
+          ) : (
+            "Run simulation"
+          )}
+        </button>
+      </div>
 
       <div className="simulation__recommendation">
-        <span className="simulation__diff-label">Best match</span>
+        <span className="simulation__diff-label">
+          Step 2: Find the best matching product
+        </span>
         {bestProduct && bestScore ? (
           <div className="simulation__recommendation-body">
             <strong>{bestProduct.name}</strong>
@@ -316,10 +291,31 @@ export function SimulationPanel({
           </div>
         ) : (
           <p className="simulation__intro-text">
-            Run a simulation to identify the closest product for this intent.
+            Run a simulation first to identify the closest product.
           </p>
         )}
         <div className="simulation__recommendation-actions">
+          <button
+            type="button"
+            className="button button--primary-subtle"
+            onClick={() => {
+              if (bestScore?.product_id) {
+                onSelectProduct(bestScore.product_id);
+              } else {
+                setBestMatchPending(true);
+                onRun();
+              }
+            }}
+            disabled={!canRun || loading}
+          >
+            {loading && bestMatchPending ? (
+              <>
+                Finding match<span className="button__dots" />
+              </>
+            ) : (
+              "Find best matching product"
+            )}
+          </button>
           <button
             type="button"
             className="button button--ghost"
@@ -329,11 +325,47 @@ export function SimulationPanel({
             See all product scores
           </button>
         </div>
+        {products.length > 0 && (
+          <div className="simulation__picker">
+            <span className="simulation__diff-label">
+              Product to optimize
+            </span>
+            <p className="simulation__intro-text">
+              Defaults to the product selected in the client panel.
+            </p>
+            <div className="simulation__picker-buttons">
+              {products.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  className={`simulation__picker-button ${
+                    selectedProductId === product.id ? "is-active" : ""
+                  }`}
+                  onClick={() => onSelectProduct(product.id)}
+                >
+                  {product.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeMissingSignals.length > 0 && (
+          <div className="simulation__run-missing">
+            <span className="simulation__diff-label">Top missing signals</span>
+            <div className="simulation__signal-chips">
+              {activeMissingSignals.slice(0, 3).map((signal) => (
+                <span key={signal} className="simulation__signal-chip">
+                  {signal}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {(optimizationMode === "copy" || optimizationMode === "both") && (
         <div className="simulation__copy">
-          <span className="simulation__diff-label">Web copy</span>
+          <span className="simulation__diff-label">Step 3: Optimize web copy</span>
           {brandToneSummary && (
             <p className="simulation__tone-suggestion">
               Current brand tone: {brandToneSummary}
@@ -354,7 +386,7 @@ export function SimulationPanel({
 
       {(optimizationMode === "feed" || optimizationMode === "both") && (
         <div className="simulation__feeds">
-          <span className="simulation__diff-label">Feed snapshot</span>
+          <span className="simulation__diff-label">Step 3: Optimize feeds</span>
           <div className="simulation__feed-grid">
             <div className="simulation__feed-card">
               <div className="simulation__feed-title">ACP feed</div>
@@ -472,7 +504,8 @@ export function SimulationPanel({
             <ul>
               {feedSuggestions.map((item) => (
                 <li key={item.signal}>
-                  Add <strong>{item.signal}</strong> → {item.field}
+                  Include mention of <strong>{item.signal}</strong> →{" "}
+                  {item.field}
                 </li>
               ))}
             </ul>

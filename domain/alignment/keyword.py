@@ -106,7 +106,9 @@ def match_goal_to_product(
     }
 
 
-def _missing_required_category(goal_tokens: Set[str], product_tokens_set: Set[str]) -> str | None:
+def _missing_required_category(
+    goal_tokens: Set[str], product_tokens_set: Set[str]
+) -> str | None:
     category_groups = [
         {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers", "footwear"},
         {"vest", "vests", "jacket", "jackets", "outerwear"},

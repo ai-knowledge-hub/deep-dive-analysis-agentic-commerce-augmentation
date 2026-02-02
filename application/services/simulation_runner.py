@@ -17,6 +17,7 @@ from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
 from application.services.alignment_service import AlignmentService
 from application.services.intentionality_profiler import build_profile
+from application.services.signal_extractor import SignalExtractor
 from domain.simulation.types import SimulationProduct
 from domain.simulation.tone import derive_tone
 
@@ -44,17 +45,45 @@ def run_simulation(
         )
 
     primary_goal = goals[0] if goals else ""
+    signal_extractor = SignalExtractor(deps)
     for product in normalized:
         score = score_map.get(product.id)
         if score:
-            gap_reports.append(
-                deps.simulation_analyze_gap(
-                    goal=primary_goal,
-                    product=product,
-                    score=score.score,
-                    winner=winner_product,
-                )
+            gap = deps.simulation_analyze_gap(
+                goal=primary_goal,
+                product=product,
+                score=score.score,
+                winner=winner_product,
             )
+            extracted = signal_extractor.extract(
+                goal=primary_goal,
+                product={
+                    "id": product.id,
+                    "name": product.name,
+                    "description": product.description,
+                },
+                winner={
+                    "id": winner_product.id,
+                    "name": winner_product.name,
+                    "description": winner_product.description,
+                }
+                if winner_product
+                else None,
+            )
+            if extracted:
+                if extracted.missing_signals:
+                    gap["missing_signals"] = extracted.missing_signals[:5]
+                    gap["summary"] = (
+                        f"{gap['severity'].title()} gap: missing signals for "
+                        f"{', '.join(extracted.missing_signals[:3])}."
+                    )
+                if extracted.winner_signals:
+                    gap["winner_signals"] = extracted.winner_signals[:3]
+                    gap["competitor_summary"] = (
+                        f"Winner highlights {', '.join(extracted.winner_signals[:3])} "
+                        f"for '{primary_goal}', while this product doesn't frame it that way."
+                    )
+            gap_reports.append(gap)
 
     tone = derive_tone(products)
     lessons = (

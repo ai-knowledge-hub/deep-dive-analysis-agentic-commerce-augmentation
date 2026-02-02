@@ -52,6 +52,7 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 | **Intentionality Profiling** | Transform specs → capabilities → outcomes | `domain/intentionality/` + `application/services/intentionality_profiler.py` |
 | **Alignment Scoring** | Score products against inferred intent | `domain/alignment/` + `infrastructure/alignment/goal_alignment_gateway.py` |
 | **Evidence Discovery** | Analyze open-web representations for intent legibility | `domain/evidence/` + `application/services/evidence_service.py` |
+| **Signal Extraction (Skills)** | Convert intent → phrase-level signals via editable skill prompts | `application/services/signal_extractor.py` + `infrastructure/db/skills.py` |
 | **Verification (Lift)** | Show before/after discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
 | **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
 | **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
@@ -123,6 +124,12 @@ All API calls require `client_id` unless the caller is an admin user (see `ADMIN
 `brand_id` and `product_id` are optional on simulation endpoints for tying runs to a product record.
 The UI exposes a manual admin context picker when `NEXT_PUBLIC_ADMIN_MODE=true` so you can
 switch client/brand/product without automated onboarding.
+
+### Skill prompts (admin-editable)
+
+Signal extraction and copy generation run from **skills stored in the DB**.  
+You can edit them in **Admin → Agent skills**. Each update writes an **audit trail** into
+`skills_history` for traceability and safe iteration.
 
 ### Clerk user sync (webhook)
 

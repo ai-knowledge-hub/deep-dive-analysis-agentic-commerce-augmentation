@@ -23,6 +23,9 @@ import {
   AdminProduct,
   AdminClientUser,
   AdminPlatformProfileResponse,
+  AdminSkillResponse,
+  AdminSkillHistoryResponse,
+  EvidenceSignalResponse,
   QueryBatteryListResponse,
   QueryBatteryQueryListResponse,
   QueryBatteryMetricsResponse,
@@ -297,6 +300,7 @@ export async function startConversationStreamWithEvents(
   userId: string | null | undefined,
   metadata: Record<string, unknown> | undefined,
   handlers: StreamHandlers<ConversationResponse>,
+  signal?: AbortSignal,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -304,6 +308,7 @@ export async function startConversationStreamWithEvents(
     "/conversation/start/stream",
     {
       method: "POST",
+      signal,
       body: JSON.stringify({
         opening_message: message,
         user_id: userId ?? undefined,
@@ -342,6 +347,7 @@ export async function sendConversationMessageStreamWithEvents(
   userId: string | null | undefined,
   metadata: Record<string, unknown> | undefined,
   handlers: StreamHandlers<ConversationResponse>,
+  signal?: AbortSignal,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -349,6 +355,7 @@ export async function sendConversationMessageStreamWithEvents(
     `/conversation/${sessionId}/stream`,
     {
       method: "POST",
+      signal,
       body: JSON.stringify({
         message,
         user_id: userId ?? undefined,
@@ -1180,11 +1187,74 @@ export async function updateAdminPlatformProfile(
   });
 }
 
+export async function getAdminSkill(
+  name: string,
+  userId?: string | null,
+): Promise<AdminSkillResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminSkillResponse>(`/skills/${name}${suffix}`);
+}
+
+export async function updateAdminSkill(
+  name: string,
+  payload: {
+    description: string;
+    version: string;
+    content: string;
+    enabled: boolean;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AdminSkillResponse> {
+  return request<AdminSkillResponse>(`/skills/${name}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      ...payload,
+      name,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminSkillHistory(
+  name: string,
+  userId?: string | null,
+  limit: number = 10,
+): Promise<AdminSkillHistoryResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  if (limit) params.set("limit", String(limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<AdminSkillHistoryResponse>(`/skills/${name}/history${suffix}`);
+}
+
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {
   const clientId = getClientId();
   return request<EvidenceAnalyzeResponse>("/evidence/analyze", {
     method: "POST",
     body: JSON.stringify({ query, client_id: clientId ?? undefined }),
+  });
+}
+
+export async function extractEvidenceSignals(
+  payload: {
+    goal: string;
+    product: { id?: string; name?: string; description?: string };
+    winner?: { id?: string; name?: string; description?: string };
+  },
+  userId?: string | null,
+): Promise<EvidenceSignalResponse> {
+  const clientId = getClientId();
+  return request<EvidenceSignalResponse>("/evidence/signals", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
   });
 }
 

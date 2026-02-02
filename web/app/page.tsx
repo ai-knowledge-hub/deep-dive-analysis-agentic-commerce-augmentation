@@ -72,7 +72,8 @@ export default function HomePage() {
     useState<string | null>(null);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [backgroundStatus, setBackgroundStatus] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -84,6 +85,7 @@ export default function HomePage() {
   const [researchRefreshing, setResearchRefreshing] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const { user } = useUser();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -231,7 +233,7 @@ export default function HomePage() {
 
   const sendMessage = useCallback(
     async (text: string, opts?: { skipEcho?: boolean }) => {
-      if (!text.trim()) return;
+      if (!text.trim() || isStreaming) return;
       const isLabCommand =
         /^\/lab\b/i.test(text) ||
         /run next test/i.test(text) ||
@@ -240,8 +242,10 @@ export default function HomePage() {
       if (!opts?.skipEcho) {
         setMessages((prev) => [...prev, { role: "user", content: text }]);
       }
-      setLoading(true);
+      setIsStreaming(true);
       setThinkingMessage("Synthesizing the intent graph");
+      const controller = new AbortController();
+      abortRef.current = controller;
       let agentIndex: number | null = null;
       let receivedDelta = false;
       const applyDelta = (delta: string) => {
@@ -266,8 +270,8 @@ export default function HomePage() {
         product_id: productId ?? undefined,
         client_id: clientId ?? undefined,
       };
+      let response: ConversationResponse | null = null;
       try {
-        let response: ConversationResponse;
         if (!sessionId) {
           try {
             response = await startConversationStreamWithEvents(
@@ -275,17 +279,20 @@ export default function HomePage() {
               userId,
               metadata,
               { onDelta: applyDelta },
+              controller.signal,
             );
           } catch {
             response = await startConversation(text, userId, metadata);
           }
-          setSessionId(response.session_id);
-          upsertSession({
-            id: response.session_id,
-            preview: text,
-            created_at: response.snapshot?.session?.created_at,
-            last_turn_at: new Date().toISOString(),
-          });
+          if (response) {
+            setSessionId(response.session_id);
+            upsertSession({
+              id: response.session_id,
+              preview: text,
+              created_at: response.snapshot?.session?.created_at,
+              last_turn_at: new Date().toISOString(),
+            });
+          }
         } else {
           try {
             response = await sendConversationMessageStreamWithEvents(
@@ -294,58 +301,83 @@ export default function HomePage() {
               userId,
               metadata,
               { onDelta: applyDelta },
+              controller.signal,
             );
           } catch {
             response = await sendConversationMessage(sessionId, text, userId, metadata);
           }
-          upsertSession({
-            id: sessionId,
-            preview: text,
-            created_at: response.snapshot?.session?.created_at,
-            last_turn_at: new Date().toISOString(),
-          });
+          if (response) {
+            upsertSession({
+              id: sessionId,
+              preview: text,
+              created_at: response.snapshot?.session?.created_at,
+              last_turn_at: new Date().toISOString(),
+            });
+          }
         }
-
-        const clarification = response.clarification;
-        if (clarification) {
-          setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
-        }
-
-        if (response.lab_operator?.message) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "agent", content: response.lab_operator.message as string },
-          ]);
-          setLabOperator(response.lab_operator ?? null);
-        }
-
-        if (response.explanation && !receivedDelta) {
-          setMessages((prev) => [...prev, { role: "agent", content: response.explanation! }]);
-        }
-        setPlan(response.plan);
-        setClarifications(response.plan?.clarifications ?? []);
-        setProductReasoning(response.product_explanations ?? []);
-        setGoalState(response.goal_state);
-        setIntent(response.intent);
-        setResearchResults(response.plan?.research_results ?? []);
-        const nextQuery = response.plan?.query ?? text;
-        setLastQuery(nextQuery);
-        if (!simulationScenarioDirty) {
-          setSimulationScenario(nextQuery);
-        }
-
-        if (isLabCommand) {
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
           return;
         }
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", content: `Error: ${(error as Error).message}` },
+        ]);
+      } finally {
+        setIsStreaming(false);
+        setThinkingMessage(null);
+        abortRef.current = null;
+      }
 
+      if (!response) return;
+
+      const clarification = response.clarification;
+      if (clarification) {
+        setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
+      }
+
+      if (response.lab_operator?.message) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", content: response.lab_operator.message as string },
+        ]);
+        setLabOperator(response.lab_operator ?? null);
+      }
+
+      if (response.explanation && !receivedDelta) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", content: response.explanation! },
+        ]);
+      }
+      setPlan(response.plan);
+      setClarifications(response.plan?.clarifications ?? []);
+      setProductReasoning(response.product_explanations ?? []);
+      setGoalState(response.goal_state);
+      setIntent(response.intent);
+      setResearchResults(response.plan?.research_results ?? []);
+      const nextQuery = response.plan?.query ?? text;
+      setLastQuery(nextQuery);
+      if (!simulationScenarioDirty) {
+        setSimulationScenario(nextQuery);
+      }
+
+      if (isLabCommand) {
+        return;
+      }
+
+      setBackgroundStatus("Analyzing evidence...");
+      try {
         const analysis = await analyzeEvidence(text);
         setEvidenceAnalysis(analysis);
+        setBackgroundStatus("Optimizing representation...");
         const optimization = await optimizeRepresentation(
           analysis.evidence_products,
           text,
           simulationTone || undefined,
         );
         setEvidenceOptimization(optimization);
+        setBackgroundStatus("Verifying recommendations...");
         const verification = await verifyRecommendation(
           text,
           analysis.evidence_products,
@@ -367,15 +399,18 @@ export default function HomePage() {
           setSelectedSimulationProductId(products[0].id);
         }
       } catch (error) {
-        setMessages((prev) => [...prev, { role: "agent", content: `Error: ${(error as Error).message}` }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", content: `Error: ${(error as Error).message}` },
+        ]);
       } finally {
-        setLoading(false);
-        setThinkingMessage(null);
+        setBackgroundStatus(null);
       }
     },
     [
       brandId,
       clientId,
+      isStreaming,
       latestExperimentId,
       productId,
       sessionId,
@@ -387,7 +422,7 @@ export default function HomePage() {
   );
 
   useEffect(() => {
-    if (!loading) return;
+    if (!isStreaming) return;
     const phrases = [
       "Synthesizing the intent graph",
       "Negotiating with the future you",
@@ -402,11 +437,11 @@ export default function HomePage() {
       setThinkingMessage(phrases[index]);
     }, 2200);
     return () => window.clearInterval(timer);
-  }, [loading]);
+  }, [isStreaming]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim()) {
+    if (inputValue.trim() && !isStreaming) {
       void sendMessage(inputValue);
       setInputValue("");
     }
@@ -415,7 +450,7 @@ export default function HomePage() {
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (inputValue.trim()) {
+      if (inputValue.trim() && !isStreaming) {
         void sendMessage(inputValue);
         setInputValue("");
       }
@@ -712,22 +747,26 @@ export default function HomePage() {
 
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
-      try {
-        await deleteConversationSession(deleteTargetId, userId);
-        updateSessions((current) =>
-          current.filter((item) => item.id !== deleteTargetId),
-        );
-        if (deleteTargetId === sessionId) {
-          resetConversation();
-        }
-      } catch (error) {
+    try {
+      await deleteConversationSession(deleteTargetId, userId);
+    } catch (error) {
+      const message = (error as Error).message || "";
+      if (!message.includes("API error 404")) {
         setMessages((prev) => [
           ...prev,
           { role: "agent", content: `Error deleting conversation: ${(error as Error).message}` },
         ]);
-      } finally {
-        setDeleteTargetId(null);
+        return;
       }
+    } finally {
+      updateSessions((current) =>
+        current.filter((item) => item.id !== deleteTargetId),
+      );
+      if (deleteTargetId === sessionId) {
+        resetConversation();
+      }
+      setDeleteTargetId(null);
+    }
     },
     [deleteTargetId, resetConversation, sessionId, updateSessions, userId],
   );
@@ -812,7 +851,7 @@ export default function HomePage() {
             <div className="chat__messages" ref={chatContainerRef}>
               <ChatWindow
                 messages={messages}
-                isThinking={loading}
+                isThinking={isStreaming}
                 thinkingMessage={thinkingMessage ?? undefined}
               />
             </div>
@@ -821,7 +860,7 @@ export default function HomePage() {
               <button
                 type="button"
                 className="chat__quick-action"
-                disabled={loading || !latestExperimentId}
+                disabled={isStreaming || !latestExperimentId}
                 onClick={() => void sendMessage("/lab next", { skipEcho: true })}
               >
                 Run next test
@@ -829,7 +868,7 @@ export default function HomePage() {
               <button
                 type="button"
                 className="chat__quick-action"
-                disabled={loading || !latestExperimentId}
+                disabled={isStreaming || !latestExperimentId}
                 onClick={() => void sendMessage("/lab why", { skipEcho: true })}
               >
                 Explain last variant
@@ -837,7 +876,7 @@ export default function HomePage() {
               <button
                 type="button"
                 className="chat__quick-action"
-                disabled={loading}
+                disabled={isStreaming}
                 onClick={() => void sendMessage("/lab belief", { skipEcho: true })}
               >
                 Create hypothesis from belief
@@ -882,16 +921,34 @@ export default function HomePage() {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleInputKeyDown}
                 placeholder="What are you looking for?"
-                disabled={loading}
+                disabled={isStreaming}
                 autoComplete="off"
                 rows={1}
               />
               <button
-                type="submit"
-                className="chat__send"
-                disabled={loading || !inputValue.trim()}
+                type={isStreaming ? "button" : "submit"}
+                className={`chat__send${isStreaming ? " chat__send--stop" : ""}`}
+                disabled={!inputValue.trim() && !isStreaming}
+                onClick={
+                  isStreaming
+                    ? () => {
+                        abortRef.current?.abort();
+                      }
+                    : undefined
+                }
               >
-                {loading ? "..." : "Send"}
+                {isStreaming ? (
+                  <>
+                    Stop
+                    <span className="thinking-dots" aria-hidden="true">
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                    </span>
+                  </>
+                ) : (
+                  "Send"
+                )}
               </button>
             </form>
           </div>
@@ -915,7 +972,7 @@ export default function HomePage() {
               onAction={handleRefreshResearch}
               actionDisabled={researchRefreshing || !sessionId}
               onQuickCreateBattery={handleQuickCreateBattery}
-              statusMessage={batteryStatus ?? researchStatus}
+              statusMessage={batteryStatus ?? backgroundStatus ?? researchStatus}
             />
             <div className="insights__summary">
               <div className="summary-card summary-card--header">
