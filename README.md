@@ -41,6 +41,11 @@ We provide **the discovery layer that transaction protocols don't define**, work
 
 We make products **intent‑legible** and rank them by alignment with inferred goals.
 
+**Alignment (current model, explainable):**
+- Signal‑overlap scoring across **intent signals**, **evidence signals**, and **our copy**.
+- **Hard category gate**: if the query specifies a category (e.g., *shoes*) and the product copy doesn’t mention that category (or synonyms), the score is forced to **0** to prevent false positives.
+- This baseline is transparent and auditable; semantic/Bayesian weighting is on the roadmap.
+
 | Capability | What It Does | Implementation |
 |-----------|--------------|----------------|
 | **Intent Inference** | Model user goals from query + context | `domain/intent/` + `application/services/*` |

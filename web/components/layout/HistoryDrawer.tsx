@@ -8,7 +8,7 @@ type Props = {
   sessions: SessionSummary[];
   activeSessionId?: string | null;
   onClose: () => void;
-  onSelect: (sessionId: string) => void;
+  onSelect: (session: SessionSummary) => void;
   onRequestDelete: (sessionId: string) => void;
 };
 
@@ -57,11 +57,11 @@ export function HistoryDrawer({
                 className={`history-panel__item ${
                   session.id === activeSessionId ? "is-active" : ""
                 }`}
-                onClick={() => onSelect(session.id)}
+                onClick={() => onSelect(session)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    onSelect(session.id);
+                    onSelect(session);
                   }
                 }}
               >

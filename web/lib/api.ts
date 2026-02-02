@@ -384,10 +384,11 @@ export async function sendConversationMessageStream(
 export async function getConversationSnapshot(
   sessionId: string,
   userId?: string | null,
+  clientIdOverride?: string | null,
 ): Promise<ConversationResponse> {
   const params = new URLSearchParams();
   if (userId) params.set("user_id", userId);
-  const clientId = getClientId();
+  const clientId = clientIdOverride ?? getClientId();
   if (clientId) params.set("client_id", clientId);
   const query = params.toString();
   const suffix = query ? `?${query}` : "";

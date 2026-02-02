@@ -88,7 +88,7 @@ export default function HomePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const userId = user?.id ?? null;
-  const { brandId, productId, clientId } = useTenant();
+  const { brandId, productId, clientId, setClientId } = useTenant();
   const storageClientId =
     clientId ??
     (typeof window !== "undefined"
@@ -559,9 +559,19 @@ export default function HomePage() {
 
 
   const handleSelectSession = useCallback(
-    async (selectedId: string) => {
+    async (selected: SessionSummary | string) => {
+      const selectedId = typeof selected === "string" ? selected : selected.id;
+      const selectedClientId =
+        typeof selected === "string" ? null : selected.client_id ?? null;
       if (!selectedId) return;
-      const snapshot = await getConversationSnapshot(selectedId, userId);
+      if (selectedClientId && selectedClientId !== clientId) {
+        setClientId(selectedClientId);
+      }
+      const snapshot = await getConversationSnapshot(
+        selectedId,
+        userId,
+        selectedClientId ?? clientId ?? undefined,
+      );
       const turns = snapshot.snapshot?.turns ?? [];
       setSessionId(selectedId);
       setMessages(
@@ -647,7 +657,7 @@ export default function HomePage() {
       }
       setSimulationTone("");
     },
-    [evidenceStorageKey, userId],
+    [clientId, evidenceStorageKey, setClientId, userId],
   );
 
   useEffect(() => {
@@ -776,8 +786,8 @@ export default function HomePage() {
         sessions={sessions}
         activeSessionId={sessionId}
         onClose={handleCloseHistory}
-        onSelect={(selectedId) => {
-          void handleSelectSession(selectedId);
+        onSelect={(session) => {
+          void handleSelectSession(session);
           setHistoryOpen(false);
         }}
         onRequestDelete={handleDeleteSession}

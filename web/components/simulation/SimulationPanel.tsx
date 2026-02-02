@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type {
   SimulationGapReport,
   SimulationOptimizeResponse,
@@ -14,8 +15,21 @@ type Props = {
   onScenarioChange?: (value: string) => void;
   productCopy?: string;
   onProductCopyChange?: (value: string) => void;
-  onProductCopySave?: () => void;
-  productCopySaved?: string | null;
+  optimizationMode?: "copy" | "feed" | "both";
+  onOptimizationModeChange?: (mode: "copy" | "feed" | "both") => void;
+  feedPreview?: {
+    acp?: string;
+    ucp?: string;
+  } | null;
+  evidenceSummary?: {
+    intentSignal: string | null;
+    total: number;
+    rank: number | null;
+    alignment: number | null;
+    discovered: boolean;
+    focusHint: string | null;
+  } | null;
+  sourceSessionId?: string | null;
   brandToneSummary?: string | null;
   toneSuggestion?: string | null;
   toneValue?: string;
@@ -65,8 +79,11 @@ export function SimulationPanel({
   onScenarioChange,
   productCopy,
   onProductCopyChange,
-  onProductCopySave,
-  productCopySaved,
+  optimizationMode = "both",
+  onOptimizationModeChange,
+  feedPreview,
+  evidenceSummary,
+  sourceSessionId,
   brandToneSummary,
   toneSuggestion,
   toneValue,
@@ -90,12 +107,33 @@ export function SimulationPanel({
   onRetest,
   onSelectProduct,
 }: Props) {
+  const [bestMatchPending, setBestMatchPending] = useState(false);
+  const [scoresOpen, setScoresOpen] = useState(false);
   const scores = run?.result?.scores ?? [];
   const winnerId = run?.result?.winner_id;
+  const bestScore = scores.length
+    ? [...scores].sort((a, b) => b.score - a.score)[0]
+    : null;
+  const bestProduct = bestScore
+    ? products.find((product) => product.id === bestScore.product_id)
+    : null;
   const primaryGap =
     run?.result?.gap_analysis?.find((gap) => gap.product_id === selectedProductId) ??
     run?.result?.gap_analysis?.[0] ??
     null;
+
+  useEffect(() => {
+    if (!loading) {
+      setBestMatchPending(false);
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    if (!bestMatchPending) return;
+    if (!bestScore?.product_id) return;
+    onSelectProduct(bestScore.product_id);
+    setBestMatchPending(false);
+  }, [bestMatchPending, bestScore?.product_id, onSelectProduct]);
   const protocolEntries = (run?.result?.protocol_readiness ?? []).filter(
     (entry) => entry.product_id === selectedProductId
   );
@@ -121,84 +159,269 @@ export function SimulationPanel({
     })
     .filter((entry) => entry.hasEntry);
 
+  const activeMissingSignals = primaryGap?.missing_signals ?? [];
+  const feedSuggestions =
+    activeMissingSignals.length > 0
+      ? activeMissingSignals.slice(0, 6).map((signal) => ({
+          signal,
+          field: "feed.keywords",
+        }))
+      : [];
+
   return (
     <div className="panel__card">
       <div className="panel__header">
         <h3>Simulation Sandbox</h3>
-        <div className="panel__meta">
-          <button
-            type="button"
-            className="panel__action"
-            onClick={onRun}
-            disabled={!canRun || loading}
-          >
-            Run
-          </button>
+      </div>
+      <div className="simulation__intro">
+        <div className="simulation__intro-card">
+          <span className="simulation__diff-label">Scenario</span>
+          {sourceSessionId && (
+            <p className="simulation__note">
+              Scenario sourced from session {sourceSessionId.slice(0, 8)}.
+            </p>
+          )}
+          <textarea
+            id="simulation-scenario"
+            rows={2}
+            value={scenarioValue ?? query ?? ""}
+            onChange={(event) => onScenarioChange?.(event.target.value)}
+            placeholder="Describe the buyer intent you want to simulate."
+          />
+        </div>
+        <div className="simulation__intro-card">
+          <span className="simulation__diff-label">Optimization target</span>
+          <div className="simulation__mode-buttons">
+            {(["copy", "feed", "both"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`simulation__mode-button ${
+                  optimizationMode === mode ? "is-active" : ""
+                }`}
+                onClick={() => onOptimizationModeChange?.(mode)}
+              >
+                {mode === "copy"
+                  ? "Copy only"
+                  : mode === "feed"
+                  ? "Feed only"
+                  : "Both"}
+              </button>
+            ))}
+          </div>
+          <p className="simulation__intro-text">
+            {optimizationMode === "copy"
+              ? "Optimize the website/product copy for intent fit."
+              : optimizationMode === "feed"
+              ? "Optimize ACP/UCP feed fields and protocol readiness."
+              : "Optimize both copy and feed in one pass."}
+          </p>
+        </div>
+        <div className="simulation__intro-card">
+          <span className="simulation__diff-label">Evidence summary</span>
+          {evidenceSummary ? (
+            <>
+              <div className="simulation__intro-metric">
+                <span>Intent signal</span>
+                <strong>{evidenceSummary.intentSignal ?? "—"}</strong>
+              </div>
+              <div className="simulation__intro-metric">
+                <span>Discovered</span>
+                <strong>{evidenceSummary.discovered ? "Yes" : "No"}</strong>
+              </div>
+              <div className="simulation__intro-metric">
+                <span>Rank</span>
+                <strong>
+                  {evidenceSummary.rank ? `#${evidenceSummary.rank}` : "—"}
+                </strong>
+              </div>
+              <div className="simulation__intro-metric">
+                <span>Alignment</span>
+                <strong>
+                  {typeof evidenceSummary.alignment === "number"
+                    ? `${Math.round(evidenceSummary.alignment * 100)}%`
+                    : "—"}
+                </strong>
+              </div>
+              <p className="simulation__intro-text">
+                {evidenceSummary.discovered
+                  ? evidenceSummary.focusHint === "depth"
+                    ? "We’re ranking but not at the top. Push depth on top intent signals."
+                    : "We’re discovered. Consider breadth to cover adjacent intent."
+                  : "Not discovered. Focus on core intent signals to enter the set."}
+              </p>
+            </>
+          ) : (
+            <p className="simulation__intro-text">
+              No evidence snapshot yet. Run a chat query to ground the scenario.
+            </p>
+          )}
         </div>
       </div>
-      <div className="simulation__scenario">
-        <label className="simulation__scenario-label" htmlFor="simulation-scenario">
-          Scenario
-        </label>
-        <textarea
-          id="simulation-scenario"
-          rows={2}
-          value={scenarioValue ?? query ?? ""}
-          onChange={(event) => onScenarioChange?.(event.target.value)}
-          placeholder="Describe the buyer intent you want to simulate."
-        />
-      </div>
 
-      <div className="simulation__copy">
-        <span className="simulation__diff-label">Product copy</span>
-        {brandToneSummary && (
-          <p className="simulation__tone-suggestion">
-            Current brand tone: {brandToneSummary}
+      {products.length > 0 && (
+        <div className="simulation__picker">
+          <span className="simulation__diff-label">
+            Product to optimize
+          </span>
+          <p className="simulation__intro-text">
+            Defaults to the product selected in the client panel.
+          </p>
+          <div className="simulation__picker-actions">
+            <button
+              type="button"
+              className="button button--primary-subtle"
+              onClick={() => {
+                if (bestScore?.product_id) {
+                  onSelectProduct(bestScore.product_id);
+                } else {
+                  setBestMatchPending(true);
+                  onRun();
+                }
+              }}
+              disabled={!canRun || loading}
+            >
+              {loading && bestMatchPending ? (
+                <>
+                  Finding match<span className="button__dots" />
+                </>
+              ) : (
+                "Find best matching product"
+              )}
+            </button>
+          </div>
+          <div className="simulation__picker-buttons">
+            {products.map((product) => (
+              <button
+                key={product.id}
+                type="button"
+                className={`simulation__picker-button ${
+                  selectedProductId === product.id ? "is-active" : ""
+                }`}
+                onClick={() => onSelectProduct(product.id)}
+              >
+                {product.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="simulation__recommendation">
+        <span className="simulation__diff-label">Best match</span>
+        {bestProduct && bestScore ? (
+          <div className="simulation__recommendation-body">
+            <strong>{bestProduct.name}</strong>
+            <span>{(bestScore.score * 100).toFixed(0)}% alignment</span>
+          </div>
+        ) : (
+          <p className="simulation__intro-text">
+            Run a simulation to identify the closest product for this intent.
           </p>
         )}
-        <textarea
-          rows={3}
-          value={productCopy ?? ""}
-          onChange={(event) => onProductCopyChange?.(event.target.value)}
-          placeholder="Add or edit the product description used for optimization."
-        />
-        <div className="simulation__tone-actions">
+        <div className="simulation__recommendation-actions">
           <button
             type="button"
-            className="button button--primary"
-            onClick={onProductCopySave}
-            disabled={!productCopy?.trim()}
+            className="button button--ghost"
+            onClick={() => setScoresOpen(true)}
+            disabled={scores.length === 0}
           >
-            Save copy
+            See all product scores
           </button>
-          {productCopySaved ? (
-            <span className="simulation__notice">{productCopySaved}</span>
-          ) : null}
         </div>
       </div>
 
-      {scores.length === 0 ? (
-        <p className="panel__empty">Run a simulation to see who wins.</p>
-      ) : (
-        <div className="simulation__scores">
-          {scores.map((score) => (
-            <div key={score.product_id} className="simulation__score">
-              <div className="simulation__score-header">
-                <span className="simulation__score-id">
-                  {score.product_id}
-                </span>
-                <span className="simulation__score-value">
-                  {(score.score * 100).toFixed(0)}%
-                </span>
-              </div>
-              {score.product_id === winnerId && (
-                <span className="simulation__winner">Winner</span>
-              )}
-              <p className="simulation__reasoning">
-                {score.alignment_reasoning || "No reasoning yet."}
-              </p>
+      {(optimizationMode === "copy" || optimizationMode === "both") && (
+        <div className="simulation__copy">
+          <span className="simulation__diff-label">Web copy</span>
+          {brandToneSummary && (
+            <p className="simulation__tone-suggestion">
+              Current brand tone: {brandToneSummary}
+            </p>
+          )}
+          <textarea
+            rows={4}
+            value={productCopy ?? ""}
+            onChange={(event) => onProductCopyChange?.(event.target.value)}
+            placeholder="Edit the web description used for optimization."
+            disabled={optimizationMode === "feed"}
+          />
+          <p className="simulation__intro-text">
+            Updates here are applied to the simulation only (no permanent save).
+          </p>
+        </div>
+      )}
+
+      {(optimizationMode === "feed" || optimizationMode === "both") && (
+        <div className="simulation__feeds">
+          <span className="simulation__diff-label">Feed snapshot</span>
+          <div className="simulation__feed-grid">
+            <div className="simulation__feed-card">
+              <div className="simulation__feed-title">ACP feed</div>
+              <pre className="simulation__feed-code">
+                {feedPreview?.acp ?? "No ACP feed snapshot yet."}
+              </pre>
             </div>
-          ))}
+            <div className="simulation__feed-card">
+              <div className="simulation__feed-title">UCP feed</div>
+              <pre className="simulation__feed-code">
+                {feedPreview?.ucp ?? "No UCP feed snapshot yet."}
+              </pre>
+            </div>
+          </div>
+          <p className="simulation__intro-text">
+            These are demo snapshots for the POC. In production they map to live
+            ACP/UCP payloads.
+          </p>
+        </div>
+      )}
+
+      {scoresOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal simulation__scores-modal">
+            <div className="simulation__scores-header">
+              <div>
+                <h4>All product scores</h4>
+                <p className="simulation__scores-meta">
+                  Ranked by alignment for this intent.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => setScoresOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="simulation__scores-list">
+              {scores.length === 0 ? (
+                <p className="panel__empty">Run a simulation to see who wins.</p>
+              ) : (
+                scores
+                  .slice()
+                  .sort((a, b) => b.score - a.score)
+                  .map((score) => (
+                    <div key={score.product_id} className="simulation__score">
+                      <div className="simulation__score-header">
+                        <span className="simulation__score-id">
+                          {score.product_id}
+                        </span>
+                        <span className="simulation__score-value">
+                          {(score.score * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      {score.product_id === winnerId && (
+                        <span className="simulation__winner">Winner</span>
+                      )}
+                      <p className="simulation__reasoning">
+                        {score.alignment_reasoning || "No reasoning yet."}
+                      </p>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -240,6 +463,23 @@ export function SimulationPanel({
         </div>
       )}
 
+      {optimizationMode !== "copy" && (
+        <div className="simulation__comparison">
+          <span className="simulation__diff-label">Feed patch suggestions</span>
+          {feedSuggestions.length === 0 ? (
+            <p>No feed updates suggested yet. Run a simulation to detect gaps.</p>
+          ) : (
+            <ul>
+              {feedSuggestions.map((item) => (
+                <li key={item.signal}>
+                  Add <strong>{item.signal}</strong> → {item.field}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {(run?.result?.lessons ?? []).length > 0 && (
         <div className="simulation__lessons">
           <span className="simulation__diff-label">Lessons learned</span>
@@ -276,6 +516,7 @@ export function SimulationPanel({
           value={toneValue ?? ""}
           onChange={(event) => onToneChange?.(event.target.value)}
           placeholder="Confirm or edit the brand tone."
+          disabled={optimizationMode === "feed"}
         />
         <div className="simulation__tone-actions">
           <button
@@ -298,7 +539,7 @@ export function SimulationPanel({
             type="button"
             className="button button--primary"
             onClick={onToneSave}
-            disabled={!toneValue}
+            disabled={!toneValue || optimizationMode === "feed"}
           >
             Save tone
           </button>
@@ -313,26 +554,6 @@ export function SimulationPanel({
         </div>
       </div>
 
-      {products.length > 0 && (
-        <div className="simulation__picker">
-          <span className="simulation__diff-label">Optimize a product</span>
-          <div className="simulation__picker-buttons">
-            {products.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                className={`simulation__picker-button ${
-                  selectedProductId === product.id ? "is-active" : ""
-                }`}
-                onClick={() => onSelectProduct(product.id)}
-              >
-                {product.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="simulation__actions">
         <button
           type="button"
@@ -340,7 +561,9 @@ export function SimulationPanel({
           onClick={() => onOptimize(selectedProductId ?? undefined)}
           disabled={!canOptimize || loading}
         >
-          Optimize {selectedProductId ? "selected" : "weakest"}
+          {optimizationMode === "both"
+            ? "Generate optimized copy + feed"
+            : `Generate optimized ${optimizationMode === "feed" ? "feed" : "copy"}`}
         </button>
         <button
           type="button"

@@ -1,14 +1,14 @@
 # Platform Architecture - Visual Guide
 
-**Version:** 1.1
-**Date:** 2026-01-29
+**Version:** 1.2
+**Date:** 2026-02-01
 
 ---
 
-## System Architecture Overview (Unified Lab Loop)
+## System Architecture Overview (Unified Lab Loop + Manual Lab)
 
-The app is now framed as an **automated experimentation lab** with two modes:
-**Manual** (hands-on simulation) and **Lab** (hypothesis → battery → run → belief).
+The app is framed as an **automated experimentation lab** with two modes:
+**Manual** (hands‑on, session‑driven lab workflow) and **Lab** (hypothesis → battery → run → belief).
 Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 
 ```
@@ -65,7 +65,6 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 │  │ └─────────────┘ │                                                     │
 │  └─────────────────┘                                                     │
 │                                                                           │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │
 │  ┌─────────────────┐  ┌─────────────────┐                              │
 │  │  Experiment     │  │   Battery       │                              │
 │  │   Service       │  │   Builder       │                              │
@@ -74,7 +73,7 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 │  │ │Add Variants │ │  │ │Scenarios    │ │                              │
 │  │ │Run Tests    │ │  │ │Bottom-up    │ │                              │
 │  │ │Track Metrics│ │  │ │Top-down     │ │                              │
-│  │ │ML Recommend │ │  │ └─────────────┘ │                              │
+│  │ │Next‑Test    │ │  │ └─────────────┘ │                              │
 │  │ └─────────────┘ │  └─────────────────┘                              │
 │  └─────────────────┘                                                     │
 │                                                                           │
@@ -118,7 +117,7 @@ Chat acts as the **Lab Operator**, and Experiments is the **lab cockpit**.
 
 ---
 
-## Data Flow: Lab Loop (Primary)
+## Data Flow: Lab Loop (Primary, automated)
 
 ```
 World State (Brand Beliefs + Protocol Readiness)
@@ -137,6 +136,16 @@ Next Test Recommendation (or auto‑create variant in Lab mode)
 ```
 
 Manual mode still exists, but the lab loop is the canonical flow.
+
+## Data Flow: Manual Lab (Session‑driven)
+
+```
+Chat (intent + clarification) → Alignment (intent + research results)
+→ Evidence (rank + deltas + why‑they‑win) → Simulation (optimize copy/feed)
+→ Retest → Save lesson
+```
+
+**Key rule:** Manual pages load their state from the latest chat session when opened from history.
 
 ## Data Flow: Chat Query (Manual / discovery)
 

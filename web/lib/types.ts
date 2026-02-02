@@ -377,6 +377,7 @@ export type ConversationResponse = {
 
 export type SessionSummary = {
   id: string;
+  client_id?: string;
   created_at?: string;
   preview?: string;
   last_turn_at?: string;

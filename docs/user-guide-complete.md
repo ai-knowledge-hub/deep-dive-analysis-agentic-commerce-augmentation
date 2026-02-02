@@ -118,6 +118,28 @@ You can run it manually or let the lab automate it:
 4. Open **Evidence** to see how your product compares to the open‑web set
 5. Open **Simulation** to optimize your product copy for intent fit
 
+---
+
+## How to Interpret Alignment (Current Model)
+
+Alignment is an **explainable, signal‑based score** that measures how well a product matches the inferred user intent. We intentionally use a transparent baseline model in this release so teams can audit why products win or lose.
+
+**What we score:**
+1. **Intent/Goal signals (top‑down):** explicit constraints from the query (e.g., size, budget, surface, stability).
+2. **Evidence signals (bottom‑up):** recurring features across winning products in the evidence set.
+3. **Copy‑presence signals (our product):** what our copy covers vs. misses from the above signal sets.
+
+**Hard category gate (prevents false wins):**
+If the intent clearly specifies a **product category** (e.g., *shoes*, *vest*, *headphones*), and the product copy does **not** contain that category (or synonyms), the alignment score is forced to **0**. This avoids cases like a running vest out‑ranking a running shoe query.
+
+**Scoring intuition:**
+- Higher overlap with intent signals → higher alignment.
+- Missing high‑priority intent signals → larger penalty.
+- Evidence signals increase confidence when they co‑occur across winners.
+- Specificity vs. breadth is derived from the ratio of query‑specific signals to broader adjacent signals.
+
+This is the **shipping baseline**. We’ll add semantic and Bayesian weighting in the roadmap, but the current model is already reliable and fully explainable.
+
 **Time:** ~2 minutes
 **Output:** Immediate insight into product discoverability
 
@@ -262,6 +284,8 @@ You can run it manually or let the lab automate it:
 **Steps:**
 
 1. **Go to Evidence Page** (`/evidence`)
+
+   Evidence is **session‑driven**: it loads from the most recent chat run (or a selected history session).
 
 2. **Review Evidence Tab:**
    - See products ranked by **alignment score**

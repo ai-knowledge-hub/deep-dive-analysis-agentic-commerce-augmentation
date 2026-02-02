@@ -452,7 +452,7 @@ export function EvidencePanel({
             <div className="explanation-content">
               <div className="explain-grid">
                 <div className="explain-card">
-                  <div className="explain-card__title">Score distribution</div>
+                  <div className="explain-card__title">Alignment Score distribution</div>
                   <div className="histogram">
                     {histogram.map((bucket) => (
                       <div key={bucket.label} className="histogram__row">
