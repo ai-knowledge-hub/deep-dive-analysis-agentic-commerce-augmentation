@@ -8,6 +8,7 @@ Safe to run multiple times (UPSERTs by id).
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from shared.db.connection import DEFAULT_DB_PATH, get_connection, init_db
@@ -371,6 +372,7 @@ def seed_demo_competitors() -> Dict[str, int]:
         created_brands += 1
 
         for product in product_sets.get(tenant["id"], []):
+            updated_at = datetime.now(timezone.utc).isoformat()
             metadata = {
                 "demo": True,
                 "scenario": product["scenario"],
@@ -399,7 +401,15 @@ def seed_demo_competitors() -> Dict[str, int]:
                     "is_eligible_checkout": True,
                     "seller_name": tenant["name"],
                     "seller_url": tenant["site"],
-                    "updated_at": "2026-01-28T12:00:00Z",
+                    "updated_at": updated_at,
+                },
+                "ucp": {
+                    "offer_url": f"{tenant['site'].rstrip('/')}/demo/{product['id']}",
+                    "merchant_name": tenant["name"],
+                    "price": 99.0,
+                    "currency": "USD",
+                    "availability": "in_stock",
+                    "available_for_sale": True,
                 },
             }
             _upsert_product(

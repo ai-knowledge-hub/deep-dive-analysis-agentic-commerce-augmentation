@@ -189,7 +189,9 @@ def run_research(
                     search_name = "product_search"
 
                 if search_exec is not None:
-                    tool_outputs.append({"name": search_name, "output": search_exec.output})
+                    tool_outputs.append(
+                        {"name": search_name, "output": search_exec.output}
+                    )
                     tool_call_records.append(search_exec.call)
 
                 search_results = (
@@ -203,7 +205,9 @@ def run_research(
                         "product_search",
                         {"query": query, "limit": 5},
                     )
-                    tool_outputs.append({"name": "product_search", "output": fallback_exec.output})
+                    tool_outputs.append(
+                        {"name": "product_search", "output": fallback_exec.output}
+                    )
                     tool_call_records.append(fallback_exec.call)
                     search_results = (
                         fallback_exec.output.get("results")

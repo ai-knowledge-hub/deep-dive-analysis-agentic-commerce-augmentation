@@ -111,6 +111,9 @@ export function SimulationPanel({
   const [scoresOpen, setScoresOpen] = useState(false);
   const scores = run?.result?.scores ?? [];
   const winnerId = run?.result?.winner_id;
+  const selectedScore = selectedProductId
+    ? scores.find((score) => score.product_id === selectedProductId) ?? null
+    : null;
   const bestScore = scores.length
     ? [...scores].sort((a, b) => b.score - a.score)[0]
     : null;
@@ -469,6 +472,15 @@ export function SimulationPanel({
       {protocolReadiness.length > 0 && (
         <div className="simulation__comparison">
           <span className="simulation__diff-label">Protocol readiness</span>
+          <p className="simulation__intro-text">
+            Readiness checks ACP/UCP compliance, not intent fit.{" "}
+            <strong>Intent fit:</strong>{" "}
+            {selectedScore
+              ? `${Math.round(selectedScore.score * 100)}% alignment`
+              : bestScore
+                ? `${Math.round(bestScore.score * 100)}% (best match)`
+                : "—"}
+          </p>
           {readinessByProtocol.map((entry) => (
             <div key={entry.protocol} className="simulation__protocol-block">
               <div className="simulation__protocol-title">

@@ -14,6 +14,7 @@ class SimulationProduct:
     name: str
     description: str
     source: str = "simulation"
+    brand_id: Optional[str] = None
     url: Optional[str] = None
     price: Optional[float] = None
     confidence: float = 0.5

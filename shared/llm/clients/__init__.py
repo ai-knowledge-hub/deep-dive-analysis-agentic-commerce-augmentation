@@ -21,6 +21,7 @@ def _get_gemini_client() -> "GeminiLLMClient":
 
     return get_gemini_client()
 
+
 def _get_gemini_cli_client() -> "GeminiCLILLMClient":
     from shared.llm.clients.gemini_cli import get_client as get_gemini_cli_client
 

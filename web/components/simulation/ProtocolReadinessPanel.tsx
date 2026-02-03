@@ -22,11 +22,16 @@ export function ProtocolReadinessPanel({
   onAction,
   emptyMessage = "Run a simulation to see ACP/UCP readiness.",
 }: Props) {
+  const isDemoMode =
+    typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_PROTOCOL_MODE === "demo";
+
   return (
     <div className="panel__card">
       <div className="panel__header">
         <h3>{title}</h3>
         <div className="panel__meta">
+          {isDemoMode ? <span className="panel__badge">Demo</span> : null}
           {onAction ? (
             <button type="button" className="panel__action" onClick={onAction}>
               {actionLabel}

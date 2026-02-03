@@ -1,10 +1,5 @@
 # Platform Architecture - Visual Guide
 
-**Version:** 1.2
-**Date:** 2026-02-01
-
----
-
 ## System Architecture Overview (Unified Lab Loop + Manual Lab)
 
 The app is framed as an **automated experimentation lab** with two modes:

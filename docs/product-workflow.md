@@ -105,10 +105,27 @@ Output is surfaced during Simulation runs as a readiness score + issue list.
 - Shows research results with alignment explanations.
 - Includes “Is our product present?” check → CTA to Simulation.
 
-### Evidence Page
-- **Evidence** tab: open‑web results ranked by alignment score.
-- **Explanation** tab: score distribution, “why they win”, signal deltas, 3‑path model.
-- **Next actions** tab: recommended next test + counterfactual lift → CTA to Simulation.
+### Evidence Page (Evidence‑First Flow)
+Evidence is the **analysis layer** that explains why winners rank and what to do next.
+
+**Data source**
+- Always derived from the **latest chat session**.
+- Hydrates from cached session snapshot if page is opened directly.
+
+**Tabs**
+- **Evidence**: open‑web results ranked by alignment score.
+- **Explanation**: score distribution, “why they win”, signal deltas, 3‑path model.
+- **Next actions**: counterfactual lift + CTA to Simulation.
+
+**3‑Path Signal Model**
+1) Intent/Goal signals (top‑down): inferred goals + constraints  
+   Weight = intent confidence × explicitness in query  
+2) Evidence signals (bottom‑up): recurring features across winners  
+   Weight = frequency among winners × alignment score  
+3) Copy‑presence signals (our product)  
+   Weight = coverage + missing penalties  
+
+Specificity vs breadth = ratio of intent signals to evidence signals.
 
 ---
 
@@ -140,7 +157,4 @@ Automated catalog ingestion, batch analysis, and deployment workflows are
 intentionally deferred in v1. When re‑introduced, they will live in a separate
 integration layer and be documented in the roadmap.
 
----
 
-*Document Version: 2026-01-22*  
-*Status: Active*

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import Any, List
+from typing import List
 
 from shared.config.env import settings
 from shared.llm.clients.base import LLMClient
@@ -24,16 +24,12 @@ CLI_TOOLS_INSTRUCTION = (
 
 def _ensure_dev_only() -> None:
     if settings.app_env not in {"local", "dev"}:
-        raise RuntimeError(
-            "Gemini CLI provider is dev-only. Set APP_ENV=local/dev."
-        )
+        raise RuntimeError("Gemini CLI provider is dev-only. Set APP_ENV=local/dev.")
 
 
 def _select_model() -> str:
     return (
-        os.getenv("GEMINI_CLI_MODEL")
-        or os.getenv("GEMINI_MODEL")
-        or "gemini-2.0-flash"
+        os.getenv("GEMINI_CLI_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash"
     )
 
 

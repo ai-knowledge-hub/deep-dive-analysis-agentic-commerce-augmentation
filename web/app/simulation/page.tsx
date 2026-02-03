@@ -251,13 +251,80 @@ export default function SimulationPage() {
         name: product.name,
         description: product.description ?? product.metadata?.description ?? product.name,
         source: "catalog",
+        brand_id: product.brand_id ?? brandId ?? undefined,
         url: (product.metadata?.product_url as string | undefined) ?? undefined,
         price:
           typeof product.metadata?.price === "number"
             ? product.metadata?.price
             : undefined,
         confidence: 0.6,
-        metadata: product.metadata ?? {},
+        metadata: {
+          ...(product.metadata ?? {}),
+          feed_description:
+            (product.metadata?.feed_description as string | undefined) ??
+            product.description ??
+            product.metadata?.description ??
+            product.name,
+          acp: {
+            item_id: product.id,
+            title: product.name,
+            description:
+              (product.metadata?.acp?.description as string | undefined) ??
+              (product.metadata?.feed_description as string | undefined) ??
+              product.description ??
+              product.metadata?.description ??
+              product.name,
+            url:
+              (product.metadata?.product_url as string | undefined) ??
+              (product.metadata?.site_url as string | undefined) ??
+              undefined,
+            image_url:
+              (product.metadata?.image_url as string | undefined) ??
+              (product.metadata?.image as string | undefined) ??
+              undefined,
+            price:
+              typeof product.metadata?.price === "number"
+                ? product.metadata?.price
+                : undefined,
+            availability:
+              (product.metadata?.availability as string | undefined) ?? "in_stock",
+            brand:
+              (product.metadata?.brand as string | undefined) ?? product.name,
+            seller_name:
+              (product.metadata?.merchant_name as string | undefined) ??
+              product.name,
+            seller_url:
+              (product.metadata?.site_url as string | undefined) ??
+              (product.metadata?.product_url as string | undefined) ??
+              undefined,
+            is_eligible_search: true,
+            is_eligible_checkout: true,
+            updated_at: new Date().toISOString(),
+          },
+          ucp: {
+            offer_url:
+              (product.metadata?.product_url as string | undefined) ??
+              (product.metadata?.site_url as string | undefined) ??
+              undefined,
+            merchant_name:
+              (product.metadata?.merchant_name as string | undefined) ??
+              product.name,
+            description:
+              (product.metadata?.ucp?.description as string | undefined) ??
+              (product.metadata?.feed_description as string | undefined) ??
+              product.description ??
+              product.metadata?.description ??
+              product.name,
+            price:
+              typeof product.metadata?.price === "number"
+                ? product.metadata?.price
+                : undefined,
+            currency: "USD",
+            availability:
+              (product.metadata?.availability as string | undefined) ?? "in_stock",
+            available_for_sale: true,
+          },
+        },
       }));
       setSimulationProducts((current) => {
         if (current.length === 0) {
@@ -321,6 +388,9 @@ export default function SimulationPage() {
     const creative = (selected.metadata as Record<string, unknown> | undefined)?.creative as
       | Record<string, unknown>
       | undefined;
+    const metadata = (selected.metadata as Record<string, unknown> | undefined) ?? {};
+    const acpMeta = (metadata.acp as Record<string, unknown> | undefined) ?? {};
+    const ucpMeta = (metadata.ucp as Record<string, unknown> | undefined) ?? {};
     setProductCopy(
       (creative?.manual_copy as string | undefined) ??
         selected.description ??
@@ -329,9 +399,16 @@ export default function SimulationPage() {
     const acp = {
       item_id: selected.id,
       title: selected.name,
-      description: selected.description ?? "",
+      description:
+        (acpMeta.description as string | undefined) ??
+        (metadata.feed_description as string | undefined) ??
+        selected.description ??
+        "",
       price: selected.price ? `${selected.price} USD` : undefined,
-      url: selected.url,
+      url:
+        (acpMeta.url as string | undefined) ??
+        (metadata.product_url as string | undefined) ??
+        selected.url,
       availability: "in_stock",
       is_eligible_search: true,
       is_eligible_checkout: true,
@@ -339,11 +416,19 @@ export default function SimulationPage() {
     const ucp = {
       product_id: selected.id,
       name: selected.name,
-      description: selected.description ?? "",
+      description:
+        (ucpMeta.description as string | undefined) ??
+        (metadata.feed_description as string | undefined) ??
+        selected.description ??
+        "",
       price: selected.price ?? null,
       currency: "USD",
       available_for_sale: true,
-      product_url: selected.url ?? null,
+      product_url:
+        (ucpMeta.product_url as string | undefined) ??
+        (metadata.product_url as string | undefined) ??
+        selected.url ??
+        null,
     };
     setFeedPreview({
       acp: JSON.stringify(acp, null, 2),

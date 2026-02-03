@@ -169,13 +169,10 @@ make test
 | [docs/user-guide-complete.md](docs/user-guide-complete.md) | Full user manual |
 | [docs/product-workflow.md](docs/product-workflow.md) | Automated lab workflow |
 | [docs/architecture-visual.md](docs/architecture-visual.md) | System diagrams |
-| [docs/evidence-first-flow.md](docs/evidence-first-flow.md) | Evidence + explanation UX |
+| [docs/terminology.md](docs/terminology.md) | Glossary + quick reference |
 | [docs/brand-belief-system.md](docs/brand-belief-system.md) | Belief updates & memory |
 | [docs/experiment-orchestrator-enhancements.md](docs/experiment-orchestrator-enhancements.md) | Orchestrator logic |
 | [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features |
-| [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
-| [docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md](docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md) | Why + what to change for agentic clean architecture |
-| [docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md](docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md) | Step-by-step execution plan (incremental) |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
 ---

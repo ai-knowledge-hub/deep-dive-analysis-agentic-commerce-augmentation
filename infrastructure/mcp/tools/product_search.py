@@ -8,9 +8,7 @@ import re
 
 
 def _fetch(url: str, timeout: int = 8) -> str:
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "CCO-Research/1.0"}
-    )
+    request = urllib.request.Request(url, headers={"User-Agent": "CCO-Research/1.0"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         raw = response.read(15000)
     return raw.decode("utf-8", errors="ignore")
@@ -19,7 +17,9 @@ def _fetch(url: str, timeout: int = 8) -> str:
 def _extract_links(html: str, limit: int = 5) -> list[dict]:
     results: list[dict] = []
     # DuckDuckGo HTML results use <a class="result__a" href="...">Title</a>
-    pattern = re.compile(r'class="result__a"[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>')
+    pattern = re.compile(
+        r'class="result__a"[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>'
+    )
     for url, title in pattern.findall(html):
         if "duckduckgo.com" in url:
             continue

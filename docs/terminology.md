@@ -374,5 +374,32 @@ The theory explains *why* it works. The demo shows *that* it works.
 
 ---
 
-*Document Version: 2026-01-22*
-*Status: Active*
+# Quick Reference (v1)
+
+## Start the app (local)
+```bash
+# Backend
+DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
+
+# Frontend
+cd web
+npm run dev
+```
+
+## Core Pages
+- **Chat** (`/`) — generate intent + evidence
+- **Alignment** (`/alignment`) — intent + goals + research alignment
+- **Evidence** (`/evidence`) — winners, signals, next actions
+- **Simulation** (`/simulation`) — optimize copy + feeds, re‑test
+- **Experiments** (`/experiments`) — lab loop + batteries
+
+## Evidence tabs
+- **Evidence** — ranked open‑web results
+- **Explanation** — score distribution + signal model
+- **Next actions** — counterfactual lift + CTA to simulation
+
+## Key Metrics
+- **Alignment**: 0–1 product‑goal fit score
+- **Win rate**: % queries where a variant wins
+- **Avg score**: mean alignment across queries
+- **Lift**: % improvement vs baseline

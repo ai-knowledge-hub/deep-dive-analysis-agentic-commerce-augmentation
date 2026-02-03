@@ -9,6 +9,7 @@ export type GoalClarificationState = {
 export type Product = {
   id: string;
   name: string;
+  brand_id?: string;
   price?: number;
   confidence?: number;
   source?: string;
@@ -106,6 +107,7 @@ export type SimulationProduct = {
   name: string;
   description: string;
   source?: string;
+  brand_id?: string;
   url?: string;
   price?: number;
   confidence?: number;
