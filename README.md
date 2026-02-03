@@ -168,13 +168,11 @@ make test
 
 | Document | Purpose |
 |----------|---------|
-| [docs/user-guide-complete.md](docs/user-guide-complete.md) | Full user manual |
-| [docs/product-workflow.md](docs/product-workflow.md) | Automated lab workflow |
-| [docs/architecture-visual.md](docs/architecture-visual.md) | System diagrams |
+| [docs/user-guide-complete.md](docs/user-guide-complete.md) | User manual (current features) |
+| [docs/app-architecture.md](docs/app-architecture.md) | Comprehensive architecture (current + planned) |
+| [docs/app-workflows.md](docs/app-workflows.md) | All workflows and how they connect |
 | [docs/terminology.md](docs/terminology.md) | Glossary + quick reference |
-| [docs/brand-belief-system.md](docs/brand-belief-system.md) | Belief updates & memory |
-| [docs/experiment-orchestrator-enhancements.md](docs/experiment-orchestrator-enhancements.md) | Orchestrator logic |
-| [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features |
+| [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features (planned) |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
 ---
