@@ -100,7 +100,9 @@ class ExperimentRunner:
             winner_id_keyword = result.get("winner_id_keyword")
 
             score = score_for_product(result.get("scores", []), product["id"])
-            score_kw = score_for_product(result.get("scores_keyword", []), product["id"])
+            score_kw = score_for_product(
+                result.get("scores_keyword", []), product["id"]
+            )
             if score is not None:
                 scores.append(score)
             if score_kw is not None:
@@ -157,9 +159,13 @@ class ExperimentRunner:
         win_rate = (wins / total) if total else 0.0
         win_rate_keyword = (wins_keyword / total) if total else 0.0
         win_rate_robust = (wins_robust / total) if total else 0.0
-        judge_consensus_win_rate = (judge_consensus_wins / judge_runs) if judge_runs else None
+        judge_consensus_win_rate = (
+            (judge_consensus_wins / judge_runs) if judge_runs else None
+        )
         avg_score = (sum(scores) / len(scores)) if scores else None
-        avg_score_keyword = (sum(scores_keyword) / len(scores_keyword)) if scores_keyword else None
+        avg_score_keyword = (
+            (sum(scores_keyword) / len(scores_keyword)) if scores_keyword else None
+        )
         avg_protocol_readiness = (
             (sum(protocol_readiness_scores) / len(protocol_readiness_scores))
             if protocol_readiness_scores
@@ -462,5 +468,6 @@ def _consensus_winner(results: List[Dict[str, Any]]) -> Optional[str]:
     if len(sorted_votes) > 1 and sorted_votes[1][1] == top_count:
         return None
     return top_id
+
 
 __all__ = ["ExperimentRunner", "ExperimentRunResult"]

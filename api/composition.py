@@ -79,7 +79,9 @@ def default_deps() -> AppDeps:
         embedding_available=embedding_available,
         embed=embed,
         generate=generate,
-        generate_with_provider=lambda prompt, provider=None, system_instruction=None: generate(
+        generate_with_provider=lambda prompt,
+        provider=None,
+        system_instruction=None: generate(
             prompt, system_instruction=system_instruction, provider=provider
         ),
         build_optimization_prompt=build_optimization_prompt,

@@ -474,7 +474,9 @@ class ExperimentOrchestrator:
         win_rate = float(payload.get("win_rate") or 0.0)
         win_rate_robust = float(payload.get("win_rate_robust") or 0.0)
         judge_consensus = payload.get("judge_consensus_win_rate")
-        judge_consensus = float(judge_consensus) if judge_consensus is not None else None
+        judge_consensus = (
+            float(judge_consensus) if judge_consensus is not None else None
+        )
         avg_score = float(payload.get("avg_score") or 0.0)
         # Prefer robust win rate when available (winner under both semantic + keyword scoring).
         base = win_rate_robust * 0.6 + win_rate * 0.3 + avg_score * 0.1

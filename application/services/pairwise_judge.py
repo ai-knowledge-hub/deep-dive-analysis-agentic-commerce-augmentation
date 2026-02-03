@@ -12,7 +12,9 @@ def judge_pairwise(
     provider: Optional[str] = None,
 ) -> Dict[str, Any]:
     prompt = _build_prompt(query=query, product_a=product_a, product_b=product_b)
-    response = generate_fn(prompt, provider=provider, system_instruction=_system_instruction())
+    response = generate_fn(
+        prompt, provider=provider, system_instruction=_system_instruction()
+    )
     decision = _parse_winner(response)
     return {
         "provider": provider or "default",
@@ -22,12 +24,12 @@ def judge_pairwise(
 
 
 def _system_instruction() -> str:
-    return (
-        "You are a shopping intent judge. Choose the product that best matches the query."
-    )
+    return "You are a shopping intent judge. Choose the product that best matches the query."
 
 
-def _build_prompt(*, query: str, product_a: Dict[str, Any], product_b: Dict[str, Any]) -> str:
+def _build_prompt(
+    *, query: str, product_a: Dict[str, Any], product_b: Dict[str, Any]
+) -> str:
     return (
         "USER QUERY:\n"
         f"{query}\n\n"

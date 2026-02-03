@@ -83,7 +83,9 @@ class SimulationService:
         competitor_client_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         resolved_products = list(products or [])
-        resolved_raw_products = list(raw_products or [p.__dict__ for p in resolved_products])
+        resolved_raw_products = list(
+            raw_products or [p.__dict__ for p in resolved_products]
+        )
 
         # "auto_competitors" means: include competitor products in addition to any
         # explicitly provided products (e.g., experiment variants). Previously we

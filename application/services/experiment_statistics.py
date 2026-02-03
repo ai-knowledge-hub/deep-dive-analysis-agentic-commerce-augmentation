@@ -90,9 +90,13 @@ def compare_variants(
             if a_n + b_n < 50:
                 action = "Weak evidence—collect more runs before deciding."
             else:
-                action = "No clear winner—try a new hypothesis or improve the query battery."
+                action = (
+                    "No clear winner—try a new hypothesis or improve the query battery."
+                )
         elif difference > 0:
-            action = f"Variant B outperforms A (Δ win rate {abs(difference):.3f}). Deploy B."
+            action = (
+                f"Variant B outperforms A (Δ win rate {abs(difference):.3f}). Deploy B."
+            )
         else:
             action = f"Variant A outperforms B (Δ win rate {abs(difference):.3f}). Stick with A."
 
@@ -134,15 +138,14 @@ def compare_variants(
 
     # Welch's t-test - uses standard error variance
     se_diff = math.sqrt(a_se_var + b_se_var)
-    t_stat = difference / se_diff if se_diff > 0 else 0.0
 
     # Degrees of freedom (Welch-Satterthwaite)
     if a_se_var > 0 and b_se_var > 0:
-        df = ((a_se_var + b_se_var) ** 2) / (
+        _ = ((a_se_var + b_se_var) ** 2) / (
             (a_se_var**2) / max(a_n - 1, 1) + (b_se_var**2) / max(b_n - 1, 1)
         )
     else:
-        df = max(a_n + b_n - 2, 1)
+        _ = max(a_n + b_n - 2, 1)
 
     # 95% CI for difference
     t_critical = 1.96  # approximate for large df
@@ -217,7 +220,9 @@ def _cohen_h(p_a: float, p_b: float) -> float:
     return 2.0 * math.asin(math.sqrt(b)) - 2.0 * math.asin(math.sqrt(a))
 
 
-def _evidence_strength(*, is_significant: bool, total_n: int, effect_size: float) -> str:
+def _evidence_strength(
+    *, is_significant: bool, total_n: int, effect_size: float
+) -> str:
     if not is_significant:
         return "weak"
     if total_n >= 200 and effect_size >= 0.5:

@@ -35,7 +35,9 @@ def run_simulation(
 
     score_map = {score.product_id: score for score in scores_semantic}
 
-    ranked_scores = domain_ranking.rank_scores([score.__dict__ for score in scores_semantic])
+    ranked_scores = domain_ranking.rank_scores(
+        [score.__dict__ for score in scores_semantic]
+    )
     winner = domain_ranking.winner_id(ranked_scores)
 
     ranked_scores_keyword = domain_ranking.rank_scores(

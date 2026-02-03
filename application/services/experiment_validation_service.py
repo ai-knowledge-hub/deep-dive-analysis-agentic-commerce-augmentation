@@ -121,7 +121,9 @@ class ExperimentValidationService:
         )
         return self._build_summary(total_logged, summary)
 
-    def _build_summary(self, total_logged: int, summary: Dict[str, Any]) -> ValidationSummary:
+    def _build_summary(
+        self, total_logged: int, summary: Dict[str, Any]
+    ) -> ValidationSummary:
         verified_runs = int(summary.get("verified_runs") or 0)
         correct_runs = int(summary.get("correct_runs") or 0)
         accuracy = float(summary.get("accuracy") or 0.0)
