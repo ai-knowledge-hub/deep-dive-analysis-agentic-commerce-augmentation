@@ -18,9 +18,9 @@ interface StatisticalAnalysisProps {
     difference: number;
     effect_size: number;
     confidence_interval: [number, number];
-    p_value: number;
     is_significant: boolean;
     recommended_action: string;
+    evidence_strength?: string;
   };
   variantLabels?: Map<string, string>;
 }
@@ -56,7 +56,7 @@ export function StatisticalAnalysis({
   return (
     <div className="panel__card">
       <div className="panel__header">
-        <h4>Statistical Analysis</h4>
+        <h4>Evidence Summary</h4>
         <span
           className={`panel__badge ${
             analysis.is_significant
@@ -64,7 +64,11 @@ export function StatisticalAnalysis({
               : "panel__badge--secondary"
           }`}
         >
-          {analysis.is_significant ? "Significant" : "Not Significant"}
+          {analysis.evidence_strength
+            ? `${analysis.evidence_strength} evidence`
+            : analysis.is_significant
+              ? "Directional"
+              : "Unclear"}
         </span>
       </div>
 
@@ -96,7 +100,7 @@ export function StatisticalAnalysis({
 
           {/* Effect Size */}
           <div className="stats-section">
-            <h5 className="stats-label">Effect Size (Cohen&apos;s d)</h5>
+            <h5 className="stats-label">Effect Size</h5>
             <div className="stats-value">
               <span className="stats-number" style={{ color: effectColor }}>
                 {analysis.effect_size.toFixed(2)}
@@ -111,28 +115,6 @@ export function StatisticalAnalysis({
                   backgroundColor: effectColor,
                 }}
               />
-            </div>
-          </div>
-
-          {/* P-Value */}
-          <div className="stats-section">
-            <h5 className="stats-label">P-Value</h5>
-            <div className="stats-value">
-              <span
-                className="stats-number"
-                style={{
-                  color: analysis.p_value < 0.05 ? "#1cc886" : "#94a3b8",
-                }}
-              >
-                {analysis.p_value.toFixed(4)}
-              </span>
-              <span className="stats-subtext">
-                {analysis.p_value < 0.01
-                  ? "highly significant"
-                  : analysis.p_value < 0.05
-                    ? "significant"
-                    : "not significant"}
-              </span>
             </div>
           </div>
 

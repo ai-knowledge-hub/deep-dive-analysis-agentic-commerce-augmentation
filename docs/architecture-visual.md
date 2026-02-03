@@ -355,8 +355,8 @@ User Creates Experiment: "Outcome Framing Test"
 │  3. RUN EXPERIMENT                      │
 │  ──────────────────                     │
 │  For each query × each variant:         │
-│  • Score alignment                      │
-│  • Track wins                           │
+│  • Score alignment (semantic + keyword) │
+│  • Track wins (including robust wins)   │
 │  • Calculate metrics                    │
 │                                          │
 │  Query 1 × Control:  0.42               │
@@ -384,13 +384,13 @@ User Creates Experiment: "Outcome Framing Test"
 ┌─────────────────────────────────────────┐
 │  5. STATISTICAL ANALYSIS                │
 │  ────────────────────────               │
-│  Welch's t-test:                        │
-│  • p-value: 0.03 (significant)          │
-│  • Effect size: 0.61 (medium)           │
-│  • 95% CI: [+40%, +80%]                 │
+│  Uncertainty + robustness:              │
+│  • Win-rate Δ with CI (conservative)    │
+│  • Effect size (Cohen's h)              │
+│  • Evidence strength: weak/mod/strong   │
 │                                          │
-│  Conclusion: Variant A significantly    │
-│  outperforms control                    │
+│  Conclusion: Variant A likely better,   │
+│  but results are simulation-based       │
 └────────────────┬────────────────────────┘
                  │
                  ▼
@@ -524,12 +524,11 @@ User Creates Experiment: "Outcome Framing Test"
         │   STATISTICAL ANALYSIS               │
         │                                       │
         │  Compare: Variant A vs Control       │
-        │  • t-statistic: 2.45                 │
-        │  • p-value: 0.03 (significant)       │
-        │  • Effect size: 0.61 (medium)        │
-        │  • 95% CI: [+40%, +80%]              │
+        │  • Win-rate Δ with CI (conservative) │
+        │  • Effect size (Cohen's h)           │
+        │  • Evidence strength: weak/mod/strong│
         │                                       │
-        │  ✓ Variant A significantly better    │
+        │  ✓ Variant A likely better (sim)     │
         └──────────────┬───────────────────────┘
                        │
                        ▼

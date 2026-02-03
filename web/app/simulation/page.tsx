@@ -843,6 +843,10 @@ export default function SimulationPage() {
             onMenu={() => setSidebarOpen(true)}
             onBack={() => router.push("/")}
           />
+          <section className="panel__notice panel__notice--info">
+            <strong>Lab signal:</strong> Simulation scores are directional and
+            should be validated with live outcomes before rollout.
+          </section>
           <SimulationPanel
             query={simulationScenario}
             scenarioValue={simulationScenario}

@@ -169,7 +169,15 @@ class AlignmentScore:
 ```
 
 **Key Property**
-> High alignment score = LLM will recommend. Low alignment score = LLM will skip.
+> Alignment score is a **proxy** for semantic match + intent coverage (clarity, relevant signals).
+> It can improve “LLM-friendliness”, but it does **not** guarantee rankings in any production shopping stack.
+
+**Robustness Note**
+This app can compute alignment via:
+- `semantic` (embeddings-based similarity)
+- `keyword` (signal/coverage-based)
+
+A win that holds under both is reported as a stronger, more robust signal than a single-score lift.
 
 **In Code**
 

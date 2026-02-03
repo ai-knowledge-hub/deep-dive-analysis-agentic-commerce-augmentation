@@ -25,9 +25,9 @@ def test_compare_variants_significant_difference():
     assert result.variant_b_id == "hypothesis"
     assert result.difference == pytest.approx(0.20, abs=0.01)
     assert result.is_significant is True
-    assert result.p_value < 0.05
-    # For binomial, 20% difference gives d ~0.4 (medium-to-large effect)
-    assert result.effect_size > 0.3
+    assert result.evidence_strength in {"moderate", "strong"}
+    # Cohen's h for 0.4 -> 0.6 is ~0.40
+    assert abs(result.effect_size) > 0.3
     assert len(result.confidence_interval) == 2
 
 
@@ -46,7 +46,7 @@ def test_compare_variants_no_significant_difference():
 
     assert result.difference == pytest.approx(0.05, abs=0.01)
     assert result.is_significant is False
-    assert result.p_value > 0.05
+    assert result.evidence_strength == "weak"
 
 
 def test_compare_variants_small_effect_size():
@@ -222,21 +222,19 @@ def test_compare_variants_avg_score_metric():
 
 def test_effect_size_interpretation():
     """Test effect size boundaries for interpretation."""
-    # Small effect (< 0.2)
+    # Small effect (< 0.2) for Cohen's h
     variant_a = {"id": "a", "metrics": {"win_rate": 0.48, "total_runs": 100}}
     variant_b = {"id": "b", "metrics": {"win_rate": 0.52, "total_runs": 100}}
     result_small = compare_variants(variant_a, variant_b)
     assert abs(result_small.effect_size) < 0.2
 
-    # Medium effect (0.2 <= d < 0.5)
-    # For binomial, need ~10% difference to get d~0.2, ~25% for d~0.5
+    # Medium effect (0.2 <= h < 0.5)
     variant_a = {"id": "a", "metrics": {"win_rate": 0.40, "total_runs": 100}}
     variant_b = {"id": "b", "metrics": {"win_rate": 0.55, "total_runs": 100}}
     result_medium = compare_variants(variant_a, variant_b)
     assert 0.2 <= abs(result_medium.effect_size) < 0.5
 
     # Large effect (>= 0.5)
-    # For binomial, need ~25%+ difference
     variant_a = {"id": "a", "metrics": {"win_rate": 0.30, "total_runs": 100}}
     variant_b = {"id": "b", "metrics": {"win_rate": 0.60, "total_runs": 100}}
     result_large = compare_variants(variant_a, variant_b)

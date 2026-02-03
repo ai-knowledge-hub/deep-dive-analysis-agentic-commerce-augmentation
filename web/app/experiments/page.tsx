@@ -11,6 +11,7 @@ import type {
   ExperimentRun,
   ExperimentVariant,
   NextTestRecommendation,
+  ValidationSummary,
   QueryBattery,
   QueryBatteryQuery,
   SessionSummary,
@@ -42,6 +43,9 @@ import {
   getLatestBrandBelief,
   listBrandBeliefs,
   getSimulationRun,
+  getExperimentValidationSummary,
+  logExperimentValidation,
+  getBrandPredictionAccuracy,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -125,6 +129,20 @@ export default function ExperimentsPage() {
   const [nextTest, setNextTest] = useState<NextTestRecommendation | null>(null);
   const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
+  const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
+    null,
+  );
+  const [validationStatus, setValidationStatus] = useState<string | null>(null);
+  const [brandAccuracy, setBrandAccuracy] = useState<ValidationSummary | null>(null);
+  const [validationForm, setValidationForm] = useState({
+    variantId: "",
+    platform: "chatgpt",
+    queryText: "",
+    observedProducts: "",
+    observedWinnerVariantId: "",
+    observedPosition: "",
+    notes: "",
+  });
   const [jsonErrors, setJsonErrors] = useState({
     hypothesis: null as string | null,
     competitorPolicy: null as string | null,
@@ -185,6 +203,7 @@ export default function ExperimentsPage() {
       setRuns([]);
       setMetrics([]);
       setRecommendations([]);
+      setValidationSummary(null);
       return;
     }
     void listExperimentVariants(selectedExperimentId, userId).then((response) => {
@@ -201,6 +220,11 @@ export default function ExperimentsPage() {
         setRecommendations(response.recommendations ?? []);
       },
     );
+    void getExperimentValidationSummary(selectedExperimentId, userId)
+      .then((response) => {
+        setValidationSummary(response.summary ?? null);
+      })
+      .catch(() => setValidationSummary(null));
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
 
   useEffect(() => {
@@ -238,9 +262,19 @@ export default function ExperimentsPage() {
   }, [runs, simulationDetails, userId]);
 
   useEffect(() => {
+    if (!variants.length) return;
+    if (validationForm.variantId) return;
+    setValidationForm((prev) => ({
+      ...prev,
+      variantId: variants[0]?.id ?? "",
+    }));
+  }, [validationForm.variantId, variants]);
+
+  useEffect(() => {
     if (!brandId) {
       setBeliefCount(0);
       setLatestBelief(null);
+      setBrandAccuracy(null);
       return;
     }
     void listBrandBeliefs(brandId, userId, 25)
@@ -253,6 +287,11 @@ export default function ExperimentsPage() {
         setLatestBelief(response.belief ?? null);
       })
       .catch(() => setLatestBelief(null));
+    void getBrandPredictionAccuracy(brandId, userId)
+      .then((response) => {
+        setBrandAccuracy(response.summary ?? null);
+      })
+      .catch(() => setBrandAccuracy(null));
   }, [brandId, userId]);
 
   useEffect(() => {
@@ -785,6 +824,44 @@ export default function ExperimentsPage() {
     }
   }, [selectedExperimentId, userId]);
 
+  const handleLogValidation = useCallback(async () => {
+    if (!selectedExperimentId) return;
+    setValidationStatus(null);
+    setSubmitting(true);
+    try {
+      const observedProducts = validationForm.observedProducts
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const response = await logExperimentValidation(selectedExperimentId, {
+        variant_id: validationForm.variantId || undefined,
+        platform: validationForm.platform || undefined,
+        query_text: validationForm.queryText || undefined,
+        observed_products: observedProducts,
+        observed_winner_variant_id: validationForm.observedWinnerVariantId || undefined,
+        observed_position: validationForm.observedPosition
+          ? Number(validationForm.observedPosition)
+          : undefined,
+        notes: validationForm.notes || undefined,
+        user_id: userId ?? undefined,
+      });
+      setValidationSummary(response.summary);
+      setValidationStatus("Validation logged.");
+      setValidationForm((prev) => ({
+        ...prev,
+        queryText: "",
+        observedProducts: "",
+        observedWinnerVariantId: "",
+        observedPosition: "",
+        notes: "",
+      }));
+    } catch {
+      setValidationStatus("Unable to log validation.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [selectedExperimentId, userId, validationForm]);
+
   const handleRunRecommended = useCallback(async () => {
     if (!selectedExperimentId || !nextTest?.variant_id) return;
     setRunningVariantId(nextTest.variant_id);
@@ -1229,7 +1306,12 @@ export default function ExperimentsPage() {
             }
           />
           <div className="detail__stack">
-          <section className="panel__card lab-loop">
+            <section className="panel__notice panel__notice--info">
+              <strong>Lab signals only:</strong> Experiment results are screening
+              signals from simulated judges. Validate winners with live tests
+              before rollout.
+            </section>
+            <section className="panel__card lab-loop">
             <div className="panel__header">
               <h3>Lab Loop</h3>
               <div className="lab-loop__badges">
@@ -1327,17 +1409,43 @@ export default function ExperimentsPage() {
             </div>
           </section>
           {brandId ? (
-            <div ref={(node) => (beliefsRef.current = node)}>
-              <BrandBeliefs
-                brandId={brandId}
-                clientId={clientId ?? undefined}
-                userId={userId ?? undefined}
-                limit={50}
-                onUseBelief={handleUseBelief}
-                viewMode={beliefsViewMode}
-                onViewModeChange={setBeliefsViewMode}
-              />
-            </div>
+            validationSummary?.unlock_ready ? (
+              <div ref={(node) => (beliefsRef.current = node)}>
+                <BrandBeliefs
+                  brandId={brandId}
+                  clientId={clientId ?? undefined}
+                  userId={userId ?? undefined}
+                  limit={50}
+                  onUseBelief={handleUseBelief}
+                  viewMode={beliefsViewMode}
+                  onViewModeChange={setBeliefsViewMode}
+                />
+              </div>
+            ) : (
+              <section className="panel__card">
+                <div className="panel__header">
+                  <h3>Pattern Insights (Locked)</h3>
+                  <span className="panel__badge panel__badge--secondary">
+                    Validation required
+                  </span>
+                </div>
+                <p className="panel__muted">
+                  Unlock after 10+ verified experiments and ≥75% prediction
+                  accuracy. Log live validation results to progress.
+                </p>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar__fill"
+                    style={{
+                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="panel__muted">
+                  Progress: {validationSummary?.verified_runs ?? 0}/10 verified
+                </p>
+              </section>
+            )
           ) : null}
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
@@ -1945,11 +2053,186 @@ export default function ExperimentsPage() {
                   <li>Total runs: {latestMetric.total_runs ?? "-"}</li>
                   <li>Wins: {latestMetric.wins ?? "-"}</li>
                   <li>Win rate: {latestMetric.win_rate ?? "-"}</li>
+                  <li>Win rate (keyword): {latestMetric.win_rate_keyword ?? "-"}</li>
+                  <li>Win rate (robust): {latestMetric.win_rate_robust ?? "-"}</li>
                   <li>Avg score: {latestMetric.avg_score ?? "-"}</li>
+                  <li>
+                    Judge consensus win rate:{" "}
+                    {latestMetric.judge_consensus_win_rate ?? "-"}
+                  </li>
                 </ul>
               ) : (
                 <p className="panel__empty">Run a variant to generate metrics.</p>
               )}
+            </section>
+
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Validation Progress</h3>
+                {validationSummary?.unlock_ready ? (
+                  <span className="panel__badge panel__badge--success">
+                    Insights unlocked
+                  </span>
+                ) : (
+                  <span className="panel__badge panel__badge--secondary">
+                    Lab-only
+                  </span>
+                )}
+              </div>
+              <div className="panel__form">
+                <div className="panel__meta panel__meta--stack">
+                  <span className="panel__muted">
+                    Logged validations: {validationSummary?.total_logged ?? 0}
+                  </span>
+                  <span className="panel__muted">
+                    Verified runs: {validationSummary?.verified_runs ?? 0} / 10
+                  </span>
+                  <span className="panel__muted">
+                    Accuracy:{" "}
+                    {validationSummary
+                      ? `${Math.round(validationSummary.accuracy * 100)}%`
+                      : "—"}
+                  </span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar__fill"
+                    style={{
+                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
+                    }}
+                  />
+                </div>
+                {brandAccuracy ? (
+                  <div className="panel__meta panel__meta--stack">
+                    <span className="panel__muted">
+                      Brand accuracy: {Math.round(brandAccuracy.accuracy * 100)}%
+                    </span>
+                    <span className="panel__muted">
+                      Verified (brand): {brandAccuracy.verified_runs}
+                    </span>
+                  </div>
+                ) : null}
+                <label className="panel__label">
+                  Variant (lab winner)
+                  <select
+                    className="panel__input"
+                    value={validationForm.variantId}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        variantId: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select variant</option>
+                    {variants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  Platform
+                  <select
+                    className="panel__input"
+                    value={validationForm.platform}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        platform: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="chatgpt">ChatGPT</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="perplexity">Perplexity</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label className="panel__label">
+                  Query tested
+                  <input
+                    className="panel__input"
+                    value={validationForm.queryText}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        queryText: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g., running shoes for marathon training"
+                  />
+                </label>
+                <label className="panel__label">
+                  Products shown (comma-separated)
+                  <input
+                    className="panel__input"
+                    value={validationForm.observedProducts}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        observedProducts: event.target.value,
+                      }))
+                    }
+                    placeholder="Product A, Product B"
+                  />
+                </label>
+                <label className="panel__label">
+                  Observed winner variant (optional)
+                  <input
+                    className="panel__input"
+                    value={validationForm.observedWinnerVariantId}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        observedWinnerVariantId: event.target.value,
+                      }))
+                    }
+                    placeholder="Variant ID (if known)"
+                  />
+                </label>
+                <label className="panel__label">
+                  Observed position (optional)
+                  <input
+                    className="panel__input"
+                    value={validationForm.observedPosition}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        observedPosition: event.target.value,
+                      }))
+                    }
+                    placeholder="1"
+                  />
+                </label>
+                <label className="panel__label">
+                  Notes
+                  <textarea
+                    className="panel__textarea"
+                    value={validationForm.notes}
+                    onChange={(event) =>
+                      setValidationForm((prev) => ({
+                        ...prev,
+                        notes: event.target.value,
+                      }))
+                    }
+                    rows={2}
+                    placeholder="Any observations..."
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="panel__action"
+                  onClick={handleLogValidation}
+                  disabled={isSubmitting || !selectedExperimentId}
+                >
+                  Log verification result
+                </button>
+                {validationStatus ? (
+                  <p className="panel__success">{validationStatus}</p>
+                ) : null}
+              </div>
             </section>
 
             <section className="panel__card">
@@ -2058,6 +2341,9 @@ export default function ExperimentsPage() {
                       <div className="panel__meta">
                         <span className="panel__muted">
                           Win rate: {values.win_rate ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Robust win rate: {values.win_rate_robust ?? "—"}
                         </span>
                         <span className="panel__muted">
                           Avg score: {values.avg_score ?? "—"}

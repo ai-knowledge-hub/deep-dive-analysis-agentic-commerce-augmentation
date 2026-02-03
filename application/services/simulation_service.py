@@ -82,15 +82,25 @@ class SimulationService:
         auto_competitors: bool = True,
         competitor_client_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        resolved_products = products
-        resolved_raw_products = raw_products or [p.__dict__ for p in products]
+        resolved_products = list(products or [])
+        resolved_raw_products = list(raw_products or [p.__dict__ for p in resolved_products])
 
-        if auto_competitors and not resolved_products:
-            resolved_products, resolved_raw_products = self._auto_competitor_products(
+        # "auto_competitors" means: include competitor products in addition to any
+        # explicitly provided products (e.g., experiment variants). Previously we
+        # only auto-added competitors when no products were provided, which made
+        # experiments degenerate (the only candidate always wins).
+        if auto_competitors:
+            auto_products, auto_raw = self._auto_competitor_products(
                 query=query,
                 client_id=client_id,
                 product_id=product_id,
                 competitor_client_ids=competitor_client_ids,
+            )
+            resolved_products, resolved_raw_products = _merge_products(
+                preferred_products=resolved_products,
+                preferred_raw=resolved_raw_products,
+                auto_products=auto_products,
+                auto_raw=auto_raw,
             )
 
         executor = ToolExecutor()
@@ -532,6 +542,38 @@ def _simulation_product_dict(product: SimulationProduct) -> Dict[str, Any]:
         "confidence": product.confidence,
         "metadata": product.metadata,
     }
+
+
+def _merge_products(
+    *,
+    preferred_products: List[SimulationProduct],
+    preferred_raw: List[Dict[str, Any]],
+    auto_products: List[SimulationProduct],
+    auto_raw: List[Dict[str, Any]],
+) -> tuple[List[SimulationProduct], List[Dict[str, Any]]]:
+    """Merge auto-discovered competitors with caller-provided products.
+
+    Caller-provided products take precedence by product id (e.g., experiment
+    variants override the baseline product record pulled from the DB).
+    """
+    merged_products: List[SimulationProduct] = []
+    merged_raw: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(prod: SimulationProduct, raw_item: Dict[str, Any]) -> None:
+        if not prod.id or prod.id in seen:
+            return
+        seen.add(prod.id)
+        merged_products.append(prod)
+        merged_raw.append(raw_item)
+
+    for prod, raw_item in zip(preferred_products, preferred_raw):
+        add(prod, raw_item)
+
+    for prod, raw_item in zip(auto_products, auto_raw):
+        add(prod, raw_item)
+
+    return merged_products, merged_raw
 
 
 def _protocol_readiness_for_items(

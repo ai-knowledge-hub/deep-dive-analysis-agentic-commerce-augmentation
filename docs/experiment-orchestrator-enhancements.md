@@ -10,7 +10,7 @@
 
 The orchestrator now combines three signals to recommend the next experiment action:
 
-1. **Statistical testing** (effect size + confidence)
+1. **Uncertainty estimation** (win-rate Δ + CI + evidence strength)
 2. **ML recommendations** (pattern mining over historical experiments)
 3. **Thompson sampling** (explore vs. exploit)
 
@@ -20,7 +20,7 @@ Fallback rules apply when data is sparse.
 
 ## What’s Implemented
 
-### 1) Statistical Testing
+### 1) Uncertainty Estimation
 
 - Compares top variants for win‑rate difference
 - Detects diminishing returns
@@ -59,4 +59,3 @@ Recommendations include:
 The Experiments page shows the **Next Test** card (action + rationale).
 Advanced ML/Thompson fields are currently available via API and can be surfaced
 in UI when desired.
-

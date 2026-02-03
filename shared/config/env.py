@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     openrouter_app_name: str | None = Field(
         default=None, validation_alias=AliasChoices("OPENROUTER_APP_NAME")
     )
+    judge_providers: str = Field(
+        default="", validation_alias=AliasChoices("JUDGE_PROVIDERS")
+    )
 
     frontend_url: str = Field(
         default="http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL")

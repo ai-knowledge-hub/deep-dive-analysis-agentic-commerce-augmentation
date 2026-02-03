@@ -145,9 +145,13 @@ HYPOTHESIS → RUN BATTERY → COMPARE VARIANTS → BELIEF UPDATE → NEXT TEST
 ```
 
 Metrics tracked:
-- Win‑rate
-- Avg score
+- Win‑rate (semantic + keyword)
+- Robust win‑rate (wins under both)
+- Evidence strength (weak / moderate / strong lab signal)
 - Coverage / redundancy
+
+**Important:** Experiment results are **lab signals**. Validate winners with live
+tests before rolling out catalog‑wide changes.
 
 ---
 
@@ -156,5 +160,4 @@ Metrics tracked:
 Automated catalog ingestion, batch analysis, and deployment workflows are
 intentionally deferred in v1. When re‑introduced, they will live in a separate
 integration layer and be documented in the roadmap.
-
 

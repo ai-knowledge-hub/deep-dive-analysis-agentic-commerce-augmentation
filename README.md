@@ -40,6 +40,7 @@ We provide **the discovery layer that transaction protocols don't define**, work
 ## Core Innovation: Intentionality + Alignment
 
 We make products **intent‑legible** and rank them by alignment with inferred goals.
+These alignment rankings are a **proxy for semantic match + intent coverage** (useful for “LLM‑friendliness”), not a guaranteed predictor of any closed‑box shopping ranking system.
 
 **Alignment (current model, explainable):**
 - Signal‑overlap scoring across **intent signals**, **evidence signals**, and **our copy**.
@@ -53,8 +54,9 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 | **Alignment Scoring** | Score products against inferred intent | `domain/alignment/` + `infrastructure/alignment/goal_alignment_gateway.py` |
 | **Evidence Discovery** | Analyze open-web representations for intent legibility | `domain/evidence/` + `application/services/evidence_service.py` |
 | **Signal Extraction (Skills)** | Convert intent → phrase-level signals via editable skill prompts | `application/services/signal_extractor.py` + `infrastructure/db/skills.py` |
-| **Verification (Lift)** | Show before/after discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
+| **Verification (Lift)** | Show before/after *simulated* discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
 | **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
+| **Validation Logging** | Track lab predictions vs. live outcomes | `api/routes/experiments.py` + `application/services/experiment_validation_service.py` |
 | **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
 | **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
 
@@ -181,7 +183,7 @@ make test
 
 These rules keep the system grounded in intent legibility:
 
-1. **Intent inference drives ranking**
+1. **Intent inference drives proxy ranking**
 2. **Products are represented as capabilities, not specs**
 3. **Alignment scores are explainable**
 4. **Memory improves inference (not surveillance)**
@@ -196,7 +198,7 @@ These rules keep the system grounded in intent legibility:
 | **Intentionality Profile** | Product representation in terms of capabilities and outcomes |
 | **Intent Inference** | Modeling user goals from query + context |
 | **Alignment Score** | Match confidence between intent and product |
-| **Discoverability Lift** | Improvement in organic LLM recommendations |
+| **Discoverability Lift** | Improvement in simulated “LLM‑friendliness” metrics |
 
 See [docs/terminology.md](docs/terminology.md) for complete definitions.
 

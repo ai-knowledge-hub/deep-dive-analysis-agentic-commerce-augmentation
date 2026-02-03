@@ -225,7 +225,7 @@ class ExperimentOrchestrator:
         if (
             stat_result.is_significant
             and abs(stat_result.effect_size) > 0.5
-            and stat_result.p_value < 0.01
+            and stat_result.evidence_strength in {"moderate", "strong"}
         ):
             winner_id = (
                 stat_result.variant_b_id
@@ -238,7 +238,7 @@ class ExperimentOrchestrator:
                 reason=(
                     f"Clear winner identified: {winner_id}. "
                     f"Effect size: {abs(stat_result.effect_size):.2f}, "
-                    f"p-value: {stat_result.p_value:.4f}. "
+                    f"evidence: {stat_result.evidence_strength}. "
                     "Recommend deploying winner and concluding experiment."
                 ),
                 confidence=0.95,
@@ -472,8 +472,15 @@ class ExperimentOrchestrator:
         """Compute combined score for a variant."""
         payload = metrics.get("metrics") or {}
         win_rate = float(payload.get("win_rate") or 0.0)
+        win_rate_robust = float(payload.get("win_rate_robust") or 0.0)
+        judge_consensus = payload.get("judge_consensus_win_rate")
+        judge_consensus = float(judge_consensus) if judge_consensus is not None else None
         avg_score = float(payload.get("avg_score") or 0.0)
-        return win_rate * 0.7 + avg_score * 0.3
+        # Prefer robust win rate when available (winner under both semantic + keyword scoring).
+        base = win_rate_robust * 0.6 + win_rate * 0.3 + avg_score * 0.1
+        if judge_consensus is not None:
+            return base * 0.8 + judge_consensus * 0.2
+        return base
 
     def _get_product_for_experiment(
         self, experiment: Dict[str, Any], client_id: str
@@ -522,6 +529,7 @@ class ExperimentOrchestrator:
             "p_value": result.p_value,
             "is_significant": result.is_significant,
             "recommended_action": result.recommended_action,
+            "evidence_strength": result.evidence_strength,
         }
 
     def _ml_recommendation_to_dict(

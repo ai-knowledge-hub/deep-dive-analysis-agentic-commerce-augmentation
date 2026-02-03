@@ -229,6 +229,8 @@ This is the **shipping baseline**. We’ll add semantic and Bayesian weighting i
 
 ---
 
+**Important:** Experiment outputs are **lab signals** from simulated judges. Always validate winners with live tests before rollout. The Experiments page includes a **“Log Verification Result”** form to track prediction accuracy over time.
+
 #### **Part C: Create Variants** (if Manual Mode)
 
 1. **Click "Add Variant"**
@@ -408,7 +410,7 @@ This is the **shipping baseline**. We’ll add semantic and Bayesian weighting i
 Day 1: Chat → "Hmm, my running shoes score low for marathon queries"
 Day 2: Simulation → "Adding 'endurance support' improves score by 60%"
 Day 3: Experiment → "Let's A/B test this systematically"
-Week 2: Monitoring → "Confirmed: +45% win rate improvement"
+Week 2: Monitoring → "Observed (simulation): +45% win rate improvement"
 ```
 
 ---
@@ -594,7 +596,7 @@ This holds competitor products constant while testing your variants.
 **What it does:** Chooses the next best action using statistical analysis, ML patterns, and Thompson sampling.
 
 **How it works:**
-1. **Statistical tests** compare top variants (effect size + confidence)
+1. **Uncertainty estimates** compare top variants (win-rate Δ + CI + evidence strength)
 2. **ML engine** learns from historical experiments to suggest hypotheses
 3. **Thompson sampling** balances exploration vs. exploitation
 4. **Fallback rules** apply when data is sparse

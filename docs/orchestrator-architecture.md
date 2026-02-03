@@ -10,7 +10,7 @@
 The orchestrator is a **decision engine** that recommends the next best action
 for an experiment. It combines:
 
-- **Statistical comparisons** (effect size + confidence)
+- **Uncertainty comparisons** (win-rate Δ + CI + evidence strength)
 - **ML pattern recognition** (learned from historical experiments)
 - **Thompson sampling** (explore vs. exploit)
 - **Rule-based fallbacks** (when data is sparse)
@@ -74,4 +74,3 @@ The orchestrator integrates with:
 - The ML engine uses historical experiment data when available.
 - If the training pipeline is not wired or data is sparse, the orchestrator
   falls back to safe, explainable rules.
-

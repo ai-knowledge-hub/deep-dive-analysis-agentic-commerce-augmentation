@@ -189,3 +189,30 @@ def test_experiments_and_variants(client: TestClient):
     )
     assert metrics_response.status_code == 200
     assert isinstance(metrics_response.json()["metrics"], list)
+
+    validation_response = client.post(
+        f"/experiments/{experiment_id}/validations",
+        json={
+            "client_id": CLIENT_ID,
+            "variant_id": variant_id,
+            "platform": "chatgpt",
+            "query_text": "best training shoe for achilles pain",
+            "observed_products": ["Product Test"],
+            "observed_winner_variant_id": variant_id,
+        },
+    )
+    assert validation_response.status_code == 200
+    assert "validation" in validation_response.json()
+    assert "summary" in validation_response.json()
+
+    summary_response = client.get(
+        f"/experiments/{experiment_id}/validation-summary?client_id={CLIENT_ID}"
+    )
+    assert summary_response.status_code == 200
+    assert "summary" in summary_response.json()
+
+    accuracy_response = client.get(
+        f"/brands/{BRAND_ID}/prediction-accuracy?client_id={CLIENT_ID}"
+    )
+    assert accuracy_response.status_code == 200
+    assert "summary" in accuracy_response.json()

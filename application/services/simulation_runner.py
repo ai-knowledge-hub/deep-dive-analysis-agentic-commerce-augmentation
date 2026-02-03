@@ -30,12 +30,18 @@ def run_simulation(
 
     normalized = [_to_product(product) for product in products]
     alignment = AlignmentService(deps)
-    scores = alignment.score_products(goals, normalized)
-    score_map = {score.product_id: score for score in scores}
+    scores_semantic = alignment.score_products(goals, normalized, use_semantic=True)
+    scores_keyword = alignment.score_products(goals, normalized, use_semantic=False)
 
-    score_dicts = [score.__dict__ for score in scores]
-    ranked_scores = domain_ranking.rank_scores(score_dicts)
+    score_map = {score.product_id: score for score in scores_semantic}
+
+    ranked_scores = domain_ranking.rank_scores([score.__dict__ for score in scores_semantic])
     winner = domain_ranking.winner_id(ranked_scores)
+
+    ranked_scores_keyword = domain_ranking.rank_scores(
+        [score.__dict__ for score in scores_keyword]
+    )
+    winner_keyword = domain_ranking.winner_id(ranked_scores_keyword)
 
     gap_reports = []
     winner_product = None
@@ -97,6 +103,8 @@ def run_simulation(
         "goals": goals,
         "scores": ranked_scores,
         "winner_id": winner,
+        "scores_keyword": ranked_scores_keyword,
+        "winner_id_keyword": winner_keyword,
         "gap_analysis": gap_reports,
         "profiles": [build_profile(product).to_dict() for product in normalized],
         "lessons": lessons,

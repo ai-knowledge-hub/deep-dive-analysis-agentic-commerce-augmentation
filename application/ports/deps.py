@@ -187,6 +187,28 @@ class ExperimentRecommendationsStore(Protocol):
     def list_recommendations(self, **kwargs: Any) -> list[dict]: ...
 
 
+class ExperimentValidationsStore(Protocol):
+    def create_validation(self, **kwargs: Any) -> dict: ...
+
+    def list_validations(self, **kwargs: Any) -> list[dict]: ...
+
+    def accuracy_summary(self, **kwargs: Any) -> dict: ...
+
+    def count_validations(self, **kwargs: Any) -> int: ...
+
+
+class ExperimentCalibrationsStore(Protocol):
+    def upsert_calibration(self, **kwargs: Any) -> dict: ...
+
+    def get_calibration(self, **kwargs: Any) -> dict | None: ...
+
+
+class AnalyticsEventsStore(Protocol):
+    def create_event(self, **kwargs: Any) -> dict: ...
+
+    def list_events(self, **kwargs: Any) -> list[dict]: ...
+
+
 class BrandBeliefsStore(Protocol):
     def create_belief(self, **kwargs: Any) -> dict: ...
 
@@ -230,6 +252,9 @@ class AppDeps:
     experiments: ExperimentsStore
     experiment_runs: ExperimentRunsStore
     experiment_recommendations: ExperimentRecommendationsStore
+    experiment_validations: ExperimentValidationsStore
+    experiment_calibrations: ExperimentCalibrationsStore
+    analytics_events: AnalyticsEventsStore
     brand_beliefs: BrandBeliefsStore
     skills: SkillsStore
 
@@ -244,6 +269,7 @@ class AppDeps:
 
     # LLM + tools
     generate: Callable[[str], str]
+    generate_with_provider: Callable[..., str]
     build_optimization_prompt: Callable[..., str]
     run_research: Callable[..., dict]
     classify_intent: Callable[..., dict]
