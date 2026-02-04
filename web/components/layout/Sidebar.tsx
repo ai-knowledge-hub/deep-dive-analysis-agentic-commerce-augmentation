@@ -61,41 +61,15 @@ export function Sidebar({
   const classNames = ["sidebar"];
   if (collapsed) classNames.push("sidebar--collapsed");
   if (mobileOpen) classNames.push("sidebar--open");
-  const navItems = [
+  const workflowItems = [
     {
-      href: "/overview",
-      label: "Overview",
-      shortLabel: "O",
+      href: "/alignment",
+      label: "Alignment",
+      shortLabel: "A",
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
-            d="M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 6v-9h7v9h-7z"
-            fill="currentColor"
-          />
-        </svg>
-      ),
-    },
-    {
-      href: "/simulation",
-      label: "Simulation",
-      shortLabel: "S",
-      icon: (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M8 3h8l1 2h4v2H3V5h4l1-2zm1 7h2v7H9v-7zm4 0h2v7h-2v-7z"
-            fill="currentColor"
-          />
-        </svg>
-      ),
-    },
-    {
-      href: "/experiments",
-      label: "Experiments",
-      shortLabel: "X",
-      icon: (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M9 3h6v2h-1v4.3l4.8 7.7A2 2 0 0 1 17.1 20H6.9a2 2 0 0 1-1.7-3L10 9.3V5H9V3zm2 8.1-4 6.4h10l-4-6.4V5h-2v6.1z"
+            d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 4a6 6 0 1 1-6 6 6 6 0 0 1 6-6zm0 3a3 3 0 1 0 3 3 3 3 0 0 0-3-3z"
             fill="currentColor"
           />
         </svg>
@@ -115,36 +89,62 @@ export function Sidebar({
       ),
     },
     {
-      href: "/alignment",
-      label: "Alignment",
-      shortLabel: "A",
+      href: "/simulation",
+      label: "Simulation",
+      shortLabel: "S",
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
-            d="M12 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L12 13.8 7.8 16l.8-4.7L5.2 8l4.7-.7L12 3z"
+            d="M5 4h14a2 2 0 0 1 2 2v2H3V6a2 2 0 0 1 2-2zm-2 6h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm6 2v4h2v-4H9zm4 0v4h2v-4h-2z"
             fill="currentColor"
           />
         </svg>
       ),
     },
-    ...(isAdminMode
-      ? [
-          {
-            href: "/admin",
-            label: "Admin",
-            shortLabel: "AD",
-            icon: (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M12 4l7 3v5c0 4.4-3 7.9-7 9-4-1.1-7-4.6-7-9V7l7-3zm0 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 8c-2.2 0-4 1.1-4 2.5V20h8v-1.5c0-1.4-1.8-2.5-4-2.5z"
-                  fill="currentColor"
-                />
-              </svg>
-            ),
-          },
-        ]
-      : []),
+    {
+      href: "/experiments",
+      label: "Experiments",
+      shortLabel: "X",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M9 3h6v2h-1v4.3l4.8 7.7A2 2 0 0 1 17.1 20H6.9a2 2 0 0 1-1.7-3L10 9.3V5H9V3zm2 8.1-4 6.4h10l-4-6.4V5h-2v6.1z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
+    {
+      href: "/overview",
+      label: "Overview",
+      shortLabel: "O",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 6v-9h7v9h-7z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
   ];
+  const adminItems = isAdminMode
+    ? [
+        {
+          href: "/admin",
+          label: "Admin",
+          shortLabel: "AD",
+          icon: (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 4l7 3v5c0 4.4-3 7.9-7 9-4-1.1-7-4.6-7-9V7l7-3zm0 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 8c-2.2 0-4 1.1-4 2.5V20h8v-1.5c0-1.4-1.8-2.5-4-2.5z"
+                fill="currentColor"
+              />
+            </svg>
+          ),
+        },
+      ]
+    : [];
 
   const historyIcon = (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -291,7 +291,10 @@ export function Sidebar({
 
         <div className="sidebar__nav-scroll">
           <div className="sidebar__nav-section">
-            {navItems.map((item) => (
+            {!collapsed && (
+              <div className="sidebar__section-label">Workflow</div>
+            )}
+            {workflowItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -310,6 +313,34 @@ export function Sidebar({
               </Link>
             ))}
           </div>
+          {adminItems.length ? (
+            <div className="sidebar__nav-section">
+              <div className="sidebar__divider" aria-hidden="true" />
+              {!collapsed && (
+                <div className="sidebar__section-label">Admin</div>
+              )}
+              {adminItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`sidebar__item ${
+                    pathname === item.href ? "sidebar__item--active" : ""
+                  }`}
+                  onClick={() => {
+                    if (mobileOpen) onMobileClose();
+                  }}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <span className="sidebar__icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  {!collapsed && (
+                    <span className="sidebar__label">{item.label}</span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          ) : null}
           {showHistoryButton && (
             <div className="sidebar__nav-section sidebar__nav-section--meta">
               <div className="sidebar__divider" aria-hidden="true" />

@@ -18,6 +18,9 @@ BUILDER = QueryBatteryBuilder(
     batteries_repo=DEPS.query_batteries,
     clients_repo=DEPS.clients,
     generate_fn=DEPS.generate,
+    beliefs_repo=DEPS.brand_beliefs,
+    simulation_runs_repo=DEPS.simulation_runs,
+    archetypes_repo=DEPS.audience_archetypes,
 )
 
 
@@ -69,6 +72,7 @@ class BatteryGenerateRequest(BaseModel):
     source: str = Field(..., min_length=1)
     seed_queries: Optional[list[str]] = None
     limit: int = Field(default=15, ge=1, le=100)
+    use_llm: Optional[bool] = False
 
 
 @router.post("")
@@ -196,6 +200,7 @@ def generate_queries(
             source=payload.source,
             seed_queries=payload.seed_queries,
             limit=payload.limit,
+            use_llm=bool(payload.use_llm),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

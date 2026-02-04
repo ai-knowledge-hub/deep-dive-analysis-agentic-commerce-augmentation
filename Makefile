@@ -74,6 +74,10 @@ run-dev:
 db-init:
 	$(PYTHON) -m shared.db.connection
 
+.PHONY: db-migrate
+db-migrate:
+	$(PYTHON) -m shared.db.connection
+
 .PHONY: db-reset
 db-reset:
 	@DB_PATH="$$( $(PYTHON) -c "from shared.db.connection import DEFAULT_DB_PATH; print(DEFAULT_DB_PATH)" )"; \

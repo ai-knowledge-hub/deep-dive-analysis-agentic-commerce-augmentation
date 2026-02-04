@@ -24,6 +24,7 @@ from infrastructure.db import (
     experiment_validations as experiment_validations_repo,
     experiment_calibrations as experiment_calibrations_repo,
     analytics_events as analytics_events_repo,
+    audience_archetypes as audience_archetypes_repo,
     brand_beliefs as brand_beliefs_repo,
     goals as goals_repo,
     skills as skills_repo,
@@ -70,6 +71,7 @@ def default_deps() -> AppDeps:
         experiment_calibrations=experiment_calibrations_repo,
         analytics_events=analytics_events_repo,
         brand_beliefs=brand_beliefs_repo,
+        audience_archetypes=audience_archetypes_repo,
         skills=skills_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
