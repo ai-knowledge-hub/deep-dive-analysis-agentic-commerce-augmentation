@@ -217,6 +217,14 @@ class BrandBeliefsStore(Protocol):
     def latest_belief(self, **kwargs: Any) -> dict | None: ...
 
 
+class AudienceArchetypesStore(Protocol):
+    def create_archetype(self, **kwargs: Any) -> dict: ...
+
+    def get_archetype(self, **kwargs: Any) -> dict | None: ...
+
+    def list_archetypes(self, **kwargs: Any) -> list[dict]: ...
+
+
 class SkillsStore(Protocol):
     def get_skill(self, **kwargs: Any) -> dict | None: ...
 
@@ -256,6 +264,7 @@ class AppDeps:
     experiment_calibrations: ExperimentCalibrationsStore
     analytics_events: AnalyticsEventsStore
     brand_beliefs: BrandBeliefsStore
+    audience_archetypes: AudienceArchetypesStore
     skills: SkillsStore
 
     # Semantic memory

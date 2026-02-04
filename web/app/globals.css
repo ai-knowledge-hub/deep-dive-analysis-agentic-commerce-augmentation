@@ -1774,6 +1774,7 @@ input[type="checkbox"]:focus-visible {
   max-width: min(220px, 70vw);
   z-index: 10;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
 .product__tooltip:hover::before {
@@ -1786,6 +1787,40 @@ input[type="checkbox"]:focus-visible {
   border-style: solid;
   border-color: var(--bg-tertiary) transparent transparent transparent;
   z-index: 10;
+  pointer-events: none;
+}
+
+.tooltip--below {
+  overflow: visible;
+}
+
+.tooltip--below:hover::after {
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  max-width: min(240px, 80vw);
+  text-align: center;
+}
+
+.tooltip--below:hover::before {
+  left: 50%;
+  top: calc(100% + 2px);
+  transform: translateX(-50%);
+  border-width: 0 6px 6px 6px;
+  border-style: solid;
+  border-color: transparent transparent var(--bg-tertiary) transparent;
+}
+
+.tooltip--centered:hover::after {
+  left: 50%;
+  transform: translate(-50%, -100%);
+  max-width: min(260px, 85vw);
+  text-align: center;
+}
+
+.tooltip--centered:hover::before {
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .product__alignment {

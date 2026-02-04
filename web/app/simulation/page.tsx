@@ -597,6 +597,10 @@ export default function SimulationPage() {
       setSimulationRun(response);
       setSimulationOptimized(null);
       setSimulationRetest(null);
+      const winnerId = response.result?.winner_id;
+      if (winnerId && simulationProducts.some((item) => item.id === winnerId)) {
+        setSelectedSimulationProductId(winnerId);
+      }
       setSimulationToneSuggestion(response.result?.tone?.summary ?? null);
       if (!simulationTone) {
         setSimulationTone(response.result?.tone?.summary ?? "");

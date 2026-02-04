@@ -102,6 +102,7 @@ export default function ExperimentsPage() {
     null,
   );
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
+  const [batteryUseLlm, setBatteryUseLlm] = useState(false);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
     batteryId: "",
@@ -527,6 +528,7 @@ export default function ExperimentsPage() {
           source: batteryForm.generationMode,
           seed_queries: seedList.length ? seedList : undefined,
           user_id: userId,
+          use_llm: batteryUseLlm,
         });
         const refreshed = await listBatteryQueries(batteryId, userId);
         setQueries(refreshed.queries ?? []);
@@ -534,7 +536,7 @@ export default function ExperimentsPage() {
         setSubmitting(false);
       }
     },
-    [batterySeedQueries, batteryForm.generationMode, userId],
+    [batterySeedQueries, batteryForm.generationMode, batteryUseLlm, userId],
   );
 
   const handleQueryToggle = useCallback(
@@ -681,6 +683,7 @@ export default function ExperimentsPage() {
           source: generationMode,
           seed_queries: seedQueries.length > 0 ? seedQueries : undefined,
           user_id: userId,
+          use_llm: batteryUseLlm,
         });
         const refreshedBatteries = await listBatteries(userId, productId);
         setBatteries(refreshedBatteries.batteries ?? []);
@@ -755,6 +758,7 @@ export default function ExperimentsPage() {
     }
   }, [
     batteryForm.generationMode,
+    batteryUseLlm,
     brandId,
     experimentForm,
     jsonErrors,
@@ -1286,19 +1290,21 @@ export default function ExperimentsPage() {
               <div className="summary-card__toggle">
                 <button
                   type="button"
-                  className={`summary-card__toggle-btn ${
+                  className={`summary-card__toggle-btn product__tooltip tooltip--below ${
                     labMode === "lab" ? "is-active" : ""
                   }`}
                   onClick={() => setLabMode("lab")}
+                  data-tooltip="Lab mode auto-creates batteries, variants, and runs."
                 >
                   Lab mode
                 </button>
                 <button
                   type="button"
-                  className={`summary-card__toggle-btn ${
+                  className={`summary-card__toggle-btn product__tooltip tooltip--below ${
                     labMode === "manual" ? "is-active" : ""
                   }`}
                   onClick={() => setLabMode("manual")}
+                  data-tooltip="Manual mode is controlled: you create and run each step."
                 >
                   Manual
                 </button>
@@ -1408,45 +1414,6 @@ export default function ExperimentsPage() {
               </div>
             </div>
           </section>
-          {brandId ? (
-            validationSummary?.unlock_ready ? (
-              <div ref={(node) => (beliefsRef.current = node)}>
-                <BrandBeliefs
-                  brandId={brandId}
-                  clientId={clientId ?? undefined}
-                  userId={userId ?? undefined}
-                  limit={50}
-                  onUseBelief={handleUseBelief}
-                  viewMode={beliefsViewMode}
-                  onViewModeChange={setBeliefsViewMode}
-                />
-              </div>
-            ) : (
-              <section className="panel__card">
-                <div className="panel__header">
-                  <h3>Pattern Insights (Locked)</h3>
-                  <span className="panel__badge panel__badge--secondary">
-                    Validation required
-                  </span>
-                </div>
-                <p className="panel__muted">
-                  Unlock after 10+ verified experiments and ≥75% prediction
-                  accuracy. Log live validation results to progress.
-                </p>
-                <div className="progress-bar">
-                  <div
-                    className="progress-bar__fill"
-                    style={{
-                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
-                    }}
-                  />
-                </div>
-                <p className="panel__muted">
-                  Progress: {validationSummary?.verified_runs ?? 0}/10 verified
-                </p>
-              </section>
-            )
-          ) : null}
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
@@ -1504,13 +1471,27 @@ export default function ExperimentsPage() {
                     <option value="hybrid">Hybrid</option>
                   </select>
                 </label>
+                <label className="panel__toggle">
+                  <input
+                    type="checkbox"
+                    checked={batteryUseLlm}
+                    onChange={(event) => setBatteryUseLlm(event.target.checked)}
+                  />
+                  <span>Use LLM-assisted query generation</span>
+                </label>
                 <button
                   type="button"
                   className="panel__action"
                   onClick={handleCreateBattery}
                   disabled={isSubmitting || batteryForm.name.trim() === ""}
                 >
-                  Create battery
+                  {isSubmitting ? (
+                    <>
+                      Creating battery<span className="button__dots" />
+                    </>
+                  ) : (
+                    "Create battery"
+                  )}
                 </button>
                 <label className="panel__label">
                   Seed queries (optional, one per line)
@@ -1824,7 +1805,13 @@ export default function ExperimentsPage() {
                     Boolean(jsonErrors.hypothesis || jsonErrors.competitorPolicy)
                   }
                 >
-                  Create experiment
+                  {isSubmitting ? (
+                    <>
+                      Creating experiment<span className="button__dots" />
+                    </>
+                  ) : (
+                    "Create experiment"
+                  )}
                 </button>
               </div>
             ) : (
@@ -1967,7 +1954,13 @@ export default function ExperimentsPage() {
                     Boolean(jsonErrors.variantPayload)
                   }
                 >
-                  Add variant
+                  {isSubmitting ? (
+                    <>
+                      Adding variant<span className="button__dots" />
+                    </>
+                  ) : (
+                    "Add variant"
+                  )}
                 </button>
               </div>
               {variants.length === 0 ? (
@@ -2019,7 +2012,13 @@ export default function ExperimentsPage() {
                         onClick={handleCreateSuggestedVariant}
                         disabled={isSubmitting}
                       >
-                        Create suggested variant
+                        {isSubmitting ? (
+                          <>
+                            Creating variant<span className="button__dots" />
+                          </>
+                        ) : (
+                          "Create suggested variant"
+                        )}
                       </button>
                     </div>
                   ) : null}
@@ -2044,6 +2043,81 @@ export default function ExperimentsPage() {
               ) : null}
             </section>
 
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Scheduling</h3>
+              </div>
+              {selectedExperiment ? (
+                <div className="panel__form">
+                  {scheduleStatus ? (
+                    <p className="panel__success">{scheduleStatus}</p>
+                  ) : null}
+                  <label className="panel__label">
+                    Enable schedule
+                    <input
+                      type="checkbox"
+                      checked={scheduleForm.enabled}
+                      onChange={(event) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          enabled: event.target.checked,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="panel__label">
+                    Interval (minutes)
+                    <input
+                      className="panel__input"
+                      type="number"
+                      min={15}
+                      step={15}
+                      value={scheduleForm.intervalMinutes}
+                      onChange={(event) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          intervalMinutes: event.target.value,
+                        }))
+                      }
+                      disabled={!scheduleForm.enabled}
+                    />
+                  </label>
+                  <div className="panel__meta">
+                    <span className="panel__muted">
+                      Last run:{" "}
+                      {selectedExperiment.last_run_at
+                        ? new Date(selectedExperiment.last_run_at).toLocaleString()
+                        : "—"}
+                    </span>
+                    <span className="panel__muted">
+                      Next run:{" "}
+                      {selectedExperiment.next_run_at
+                        ? new Date(selectedExperiment.next_run_at).toLocaleString()
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action"
+                      onClick={handleScheduleSave}
+                    >
+                      Save schedule
+                    </button>
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={handleBackfill}
+                    >
+                      Backfill now
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="panel__empty">Select an experiment to schedule reruns.</p>
+              )}
+            </section>
+            
             <section className="panel__card">
               <div className="panel__header">
                 <h3>Latest Metrics</h3>
@@ -2234,82 +2308,47 @@ export default function ExperimentsPage() {
                 ) : null}
               </div>
             </section>
-
-            <section className="panel__card">
-              <div className="panel__header">
-                <h3>Scheduling</h3>
-              </div>
-              {selectedExperiment ? (
-                <div className="panel__form">
-                  {scheduleStatus ? (
-                    <p className="panel__success">{scheduleStatus}</p>
-                  ) : null}
-                  <label className="panel__label">
-                    Enable schedule
-                    <input
-                      type="checkbox"
-                      checked={scheduleForm.enabled}
-                      onChange={(event) =>
-                        setScheduleForm((prev) => ({
-                          ...prev,
-                          enabled: event.target.checked,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="panel__label">
-                    Interval (minutes)
-                    <input
-                      className="panel__input"
-                      type="number"
-                      min={15}
-                      step={15}
-                      value={scheduleForm.intervalMinutes}
-                      onChange={(event) =>
-                        setScheduleForm((prev) => ({
-                          ...prev,
-                          intervalMinutes: event.target.value,
-                        }))
-                      }
-                      disabled={!scheduleForm.enabled}
-                    />
-                  </label>
-                  <div className="panel__meta">
-                    <span className="panel__muted">
-                      Last run:{" "}
-                      {selectedExperiment.last_run_at
-                        ? new Date(selectedExperiment.last_run_at).toLocaleString()
-                        : "—"}
-                    </span>
-                    <span className="panel__muted">
-                      Next run:{" "}
-                      {selectedExperiment.next_run_at
-                        ? new Date(selectedExperiment.next_run_at).toLocaleString()
-                        : "—"}
-                    </span>
-                  </div>
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action"
-                      onClick={handleScheduleSave}
-                    >
-                      Save schedule
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={handleBackfill}
-                    >
-                      Backfill now
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="panel__empty">Select an experiment to schedule reruns.</p>
-              )}
-            </section>
           </div>
+
+          {brandId ? (
+            validationSummary?.unlock_ready ? (
+              <div ref={(node) => (beliefsRef.current = node)}>
+                <BrandBeliefs
+                  brandId={brandId}
+                  clientId={clientId ?? undefined}
+                  userId={userId ?? undefined}
+                  limit={50}
+                  onUseBelief={handleUseBelief}
+                  viewMode={beliefsViewMode}
+                  onViewModeChange={setBeliefsViewMode}
+                />
+              </div>
+            ) : (
+              <section className="panel__card">
+                <div className="panel__header">
+                  <h3>Pattern Insights (Locked)</h3>
+                  <span className="panel__badge panel__badge--secondary">
+                    Validation required
+                  </span>
+                </div>
+                <p className="panel__muted">
+                  Unlock after 10+ verified experiments and ≥75% prediction
+                  accuracy. Log live validation results to progress.
+                </p>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar__fill"
+                    style={{
+                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="panel__muted">
+                  Progress: {validationSummary?.verified_runs ?? 0}/10 verified
+                </p>
+              </section>
+            )
+          ) : null}
 
           <section className="panel__card">
             <div className="panel__header">
@@ -2579,9 +2618,15 @@ export default function ExperimentsPage() {
                               rec.recommendation,
                             )
                           }
-                          disabled={submitting}
+                          disabled={isSubmitting}
                         >
-                          {submitting ? "Creating…" : "Create + run variant"}
+                          {isSubmitting ? (
+                            <>
+                              Creating variant<span className="button__dots" />
+                            </>
+                          ) : (
+                            "Create + run variant"
+                          )}
                         </button>
                       </div>
                     ) : null}

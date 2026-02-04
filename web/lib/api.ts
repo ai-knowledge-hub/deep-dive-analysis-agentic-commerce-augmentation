@@ -654,6 +654,7 @@ export async function generateBatteryQueries(
     seed_queries?: string[];
     limit?: number;
     user_id?: string | null;
+    use_llm?: boolean;
   },
 ): Promise<QueryBatteryQueryListResponse> {
   const clientId = getClientId();
@@ -665,6 +666,7 @@ export async function generateBatteryQueries(
       source: payload.source,
       seed_queries: payload.seed_queries,
       limit: payload.limit ?? 15,
+      use_llm: payload.use_llm ?? undefined,
     }),
   });
 }
