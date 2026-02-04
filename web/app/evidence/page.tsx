@@ -10,6 +10,7 @@ import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { EvidencePanel } from "../../components/evidence/EvidencePanel";
 import {
   deleteConversationSession,
+  extractEvidenceSignals,
   getConversationSnapshot,
   listConversationSessions,
   listProductsByBrand,
@@ -35,6 +36,9 @@ export default function EvidencePage() {
   }, [storageClientId, userId]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [analysis, setAnalysis] = useState<EvidenceAnalyzeResponse | null>(null);
+  const [signalExtraction, setSignalExtraction] = useState<
+    EvidenceAnalyzeResponse["signal_extraction"] | null
+  >(null);
   const [optimization, setOptimization] = useState<null>(null);
   const [verification, setVerification] = useState<null>(null);
   const [targetCopy, setTargetCopy] = useState<string | null>(null);
@@ -51,6 +55,7 @@ export default function EvidencePage() {
     try {
       const payload = JSON.parse(raw) as Record<string, unknown>;
       setAnalysis((payload.analysis as EvidenceAnalyzeResponse) ?? null);
+      setSignalExtraction((payload.signal_extraction as EvidenceAnalyzeResponse["signal_extraction"]) ?? null);
       setOptimization(null);
       setVerification(null);
     } catch {
@@ -103,9 +108,10 @@ export default function EvidencePage() {
           alignment_scores: alignmentScores,
         };
         setAnalysis(nextAnalysis);
+        setSignalExtraction(null);
         localStorage.setItem(
           storageKey,
-          JSON.stringify({ analysis: nextAnalysis }),
+          JSON.stringify({ analysis: nextAnalysis, signal_extraction: null }),
         );
       } catch (error) {
         console.warn("Failed to hydrate evidence from latest session", error);
@@ -113,6 +119,57 @@ export default function EvidencePage() {
     };
     void loadFromLatestSession();
   }, [analysis, storageKey, userId]);
+
+  useEffect(() => {
+    if (!analysis || !targetCopy) return;
+    const goal =
+      analysis.intent?.primary_goal ??
+      analysis.goals?.[0] ??
+      "";
+    if (!goal) return;
+    const scores = analysis.alignment_scores ?? [];
+    const topScore = [...scores].sort(
+      (a, b) => (b.score ?? 0) - (a.score ?? 0),
+    )[0];
+    const winner =
+      topScore &&
+      analysis.evidence_products?.find(
+        (item) => item.id === topScore.product_id,
+      );
+    void extractEvidenceSignals(
+      {
+        goal,
+        product: {
+          id: productId ?? undefined,
+          name: productName ?? undefined,
+          description: targetCopy ?? undefined,
+        },
+        winner: winner
+          ? {
+              id: winner.id,
+              name: winner.name,
+              description: winner.description ?? winner.raw_text ?? "",
+            }
+          : undefined,
+      },
+      userId,
+    )
+      .then((response) => {
+        setSignalExtraction(response.signals ?? null);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              analysis,
+              signal_extraction: response.signals ?? null,
+            }),
+          );
+        }
+      })
+      .catch((error) => {
+        console.warn("Failed to extract evidence signals", error);
+      });
+  }, [analysis, productId, productName, storageKey, targetCopy, userId]);
 
   useEffect(() => {
     if (!brandId || !productId || !userId) return;
@@ -233,14 +290,17 @@ export default function EvidencePage() {
           />
           <EvidencePanel
             analysis={analysis}
+            signalExtraction={signalExtraction ?? undefined}
             targetProductId={productId ?? undefined}
             targetProductName={productName ?? undefined}
             targetProductCopy={targetCopy ?? undefined}
             targetProductUrl={targetCopyUrl ?? undefined}
             onOpenSimulation={() => router.push("/simulation")}
+            usePageScroll
           />
           <div className="detail__note">
-            Evidence runs sync from the latest chat query. Run a new query to refresh.
+            Evidence runs sync from the latest chat query. Run a new query to
+            refresh.
           </div>
         </div>
       </main>

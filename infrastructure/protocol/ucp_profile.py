@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -58,6 +59,7 @@ def load_schema_store() -> Dict[str, Dict[str, Any]]:
 
 def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
     issues: List[ProtocolReadinessIssue] = []
+    relax_oneof = os.getenv("UCP_RELAX_ONEOF", "false").lower() in {"1", "true", "yes"}
     store = load_schema_store()
     platform_caps = load_platform_capabilities()
     if not platform_caps:
@@ -95,6 +97,20 @@ def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
             validator = Draft202012Validator(schema, resolver=resolver)
             for err in validator.iter_errors(profile):
                 path = ".".join(str(p) for p in err.path) or "$"
+                if (
+                    relax_oneof
+                    and err.validator == "oneOf"
+                    and "is valid under each of" in err.message
+                ):
+                    issues.append(
+                        ProtocolReadinessIssue(
+                            field=path,
+                            severity="warning",
+                            message="UCP profile matches multiple schema variants; accepting in demo mode.",
+                            fix="Adjust profile to match only business schema in production.",
+                        )
+                    )
+                    continue
                 issues.append(
                     ProtocolReadinessIssue(
                         field=path,

@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 def _allowlisted(hostname: str) -> bool:
     allowlist_raw = os.getenv("WEB_FETCH_ALLOWLIST", "").strip()
+    if os.getenv("WEB_FETCH_ALLOW_ALL", "0").lower() in {"1", "true", "yes"}:
+        return True
     if not allowlist_raw:
         return False
     allowlist = [

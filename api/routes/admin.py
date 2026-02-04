@@ -17,7 +17,9 @@ if APIRouter:
     router = APIRouter(prefix="", tags=["admin"])
     deps = default_deps()
     admin_service = AdminService(
-        clients_repo=deps.clients, platform_profiles_repo=deps.platform_profiles
+        clients_repo=deps.clients,
+        platform_profiles_repo=deps.platform_profiles,
+        skills_repo=deps.skills,
     )
 
     class ClientCreateRequest(BaseModel):
@@ -49,6 +51,18 @@ if APIRouter:
         name: str = Field(..., min_length=1)
         version: str = Field(..., min_length=1)
         profile: Dict[str, Any] = Field(default_factory=dict)
+
+    class SkillUpdateRequest(BaseModel):
+        user_id: Optional[str] = None
+        name: str = Field(..., min_length=1)
+        description: str = Field(..., min_length=1)
+        version: str = Field(..., min_length=1)
+        content: str = Field(..., min_length=1)
+        enabled: bool = True
+        metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    class SkillHistoryResponse(BaseModel):
+        history: list[Dict[str, Any]]
 
     @router.post("/clients")
     def create_client(payload: ClientCreateRequest) -> Dict[str, Any]:
@@ -130,6 +144,33 @@ if APIRouter:
             name=payload.name, version=payload.version, profile=payload.profile
         )
         return {"profile": profile}
+
+    @router.get("/skills/{skill_name}")
+    def get_skill(skill_name: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        require_admin(user_id)
+        skill = admin_service.get_skill(name=skill_name)
+        return {"skill": skill}
+
+    @router.put("/skills/{skill_name}")
+    def update_skill(skill_name: str, payload: SkillUpdateRequest) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        skill = admin_service.update_skill(
+            name=skill_name,
+            description=payload.description,
+            version=payload.version,
+            content=payload.content,
+            enabled=payload.enabled,
+            metadata=payload.metadata,
+        )
+        return {"skill": skill}
+
+    @router.get("/skills/{skill_name}/history")
+    def list_skill_history(
+        skill_name: str, user_id: Optional[str] = None, limit: int = 10
+    ) -> Dict[str, Any]:
+        require_admin(user_id)
+        history = admin_service.list_skill_history(name=skill_name, limit=limit)
+        return {"history": history}
 else:  # pragma: no cover
     router = None
 

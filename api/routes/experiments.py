@@ -11,6 +11,9 @@ from application.services.experiment_service import ExperimentService
 from application.services.experiment_runner import ExperimentRunner
 from application.services.experiment_scheduler import ExperimentScheduler
 from application.services.experiment_orchestrator import ExperimentOrchestrator
+from application.services.experiment_validation_service import (
+    ExperimentValidationService,
+)
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -19,6 +22,7 @@ SERVICE = ExperimentService(repo=DEPS.experiments)
 RUNNER = ExperimentRunner(deps=DEPS)
 SCHEDULER = ExperimentScheduler(deps=DEPS)
 ORCHESTRATOR = ExperimentOrchestrator(deps=DEPS)
+VALIDATIONS = ExperimentValidationService(deps=DEPS)
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -66,6 +70,19 @@ class ExperimentScheduleRequest(BaseModel):
 class ExperimentBackfillRequest(BaseModel):
     user_id: Optional[str] = None
     client_id: Optional[str] = None
+
+
+class ExperimentValidationRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    variant_id: Optional[str] = None
+    platform: Optional[str] = None
+    query_text: Optional[str] = None
+    observed_products: list[str] = Field(default_factory=list)
+    observed_winner_variant_id: Optional[str] = None
+    observed_position: Optional[int] = None
+    notes: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 @router.post("")
@@ -255,6 +272,43 @@ def list_metrics(
         experiment_id=experiment_id, variant_id=variant_id, limit=limit
     )
     return {"metrics": metrics}
+
+
+@router.post("/{experiment_id}/validations")
+def log_validation(
+    experiment_id: str, payload: ExperimentValidationRequest
+) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    try:
+        validation = VALIDATIONS.log_validation(
+            experiment_id=experiment_id,
+            variant_id=payload.variant_id,
+            client_id=client_id,
+            platform=payload.platform,
+            query_text=payload.query_text,
+            observed_products=payload.observed_products,
+            observed_winner_variant_id=payload.observed_winner_variant_id,
+            observed_position=payload.observed_position,
+            notes=payload.notes,
+            created_at=payload.created_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    summary = VALIDATIONS.experiment_summary(
+        experiment_id=experiment_id, client_id=client_id
+    )
+    return {"validation": validation, "summary": summary.to_dict()}
+
+
+@router.get("/{experiment_id}/validation-summary")
+def validation_summary(
+    experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    summary = VALIDATIONS.experiment_summary(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    return {"summary": summary.to_dict()}
 
 
 @router.get("/{experiment_id}/recommendations")

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -23,11 +23,12 @@ class StatisticalResult:
     variant_a_n: int
     variant_b_n: int
     difference: float
-    effect_size: float  # Cohen's d
+    effect_size: float  # Cohen's h (proportions) / Cohen's d (continuous)
     confidence_interval: Tuple[float, float]  # 95% CI
-    p_value: float
-    is_significant: bool  # p < 0.05
+    p_value: Optional[float]
+    is_significant: bool  # derived from CI (avoid over-precision)
     recommended_action: str
+    evidence_strength: str  # "weak" | "moderate" | "strong"
 
 
 @dataclass(frozen=True)
@@ -49,9 +50,11 @@ def compare_variants(
     variant_b: Dict[str, Any],
     metric_name: str = "win_rate",
 ) -> StatisticalResult:
-    """Compare two variants using statistical hypothesis testing.
+    """Compare two variants with conservative uncertainty.
 
-    Uses Welch's t-test (doesn't assume equal variance).
+    For `win_rate`, prefer proportion intervals and effect sizes over parametric
+    tests. LLM/embedding-driven evaluations are noisy; avoid presenting
+    pseudo-precise p-values by default.
     """
     a_metrics = variant_a.get("metrics") or {}
     b_metrics = variant_b.get("metrics") or {}
@@ -61,17 +64,66 @@ def compare_variants(
     a_n = int(a_metrics.get("total_runs") or 1)
     b_n = int(b_metrics.get("total_runs") or 1)
 
-    # For hypothesis testing: standard error variance
     if metric_name == "win_rate":
-        a_se_var = a_mean * (1 - a_mean) / max(a_n, 1)
-        b_se_var = b_mean * (1 - b_mean) / max(b_n, 1)
-        # For effect size: population variance (without /n)
-        a_pop_var = a_mean * (1 - a_mean)
-        b_pop_var = b_mean * (1 - b_mean)
+        a_wins = _extract_wins(a_metrics, a_mean, a_n)
+        b_wins = _extract_wins(b_metrics, b_mean, b_n)
+
+        a_ci = _wilson_interval(a_wins, a_n)
+        b_ci = _wilson_interval(b_wins, b_n)
+
+        difference = b_mean - a_mean
+        # Newcombe diff CI using Wilson intervals.
+        ci = (b_ci[0] - a_ci[1], b_ci[1] - a_ci[0])
+        ci = (max(-1.0, ci[0]), min(1.0, ci[1]))
+
+        is_significant = ci[0] > 0 or ci[1] < 0
+
+        # Cohen's h (proportions): 0.2 small, 0.5 medium, 0.8 large
+        effect_size = _cohen_h(a_mean, b_mean)
+        evidence_strength = _evidence_strength(
+            is_significant=is_significant,
+            total_n=a_n + b_n,
+            effect_size=abs(effect_size),
+        )
+
+        if not is_significant:
+            if a_n + b_n < 50:
+                action = "Weak evidence—collect more runs before deciding."
+            else:
+                action = (
+                    "No clear winner—try a new hypothesis or improve the query battery."
+                )
+        elif difference > 0:
+            action = (
+                f"Variant B outperforms A (Δ win rate {abs(difference):.3f}). Deploy B."
+            )
+        else:
+            action = f"Variant A outperforms B (Δ win rate {abs(difference):.3f}). Stick with A."
+
+        return StatisticalResult(
+            variant_a_id=variant_a.get("id") or "A",
+            variant_b_id=variant_b.get("id") or "B",
+            metric_name=metric_name,
+            variant_a_mean=a_mean,
+            variant_b_mean=b_mean,
+            variant_a_n=a_n,
+            variant_b_n=b_n,
+            difference=difference,
+            effect_size=effect_size,
+            confidence_interval=ci,
+            p_value=None,
+            is_significant=is_significant,
+            recommended_action=action,
+            evidence_strength=evidence_strength,
+        )
     else:
         # Conservative estimate: assume std = 0.2 * mean for continuous metrics
-        a_se_var = ((0.2 * a_mean) ** 2) / max(a_n, 1) if a_mean > 0 else 0.01 / a_n
-        b_se_var = ((0.2 * b_mean) ** 2) / max(b_n, 1) if b_mean > 0 else 0.01 / b_n
+        a_se_var = (
+            ((0.2 * a_mean) ** 2) / max(a_n, 1) if a_mean > 0 else 0.01 / max(a_n, 1)
+        )
+        b_se_var = (
+            ((0.2 * b_mean) ** 2) / max(b_n, 1) if b_mean > 0 else 0.01 / max(b_n, 1)
+        )
         # Population variance
         a_pop_var = ((0.2 * a_mean) ** 2) if a_mean > 0 else 0.01
         b_pop_var = ((0.2 * b_mean) ** 2) if b_mean > 0 else 0.01
@@ -86,32 +138,33 @@ def compare_variants(
 
     # Welch's t-test - uses standard error variance
     se_diff = math.sqrt(a_se_var + b_se_var)
-    t_stat = difference / se_diff if se_diff > 0 else 0.0
 
     # Degrees of freedom (Welch-Satterthwaite)
     if a_se_var > 0 and b_se_var > 0:
-        df = ((a_se_var + b_se_var) ** 2) / (
+        _ = ((a_se_var + b_se_var) ** 2) / (
             (a_se_var**2) / max(a_n - 1, 1) + (b_se_var**2) / max(b_n - 1, 1)
         )
     else:
-        df = max(a_n + b_n - 2, 1)
-
-    # Approximate p-value (two-tailed)
-    p_value = _t_test_p_value(abs(t_stat), df)
+        _ = max(a_n + b_n - 2, 1)
 
     # 95% CI for difference
     t_critical = 1.96  # approximate for large df
     margin = t_critical * se_diff
     ci = (difference - margin, difference + margin)
 
-    is_significant = p_value < 0.05
+    is_significant = ci[0] > 0 or ci[1] < 0
+    evidence_strength = _evidence_strength(
+        is_significant=is_significant,
+        total_n=a_n + b_n,
+        effect_size=abs(effect_size),
+    )
 
     # Recommended action
     if not is_significant:
         if a_n + b_n < 20:
-            action = "Collect more data—sample size too small for significance."
+            action = "Collect more data—sample size too small for confidence."
         else:
-            action = "No significant difference detected. Consider new hypothesis."
+            action = "No clear difference detected. Consider new hypothesis."
     elif effect_size < 0.2:
         action = "Significant but small effect. Consider practical significance."
     elif difference > 0:
@@ -130,10 +183,53 @@ def compare_variants(
         difference=difference,
         effect_size=effect_size,
         confidence_interval=ci,
-        p_value=p_value,
+        p_value=None,
         is_significant=is_significant,
         recommended_action=action,
+        evidence_strength=evidence_strength,
     )
+
+
+def _extract_wins(metrics: Dict[str, Any], win_rate: float, n: int) -> int:
+    wins = metrics.get("wins")
+    try:
+        if wins is not None:
+            return int(wins)
+    except (TypeError, ValueError):
+        pass
+    return int(round(max(0.0, min(1.0, float(win_rate))) * max(int(n), 0)))
+
+
+def _wilson_interval(wins: int, n: int, *, z: float = 1.96) -> Tuple[float, float]:
+    """Wilson score interval for a binomial proportion."""
+    n = max(int(n), 0)
+    wins = max(int(wins), 0)
+    if n <= 0:
+        return (0.0, 1.0)
+    p = wins / n
+    denom = 1.0 + (z**2) / n
+    center = (p + (z**2) / (2 * n)) / denom
+    adj = (z / denom) * math.sqrt((p * (1 - p) / n) + (z**2) / (4 * n**2))
+    return (max(0.0, center - adj), min(1.0, center + adj))
+
+
+def _cohen_h(p_a: float, p_b: float) -> float:
+    """Cohen's h for difference in proportions."""
+    a = max(0.0, min(1.0, float(p_a)))
+    b = max(0.0, min(1.0, float(p_b)))
+    return 2.0 * math.asin(math.sqrt(b)) - 2.0 * math.asin(math.sqrt(a))
+
+
+def _evidence_strength(
+    *, is_significant: bool, total_n: int, effect_size: float
+) -> str:
+    if not is_significant:
+        return "weak"
+    if total_n >= 200 and effect_size >= 0.5:
+        return "strong"
+    if total_n >= 50 and effect_size >= 0.2:
+        return "moderate"
+    return "weak"
 
 
 def analyze_trend(

@@ -27,6 +27,7 @@ from api.routes import webhooks as webhooks_route
 from api.routes import admin as admin_route
 from api.routes import replay as replay_route
 from api.routes import agents as agents_route
+from api.routes import analytics as analytics_route
 
 if FastAPI:
     app = FastAPI(title="Contextual Commerce Optimization API")
@@ -52,6 +53,7 @@ if FastAPI:
     app.include_router(batteries_route.router)
     app.include_router(experiments_route.router)
     app.include_router(beliefs_route.router)
+    app.include_router(analytics_route.router)
     if replay_route.router:
         app.include_router(replay_route.router)
     if webhooks_route.router:

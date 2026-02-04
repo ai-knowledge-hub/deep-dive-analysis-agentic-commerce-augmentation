@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from typing import Callable, Dict
 
-from infrastructure.mcp.tools import web_fetch, image_analyze, memory_write
+from infrastructure.mcp.tools import (
+    web_fetch,
+    image_analyze,
+    memory_write,
+    product_search,
+    serp_search,
+)
 
 TOOLS: Dict[str, Callable[..., dict]] = {
     "web_fetch": web_fetch.run,
     "image_analyze": image_analyze.run,
     "memory_write": memory_write.run,
+    "product_search": product_search.run,
+    "serp_search": serp_search.run,
 }
 
 

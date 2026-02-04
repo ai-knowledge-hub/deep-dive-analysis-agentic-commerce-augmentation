@@ -75,6 +75,13 @@ def match_goal_to_product(
     goal_tokens: Set[str], product: Dict[str, Any]
 ) -> Dict[str, Any]:
     tokens = product_tokens(product)
+    category_missing = _missing_required_category(goal_tokens, tokens)
+    if category_missing:
+        return {
+            "score": 0.0,
+            "capabilities": [],
+            "missing": sorted(goal_tokens - tokens) + [category_missing],
+        }
     overlap = goal_tokens & tokens
     overlap_score = min(1.0, len(overlap) / max(len(goal_tokens), 1))
 
@@ -97,6 +104,23 @@ def match_goal_to_product(
         "capabilities": capability_hits,
         "missing": sorted(goal_tokens - tokens),
     }
+
+
+def _missing_required_category(
+    goal_tokens: Set[str], product_tokens_set: Set[str]
+) -> str | None:
+    category_groups = [
+        {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers", "footwear"},
+        {"vest", "vests", "jacket", "jackets", "outerwear"},
+        {"bag", "bags", "backpack", "backpacks"},
+        {"headphone", "headphones", "earbud", "earbuds"},
+    ]
+    for group in category_groups:
+        if goal_tokens & group:
+            if not (product_tokens_set & group):
+                # Return a representative token for messaging.
+                return sorted(group)[0]
+    return None
 
 
 def alignment_explanation(

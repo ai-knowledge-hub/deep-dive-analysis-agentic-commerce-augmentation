@@ -23,6 +23,7 @@ if APIRouter:
         name: str
         description: str
         source: str = "simulation"
+        brand_id: Optional[str] = None
         url: Optional[str] = None
         price: Optional[float] = None
         confidence: float = 0.5
@@ -186,6 +187,7 @@ def _to_simulation_product(item: "SimulationProductPayload") -> SimulationProduc
         name=item.name,
         description=item.description,
         source=item.source,
+        brand_id=item.brand_id,
         url=item.url,
         price=item.price,
         confidence=item.confidence,

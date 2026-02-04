@@ -16,5 +16,97 @@
     "domain": "career",
     "keywords": ["course", "certification", "promotion", "interview", "skill"],
     "questions": ["What skill do you want next?", "What roles inspire you?"]
+  },
+  {
+    "label": "running_training",
+    "domain": "fitness",
+    "keywords": [
+      "running",
+      "run",
+      "trainer",
+      "trainers",
+      "shoe",
+      "shoes",
+      "road",
+      "asphalt",
+      "distance",
+      "daily trainer"
+    ],
+    "questions": [
+      "What distance or terrain are you running on?",
+      "Do you prefer cushion or responsiveness?"
+    ]
+  },
+  {
+    "label": "stability_support",
+    "domain": "fitness",
+    "keywords": [
+      "stability",
+      "support",
+      "pronation",
+      "overpronation",
+      "flat feet",
+      "arch support",
+      "guidance",
+      "control"
+    ],
+    "questions": [
+      "Do you need stability or extra support features?",
+      "Any foot mechanics like flat feet or overpronation?"
+    ]
+  },
+  {
+    "label": "cushioning_comfort",
+    "domain": "fitness",
+    "keywords": [
+      "cushion",
+      "cushioning",
+      "comfort",
+      "soft",
+      "responsive",
+      "impact",
+      "joint",
+      "strain"
+    ],
+    "questions": [
+      "Do you want softer cushioning or a firmer ride?",
+      "Any impact sensitivity or joint strain concerns?"
+    ]
+  },
+  {
+    "label": "performance_training",
+    "domain": "fitness",
+    "keywords": [
+      "training",
+      "workout",
+      "crossfit",
+      "lift",
+      "lifting",
+      "gym",
+      "versatile",
+      "flexible"
+    ],
+    "questions": [
+      "Is this for gym training, lifting, or cross-training?",
+      "Do you need flexibility or lateral support?"
+    ]
+  },
+  {
+    "label": "weather_protection",
+    "domain": "outdoor",
+    "keywords": [
+      "rain",
+      "vest",
+      "wind",
+      "storm",
+      "water-repellent",
+      "waterproof",
+      "drizzle",
+      "packable"
+    ],
+    "questions": [
+      "Do you need wind or rain protection?",
+      "Is packability important for your runs?"
+    ]
   }
 ]

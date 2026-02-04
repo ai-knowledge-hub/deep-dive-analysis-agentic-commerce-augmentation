@@ -15,6 +15,7 @@ from application.services.evidence_normalizer import to_product
 from application.services.evidence_optimizer import optimize
 from application.services.evidence_verify import average_alignment, simulate_actual
 from application.services.intentionality_profiler import build_profile
+from application.services.signal_extractor import SignalExtractor
 
 
 class EvidenceService:
@@ -269,6 +270,27 @@ class EvidenceService:
             "optimized_alignment": [score.__dict__ for score in after_scores],
             "replay": replay.to_dict(),
             "replay_id": replay_id,
+        }
+
+    def extract_signals(
+        self,
+        *,
+        goal: str,
+        product: Dict[str, Any],
+        winner: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        extractor = SignalExtractor(self._deps)
+        result = extractor.extract(goal=goal, product=product, winner=winner)
+        if not result:
+            return {
+                "intent_signals": [],
+                "winner_signals": [],
+                "missing_signals": [],
+            }
+        return {
+            "intent_signals": result.intent_signals,
+            "winner_signals": result.winner_signals,
+            "missing_signals": result.missing_signals,
         }
 
 

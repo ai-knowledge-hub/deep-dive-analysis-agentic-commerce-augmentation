@@ -7,8 +7,10 @@ from application.ports.deps import AppDeps
 from application.services.simulation_service import SimulationService
 from application.services.brand_belief_service import BrandBeliefService
 from application.services.belief_update_agent import BeliefUpdateAgent
+from application.services.pairwise_judge import judge_pairwise
 from domain.simulation.ranking import score_for_product
 from domain.simulation.types import SimulationProduct
+from shared.config.env import settings
 
 
 @dataclass
@@ -25,6 +27,7 @@ class ExperimentRunner:
         self._simulation = SimulationService(deps=deps)
         self._beliefs = BrandBeliefService(repo=deps.brand_beliefs)
         self._belief_agent = BeliefUpdateAgent()
+        self._judge_providers = _parse_judge_providers()
 
     def run_experiment(
         self,
@@ -68,7 +71,13 @@ class ExperimentRunner:
 
         runs_payload: List[Dict[str, Any]] = []
         scores: List[float] = []
+        scores_keyword: List[float] = []
+        protocol_readiness_scores: List[int] = []
         wins = 0
+        wins_keyword = 0
+        wins_robust = 0
+        judge_consensus_wins = 0
+        judge_runs = 0
 
         for query in enabled_queries:
             sim_product, raw_product = _build_variant_product(
@@ -88,11 +97,41 @@ class ExperimentRunner:
             run_id = response.get("run_id")
             result = response.get("result") or {}
             winner_id = result.get("winner_id")
+            winner_id_keyword = result.get("winner_id_keyword")
+
             score = score_for_product(result.get("scores", []), product["id"])
+            score_kw = score_for_product(
+                result.get("scores_keyword", []), product["id"]
+            )
             if score is not None:
                 scores.append(score)
+            if score_kw is not None:
+                scores_keyword.append(score_kw)
             if winner_id == product["id"]:
                 wins += 1
+            if winner_id_keyword == product["id"]:
+                wins_keyword += 1
+            if winner_id == product["id"] and winner_id_keyword == product["id"]:
+                wins_robust += 1
+
+            readiness_score = _extract_protocol_readiness_score_for_product(
+                result, product_id=product["id"]
+            )
+            if readiness_score is not None:
+                protocol_readiness_scores.append(readiness_score)
+
+            judge_results, consensus_winner = _run_pairwise_judges(
+                deps=self._deps,
+                judge_providers=self._judge_providers,
+                query_text=query["query_text"],
+                run_id=run_id,
+                target_product_id=product["id"],
+                scores=result.get("scores") or [],
+            )
+            if judge_results:
+                judge_runs += 1
+                if consensus_winner == product["id"]:
+                    judge_consensus_wins += 1
 
             self._deps.experiment_runs.create_run(
                 experiment_id=experiment_id,
@@ -107,18 +146,46 @@ class ExperimentRunner:
                     "query_text": query["query_text"],
                     "run_id": run_id,
                     "winner_id": winner_id,
+                    "winner_id_keyword": winner_id_keyword,
                     "score": score,
+                    "score_keyword": score_kw,
+                    "protocol_readiness_score": readiness_score,
+                    "judge_results": judge_results,
+                    "judge_consensus_winner": consensus_winner,
                 }
             )
 
         total = len(enabled_queries)
         win_rate = (wins / total) if total else 0.0
+        win_rate_keyword = (wins_keyword / total) if total else 0.0
+        win_rate_robust = (wins_robust / total) if total else 0.0
+        judge_consensus_win_rate = (
+            (judge_consensus_wins / judge_runs) if judge_runs else None
+        )
         avg_score = (sum(scores) / len(scores)) if scores else None
+        avg_score_keyword = (
+            (sum(scores_keyword) / len(scores_keyword)) if scores_keyword else None
+        )
+        avg_protocol_readiness = (
+            (sum(protocol_readiness_scores) / len(protocol_readiness_scores))
+            if protocol_readiness_scores
+            else None
+        )
         metrics = {
             "total_runs": total,
             "wins": wins,
             "win_rate": round(win_rate, 4),
             "avg_score": avg_score,
+            "wins_keyword": wins_keyword,
+            "win_rate_keyword": round(win_rate_keyword, 4),
+            "wins_robust": wins_robust,
+            "win_rate_robust": round(win_rate_robust, 4),
+            "avg_score_keyword": avg_score_keyword,
+            "avg_protocol_readiness_score": avg_protocol_readiness,
+            "judge_consensus_win_rate": round(judge_consensus_win_rate, 4)
+            if judge_consensus_win_rate is not None
+            else None,
+            "judge_provider_count": len(self._judge_providers),
         }
 
         metric_row = self._deps.experiment_runs.create_metric(
@@ -256,6 +323,151 @@ def _build_variant_product(
         metadata=raw.get("metadata") or {},
     )
     return sim, raw
+
+
+def _extract_protocol_readiness_score_for_product(
+    result: Dict[str, Any], *, product_id: str
+) -> Optional[int]:
+    """Best-effort parse of protocol readiness score from simulation results."""
+    readiness = result.get("protocol_readiness")
+    if not isinstance(readiness, list):
+        return None
+    for preferred_protocol in ("ucp", "acp"):
+        entry = next(
+            (
+                item
+                for item in readiness
+                if item.get("product_id") == product_id
+                and item.get("protocol") == preferred_protocol
+            ),
+            None,
+        )
+        if not isinstance(entry, dict):
+            continue
+        issues = entry.get("issues") or []
+        if not isinstance(issues, list):
+            continue
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            field = issue.get("field")
+            if field not in {"ucp_readiness_score", "acp_readiness_score"}:
+                continue
+            message = issue.get("message") or ""
+            if not isinstance(message, str):
+                continue
+            import re
+
+            match = re.search(r"(\\d{1,3})\\s*/\\s*100", message)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    return None
+    return None
+
+
+def _parse_judge_providers() -> List[str]:
+    raw = getattr(settings, "judge_providers", "") or ""
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _run_pairwise_judges(
+    *,
+    deps: AppDeps,
+    judge_providers: List[str],
+    query_text: str,
+    run_id: Optional[str],
+    target_product_id: str,
+    scores: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    if not judge_providers or not run_id:
+        return [], None
+    run_record = deps.simulation_runs.get_run(run_id)
+    if not run_record:
+        return [], None
+    products = run_record.get("products") or []
+    target = next((p for p in products if p.get("id") == target_product_id), None)
+    if not target:
+        return [], None
+    competitor_id = _best_competitor_id(scores, target_product_id)
+    if not competitor_id:
+        return [], None
+    competitor = next((p for p in products if p.get("id") == competitor_id), None)
+    if not competitor:
+        return [], None
+
+    results: List[Dict[str, Any]] = []
+    for provider in judge_providers:
+        try:
+            result = judge_pairwise(
+                query=query_text,
+                product_a=target,
+                product_b=competitor,
+                generate_fn=deps.generate_with_provider,
+                provider=provider,
+            )
+            winner = result.get("winner")
+            winner_id = (
+                target_product_id
+                if winner == "a"
+                else competitor_id
+                if winner == "b"
+                else None
+            )
+            results.append(
+                {
+                    "provider": provider,
+                    "winner_id": winner_id,
+                    "raw": result.get("raw"),
+                }
+            )
+        except Exception:
+            results.append(
+                {
+                    "provider": provider,
+                    "winner_id": None,
+                    "raw": None,
+                }
+            )
+
+    consensus = _consensus_winner(results)
+    return results, consensus
+
+
+def _best_competitor_id(
+    scores: List[Dict[str, Any]], target_product_id: str
+) -> Optional[str]:
+    best_id = None
+    best_score = None
+    for item in scores:
+        pid = item.get("product_id")
+        if not pid or pid == target_product_id:
+            continue
+        try:
+            score_val = float(item.get("score") or 0.0)
+        except (TypeError, ValueError):
+            score_val = 0.0
+        if best_score is None or score_val > best_score:
+            best_score = score_val
+            best_id = pid
+    return best_id
+
+
+def _consensus_winner(results: List[Dict[str, Any]]) -> Optional[str]:
+    votes: Dict[str, int] = {}
+    for item in results:
+        winner_id = item.get("winner_id")
+        if not winner_id:
+            continue
+        votes[winner_id] = votes.get(winner_id, 0) + 1
+    if not votes:
+        return None
+    sorted_votes = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
+    top_id, top_count = sorted_votes[0]
+    if len(sorted_votes) > 1 and sorted_votes[1][1] == top_count:
+        return None
+    return top_id
 
 
 __all__ = ["ExperimentRunner", "ExperimentRunResult"]

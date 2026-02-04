@@ -164,6 +164,7 @@ class ConversationService:
             payload.append(
                 {
                     "id": session["id"],
+                    "client_id": session.get("client_id"),
                     "created_at": session.get("created_at"),
                     "preview": last_turn.get("content") if last_turn else None,
                     "last_turn_at": last_turn.get("created_at") if last_turn else None,

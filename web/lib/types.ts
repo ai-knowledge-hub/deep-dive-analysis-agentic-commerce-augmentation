@@ -9,6 +9,7 @@ export type GoalClarificationState = {
 export type Product = {
   id: string;
   name: string;
+  brand_id?: string;
   price?: number;
   confidence?: number;
   source?: string;
@@ -46,6 +47,7 @@ export type EvidenceAnalyzeResponse = {
   intent?: ConversationResponse["intent"];
   goals: string[];
   evidence_products: EvidenceProduct[];
+  signal_extraction?: EvidenceSignalExtraction;
   profiles: {
     product_id?: string;
     capabilities_enabled?: string[];
@@ -105,6 +107,7 @@ export type SimulationProduct = {
   name: string;
   description: string;
   source?: string;
+  brand_id?: string;
   url?: string;
   price?: number;
   confidence?: number;
@@ -151,6 +154,15 @@ export type SimulationRunResponse = {
       low_confidence?: boolean;
     }[];
     winner_id?: string | null;
+    scores_keyword?: {
+      product_id: string;
+      score: number;
+      alignment_reasoning?: string;
+      matched_capabilities?: string[];
+      confidence?: number;
+      low_confidence?: boolean;
+    }[];
+    winner_id_keyword?: string | null;
     gap_analysis: SimulationGapReport[];
     profiles: {
       product_id?: string;
@@ -226,6 +238,38 @@ export type AdminPlatformProfileResponse = {
   profile: AdminPlatformProfile;
 };
 
+export type AdminSkill = {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  content: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AdminSkillResponse = {
+  skill: AdminSkill | null;
+};
+
+export type AdminSkillHistoryItem = {
+  id: number;
+  skill_id: string;
+  name: string;
+  description?: string;
+  version?: string;
+  content: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+  changed_at?: string;
+};
+
+export type AdminSkillHistoryResponse = {
+  history: AdminSkillHistoryItem[];
+};
+
 export type SimulationAttachResponse = {
   run_id: string;
   product_id?: string | null;
@@ -290,6 +334,16 @@ export type AdminProductListResponse = {
 
 export type AdminClientUserListResponse = {
   users: AdminClientUser[];
+};
+
+export type EvidenceSignalExtraction = {
+  intent_signals: string[];
+  winner_signals: string[];
+  missing_signals: string[];
+};
+
+export type EvidenceSignalResponse = {
+  signals: EvidenceSignalExtraction;
 };
 
 export type ConversationResponse = {
@@ -377,6 +431,7 @@ export type ConversationResponse = {
 
 export type SessionSummary = {
   id: string;
+  client_id?: string;
   created_at?: string;
   preview?: string;
   last_turn_at?: string;
@@ -572,7 +627,70 @@ export type ExperimentRunResponse = {
     query_text?: string;
     run_id?: string;
     winner_id?: string | null;
+    winner_id_keyword?: string | null;
     score?: number | null;
+    score_keyword?: number | null;
+    protocol_readiness_score?: number | null;
+    judge_results?: { provider: string; winner_id?: string | null; raw?: string }[];
+    judge_consensus_winner?: string | null;
   }[];
   metrics: Record<string, unknown>;
+};
+
+export type ExperimentValidation = {
+  id: string;
+  experiment_id: string;
+  variant_id?: string | null;
+  client_id: string;
+  brand_id?: string | null;
+  product_id?: string | null;
+  platform?: string | null;
+  query_text?: string | null;
+  observed_products?: string[];
+  observed_winner_variant_id?: string | null;
+  observed_position?: number | null;
+  notes?: string | null;
+  is_correct?: boolean | null;
+  created_at?: string | null;
+};
+
+export type ValidationSummary = {
+  total_logged: number;
+  verified_runs: number;
+  correct_runs: number;
+  accuracy: number;
+  unlock_ready: boolean;
+  progress: number;
+  accuracy_target: number;
+};
+
+export type ExperimentValidationResponse = {
+  validation: ExperimentValidation;
+  summary: ValidationSummary;
+};
+
+export type ExperimentValidationSummaryResponse = {
+  summary: ValidationSummary;
+};
+
+export type BrandPredictionAccuracyResponse = {
+  summary: ValidationSummary;
+};
+
+export type AnalyticsEvent = {
+  id: string;
+  client_id: string;
+  brand_id?: string | null;
+  product_id?: string | null;
+  variant_id?: string | null;
+  experiment_id?: string | null;
+  event_type: string;
+  source?: string | null;
+  event_timestamp?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string | null;
+};
+
+export type AnalyticsEventResponse = {
+  event: AnalyticsEvent;
 };

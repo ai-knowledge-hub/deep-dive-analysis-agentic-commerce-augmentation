@@ -64,7 +64,16 @@ class HybridIntentClassifier:
         try:
             return json.loads(response)
         except json.JSONDecodeError:
-            return {}
+            # Best-effort: extract JSON object from a noisy response.
+            start = response.find("{")
+            end = response.rfind("}")
+            if start == -1 or end == -1 or end <= start:
+                return {}
+            snippet = response[start : end + 1]
+            try:
+                return json.loads(snippet)
+            except json.JSONDecodeError:
+                return {}
 
 
 __all__ = ["HybridIntentClassifier", "GenerateFn", "KeywordClassifyFn"]

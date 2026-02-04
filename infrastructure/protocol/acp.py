@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from typing import Any, Dict, List, Optional
 
 from domain.protocol.types import (
@@ -9,6 +10,12 @@ from domain.protocol.types import (
     StructuredQuery,
 )
 from infrastructure.db import clients as clients_repo
+from shared.config.env import settings
+
+
+def _is_demo_mode() -> bool:
+    mode = (os.getenv("PROTOCOL_MODE") or settings.app_env or "").lower()
+    return mode in {"demo", "local"}
 
 
 def discover_acp_candidates(
@@ -118,11 +125,31 @@ def _normalize_feed_record(metadata: Dict[str, Any]) -> Dict[str, Any]:
     acp = metadata.get("acp") if isinstance(metadata.get("acp"), dict) else {}
     record = dict(metadata)
     record.update(acp)
+    if not record.get("item_id"):
+        record["item_id"] = record.get("id") or record.get("product_id")
+    if not record.get("title"):
+        record["title"] = record.get("name")
+    if not record.get("brand"):
+        record["brand"] = record.get("merchant_name") or record.get("brand_name")
+    if not record.get("seller_name"):
+        record["seller_name"] = record.get("merchant_name") or record.get("brand")
+    if not record.get("url"):
+        record["url"] = record.get("offer_url") or record.get("product_url")
+    if not record.get("seller_url"):
+        record["seller_url"] = record.get("offer_url") or record.get("url")
+    if not record.get("image_url") and _is_demo_mode():
+        record["image_url"] = (
+            record.get("image")
+            or record.get("image_src")
+            or record.get("offer_url")
+            or record.get("url")
+        )
     return record
 
 
 def _validate_feed_record(feed: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
     issues: List[ProtocolReadinessIssue] = []
+    demo_mode = _is_demo_mode()
     required_fields = [
         "item_id",
         "title",
@@ -142,8 +169,11 @@ def _validate_feed_record(feed: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
             issues.append(
                 ProtocolReadinessIssue(
                     field=field,
-                    severity="error",
-                    message=f"Missing required ACP feed field `{field}`.",
+                    severity="warning" if demo_mode else "error",
+                    message=(
+                        f"Missing required ACP feed field `{field}`."
+                        + (" (demo mode warning)." if demo_mode else "")
+                    ),
                     fix=f"Provide `{field}` in ACP feed metadata.",
                 )
             )
@@ -199,6 +229,7 @@ def _validate_feed_record(feed: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
 
 def _validate_feed_freshness(feed: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
     issues: List[ProtocolReadinessIssue] = []
+    demo_mode = _is_demo_mode()
     updated_at = (
         feed.get("updated_at")
         or feed.get("last_updated")
@@ -233,8 +264,11 @@ def _validate_feed_freshness(feed: Dict[str, Any]) -> List[ProtocolReadinessIssu
         issues.append(
             ProtocolReadinessIssue(
                 field="updated_at",
-                severity="error",
-                message="Feed update is stale (>120 minutes).",
+                severity="warning" if demo_mode else "error",
+                message=(
+                    "Feed update is stale (>120 minutes)."
+                    + (" (demo mode warning)." if demo_mode else "")
+                ),
                 fix="Update feeds at least every 15 minutes; hourly for low-change feeds.",
             )
         )

@@ -24,7 +24,6 @@ import {
   requestBrandTone,
   updateSimulationTone,
   listProductsByBrand,
-  updateProductCopy,
   getBrand,
   attachSimulationProduct,
   listConversationSessions,
@@ -43,11 +42,30 @@ export default function SimulationPage() {
   const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
-  const { productId, productName, brandId, setProductId } = useTenant();
+  const { clientId, productId, productName, brandId, setProductId, setClientId } =
+    useTenant();
+  const storageClientId =
+    clientId ??
+    (typeof window !== "undefined"
+      ? window.localStorage.getItem("client_id")
+      : null) ??
+    undefined;
   const storageKey = useMemo(
     () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
     [userId],
   );
+  const evidenceStorageKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.evidence.${userId}${clientTag}`
+      : `intentionality.evidence.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
+  const lastSessionKey = useMemo(() => {
+    const clientTag = storageClientId ? `.${storageClientId}` : "";
+    return userId
+      ? `intentionality.last_session.${userId}${clientTag}`
+      : `intentionality.last_session.anonymous${clientTag}`;
+  }, [storageClientId, userId]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [simulationScenario, setSimulationScenario] = useState("");
   const [simulationScenarioDirty, setSimulationScenarioDirty] = useState(false);
@@ -65,9 +83,24 @@ export default function SimulationPage() {
   const [simulationTone, setSimulationTone] = useState("");
   const [simulationToneNotice, setSimulationToneNotice] = useState<string | null>(null);
   const [productCopy, setProductCopy] = useState("");
-  const [productCopySaved, setProductCopySaved] = useState<string | null>(null);
+  const [feedPreview, setFeedPreview] = useState<{ acp?: string; ucp?: string } | null>(
+    null,
+  );
   const [brandToneSummary, setBrandToneSummary] = useState<string | null>(null);
   const [simulationLoading, setSimulationLoading] = useState(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [evidenceSummary, setEvidenceSummary] = useState<{
+    intentSignal: string | null;
+    total: number;
+    rank: number | null;
+    alignment: number | null;
+    discovered: boolean;
+    focusHint: string | null;
+  } | null>(null);
+  const [optimizationMode, setOptimizationMode] = useState<"copy" | "feed" | "both">(
+    "both",
+  );
+  const [simulationSourceSession, setSimulationSourceSession] = useState<string | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
@@ -81,7 +114,10 @@ export default function SimulationPage() {
       "intentionality.simulation.anonymous",
     ];
     const raw = keys.map((key) => localStorage.getItem(key)).find(Boolean);
-    if (!raw) return;
+    if (!raw) {
+      setHasHydrated(true);
+      return;
+    }
     try {
       const data = JSON.parse(raw) as Record<string, unknown>;
       setSimulationScenario((data.scenario as string) || "");
@@ -94,11 +130,77 @@ export default function SimulationPage() {
       setSimulationTone((data.tone as string) || "");
     } catch {
       localStorage.removeItem(storageKey);
+    } finally {
+      setHasHydrated(true);
     }
   }, [storageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const rawEvidence = localStorage.getItem(evidenceStorageKey);
+    if (!rawEvidence) {
+      setEvidenceSummary(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(rawEvidence) as {
+        analysis?: {
+          intent?: Record<string, unknown> | null;
+          goals?: string[];
+          evidence_products?: { id?: string }[];
+          alignment_scores?: { product_id?: string; score?: number }[];
+        };
+      };
+      const analysis = parsed.analysis;
+      if (!analysis) {
+        setEvidenceSummary(null);
+        return;
+      }
+      const intentSignal =
+        (analysis.intent?.primary_goal as string | undefined) ??
+        (analysis.intent?.label as string | undefined) ??
+        analysis.goals?.[0] ??
+        null;
+      const total = analysis.evidence_products?.length ?? 0;
+      const scores = (analysis.alignment_scores ?? []).filter(
+        (item) => item.product_id,
+      );
+      const sorted = [...scores].sort(
+        (a, b) => (b.score ?? 0) - (a.score ?? 0),
+      );
+      const targetId = selectedSimulationProductId ?? productId ?? null;
+      const idx = targetId
+        ? sorted.findIndex((item) => item.product_id === targetId)
+        : -1;
+      const discovered = idx >= 0;
+      const rank = discovered ? idx + 1 : null;
+      const alignment = discovered ? sorted[idx].score ?? null : null;
+      const focusHint = !discovered
+        ? "depth"
+        : rank && rank > 3
+        ? "depth"
+        : "breadth";
+      setEvidenceSummary({
+        intentSignal,
+        total,
+        rank,
+        alignment,
+        discovered,
+        focusHint,
+      });
+    } catch {
+      setEvidenceSummary(null);
+    }
+  }, [
+    evidenceStorageKey,
+    productId,
+    selectedSimulationProductId,
+    simulationScenario,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasHydrated) return;
     const payload = {
       scenario: simulationScenario,
       products: simulationProducts,
@@ -111,6 +213,7 @@ export default function SimulationPage() {
     };
     localStorage.setItem(storageKey, JSON.stringify(payload));
   }, [
+    hasHydrated,
     simulationOptimized,
     simulationProducts,
     simulationRetest,
@@ -137,47 +240,126 @@ export default function SimulationPage() {
   }, [userId]);
 
   useEffect(() => {
-    if (!brandId || simulationProducts.length > 0) return;
+    if (!brandId) return;
     let cancelled = false;
     void listProductsByBrand(brandId, userId).then((response) => {
       if (cancelled) return;
       const items = response.products ?? [];
+      if (items.length === 0) return;
       const mapped = items.map((product) => ({
         id: product.id,
         name: product.name,
         description: product.description ?? product.metadata?.description ?? product.name,
         source: "catalog",
+        brand_id: product.brand_id ?? brandId ?? undefined,
         url: (product.metadata?.product_url as string | undefined) ?? undefined,
         price:
           typeof product.metadata?.price === "number"
             ? product.metadata?.price
             : undefined,
         confidence: 0.6,
-        metadata: product.metadata ?? {},
+        metadata: {
+          ...(product.metadata ?? {}),
+          feed_description:
+            (product.metadata?.feed_description as string | undefined) ??
+            product.description ??
+            product.metadata?.description ??
+            product.name,
+          acp: {
+            item_id: product.id,
+            title: product.name,
+            description:
+              (product.metadata?.acp?.description as string | undefined) ??
+              (product.metadata?.feed_description as string | undefined) ??
+              product.description ??
+              product.metadata?.description ??
+              product.name,
+            url:
+              (product.metadata?.product_url as string | undefined) ??
+              (product.metadata?.site_url as string | undefined) ??
+              undefined,
+            image_url:
+              (product.metadata?.image_url as string | undefined) ??
+              (product.metadata?.image as string | undefined) ??
+              undefined,
+            price:
+              typeof product.metadata?.price === "number"
+                ? product.metadata?.price
+                : undefined,
+            availability:
+              (product.metadata?.availability as string | undefined) ?? "in_stock",
+            brand:
+              (product.metadata?.brand as string | undefined) ?? product.name,
+            seller_name:
+              (product.metadata?.merchant_name as string | undefined) ??
+              product.name,
+            seller_url:
+              (product.metadata?.site_url as string | undefined) ??
+              (product.metadata?.product_url as string | undefined) ??
+              undefined,
+            is_eligible_search: true,
+            is_eligible_checkout: true,
+            updated_at: new Date().toISOString(),
+          },
+          ucp: {
+            offer_url:
+              (product.metadata?.product_url as string | undefined) ??
+              (product.metadata?.site_url as string | undefined) ??
+              undefined,
+            merchant_name:
+              (product.metadata?.merchant_name as string | undefined) ??
+              product.name,
+            description:
+              (product.metadata?.ucp?.description as string | undefined) ??
+              (product.metadata?.feed_description as string | undefined) ??
+              product.description ??
+              product.metadata?.description ??
+              product.name,
+            price:
+              typeof product.metadata?.price === "number"
+                ? product.metadata?.price
+                : undefined,
+            currency: "USD",
+            availability:
+              (product.metadata?.availability as string | undefined) ?? "in_stock",
+            available_for_sale: true,
+          },
+        },
       }));
-      setSimulationProducts(mapped);
-      if (mapped.length > 0) {
-        const initial =
-          productId && mapped.some((p) => p.id === productId)
-            ? productId
-            : mapped[0].id;
-        setSelectedSimulationProductId(initial);
+      setSimulationProducts((current) => {
+        if (current.length === 0) {
+          return mapped;
+        }
+        const ids = new Set(current.map((item) => item.id));
+        const merged = [...current];
+        mapped.forEach((item) => {
+          if (!ids.has(item.id)) merged.push(item);
+        });
+        return merged;
+      });
+      const initial =
+        productId && mapped.some((p) => p.id === productId)
+          ? productId
+          : mapped[0].id;
+      setSelectedSimulationProductId((prev) => prev ?? initial);
+      if (!productId) {
         setProductId(initial);
-        const selected = mapped.find((item) => item.id === initial) ?? mapped[0];
-        const creative = (selected?.metadata as Record<string, unknown> | undefined)?.creative as
-          | Record<string, unknown>
-          | undefined;
-        setProductCopy(
-          (creative?.manual_copy as string | undefined) ??
-            selected?.description ??
-            "",
-        );
       }
+      const selected =
+        mapped.find((item) => item.id === (productId ?? initial)) ?? mapped[0];
+      const creative = (selected?.metadata as Record<string, unknown> | undefined)?.creative as
+        | Record<string, unknown>
+        | undefined;
+      setProductCopy(
+        (creative?.manual_copy as string | undefined) ??
+          selected?.description ??
+          "",
+      );
     });
     return () => {
       cancelled = true;
     };
-  }, [brandId, productId, setProductId, simulationProducts.length, userId]);
+  }, [brandId, productId, setProductId, userId]);
 
   useEffect(() => {
     if (!brandId) {
@@ -206,11 +388,52 @@ export default function SimulationPage() {
     const creative = (selected.metadata as Record<string, unknown> | undefined)?.creative as
       | Record<string, unknown>
       | undefined;
+    const metadata = (selected.metadata as Record<string, unknown> | undefined) ?? {};
+    const acpMeta = (metadata.acp as Record<string, unknown> | undefined) ?? {};
+    const ucpMeta = (metadata.ucp as Record<string, unknown> | undefined) ?? {};
     setProductCopy(
       (creative?.manual_copy as string | undefined) ??
         selected.description ??
         "",
     );
+    const acp = {
+      item_id: selected.id,
+      title: selected.name,
+      description:
+        (acpMeta.description as string | undefined) ??
+        (metadata.feed_description as string | undefined) ??
+        selected.description ??
+        "",
+      price: selected.price ? `${selected.price} USD` : undefined,
+      url:
+        (acpMeta.url as string | undefined) ??
+        (metadata.product_url as string | undefined) ??
+        selected.url,
+      availability: "in_stock",
+      is_eligible_search: true,
+      is_eligible_checkout: true,
+    };
+    const ucp = {
+      product_id: selected.id,
+      name: selected.name,
+      description:
+        (ucpMeta.description as string | undefined) ??
+        (metadata.feed_description as string | undefined) ??
+        selected.description ??
+        "",
+      price: selected.price ?? null,
+      currency: "USD",
+      available_for_sale: true,
+      product_url:
+        (ucpMeta.product_url as string | undefined) ??
+        (metadata.product_url as string | undefined) ??
+        selected.url ??
+        null,
+    };
+    setFeedPreview({
+      acp: JSON.stringify(acp, null, 2),
+      ucp: JSON.stringify(ucp, null, 2),
+    });
   }, [selectedSimulationProductId, simulationProducts]);
 
   useEffect(() => {
@@ -250,28 +473,116 @@ export default function SimulationPage() {
     const sessionParam = searchParams.get("session");
     if (!sessionParam) return;
     let cancelled = false;
-    void getConversationSnapshot(sessionParam, userId).then((response) => {
-      if (cancelled) return;
-      const state = response.snapshot?.session?.state as
-        | Record<string, unknown>
-        | undefined;
-      if (!state) return;
-      const scenario = (state.last_query as string) ?? "";
-      const products = (state.last_products as SimulationProduct[]) ?? [];
-      setSimulationScenario(scenario);
-      setSimulationScenarioDirty(false);
-      setSimulationProducts(products);
-      const selected =
-        (state.last_product_id as string) ?? products[0]?.id ?? null;
-      setSelectedSimulationProductId(selected);
-      if (selected) {
-        setProductId(selected);
+    const hydrateFromSession = async () => {
+      let resolvedClientId = storageClientId ?? clientId ?? null;
+      if (!resolvedClientId && userId) {
+        try {
+          const response = await listConversationSessions(userId);
+          const match = response.sessions.find((session) => session.id === sessionParam);
+          resolvedClientId = match?.client_id ?? null;
+        } catch {
+          // ignore and fall back to current client scope
+        }
       }
+      if (resolvedClientId && resolvedClientId !== clientId) {
+        setClientId(resolvedClientId);
+      }
+      const response = await getConversationSnapshot(
+        sessionParam,
+        userId,
+        resolvedClientId ?? clientId ?? storageClientId ?? undefined,
+      );
+      if (cancelled) return;
+      const state =
+        (response.snapshot?.session?.state as Record<string, unknown> | undefined) ?? undefined;
+      const scenario =
+        (state?.last_query as string | undefined) ??
+        response.plan?.query ??
+        "";
+      const stateProducts = (state?.last_products as SimulationProduct[]) ?? [];
+      const research = response.plan?.research_results ?? response.plan?.products ?? [];
+      const researchProducts = research.map((item) => ({
+        id: item.id ?? item.name ?? "",
+        name: item.name ?? "Result",
+        description: item.description ?? item.name ?? "",
+        source: item.source ?? "research",
+        url: item.offer_url ?? undefined,
+        price: item.price ?? undefined,
+        confidence: item.confidence ?? undefined,
+        metadata: {
+          alignment_score: item.alignment_score,
+          alignment_reasoning: item.alignment_reasoning,
+        },
+      })) as SimulationProduct[];
+      const products = stateProducts.length > 0 ? stateProducts : researchProducts;
+      if (scenario) {
+        setSimulationScenario(scenario);
+        setSimulationScenarioDirty(false);
+      }
+      if (products.length > 0) {
+        setSimulationProducts(products);
+        const selected =
+          (state?.last_product_id as string | undefined) ?? products[0]?.id ?? null;
+        setSelectedSimulationProductId(selected);
+        if (selected) {
+          setProductId(selected);
+        }
+      }
+      setSimulationSourceSession(sessionParam);
+    };
+    void hydrateFromSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, searchParams, setClientId, setProductId, storageClientId, userId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!userId || simulationScenario) return;
+    const runIdParam = searchParams.get("run_id");
+    if (runIdParam) return;
+    const sessionParam = searchParams.get("session");
+    if (sessionParam) return;
+    const lastSessionId = window.localStorage.getItem(lastSessionKey);
+    if (!lastSessionId) return;
+    let cancelled = false;
+    void getConversationSnapshot(
+      lastSessionId,
+      userId,
+      storageClientId ?? clientId ?? undefined,
+    ).then((snapshot) => {
+      if (cancelled) return;
+      const scenario = snapshot.plan?.query ?? "";
+      const research =
+        snapshot.plan?.research_results ?? snapshot.plan?.products ?? [];
+      if (scenario) {
+        setSimulationScenario(scenario);
+        setSimulationScenarioDirty(false);
+      }
+      if (research.length > 0) {
+        const products = research.map((item) => ({
+          id: item.id ?? item.name ?? "",
+          name: item.name ?? "Result",
+          description: item.description ?? item.name ?? "",
+          source: item.source ?? "research",
+          url: item.offer_url ?? undefined,
+          price: item.price ?? undefined,
+          confidence: item.confidence ?? undefined,
+          metadata: {
+            alignment_score: item.alignment_score,
+            alignment_reasoning: item.alignment_reasoning,
+          },
+        })) as SimulationProduct[];
+        setSimulationProducts(products);
+        const selected = products[0]?.id ?? null;
+        setSelectedSimulationProductId(selected);
+      }
+      setSimulationSourceSession(lastSessionId);
     });
     return () => {
       cancelled = true;
     };
-  }, [searchParams, setProductId, userId]);
+  }, [clientId, lastSessionKey, searchParams, simulationScenario, storageClientId, userId]);
 
   const handleRunSimulation = useCallback(async () => {
     if (!simulationScenario.trim()) return;
@@ -303,6 +614,9 @@ export default function SimulationPage() {
 
   const handleOptimizeSimulation = useCallback(
     async (productId?: string) => {
+      if (optimizationMode === "feed") {
+        return;
+      }
       const runId = simulationRun?.run_id;
       const gaps = simulationRun?.result?.gap_analysis ?? [];
       if (!runId || gaps.length === 0) return;
@@ -323,7 +637,7 @@ export default function SimulationPage() {
         setSimulationLoading(false);
       }
     },
-    [simulationRun, simulationTone, userId],
+    [optimizationMode, simulationRun, simulationTone, userId],
   );
 
   const handleRetestSimulation = useCallback(async () => {
@@ -386,32 +700,23 @@ export default function SimulationPage() {
     await updateSimulationTone(simulationRun.run_id, "", userId);
   }, [simulationRun, userId]);
 
-  const handleSaveProductCopy = useCallback(async () => {
-    if (!selectedSimulationProductId) return;
-    const response = await updateProductCopy(
-      {
-        product_id: selectedSimulationProductId,
-        description: productCopy.trim(),
-      },
-      userId,
-    );
-    const updated = response.product;
-    if (updated) {
+  const handleProductCopyChange = useCallback(
+    (value: string) => {
+      setProductCopy(value);
+      if (!selectedSimulationProductId) return;
       setSimulationProducts((current) =>
         current.map((item) =>
-          item.id === updated.id
+          item.id === selectedSimulationProductId
             ? {
                 ...item,
-                description: updated.description ?? item.description,
-                metadata: updated.metadata ?? item.metadata,
+                description: value,
               }
             : item,
         ),
       );
-    }
-    setProductCopySaved("Product copy saved.");
-    window.setTimeout(() => setProductCopySaved(null), 2500);
-  }, [productCopy, selectedSimulationProductId, userId]);
+    },
+    [selectedSimulationProductId],
+  );
 
   const handleToneFromBrand = useCallback(async () => {
     try {
@@ -525,8 +830,8 @@ export default function SimulationPage() {
         sessions={sessions}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(selectedId) => {
-          router.push(`/?session=${selectedId}`);
+        onSelect={(session) => {
+          router.push(`/?session=${session.id}`);
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
@@ -538,6 +843,10 @@ export default function SimulationPage() {
             onMenu={() => setSidebarOpen(true)}
             onBack={() => router.push("/")}
           />
+          <section className="panel__notice panel__notice--info">
+            <strong>Lab signal:</strong> Simulation scores are directional and
+            should be validated with live outcomes before rollout.
+          </section>
           <SimulationPanel
             query={simulationScenario}
             scenarioValue={simulationScenario}
@@ -545,10 +854,13 @@ export default function SimulationPage() {
               setSimulationScenario(value);
               setSimulationScenarioDirty(true);
             }}
+            evidenceSummary={evidenceSummary}
+            optimizationMode={optimizationMode}
+            onOptimizationModeChange={setOptimizationMode}
+            sourceSessionId={simulationSourceSession}
             productCopy={productCopy}
-            onProductCopyChange={setProductCopy}
-            onProductCopySave={handleSaveProductCopy}
-            productCopySaved={productCopySaved}
+            onProductCopyChange={handleProductCopyChange}
+            feedPreview={feedPreview}
             brandToneSummary={brandToneSummary}
             toneSuggestion={simulationToneSuggestion}
             toneValue={simulationTone}
@@ -567,8 +879,13 @@ export default function SimulationPage() {
             selectedProductId={selectedSimulationProductId}
             loading={simulationLoading}
             canRun={Boolean(simulationScenario.trim() && simulationProducts.length > 0)}
-            canOptimize={Boolean(simulationRun?.result?.gap_analysis?.length)}
-            canRetest={Boolean(simulationRun && simulationOptimized)}
+            canOptimize={Boolean(
+              simulationRun?.result?.gap_analysis?.length &&
+                optimizationMode !== "feed",
+            )}
+            canRetest={Boolean(
+              simulationRun && simulationOptimized && optimizationMode !== "feed",
+            )}
             onRun={handleRunSimulation}
             onOptimize={handleOptimizeSimulation}
             onRetest={handleRetestSimulation}

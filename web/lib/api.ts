@@ -23,6 +23,9 @@ import {
   AdminProduct,
   AdminClientUser,
   AdminPlatformProfileResponse,
+  AdminSkillResponse,
+  AdminSkillHistoryResponse,
+  EvidenceSignalResponse,
   QueryBatteryListResponse,
   QueryBatteryQueryListResponse,
   QueryBatteryMetricsResponse,
@@ -33,6 +36,10 @@ import {
   ExperimentRunResponse,
   NextTestRecommendationResponse,
   ExperimentRecommendationListResponse,
+  ExperimentValidationResponse,
+  ExperimentValidationSummaryResponse,
+  BrandPredictionAccuracyResponse,
+  AnalyticsEventResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
@@ -297,6 +304,7 @@ export async function startConversationStreamWithEvents(
   userId: string | null | undefined,
   metadata: Record<string, unknown> | undefined,
   handlers: StreamHandlers<ConversationResponse>,
+  signal?: AbortSignal,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -304,6 +312,7 @@ export async function startConversationStreamWithEvents(
     "/conversation/start/stream",
     {
       method: "POST",
+      signal,
       body: JSON.stringify({
         opening_message: message,
         user_id: userId ?? undefined,
@@ -342,6 +351,7 @@ export async function sendConversationMessageStreamWithEvents(
   userId: string | null | undefined,
   metadata: Record<string, unknown> | undefined,
   handlers: StreamHandlers<ConversationResponse>,
+  signal?: AbortSignal,
 ): Promise<ConversationResponse> {
   const clientId = getClientId();
   const brandId = getBrandId();
@@ -349,6 +359,7 @@ export async function sendConversationMessageStreamWithEvents(
     `/conversation/${sessionId}/stream`,
     {
       method: "POST",
+      signal,
       body: JSON.stringify({
         message,
         user_id: userId ?? undefined,
@@ -384,10 +395,11 @@ export async function sendConversationMessageStream(
 export async function getConversationSnapshot(
   sessionId: string,
   userId?: string | null,
+  clientIdOverride?: string | null,
 ): Promise<ConversationResponse> {
   const params = new URLSearchParams();
   if (userId) params.set("user_id", userId);
-  const clientId = getClientId();
+  const clientId = clientIdOverride ?? getClientId();
   if (clientId) params.set("client_id", clientId);
   const query = params.toString();
   const suffix = query ? `?${query}` : "";
@@ -789,6 +801,96 @@ export async function listExperimentMetrics(
   );
 }
 
+export async function logExperimentValidation(
+  experimentId: string,
+  payload: {
+    variant_id?: string | null;
+    platform?: string | null;
+    query_text?: string | null;
+    observed_products?: string[];
+    observed_winner_variant_id?: string | null;
+    observed_position?: number | null;
+    notes?: string | null;
+    created_at?: string | null;
+    user_id?: string | null;
+  },
+): Promise<ExperimentValidationResponse> {
+  const clientId = getClientId();
+  return request<ExperimentValidationResponse>(
+    `/experiments/${experimentId}/validations`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: payload.user_id ?? undefined,
+        variant_id: payload.variant_id ?? undefined,
+        platform: payload.platform ?? undefined,
+        query_text: payload.query_text ?? undefined,
+        observed_products: payload.observed_products ?? [],
+        observed_winner_variant_id: payload.observed_winner_variant_id ?? undefined,
+        observed_position: payload.observed_position ?? undefined,
+        notes: payload.notes ?? undefined,
+        created_at: payload.created_at ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function getExperimentValidationSummary(
+  experimentId: string,
+  userId?: string | null,
+): Promise<ExperimentValidationSummaryResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<ExperimentValidationSummaryResponse>(
+    `/experiments/${experimentId}/validation-summary?${params.toString()}`,
+  );
+}
+
+export async function getBrandPredictionAccuracy(
+  brandId: string,
+  userId?: string | null,
+): Promise<BrandPredictionAccuracyResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<BrandPredictionAccuracyResponse>(
+    `/brands/${brandId}/prediction-accuracy?${params.toString()}`,
+  );
+}
+
+export async function logAnalyticsEvent(payload: {
+  brand_id?: string | null;
+  product_id?: string | null;
+  variant_id?: string | null;
+  experiment_id?: string | null;
+  event_type: string;
+  source?: string | null;
+  event_timestamp?: string | null;
+  metadata?: Record<string, unknown>;
+  user_id?: string | null;
+}): Promise<AnalyticsEventResponse> {
+  const clientId = getClientId();
+  return request<AnalyticsEventResponse>("/analytics/events", {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: payload.user_id ?? undefined,
+      brand_id: payload.brand_id ?? undefined,
+      product_id: payload.product_id ?? undefined,
+      variant_id: payload.variant_id ?? undefined,
+      experiment_id: payload.experiment_id ?? undefined,
+      event_type: payload.event_type,
+      source: payload.source ?? undefined,
+      event_timestamp: payload.event_timestamp ?? undefined,
+      metadata: payload.metadata ?? {},
+    }),
+  });
+}
+
 export async function getNextTestRecommendation(
   experimentId: string,
   userId?: string | null,
@@ -1179,11 +1281,74 @@ export async function updateAdminPlatformProfile(
   });
 }
 
+export async function getAdminSkill(
+  name: string,
+  userId?: string | null,
+): Promise<AdminSkillResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<AdminSkillResponse>(`/skills/${name}${suffix}`);
+}
+
+export async function updateAdminSkill(
+  name: string,
+  payload: {
+    description: string;
+    version: string;
+    content: string;
+    enabled: boolean;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AdminSkillResponse> {
+  return request<AdminSkillResponse>(`/skills/${name}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      ...payload,
+      name,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminSkillHistory(
+  name: string,
+  userId?: string | null,
+  limit: number = 10,
+): Promise<AdminSkillHistoryResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  if (limit) params.set("limit", String(limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<AdminSkillHistoryResponse>(`/skills/${name}/history${suffix}`);
+}
+
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {
   const clientId = getClientId();
   return request<EvidenceAnalyzeResponse>("/evidence/analyze", {
     method: "POST",
     body: JSON.stringify({ query, client_id: clientId ?? undefined }),
+  });
+}
+
+export async function extractEvidenceSignals(
+  payload: {
+    goal: string;
+    product: { id?: string; name?: string; description?: string };
+    winner?: { id?: string; name?: string; description?: string };
+  },
+  userId?: string | null,
+): Promise<EvidenceSignalResponse> {
+  const clientId = getClientId();
+  return request<EvidenceSignalResponse>("/evidence/signals", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
   });
 }
 

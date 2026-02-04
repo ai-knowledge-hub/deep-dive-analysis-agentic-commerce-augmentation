@@ -48,7 +48,7 @@ Visit `http://localhost:3000` to interact with the assistant.
 
 ## 3. Production Deployment
 
-### Railway (Backend)
+### Backend (Python Runtime)
 
 1. Connect your GitHub repository
 2. Set environment variables:
@@ -57,7 +57,7 @@ Visit `http://localhost:3000` to interact with the assistant.
    - `GEMINI_MODEL=gemini-2.0-flash`
 3. Deploy with: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
 
-### Vercel (Frontend)
+### Frontend (Vercel)
 
 1. Connect `web/` directory
 2. Set `NEXT_PUBLIC_API_URL` to your Railway backend URL
@@ -65,6 +65,16 @@ Visit `http://localhost:3000` to interact with the assistant.
    `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL`,
    `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL`)
 4. Deploy automatically on push
+
+### Vercel (Full‑stack) — Planned, Not Built
+
+It is **not** currently configured to deploy the FastAPI backend on Vercel’s Python
+runtime. This would require:
+- Serverless adaptation of FastAPI routes.
+- Replacing local SQLite with an external DB.
+- Explicit Vercel config for functions.
+
+Consider this **planned** work rather than a supported deployment path today.
 
 ---
 
@@ -81,15 +91,7 @@ Set `LLM_PROVIDER` to choose the language model:
 
 ## 5. Attribution Exports
 
-Export attribution events for analytics verification:
-
-```bash
-# TODO (post-migration): implement an attribution export tool.
-# This used to reference `modules/attribution/*` before the clean-architecture migration.
-# Suggested future location: `scripts/ga4_export.py` or `infrastructure/attribution/*`.
-```
-
-This creates a JSON payload compatible with GA4 or custom dashboards.
+**Planned (not built):** attribution export utilities.
 
 ---
 

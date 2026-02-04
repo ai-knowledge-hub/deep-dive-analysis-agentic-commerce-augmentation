@@ -3,10 +3,8 @@
 **Purpose:** Track features we intentionally defer during the hackathon/MVP phase so stakeholders know what’s planned, what’s not, and why.
 
 This document complements:
-- `docs/roadmap-protocol-layer.md` (protocol simulation milestones)
-- `docs/build-plan.md` (execution phases)
-- `docs/product-workflow.md` (current user flow)
-- `docs/query-battery-builder.md` (planned experiment loop + query batteries)
+- `docs/app-architecture.md` (current + planned architecture)
+- `docs/app-workflows.md` (current workflows + planned extensions)
 
 ---
 
@@ -34,7 +32,7 @@ This document complements:
 
 ## 2) Brand/Customer Feedback Loop (Deferred)
 
-**Current:** No post‑purchase tracking.
+**Current:** Manual validation logs + external analytics event ingestion.
 
 **Planned:**
 1. **Feedback collection**

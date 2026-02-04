@@ -11,6 +11,9 @@ Pure helpers live in `domain.conversation.research`.
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
+import os
+import urllib.parse
+import re
 
 from domain.conversation import research as research_domain
 from infrastructure.db import replays as replays_repo
@@ -60,6 +63,64 @@ GenerateFn = Callable[[str], Any]
 GenerateWithToolsFn = Callable[[str, list, Optional[str], Optional[str]], Any]
 
 
+def _gemini_cli_tools_allowed() -> bool:
+    return os.getenv("GEMINI_CLI_ALLOW_TOOLS", "0").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _fallback_urls(query: str) -> List[str]:
+    raw = os.getenv("RESEARCH_FALLBACK_URLS", "").strip()
+    if raw:
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    encoded = urllib.parse.quote_plus(query)
+    return [f"https://duckduckgo.com/html/?q={encoded}"]
+
+
+def _serpapi_available() -> bool:
+    return bool(os.getenv("SERPAPI_API_KEY"))
+
+
+def _summarize_web_outputs(tool_outputs: List[dict], *, max_chars: int = 1200) -> str:
+    snippets: List[str] = []
+    for entry in tool_outputs:
+        if entry.get("name") != "web_fetch":
+            continue
+        output = entry.get("output") or {}
+        if not isinstance(output, dict):
+            continue
+        if output.get("error"):
+            continue
+        text = str(output.get("text") or "").strip()
+        url = str(output.get("url") or "").strip()
+        if not text:
+            continue
+        snippet = text.replace("\n", " ").strip()
+        if len(snippet) > max_chars:
+            snippet = snippet[:max_chars] + "..."
+        if url:
+            snippets.append(f"- {url}: {snippet}")
+        else:
+            snippets.append(f"- {snippet}")
+    return "\n".join(snippets)
+
+
+def _extract_duckduckgo_links(html: str, *, limit: int = 5) -> List[str]:
+    if not html:
+        return []
+    links: List[str] = []
+    for match in re.findall(r'href="(https?://[^"]+)"', html):
+        if "duckduckgo.com" in match:
+            continue
+        if match not in links:
+            links.append(match)
+        if len(links) >= limit:
+            break
+    return links
+
+
 def run_research(
     query: str,
     goals: List[str],
@@ -95,19 +156,93 @@ def run_research(
     try:
         if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
             raise RuntimeError("OpenRouter API key missing")
-        loop = AgentLoop(
-            tools=tool_registry, generate_with_tools_fn=generate_with_tools_fn
-        )
-        tool_run, _ = loop.run_tools_once(
-            prompt=prompt,
-            run_type="conversation.research.llm",
-            inputs={"query": query, "goals": goals, "context_used": bool(context)},
-            versions=default_versions(),
-        )
-        response = tool_run.model_response
-        tool_calls = tool_run.tool_calls
-        tool_outputs = tool_run.tool_outputs
-        tool_call_records = tool_run.tool_call_records
+
+        if settings.llm_provider == "gemini_cli":
+            if _gemini_cli_tools_allowed():
+                prompt = (
+                    f"{prompt}\n\n"
+                    "Use GoogleSearch and WebFetch to find real products and sources. "
+                    "Include 3-6 products with source_url. Return JSON only."
+                )
+            text = generate_fn(prompt)
+            response = {"content": text}
+        else:
+            loop = AgentLoop(
+                tools=tool_registry, generate_with_tools_fn=generate_with_tools_fn
+            )
+            # For Gemini API, run a deterministic web_fetch first so we always
+            # have evidence even if no tool-calls are produced by the model.
+            if settings.llm_provider == "gemini":
+                search_exec = None
+                search_name = None
+                if _serpapi_available():
+                    search_exec = tool_registry.execute_with_record(
+                        "serp_search",
+                        {"query": query, "limit": 5},
+                    )
+                    search_name = "serp_search"
+                else:
+                    search_exec = tool_registry.execute_with_record(
+                        "product_search",
+                        {"query": query, "limit": 5},
+                    )
+                    search_name = "product_search"
+
+                if search_exec is not None:
+                    tool_outputs.append(
+                        {"name": search_name, "output": search_exec.output}
+                    )
+                    tool_call_records.append(search_exec.call)
+
+                search_results = (
+                    search_exec.output.get("results")
+                    if isinstance(search_exec, object)
+                    and isinstance(getattr(search_exec, "output", None), dict)
+                    else None
+                )
+                if not search_results and _serpapi_available():
+                    fallback_exec = tool_registry.execute_with_record(
+                        "product_search",
+                        {"query": query, "limit": 5},
+                    )
+                    tool_outputs.append(
+                        {"name": "product_search", "output": fallback_exec.output}
+                    )
+                    tool_call_records.append(fallback_exec.call)
+                    search_results = (
+                        fallback_exec.output.get("results")
+                        if isinstance(fallback_exec.output, dict)
+                        else None
+                    )
+
+                if isinstance(search_results, list):
+                    for result in search_results:
+                        url = result.get("url") if isinstance(result, dict) else None
+                        if not url:
+                            continue
+                        execution = tool_registry.execute_with_record(
+                            "web_fetch",
+                            {"url": url, "max_chars": 6000},
+                        )
+                        tool_outputs.append(
+                            {"name": "web_fetch", "output": execution.output}
+                        )
+                        tool_call_records.append(execution.call)
+
+                web_evidence = _summarize_web_outputs(tool_outputs)
+                if web_evidence:
+                    prompt = f"{prompt}\n\nWeb evidence (snippets):\n{web_evidence}"
+
+            tool_run, _ = loop.run_tools_once(
+                prompt=prompt,
+                run_type="conversation.research.llm",
+                inputs={"query": query, "goals": goals, "context_used": bool(context)},
+                versions=default_versions(),
+            )
+            response = tool_run.model_response
+            tool_calls = tool_run.tool_calls
+            tool_outputs = tool_outputs + tool_run.tool_outputs
+            tool_call_records = tool_call_records + tool_run.tool_call_records
     except Exception as exc:
         response = {"text": "", "error": str(exc)}
         tool_calls = (
@@ -158,6 +293,12 @@ def run_research(
         "insights": insights,
         "replay": replay.to_dict(),
     }
+    if os.getenv("RESEARCH_DEBUG", "0").lower() in {"1", "true", "yes"}:
+        payload["debug"] = {
+            "tool_outputs": tool_outputs,
+            "tool_calls": tool_calls,
+            "llm_provider": settings.llm_provider,
+        }
 
     if client_id:
         logger = ReplayLogger(persist_fn=replays_repo.create_replay_record)

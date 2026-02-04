@@ -21,8 +21,12 @@ from infrastructure.db import (
     experiments as experiments_repo,
     experiment_runs as experiment_runs_repo,
     experiment_recommendations as experiment_recommendations_repo,
+    experiment_validations as experiment_validations_repo,
+    experiment_calibrations as experiment_calibrations_repo,
+    analytics_events as analytics_events_repo,
     brand_beliefs as brand_beliefs_repo,
     goals as goals_repo,
+    skills as skills_repo,
     platform_profiles as platform_profiles_repo,
     query_batteries as query_batteries_repo,
     replays as replays_repo,
@@ -62,7 +66,11 @@ def default_deps() -> AppDeps:
         experiments=experiments_repo,
         experiment_runs=experiment_runs_repo,
         experiment_recommendations=experiment_recommendations_repo,
+        experiment_validations=experiment_validations_repo,
+        experiment_calibrations=experiment_calibrations_repo,
+        analytics_events=analytics_events_repo,
         brand_beliefs=brand_beliefs_repo,
+        skills=skills_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),
@@ -71,6 +79,11 @@ def default_deps() -> AppDeps:
         embedding_available=embedding_available,
         embed=embed,
         generate=generate,
+        generate_with_provider=lambda prompt,
+        provider=None,
+        system_instruction=None: generate(
+            prompt, system_instruction=system_instruction, provider=provider
+        ),
         build_optimization_prompt=build_optimization_prompt,
         run_research=run_research,
         classify_intent=classify_intent,

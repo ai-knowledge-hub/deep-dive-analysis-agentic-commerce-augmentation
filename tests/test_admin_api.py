@@ -76,3 +76,28 @@ def test_admin_client_user_mapping(client: TestClient):
     list_users = client.get("/clients/client-2/users?user_id=admin-user")
     assert list_users.status_code == 200
     assert any(item["user_id"] == "user-xyz" for item in list_users.json()["users"])
+
+
+def test_admin_skill_editing_and_history(client: TestClient):
+    get_skill = client.get("/skills/signal_extractor?user_id=admin-user")
+    assert get_skill.status_code == 200
+    assert get_skill.json()["skill"]["name"] == "signal_extractor"
+
+    updated = client.put(
+        "/skills/signal_extractor",
+        json={
+            "name": "signal_extractor",
+            "description": "Updated description",
+            "version": "2026-02-02",
+            "content": "Updated skill content",
+            "enabled": True,
+            "metadata": {"purpose": "signal_extraction"},
+            "user_id": ADMIN_USER_ID,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["skill"]["version"] == "2026-02-02"
+
+    history = client.get("/skills/signal_extractor/history?user_id=admin-user&limit=5")
+    assert history.status_code == 200
+    assert history.json()["history"]

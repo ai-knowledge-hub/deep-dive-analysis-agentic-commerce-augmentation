@@ -56,6 +56,18 @@ if APIRouter:
         user_id: Optional[str] = None
         client_id: Optional[str] = None
 
+    class SignalProduct(BaseModel):
+        id: Optional[str] = None
+        name: Optional[str] = None
+        description: Optional[str] = None
+
+    class EvidenceSignalRequest(BaseModel):
+        goal: str = Field(..., min_length=1)
+        product: SignalProduct
+        winner: Optional[SignalProduct] = None
+        user_id: Optional[str] = None
+        client_id: Optional[str] = None
+
     @router.post("/analyze")
     def analyze(payload: EvidenceAnalyzeRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
@@ -94,6 +106,18 @@ if APIRouter:
             client_id=client_scope,
             user_id=payload.user_id,
         )
+
+    @router.post("/signals")
+    def extract_signals(payload: EvidenceSignalRequest):
+        require_client_id(payload.client_id, payload.user_id)
+        winner_payload = payload.winner.dict() if payload.winner else None
+        return {
+            "signals": evidence_service.extract_signals(
+                goal=payload.goal,
+                product=payload.product.dict(),
+                winner=winner_payload,
+            )
+        }
 else:  # pragma: no cover
     router = None
     representation_router = None

@@ -40,6 +40,12 @@ We provide **the discovery layer that transaction protocols don't define**, work
 ## Core Innovation: Intentionality + Alignment
 
 We make products **intent‑legible** and rank them by alignment with inferred goals.
+These alignment rankings are a **proxy for semantic match + intent coverage** (useful for “LLM‑friendliness”), not a guaranteed predictor of any closed‑box shopping ranking system.
+
+**Alignment (current model, explainable):**
+- Signal‑overlap scoring across **intent signals**, **evidence signals**, and **our copy**.
+- **Hard category gate**: if the query specifies a category (e.g., *shoes*) and the product copy doesn’t mention that category (or synonyms), the score is forced to **0** to prevent false positives.
+- This baseline is transparent and auditable; semantic/Bayesian weighting is on the roadmap.
 
 | Capability | What It Does | Implementation |
 |-----------|--------------|----------------|
@@ -47,8 +53,10 @@ We make products **intent‑legible** and rank them by alignment with inferred g
 | **Intentionality Profiling** | Transform specs → capabilities → outcomes | `domain/intentionality/` + `application/services/intentionality_profiler.py` |
 | **Alignment Scoring** | Score products against inferred intent | `domain/alignment/` + `infrastructure/alignment/goal_alignment_gateway.py` |
 | **Evidence Discovery** | Analyze open-web representations for intent legibility | `domain/evidence/` + `application/services/evidence_service.py` |
-| **Verification (Lift)** | Show before/after discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
+| **Signal Extraction (Skills)** | Convert intent → phrase-level signals via editable skill prompts | `application/services/signal_extractor.py` + `infrastructure/db/skills.py` |
+| **Verification (Lift)** | Show before/after *simulated* discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
 | **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
+| **Validation Logging** | Track lab predictions vs. live outcomes | `api/routes/experiments.py` + `application/services/experiment_validation_service.py` |
 | **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
 | **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
 
@@ -119,6 +127,12 @@ All API calls require `client_id` unless the caller is an admin user (see `ADMIN
 The UI exposes a manual admin context picker when `NEXT_PUBLIC_ADMIN_MODE=true` so you can
 switch client/brand/product without automated onboarding.
 
+### Skill prompts (admin-editable)
+
+Signal extraction and copy generation run from **skills stored in the DB**.  
+You can edit them in **Admin → Agent skills**. Each update writes an **audit trail** into
+`skills_history` for traceability and safe iteration.
+
 ### Clerk user sync (webhook)
 
 Set a Clerk webhook pointing to `POST /webhooks/clerk` with signing enabled, then store
@@ -154,16 +168,11 @@ make test
 
 | Document | Purpose |
 |----------|---------|
-| [docs/architecture.md](docs/architecture.md) | Intentionality optimization architecture |
-| [docs/strategic-positioning.md](docs/strategic-positioning.md) | Market positioning, UCP/ACP integration |
-| [docs/build-plan.md](docs/build-plan.md) | Execution plan for the pivot |
-| [docs/product-workflow.md](docs/product-workflow.md) | Brand workflow: connect → analyze → optimize → deploy → verify |
-| [docs/roadmap-protocol-layer.md](docs/roadmap-protocol-layer.md) | Protocol-layer roadmap (ACP/UCP) |
-| [docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md](docs/2-layer-arch/arch-migratoion/agentic-arch-transformation.md) | Why + what to change for agentic clean architecture |
-| [docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md](docs/2-layer-arch/arch-migratoion/agentic-arch-execution-summary.md) | Step-by-step execution plan (incremental) |
-| [docs/terminology.md](docs/terminology.md) | Definitions and naming conventions |
-| [docs/sequence-diagram.md](docs/sequence-diagram.md) | End-to-end interaction flow |
-| [docs/feed_schema.md](docs/feed_schema.md) | RawOffer → Product data pipeline |
+| [docs/user-guide-complete.md](docs/user-guide-complete.md) | User manual (current features) |
+| [docs/app-architecture.md](docs/app-architecture.md) | Comprehensive architecture (current + planned) |
+| [docs/app-workflows.md](docs/app-workflows.md) | All workflows and how they connect |
+| [docs/terminology.md](docs/terminology.md) | Glossary + quick reference |
+| [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features (planned) |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
 
 ---
@@ -172,7 +181,7 @@ make test
 
 These rules keep the system grounded in intent legibility:
 
-1. **Intent inference drives ranking**
+1. **Intent inference drives proxy ranking**
 2. **Products are represented as capabilities, not specs**
 3. **Alignment scores are explainable**
 4. **Memory improves inference (not surveillance)**
@@ -187,7 +196,7 @@ These rules keep the system grounded in intent legibility:
 | **Intentionality Profile** | Product representation in terms of capabilities and outcomes |
 | **Intent Inference** | Modeling user goals from query + context |
 | **Alignment Score** | Match confidence between intent and product |
-| **Discoverability Lift** | Improvement in organic LLM recommendations |
+| **Discoverability Lift** | Improvement in simulated “LLM‑friendliness” metrics |
 
 See [docs/terminology.md](docs/terminology.md) for complete definitions.
 
@@ -271,15 +280,6 @@ UCP and ACP define *how* transactions flow. We define *why* a product gets recom
 
 See [docs/strategic-positioning.md](docs/strategic-positioning.md) for the full positioning narrative.
 
----
-
-## Research Foundation
-
-This implementation builds on:
-
-- **Intent inference / theory of mind in LLMs** — LLMs model goals and can align products to those goals.
-- **Active inference / free energy** — recommendations that fit context reduce uncertainty.
-- **Computational Intentionality Theory (CIT)** — products become discoverable when mapped to human capabilities *(paper forthcoming)*.
 
 ---
 

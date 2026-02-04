@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, Dict
 
 try:
     from fastapi import APIRouter, Query
@@ -10,6 +11,8 @@ except ImportError:  # pragma: no cover - optional dependency
 from infrastructure.llm.intent_classifier import build_intent_classifier
 from application.services.intentionality_profiler import build_profile
 from application.services.alignment_service import AlignmentService
+from application.agents.layer2_agent import Layer2Agent
+from application.services.simulation_service import _protocol_readiness_for_items
 from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
@@ -173,6 +176,43 @@ if APIRouter:
             "alignment": alignment,
         }
 
+    @router.get("/{product_id}/schema-score")
+    def schema_score(
+        product_id: str,
+        client_id: str | None = None,
+        user_id: str | None = None,
+    ) -> Dict[str, Any]:
+        require_client_id(client_id, user_id)
+        deps = default_deps()
+        product = deps.clients.get_product_for_client(
+            client_id=client_id, product_id=product_id
+        )
+        if not product:
+            return {"error": "product not found"}
+        flat = _flatten_product(product)
+        agent = Layer2Agent()
+        analysis = agent.analyze_products([flat])
+        issues = analysis.get("schema_checks", [])[0].get("issues", [])
+        score = _schema_score(issues)
+        return {"score": score, "issues": issues, "summary": analysis.get("summary")}
+
+    @router.get("/{product_id}/protocol-readiness")
+    def protocol_readiness(
+        product_id: str,
+        client_id: str | None = None,
+        user_id: str | None = None,
+    ) -> Dict[str, Any]:
+        require_client_id(client_id, user_id)
+        deps = default_deps()
+        product = deps.clients.get_product_for_client(
+            client_id=client_id, product_id=product_id
+        )
+        if not product:
+            return {"error": "product not found"}
+        flat = _flatten_product(product)
+        readiness = _protocol_readiness_for_items(deps, [flat])
+        return {"readiness": readiness}
+
     def _intent_goals(intent: dict) -> list[str]:
         goals: list[str] = []
         primary = intent.get("primary_goal") or intent.get("label")
@@ -187,5 +227,29 @@ if APIRouter:
                 seen.add(goal)
                 deduped.append(goal)
         return deduped
+
+    def _flatten_product(product: dict) -> dict:
+        metadata = product.get("metadata") or {}
+        return {
+            "id": product.get("id"),
+            "name": product.get("name"),
+            "description": product.get("description") or "",
+            "source": metadata.get("source") or "product",
+            "offer_url": metadata.get("offer_url") or metadata.get("url"),
+            "merchant_name": metadata.get("merchant_name"),
+            "price": metadata.get("price"),
+            "availability": metadata.get("availability"),
+            "metadata": metadata,
+        }
+
+    def _schema_score(issues: list[dict]) -> int:
+        score = 100
+        for issue in issues:
+            severity = issue.get("severity")
+            if severity == "error":
+                score -= 25
+            elif severity == "warning":
+                score -= 10
+        return max(0, min(score, 100))
 else:  # pragma: no cover
     router = None
