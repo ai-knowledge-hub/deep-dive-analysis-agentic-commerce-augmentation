@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discovery Commerce - Performics Labs</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #111;
+      --bg-tertiary: #171717;
+      --bg-hover: #1c1c1c;
+      --border: #222;
+      --text-primary: #fafafa;
+      --text-secondary: #999;
+      --text-muted: #666;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-muted: rgba(16, 185, 129, 0.12);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .presentation {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 80px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      overflow-y: auto;
+      animation: slideIn 0.4s ease;
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .slide__header {
+      text-align: center;
+      margin-bottom: 40px;
+      max-width: 900px;
+    }
+
+    .slide__logo {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 20px;
+    }
+
+    .slide__title {
+      font-size: 48px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      line-height: 1.2;
+      color: var(--text-primary);
+    }
+
+    .slide__subtitle {
+      font-size: 18px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .slide__content {
+      max-width: 1100px;
+      width: 100%;
+    }
+
+    /* --- Buttons (minimal, matches app style) --- */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 14px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-primary);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    .btn--lg {
+      padding: 10px 20px;
+      font-size: 13px;
+    }
+
+    /* --- Grid --- */
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      margin-top: 32px;
+    }
+
+    .grid--2 { grid-template-columns: repeat(2, 1fr); }
+    .grid--3 { grid-template-columns: repeat(3, 1fr); }
+    .grid--4 { grid-template-columns: repeat(4, 1fr); }
+
+    /* --- Cards --- */
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 24px;
+    }
+
+    .card__title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--text-primary);
+    }
+
+    .card__text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .card__badge {
+      display: inline-block;
+      padding: 3px 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* --- Stats --- */
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin: 32px 0;
+    }
+
+    .stat { text-align: center; }
+
+    .stat__value {
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .stat__label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* --- Timeline --- */
+
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .timeline__item {
+      position: relative;
+      padding-bottom: 28px;
+    }
+
+    .timeline__item::before {
+      content: '';
+      position: absolute;
+      left: -36px;
+      top: 5px;
+      width: 8px;
+      height: 8px;
+      background: var(--text-muted);
+      border-radius: 50%;
+    }
+
+    .timeline__item:first-child::before {
+      background: var(--accent);
+    }
+
+    .timeline__phase {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .timeline__item:first-child .timeline__phase {
+      color: var(--accent);
+    }
+
+    .timeline__title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .timeline__text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* --- Lists --- */
+
+    .list { list-style: none; margin: 14px 0; }
+
+    .list__item {
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .list__item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 14px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* --- Diagram --- */
+
+    .diagram {
+      background: var(--bg-secondary);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 32px;
+      margin: 32px 0;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      overflow-x: auto;
+    }
+
+    .highlight {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* --- Moat grid --- */
+
+    .moat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 32px;
+    }
+
+    .moat-item {
+      background: var(--bg-secondary);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-left: 3px solid rgba(255, 255, 255, 0.12);
+      padding: 20px;
+      border-radius: 8px;
+    }
+
+    .moat-item__title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    .moat-item__text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* --- Navigation --- */
+
+    .navigation {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+    }
+
+    .nav-button {
+      width: 36px;
+      height: 36px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-primary);
+      font-size: 14px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .nav-button:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .slide-counter {
+      position: fixed;
+      bottom: 36px;
+      left: 32px;
+      font-size: 12px;
+      color: var(--text-muted);
+      z-index: 100;
+    }
+
+    /* --- Responsive --- */
+
+    @media (max-width: 1024px) {
+      .slide { padding: 48px 32px; }
+      .slide__title { font-size: 36px; }
+      .slide__subtitle { font-size: 16px; }
+      .grid--2, .grid--3, .grid--4 { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr; }
+      .moat-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 768px) {
+      .slide { padding: 32px 20px; }
+      .slide__title { font-size: 28px; }
+      .navigation { bottom: 16px; right: 16px; }
+      .slide-counter { bottom: 16px; left: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="presentation">
+
+    <!-- 1: Title -->
+    <div class="slide active" data-slide="1">
+      <div class="slide__header">
+        <div class="slide__logo">Performics Labs</div>
+        <h1 class="slide__title">Discovery Commerce</h1>
+        <p class="slide__subtitle">Making products legible to reasoning agents. The discovery layer for AI-driven commerce.</p>
+      </div>
+      <button class="btn btn--lg" onclick="nextSlide()">See the Opportunity</button>
+    </div>
+
+    <!-- 2: The Problem -->
+    <div class="slide" data-slide="2">
+      <div class="slide__header">
+        <h2 class="slide__title">The Problem</h2>
+        <p class="slide__subtitle">AI shopping agents are reshaping commerce, but brands have no way to optimize for discovery</p>
+      </div>
+      <div class="slide__content">
+        <div class="grid grid--2">
+          <div class="card">
+            <h3 class="card__title">Invisible to AI</h3>
+            <p class="card__text">Products optimized for keyword search are invisible to LLM reasoning. Traditional SEO doesn't work when agents understand <em>intent</em>, not keywords.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">No Visibility</h3>
+            <p class="card__text">Brands have no insight into how AI agents perceive their products. Why does a product rank #5 instead of #1? What's missing?</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">No Validation</h3>
+            <p class="card__text">Lab metrics don't predict production outcomes. Optimizations that test well may fail in real traffic, wasting resources.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Protocol Gap</h3>
+            <p class="card__text">Commerce protocols (UCP, ACP) define transactions, but not discovery. The layer between agent reasoning and checkout is undefined.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3: The Solution -->
+    <div class="slide" data-slide="3">
+      <div class="slide__header">
+        <h2 class="slide__title">The Solution</h2>
+        <p class="slide__subtitle">A brand-side intentionality optimization + validation layer</p>
+      </div>
+      <div class="slide__content">
+        <div class="diagram">
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;         AI Agents (Gemini, ChatGPT, Claude)             &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+                          &#x25BC;
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;    DISCOVERY COMMERCE: Optimization + Verification      &#x2502;
+&#x2502;                                                         &#x2502;
+&#x2502;  What is the user trying to achieve?                    &#x2502;
+&#x2502;  Which products enable that goal?                       &#x2502;
+&#x2502;  Why does this product align with intent?               &#x2502;
+&#x2502;  Did optimization improve discoverability?              &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+                          &#x25BC;
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;       Commerce Protocols (UCP, ACP, etc.)               &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+        </div>
+        <p style="text-align: center; font-size: 14px; color: var(--text-secondary); margin-top: 16px;">
+          <span class="highlight">Protocol-agnostic.</span> The discovery layer works with any commerce protocol.
+        </p>
+      </div>
+    </div>
+
+    <!-- 4: Core Capabilities -->
+    <div class="slide" data-slide="4">
+      <div class="slide__header">
+        <h2 class="slide__title">Core Capabilities</h2>
+        <p class="slide__subtitle">A complete platform for AI commerce optimization</p>
+      </div>
+      <div class="slide__content">
+        <div class="grid grid--3">
+          <div class="card">
+            <h3 class="card__title">Intent Inference</h3>
+            <p class="card__text">Model user goals from natural language queries. Transform "TV for bright living room" into structured intent signals.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Intentionality Profiling</h3>
+            <p class="card__text">Convert product specs into capabilities and outcomes. Make products legible to reasoning agents.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Alignment Scoring</h3>
+            <p class="card__text">Dual-mode scoring (keyword + semantic) with hard category gating to prevent false positives.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Simulation Sandbox</h3>
+            <p class="card__text">Run competitive scenarios. See exactly why you lost to competitors and get actionable optimization suggestions.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Experiment Framework</h3>
+            <p class="card__text">Create variants, run batteries of test queries, track predictions vs. reality. Unlock insights after validation.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Validation Logging</h3>
+            <p class="card__text">Track lab predictions against real-world outcomes. Soft-gate insights until prediction accuracy thresholds are met.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5: Competitive Moat -->
+    <div class="slide" data-slide="5">
+      <div class="slide__header">
+        <h2 class="slide__title">Competitive Moat</h2>
+        <p class="slide__subtitle">Hamilton's 7 Powers + unique technical advantages</p>
+      </div>
+      <div class="slide__content">
+        <div class="moat-grid">
+          <div class="moat-item">
+            <h3 class="moat-item__title">Learning Economies</h3>
+            <p class="moat-item__text">Every simulation run, experiment, and validation creates proprietary lessons. The system learns what makes products discoverable across categories, brands, and intent patterns.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Switching Costs</h3>
+            <p class="moat-item__text">Once brands optimize products through the platform, moving to competitors means losing intentionality profiles, experiment history, and validated insights.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Network Effects</h3>
+            <p class="moat-item__text">More brands, more intent patterns, better classification, more accurate optimization. Cross-brand pattern learning improves outcomes for everyone.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Brand Positioning</h3>
+            <p class="moat-item__text">First mover in the "intent legibility" category. Performics Labs signals R&D credibility. Early adopters become reference customers.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Hard Category Gating</h3>
+            <p class="moat-item__text">Hybrid scoring (semantic + keyword with category enforcement) prevents false positives that pure-semantic systems suffer from. Explainability builds trust.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Validation-First</h3>
+            <p class="moat-item__text">Built-in skepticism: lab metrics require real-world validation before insights unlock. This prevents overfitting and builds credibility with enterprise buyers.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Protocol Agnostic</h3>
+            <p class="moat-item__text">Works with UCP, ACP, or any future commerce protocol. Not locked to a single transaction layer, preserving optionality as the market evolves.</p>
+          </div>
+          <div class="moat-item">
+            <h3 class="moat-item__title">Bottom-Up + Top-Down</h3>
+            <p class="moat-item__text">Hybrid query generation (from product specs + brand beliefs) prevents bias and captures both discovered and hypothesized intent patterns.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6: Technology -->
+    <div class="slide" data-slide="6">
+      <div class="slide__header">
+        <h2 class="slide__title">Technology & Architecture</h2>
+        <p class="slide__subtitle">Built for scale, designed for flexibility</p>
+      </div>
+      <div class="slide__content">
+        <div class="grid grid--2">
+          <div class="card">
+            <h3 class="card__title">Clean Architecture</h3>
+            <ul class="list">
+              <li class="list__item">Domain-driven design with pure business logic</li>
+              <li class="list__item">Pluggable infrastructure (swap LLM/DB providers)</li>
+              <li class="list__item">Multi-tenant from day one</li>
+              <li class="list__item">Testable, maintainable, auditable</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Modern Stack</h3>
+            <ul class="list">
+              <li class="list__item">FastAPI backend with Pydantic validation</li>
+              <li class="list__item">Next.js frontend with TypeScript</li>
+              <li class="list__item">Gemini + OpenRouter LLM integration</li>
+              <li class="list__item">SQLite with Postgres migration path</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Key Innovations</h3>
+            <ul class="list">
+              <li class="list__item">Admin-editable prompt templates with version control</li>
+              <li class="list__item">Dual-mode alignment scoring with confidence blending</li>
+              <li class="list__item">Simulation sandbox for competitive analysis</li>
+              <li class="list__item">Experiment validation with accuracy gating</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Production Ready</h3>
+            <ul class="list">
+              <li class="list__item">Comprehensive test coverage</li>
+              <li class="list__item">Analytics event tracking and replay</li>
+              <li class="list__item">Clerk authentication + webhook sync</li>
+              <li class="list__item">Protocol readiness scoring (UCP/ACP)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7: Roadmap -->
+    <div class="slide" data-slide="7">
+      <div class="slide__header">
+        <h2 class="slide__title">Product Roadmap</h2>
+        <p class="slide__subtitle">From proof of concept to platform</p>
+      </div>
+      <div class="slide__content">
+        <div class="timeline">
+          <div class="timeline__item">
+            <div class="timeline__phase">Now: Validation</div>
+            <h3 class="timeline__title">Prove the Concept</h3>
+            <p class="timeline__text">Simulation sandbox, experiment framework, validation logging. Onboard pilot brands, run experiments, measure discoverability lift and competitive win rate.</p>
+          </div>
+          <div class="timeline__item">
+            <div class="timeline__phase">Next: Scale</div>
+            <h3 class="timeline__title">Enterprise Features</h3>
+            <p class="timeline__text">Self-serve multi-tenant console with RBAC. Full UCP/ACP protocol compliance. Real-time verification harness. Postgres + queue system for scale. Advanced analytics dashboards.</p>
+          </div>
+          <div class="timeline__item">
+            <div class="timeline__phase">Then: Intelligence</div>
+            <h3 class="timeline__title">Competitive Intelligence</h3>
+            <p class="timeline__text">Automatic competitor discovery and capability mapping. Share-of-voice tracking across AI agents. Brand voice adherence scoring. Active learning from pattern extraction.</p>
+          </div>
+          <div class="timeline__item">
+            <div class="timeline__phase">Future: Ecosystem</div>
+            <h3 class="timeline__title">Platform Play</h3>
+            <p class="timeline__text">API marketplace for third-party integrations. Shared intent ontology as an industry standard. Attribution tracking from recommendation to purchase. SOC-2 and ISO-27001 compliance.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8: Market Opportunity -->
+    <div class="slide" data-slide="8">
+      <div class="slide__header">
+        <h2 class="slide__title">Market Opportunity</h2>
+        <p class="slide__subtitle">New category in a rapidly growing space</p>
+      </div>
+      <div class="slide__content">
+        <div class="grid grid--3">
+          <div class="card">
+            <h3 class="card__title">DTC Brands</h3>
+            <p class="card__text">High digital maturity, willing to experiment with emerging channels, need modern optimization tools beyond traditional SEO.</p>
+            <span class="card__badge">Primary</span>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Enterprise Retailers</h3>
+            <p class="card__text">Large product catalogs, complex intent patterns, multi-brand portfolios. Need scalable AI discoverability solutions.</p>
+            <span class="card__badge">Secondary</span>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Digital Agencies</h3>
+            <p class="card__text">Manage multiple brands, need next-generation tools for client optimization. High referral potential and channel leverage.</p>
+            <span class="card__badge">Channel</span>
+          </div>
+        </div>
+        <p style="margin-top: 32px; font-size: 14px; color: var(--text-secondary); text-align: center; line-height: 1.6;">
+          As AI agents take a growing share of commerce discovery, every brand with an online presence<br>becomes a potential customer for intent legibility optimization.
+        </p>
+      </div>
+    </div>
+
+    <!-- 9: Competitive Landscape -->
+    <div class="slide" data-slide="9">
+      <div class="slide__header">
+        <h2 class="slide__title">Competitive Landscape</h2>
+        <p class="slide__subtitle">New category, no direct competitors</p>
+      </div>
+      <div class="slide__content">
+        <div class="grid grid--2">
+          <div class="card">
+            <h3 class="card__title">Traditional SEO Tools</h3>
+            <p class="card__text">Keyword-focused, not intent-focused. Built for search engines, not reasoning agents. No simulation or validation capabilities.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Product Feed Optimizers</h3>
+            <p class="card__text">Optimize structured data, not intentionality. No AI agent simulation. No validation framework.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">E-commerce Analytics</h3>
+            <p class="card__text">Measure outcomes, don't optimize inputs. No intent inference or product profiling. Reactive, not proactive.</p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">AI Commerce Platforms</h3>
+            <p class="card__text">Emerging startups focused on transaction or recommendation, not discovery optimization. Complementary, not competitive.</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top: 24px;">
+          <h3 class="card__title" style="color: var(--accent);">Our Differentiation</h3>
+          <p class="card__text">The only platform that combines intent inference, intentionality profiling, competitive simulation, and validation-first experimentation. We define the "discovery layer" category.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10: Performics Labs -->
+    <div class="slide" data-slide="10">
+      <div class="slide__header">
+        <h2 class="slide__title">Performics Labs</h2>
+        <p class="slide__subtitle">The R&D division of Performics Global</p>
+      </div>
+      <div class="slide__content">
+        <div class="grid grid--2">
+          <div class="card">
+            <h3 class="card__title">Built on Deep Domain Expertise</h3>
+            <p class="card__text">
+              Performics Global is a leading performance marketing agency with decades in digital commerce, Fortune 500 client relationships, and global presence across 20+ markets.
+            </p>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Why Performics Labs?</h3>
+            <p class="card__text">
+              Like Google Labs explores emerging tech for Google, Performics Labs explores next-generation commerce optimization. Direct access to real brand challenges, a built-in testing pipeline, and enterprise credibility.
+            </p>
+          </div>
+        </div>
+        <div class="card" style="margin-top: 24px;">
+          <h3 class="card__title">The Opportunity</h3>
+          <p class="card__text" style="font-size: 14px;">
+            AI shopping agents are crossing the chasm from early adopters to mainstream. Brands are beginning to ask how they show up in AI recommendations. The window to establish category leadership in intent legibility is open now.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 11: Closing -->
+    <div class="slide" data-slide="11">
+      <div class="slide__header">
+        <div class="slide__logo">Performics Labs</div>
+        <h1 class="slide__title">Discovery Commerce</h1>
+        <p class="slide__subtitle">
+          Making products legible to reasoning agents.<br>
+          The discovery layer that transaction protocols don't define.
+        </p>
+      </div>
+      <div style="text-align: center; margin-top: 48px;">
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px;">
+          <em>"Discovery without intent legibility is noise. We make it signal."</em>
+        </p>
+        <a href="mailto:contact@performicslabs.com" class="btn btn--lg">Get in Touch</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Navigation -->
+  <div class="navigation">
+    <button class="nav-button" onclick="prevSlide()" aria-label="Previous slide">&larr;</button>
+    <button class="nav-button" onclick="nextSlide()" aria-label="Next slide">&rarr;</button>
+  </div>
+
+  <div class="slide-counter">
+    <span id="current-slide">1</span> / <span id="total-slides">11</span>
+  </div>
+
+  <script>
+    let currentSlide = 1;
+    const totalSlides = document.querySelectorAll('.slide').length;
+    document.getElementById('total-slides').textContent = totalSlides;
+
+    function showSlide(n) {
+      const slides = document.querySelectorAll('.slide');
+      if (n > totalSlides) currentSlide = totalSlides;
+      else if (n < 1) currentSlide = 1;
+      else currentSlide = n;
+      slides.forEach(s => s.classList.remove('active'));
+      slides[currentSlide - 1].classList.add('active');
+      document.getElementById('current-slide').textContent = currentSlide;
+    }
+
+    function nextSlide() { showSlide(currentSlide + 1); }
+    function prevSlide() { showSlide(currentSlide - 1); }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+    });
+
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; });
+    document.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].screenX - touchStartX;
+      if (dx < -50) nextSlide();
+      if (dx > 50) prevSlide();
+    });
+  </script>
+</body>
+</html>

@@ -110,6 +110,8 @@ The Admin page is now step-ordered and collapsible:
 2. **Brand setup**: select/create brand under active client.
 3. **Product catalog**: select/create product; edit platform profile section.
 4. **Canonical intent spec**: controlled ontology-driven fields.
+   - Supports **Preview UCP/ACP autofill** and **Apply autofill** (confirm/edit mode).
+   - Stores raw + normalized + mapping metadata for traceability.
 5. **Review**: completion status of onboarding requirements.
 
 Operational controls (agent skills) are separated from onboarding fields.
@@ -139,3 +141,11 @@ Current supported path:
 Planned (not built):
 - Full backend on Vercel Python runtime with production-grade external DB and serverless adaptations.
 
+---
+
+## 9) Eval Loop Workflow (Current)
+
+1. Generate battery queries.
+2. System logs acceptance/rejection/regeneration instrumentation.
+3. Review battery-level dashboard via eval summary endpoint.
+4. Review weekly ontology update suggestions from rejected samples.

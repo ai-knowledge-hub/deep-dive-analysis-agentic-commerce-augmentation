@@ -51,6 +51,7 @@ Sidebar workflow order:
 - System generates candidate queries.
 - Validation runs before save.
 - Result includes accepted queries and rejected reasons.
+- If category confidence is low for bottom-up, generation is blocked with a clarification prompt.
 
 ### Step 3 — Review battery content
 - Inspect generated query list.
@@ -134,6 +135,10 @@ Canonical intent spec fields currently captured:
 
 Agent skills are in a separate operational controls section.
 
+Canonical intent spec editor also supports:
+- **Preview UCP/ACP autofill** (no save).
+- **Apply autofill** (writes canonical spec + raw/normalized/mapping metadata).
+
 ---
 
 ## 8) Validation Data Sources
@@ -164,6 +169,6 @@ See `docs/deployment.md` for commands and environment setup.
 
 - If battery output is weak, verify canonical spec fields are populated.
 - If bottom-up quality is poor for new clients, add seed features/use-cases.
+- If generation is blocked, use the clarification prompt to set category in canonical spec.
 - If insights are locked, check validation count/accuracy.
 - If admin changes do not appear, verify active client/brand/product context.
-

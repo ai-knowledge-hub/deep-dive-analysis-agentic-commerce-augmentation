@@ -63,6 +63,7 @@ We do **not** position lab scores as guaranteed production ranking outcomes.
 | **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
 | **Canonical Intent Spec** | Controlled onboarding fields for bottom-up query generation | `web/app/admin/page.tsx` + `products.metadata.canonical_intent_spec` |
 | **Query Quality Gating** | Accept/reject generated queries with reject reasons | `application/services/query_battery_builder.py` |
+| **Canonical Autofill** | UCP/ACP/feed to canonical spec (preview/apply) | `application/services/canonical_intent_spec_service.py` + `api/routes/admin.py` |
 
 ---
 
@@ -161,6 +162,9 @@ curl -X POST "http://localhost:8000/simulation/run" \
 
 # List lessons learned (optional)
 curl "http://localhost:8000/simulation/lessons?client_id=default"
+
+# Battery eval loop summary
+curl "http://localhost:8000/batteries/<battery_id>/eval-summary?client_id=default"
 
 # Run test suite
 make test

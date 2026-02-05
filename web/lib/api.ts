@@ -22,6 +22,7 @@ import {
   AdminBrand,
   AdminProduct,
   AdminClientUser,
+  AdminCanonicalAutofillResponse,
   AdminPlatformProfileResponse,
   AdminSkillResponse,
   AdminSkillHistoryResponse,
@@ -29,6 +30,8 @@ import {
   QueryBatteryListResponse,
   QueryBatteryQueryListResponse,
   QueryBatteryMetricsResponse,
+  QueryBatteryEvalSummaryResponse,
+  QueryBatteryOntologyUpdatesResponse,
   ExperimentListResponse,
   ExperimentVariantListResponse,
   ExperimentRunListResponse,
@@ -647,6 +650,32 @@ export async function getBatteryMetrics(
   );
 }
 
+export async function getBatteryEvalSummary(
+  batteryId: string,
+  userId?: string | null,
+): Promise<QueryBatteryEvalSummaryResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<QueryBatteryEvalSummaryResponse>(
+    `/batteries/${batteryId}/eval-summary?${params.toString()}`,
+  );
+}
+
+export async function getBatteryOntologyUpdates(
+  batteryId: string,
+  userId?: string | null,
+): Promise<QueryBatteryOntologyUpdatesResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<QueryBatteryOntologyUpdatesResponse>(
+    `/batteries/${batteryId}/ontology-updates?${params.toString()}`,
+  );
+}
+
 export async function generateBatteryQueries(
   batteryId: string,
   payload: {
@@ -1246,6 +1275,27 @@ export async function updateAdminProduct(
     `/brands/${brandId}/products/${productId}`,
     {
       method: "PUT",
+      body: JSON.stringify({
+        ...payload,
+        user_id: userId ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function autofillAdminProductCanonicalSpec(
+  brandId: string,
+  productId: string,
+  payload: {
+    mode?: "preview" | "apply";
+    source_priority?: string[];
+  },
+  userId?: string | null,
+): Promise<AdminCanonicalAutofillResponse> {
+  return request<AdminCanonicalAutofillResponse>(
+    `/brands/${brandId}/products/${productId}/canonical-spec/autofill`,
+    {
+      method: "POST",
       body: JSON.stringify({
         ...payload,
         user_id: userId ?? undefined,

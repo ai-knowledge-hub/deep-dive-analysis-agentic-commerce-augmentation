@@ -101,3 +101,48 @@ def test_admin_skill_editing_and_history(client: TestClient):
     history = client.get("/skills/signal_extractor/history?user_id=admin-user&limit=5")
     assert history.status_code == 200
     assert history.json()["history"]
+
+
+def test_admin_canonical_spec_autofill_preview_and_apply(client: TestClient):
+    client.post(
+        "/clients",
+        json={"id": "client-3", "name": "Client Three", "user_id": ADMIN_USER_ID},
+    )
+    client.post(
+        "/clients/client-3/brands",
+        json={"id": "brand-3", "name": "Brand Three", "user_id": ADMIN_USER_ID},
+    )
+    client.post(
+        "/brands/brand-3/products",
+        json={
+            "id": "prod-3",
+            "name": "Product Three",
+            "description": "Lightstrike midsole, engineered mesh, 8.5mm drop, 240g",
+            "metadata": {
+                "ucp": {
+                    "attributes": {"category": "running_shoes"},
+                    "use_cases": ["daily_training"],
+                }
+            },
+            "user_id": ADMIN_USER_ID,
+        },
+    )
+
+    preview = client.post(
+        "/brands/brand-3/products/prod-3/canonical-spec/autofill",
+        json={"mode": "preview", "user_id": ADMIN_USER_ID},
+    )
+    assert preview.status_code == 200
+    preview_spec = preview.json()["result"]["canonical_spec"]
+    assert preview_spec["category"]
+
+    apply = client.post(
+        "/brands/brand-3/products/prod-3/canonical-spec/autofill",
+        json={"mode": "apply", "user_id": ADMIN_USER_ID},
+    )
+    assert apply.status_code == 200
+    product = apply.json()["result"]["product"]
+    assert product
+    metadata = product.get("metadata") or {}
+    assert "canonical_intent_spec" in metadata
+    assert "canonical_intent_spec_raw" in metadata

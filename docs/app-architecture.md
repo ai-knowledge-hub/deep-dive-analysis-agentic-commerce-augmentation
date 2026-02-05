@@ -65,7 +65,9 @@ Infrastructure
 - `api/routes/experiments.py`: experiment runs, metrics, validation logs, summaries.
 - `api/routes/batteries.py`: create battery + generate queries.
 - `api/routes/admin.py`: clients/brands/products, platform profile, skill management.
+- `api/routes/admin.py`: includes canonical spec autofill preview/apply from UCP/ACP/feed.
 - `application/services/query_battery_builder.py`: top-down/bottom-up/hybrid generation, quality filtering, retry.
+- `application/services/canonical_intent_spec_service.py`: source mapping, normalization, category inference, clarification prompt.
 - `application/services/query_battery_llm_generator.py`: LLM prompt contract for query generation.
 - `application/services/experiment_validation_service.py`: prediction accuracy and unlock thresholds.
 
@@ -97,6 +99,11 @@ Core tables/entities in active use:
 - `banned_keywords`
 - `source`, `updated_at`
 
+Additional metadata saved by autofill flow:
+- `canonical_intent_spec_raw`
+- `canonical_intent_spec_normalized`
+- `canonical_intent_mapping`
+
 ---
 
 ## 5) Query Battery Generation Architecture (Current)
@@ -124,6 +131,12 @@ Core tables/entities in active use:
 - Belief snippets are filtered by confidence threshold.
 - Simulation lessons are currently excluded from prompt memory until confidence metadata exists.
 
+### Eval instrumentation
+- Query generation writes `query_generation_eval` events into `analytics_events`.
+- Battery-level dashboards are available via:
+  - `GET /batteries/{id}/eval-summary`
+  - `GET /batteries/{id}/ontology-updates`
+
 ---
 
 ## 6) Validation & Calibration Architecture (Current)
@@ -150,4 +163,3 @@ Unlock rule (soft gate):
 - High-confidence simulation-lesson reuse (after confidence scoring is added).
 - Native GA4 connector (today: generic analytics event ingestion only).
 - Full serverless Vercel deployment of backend.
-

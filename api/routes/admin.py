@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 try:
-    from fastapi import APIRouter
+    from fastapi import APIRouter, HTTPException
 except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore
 
@@ -46,6 +46,11 @@ if APIRouter:
         name: Optional[str] = None
         description: Optional[str] = None
         metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    class ProductCanonicalAutofillRequest(BaseModel):
+        user_id: Optional[str] = None
+        mode: str = Field(default="preview", pattern="^(preview|apply)$")
+        source_priority: Optional[list[str]] = None
 
     class ClientUserCreateRequest(BaseModel):
         user_id: Optional[str] = None
@@ -130,6 +135,23 @@ if APIRouter:
             metadata=payload.metadata,
         )
         return {"product": product}
+
+    @router.post("/brands/{brand_id}/products/{product_id}/canonical-spec/autofill")
+    def autofill_product_canonical_spec(
+        brand_id: str,
+        product_id: str,
+        payload: ProductCanonicalAutofillRequest,
+    ) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        try:
+            result = admin_service.autofill_product_canonical_spec(
+                product_id=product_id,
+                source_priority=payload.source_priority,
+                apply=payload.mode == "apply",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"result": result}
 
     @router.post("/clients/{client_id}/users")
     def add_client_user(

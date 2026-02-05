@@ -126,6 +126,12 @@ export default function ExperimentsPage() {
     accepted_count: number;
     rejected_count: number;
     required_category?: string | null;
+    category_confidence?: number | null;
+    category_candidates?: { category: string; score: number }[];
+    clarification_required?: boolean;
+    clarification_prompt?: string | null;
+    regeneration_count?: number;
+    acceptance_rate?: number;
     rejected?: { query_text: string; reason: string }[];
   } | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
@@ -1686,11 +1692,34 @@ export default function ExperimentsPage() {
                   <div className="panel__notice panel__notice--info">
                     Accepted: {batteryGenerationReport.accepted_count} · Rejected:{" "}
                     {batteryGenerationReport.rejected_count}
+                    {typeof batteryGenerationReport.acceptance_rate === "number" ? (
+                      <>
+                        {" "}
+                        · Acceptance rate:{" "}
+                        {Math.round(batteryGenerationReport.acceptance_rate * 100)}%
+                      </>
+                    ) : null}
+                    {typeof batteryGenerationReport.regeneration_count === "number" ? (
+                      <> · Regenerations: {batteryGenerationReport.regeneration_count}</>
+                    ) : null}
                     {batteryGenerationReport.required_category ? (
                       <>
                         {" "}
                         · Required category: {batteryGenerationReport.required_category}
                       </>
+                    ) : null}
+                    {typeof batteryGenerationReport.category_confidence === "number" ? (
+                      <>
+                        {" "}
+                        · Category confidence:{" "}
+                        {Math.round(batteryGenerationReport.category_confidence * 100)}%
+                      </>
+                    ) : null}
+                    {batteryGenerationReport.clarification_required &&
+                    batteryGenerationReport.clarification_prompt ? (
+                      <p className="panel__error">
+                        {batteryGenerationReport.clarification_prompt}
+                      </p>
                     ) : null}
                     {batteryGenerationReport.rejected &&
                     batteryGenerationReport.rejected.length > 0 ? (

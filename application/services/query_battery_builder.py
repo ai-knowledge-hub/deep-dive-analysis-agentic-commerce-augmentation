@@ -4,11 +4,16 @@ import re
 from typing import Any, Dict, Iterable, List, Optional
 
 from application.ports.deps import (
+    AnalyticsEventsStore,
     AudienceArchetypesStore,
     BrandBeliefsStore,
     ClientsStore,
     QueryBatteriesStore,
     SimulationRunsStore,
+)
+from application.services.canonical_intent_spec_service import (
+    CATEGORY_CONFIDENCE_THRESHOLD,
+    infer_category_from_context,
 )
 from application.services.query_battery_llm_generator import (
     IntentCapsule,
@@ -30,6 +35,7 @@ class QueryBatteryBuilder:
         beliefs_repo: BrandBeliefsStore | None = None,
         simulation_runs_repo: SimulationRunsStore | None = None,
         archetypes_repo: AudienceArchetypesStore | None = None,
+        analytics_events_repo: AnalyticsEventsStore | None = None,
     ) -> None:
         self._batteries = batteries_repo
         self._clients = clients_repo
@@ -37,6 +43,7 @@ class QueryBatteryBuilder:
         self._beliefs = beliefs_repo
         self._simulation_runs = simulation_runs_repo
         self._archetypes = archetypes_repo
+        self._analytics_events = analytics_events_repo
 
     def generate(
         self,
@@ -155,11 +162,41 @@ class QueryBatteryBuilder:
         deduped = _dedupe_queries(generated)
         if limit > 0:
             deduped = deduped[:limit]
-        inferred_category = (
+        category_inference = (
             _infer_category(product.get("metadata") or {}, bottom_capsule)
             if source in {"bottom_up", "hybrid"}
-            else None
+            else {
+                "category": None,
+                "confidence": 0.0,
+                "clarification_required": False,
+                "clarification_prompt": None,
+                "candidates": [],
+            }
         )
+        inferred_category = category_inference.get("category")
+        clarification_required = bool(category_inference.get("clarification_required"))
+        clarification_prompt = category_inference.get("clarification_prompt")
+        if source in {"bottom_up", "hybrid"} and clarification_required:
+            report = {
+                "accepted_count": 0,
+                "rejected_count": 0,
+                "required_category": inferred_category,
+                "category_confidence": category_inference.get("confidence"),
+                "category_candidates": category_inference.get("candidates", []),
+                "clarification_required": True,
+                "clarification_prompt": clarification_prompt,
+                "regeneration_count": 0,
+                "acceptance_rate": 0.0,
+                "rejected": [],
+            }
+            self._record_eval_event(
+                client_id=client_id,
+                battery=battery,
+                source=source,
+                use_llm=use_llm,
+                report=report,
+            )
+            return [], report
         validated, rejected = _validate_queries(
             deduped,
             banned_terms=_build_banned_terms(product, bottom_capsule),
@@ -167,12 +204,13 @@ class QueryBatteryBuilder:
             if source in {"bottom_up", "hybrid"}
             else None,
         )
-        if (
+        retried = (
             use_llm
             and self._generate
             and source in {"bottom_up", "hybrid"}
             and len(validated) < max(3, min(limit, 6))
-        ):
+        )
+        if retried:
             retry = generate_llm_queries(
                 capsule=bottom_capsule,
                 generate_fn=self._generate,
@@ -206,13 +244,58 @@ class QueryBatteryBuilder:
                     enabled=True,
                 )
             )
+        acceptance_rate = round((len(validated) / len(deduped)), 4) if deduped else 0.0
         report = {
             "accepted_count": len(validated),
             "rejected_count": len(rejected),
             "required_category": inferred_category,
+            "category_confidence": category_inference.get("confidence"),
+            "category_candidates": category_inference.get("candidates", []),
+            "clarification_required": False,
+            "clarification_prompt": None,
+            "regeneration_count": 1 if retried else 0,
+            "acceptance_rate": acceptance_rate,
             "rejected": rejected[:20],
         }
+        self._record_eval_event(
+            client_id=client_id,
+            battery=battery,
+            source=source,
+            use_llm=use_llm,
+            report=report,
+        )
         return created, report
+
+    def _record_eval_event(
+        self,
+        *,
+        client_id: str,
+        battery: Dict[str, Any],
+        source: str,
+        use_llm: bool,
+        report: Dict[str, Any],
+    ) -> None:
+        if not self._analytics_events:
+            return
+        try:
+            self._analytics_events.create_event(
+                client_id=client_id,
+                brand_id=battery.get("brand_id"),
+                product_id=battery.get("product_id"),
+                variant_id=None,
+                experiment_id=None,
+                event_type="query_generation_eval",
+                source="battery_builder",
+                event_timestamp=None,
+                metadata={
+                    "battery_id": battery.get("id"),
+                    "generation_mode": source,
+                    "use_llm": bool(use_llm),
+                    "report": report,
+                },
+            )
+        except Exception:
+            return
 
 
 def _seed_queries(seed_queries: Iterable[str]) -> List[GeneratedQuery]:
@@ -485,26 +568,38 @@ def _to_text_list(value: Any) -> List[str]:
     return []
 
 
-def _infer_category(metadata: Dict[str, Any], capsule: IntentCapsule) -> Optional[str]:
+def _infer_category(metadata: Dict[str, Any], capsule: IntentCapsule) -> Dict[str, Any]:
     canonical = metadata.get("canonical_intent_spec")
     if isinstance(canonical, dict):
         category = canonical.get("category")
         if isinstance(category, str) and category.strip():
-            return category.strip().replace("_", " ")
-    text = " ".join(
-        [
-            *(capsule.product_features or []),
-            *(capsule.use_cases or []),
-            *(capsule.intent_labels or []),
-        ]
-    ).lower()
-    if any(token in text for token in ["run", "trainer", "shoe", "marathon"]):
-        return "running shoes"
-    if any(token in text for token in ["tv", "display", "hdr"]):
-        return "television"
-    if any(token in text for token in ["vest", "jacket", "apparel"]):
-        return "sports apparel"
-    return None
+            normalized = category.strip().replace("_", " ")
+            return {
+                "category": normalized,
+                "confidence": 1.0,
+                "clarification_required": False,
+                "clarification_prompt": None,
+                "candidates": [{"category": normalized, "score": 1.0}],
+            }
+    context_values = [
+        *(capsule.product_features or []),
+        *(capsule.use_cases or []),
+        *(capsule.intent_labels or []),
+    ]
+    result = infer_category_from_context(
+        context_values=context_values,
+        explicit_category=None,
+        confidence_threshold=CATEGORY_CONFIDENCE_THRESHOLD,
+    )
+    category = result.get("category")
+    if isinstance(category, str):
+        result["category"] = category.replace("_", " ")
+    candidates = result.get("candidates")
+    if isinstance(candidates, list):
+        for item in candidates:
+            if isinstance(item, dict) and isinstance(item.get("category"), str):
+                item["category"] = item["category"].replace("_", " ")
+    return result
 
 
 def _validate_queries(

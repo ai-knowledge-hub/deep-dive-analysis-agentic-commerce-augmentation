@@ -14,6 +14,7 @@ import type {
 } from "../../lib/types";
 import {
   addAdminClientUser,
+  autofillAdminProductCanonicalSpec,
   createAdminBrand,
   createAdminClient,
   createAdminProduct,
@@ -121,6 +122,9 @@ export default function AdminPage() {
   const [isIntentDrawerOpen, setIntentDrawerOpen] = useState(false);
   const [intentSpecSaved, setIntentSpecSaved] = useState(false);
   const [intentSpecError, setIntentSpecError] = useState<string | null>(null);
+  const [intentSpecAutofillStatus, setIntentSpecAutofillStatus] = useState<string | null>(
+    null,
+  );
   const [intentSpecForm, setIntentSpecForm] = useState({
     category: "",
     subCategory: "",
@@ -441,6 +445,58 @@ export default function AdminPage() {
       setIntentSpecError("Failed to save canonical intent spec.");
     }
   }, [activeBrandId, intentSpecForm, parseCsv, selectedProduct, userId]);
+
+  const handleAutofillIntentSpec = useCallback(
+    async (mode: "preview" | "apply") => {
+      if (!userId || !activeBrandId || !selectedProduct) return;
+      try {
+        const response = await autofillAdminProductCanonicalSpec(
+          activeBrandId,
+          selectedProduct.id,
+          { mode },
+          userId,
+        );
+        const spec = (response.result?.canonical_spec ?? {}) as Record<string, unknown>;
+        const listToText = (value: unknown) =>
+          Array.isArray(value) ? value.join(", ") : "";
+        setIntentSpecForm({
+          category: String(spec.category ?? ""),
+          subCategory: String(spec.sub_category ?? ""),
+          useCases: listToText(spec.use_cases),
+          archetypes: listToText(spec.audience_archetypes),
+          featureConcepts: listToText(spec.feature_concepts),
+          constraints: listToText(spec.core_constraints),
+          exclusions: listToText(spec.must_not_target),
+          objectiveKeywords: listToText(spec.objective_keywords),
+          bannedKeywords: listToText(spec.banned_keywords),
+        });
+        if (mode === "apply" && response.result?.product) {
+          setProducts((current) =>
+            current.map((product) =>
+              product.id === response.result.product?.id ? response.result.product : product,
+            ),
+          );
+          setIntentSpecSaved(true);
+          window.setTimeout(() => setIntentSpecSaved(false), 1800);
+        }
+        const prompt = spec.clarification_prompt;
+        if (typeof prompt === "string" && prompt.trim()) {
+          setIntentSpecAutofillStatus(prompt);
+        } else {
+          setIntentSpecAutofillStatus(
+            mode === "apply"
+              ? "Canonical spec autofilled and saved from UCP/ACP/feed sources."
+              : "Canonical spec preview loaded from UCP/ACP/feed sources.",
+          );
+        }
+        setIntentSpecError(null);
+      } catch (error) {
+        setIntentSpecAutofillStatus(null);
+        setIntentSpecError("Failed to autofill canonical intent spec.");
+      }
+    },
+    [activeBrandId, selectedProduct, userId],
+  );
 
   const handleAddClientUser = useCallback(async () => {
     if (!userId || !activeClientId || !userForm.memberUserId.trim()) return;
@@ -934,6 +990,9 @@ export default function AdminPage() {
                   {intentSpecSaved ? (
                     <p className="panel__success">Saved canonical intent spec.</p>
                   ) : null}
+                  {intentSpecAutofillStatus ? (
+                    <p className="panel__meta">{intentSpecAutofillStatus}</p>
+                  ) : null}
                   {intentSpecError ? (
                     <p className="panel__error">{intentSpecError}</p>
                   ) : null}
@@ -1057,6 +1116,24 @@ export default function AdminPage() {
                     </button>
                   </div>
                   <div className="admin__form">
+                    <div className="panel__row panel__row--compact">
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() => void handleAutofillIntentSpec("preview")}
+                        disabled={!selectedProduct}
+                      >
+                        Preview UCP/ACP autofill
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--primary-subtle"
+                        onClick={() => void handleAutofillIntentSpec("apply")}
+                        disabled={!selectedProduct}
+                      >
+                        Apply autofill
+                      </button>
+                    </div>
                     <label className="panel__label">Category (required)</label>
                     <select
                       value={intentSpecForm.category}

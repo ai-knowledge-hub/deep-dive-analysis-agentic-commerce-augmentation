@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from application.ports.deps import ClientsStore, PlatformProfilesStore, SkillsStore
+from application.services.canonical_intent_spec_service import (
+    CanonicalIntentSpecService,
+    DEFAULT_SOURCE_PRIORITY,
+)
 from application.services.skill_defaults import (
     ensure_default_skill,
     default_skill_names,
@@ -22,6 +26,7 @@ class AdminService:
         self._clients = clients_repo
         self._platform_profiles = platform_profiles_repo
         self._skills = skills_repo
+        self._canonical_spec = CanonicalIntentSpecService(clients_repo=clients_repo)
 
     def create_client(
         self, *, client_id: str, name: str, metadata: Optional[Dict[str, Any]] = None
@@ -94,6 +99,19 @@ class AdminService:
             product_id=product_id,
             description=next_description,
             metadata=next_metadata,
+        )
+
+    def autofill_product_canonical_spec(
+        self,
+        *,
+        product_id: str,
+        source_priority: Optional[list[str]] = None,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        return self._canonical_spec.autofill(
+            product_id=product_id,
+            source_priority=source_priority or DEFAULT_SOURCE_PRIORITY,
+            apply=apply,
         )
 
     def add_client_user(
