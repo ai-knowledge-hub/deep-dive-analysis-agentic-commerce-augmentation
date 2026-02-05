@@ -1,168 +1,141 @@
 # App Workflows (Current + Planned)
 
-This document consolidates **all workflows** and shows how they connect.  
-Only **existing functionality** is described as current. Anything not built is labeled **Planned**.
+This is the operational workflow map for the current codebase.
+Anything not implemented is explicitly labeled **Planned (not built)**.
 
 ---
 
-## 1) End‑to‑End Map (How Workflows Connect)
+## 1) Workflow Graph
 
 ```
-Chat / Conversation
-   └─ Intent + Goals
-         ├─ Alignment
-         │    └─ Evidence
-         │         └─ Simulation
-         │              ├─ Optimize + Retest
-         │              └─ Lessons (stored)
-         └─ Experiments
-              ├─ Query Battery
-              ├─ Variants
-              ├─ Runs + Metrics
-              ├─ Beliefs (soft‑gated)
-              └─ Next‑Test Recommendations
+Chat
+  → Alignment
+    → Evidence
+      → Simulation (optimize + retest + lessons)
+  → Experiments
+      → Query Battery Builder
+      → Variants
+      → Run + Metrics
+      → Validation Logging
+      → Prediction Accuracy + Unlock status
 
-Validation (manual + analytics events)
-   └─ Prediction Accuracy + Unlock Status
+Admin Onboarding
+  → Client
+  → Brand
+  → Product
+  → Canonical Intent Spec
+  → Review
 ```
 
 ---
 
-## 2) Conversation → Alignment → Evidence (Manual Flow)
+## 2) Manual Workflow (Chat-first)
 
-**Purpose:** Understand intent and explain why products win or lose.
+1. User starts in Chat.
+2. System infers intent + clarifies goal.
+3. Alignment ranks candidate products.
+4. Evidence explains wins/gaps.
+5. Simulation runs scenario and can optimize copy.
+6. Retest confirms lab delta; lesson is stored.
 
-**Steps:**
-1. User submits a query in Chat.
-2. Intent inference + goal clarification runs.
-3. Alignment page shows inferred intent + scores.
-4. Evidence page explains why winners rank and highlights gaps.
-
-**Current outputs:**
-- Intent + clarified goals.
-- Alignment scores + explanations.
-- Evidence signals and “why they win.”
-
----
-
-## 3) Simulation Workflow (Manual Lab)
-
-**Purpose:** Test a scenario and optimize copy before changes go live.
-
-**Steps:**
-1. Run a simulation with a query and product(s).
-2. System produces intent, scores, gaps, and protocol readiness.
-3. User can optimize copy (guided by missing signals).
-4. Retest optimized copy and compare lift.
-5. Lessons are stored for that simulation run.
-
-**Current outputs:**
-- Gap analysis + suggested improvements.
-- Optimized copy (optional).
-- Retest results and lift summary.
-- Stored **simulation lessons**.
+Current outputs:
+- intent/goals
+- alignment breakdown
+- evidence signals
+- simulation scores + protocol readiness
+- lesson snapshots
 
 ---
 
-## 4) Experiments Workflow (Lab Mode)
+## 3) Experiment Workflow (Lab Mode)
 
-**Purpose:** Screen variants across a query battery and track lab signals.
+1. Create/select a query battery.
+2. Generate queries (top-down, bottom-up, or hybrid; optional LLM-assisted).
+3. Review generated queries and rejection reasons.
+4. Create experiment and add variants.
+5. Run experiment.
+6. Read metrics (win rate, robust win rate, evidence strength/consensus when available).
+7. Log validations and monitor prediction accuracy.
 
-**Steps:**
-1. Build a **Query Battery** (generate + curate queries).
-2. Create an **Experiment** (product + battery + hypothesis).
-3. Add **Variants** (control + copy variants).
-4. Run the experiment per variant.
-5. Aggregate metrics (win rates, robust win rate, scores, judge consensus).
-6. Generate **Beliefs** for the brand (soft‑gated).
-7. Use **Next‑Test** recommendations to continue iteration.
-
-**Current outputs:**
-- Win rates + robust win rate.
-- Optional multi‑judge consensus (if `JUDGE_PROVIDERS` is set).
-- Brand beliefs (locked until validation thresholds are met).
+Current safeguards:
+- Query filtering before persistence.
+- Soft-gated pattern insights until validation thresholds are met.
+- Lab result messaging that requires real-world validation.
 
 ---
 
-## 5) Validation Workflow (External Reality Check)
+## 4) Query Battery Builder Workflow (Current)
 
-**Purpose:** Validate lab predictions against external observations.
+### Inputs
+- Battery metadata
+- Seed queries (optional)
+- Seed features/use-cases (optional; useful for bottom-up)
+- Product metadata + canonical intent spec
+- LLM-assist toggle
 
-### Current validation sources
-1. **Manual validation logs** (operator enters observed results).
-2. **Analytics events ingestion** (`/analytics/events`) for external signals.
+### Processing
+1. Build capsule context.
+2. Generate deterministic base queries by selected mode.
+3. Optionally add LLM-generated queries.
+4. Deduplicate + validate.
+5. Retry once with stricter banned terms if acceptance is low.
 
-### What we measure today
-- **Verified runs**: validations with a known observed winner.
-- **Accuracy**: percent of lab winners that match observed winners.
-- **Unlock status**: pattern insights unlock at **10+ verified** and **≥75% accuracy**.
+### Review surface
+- Accepted queries are saved to battery.
+- Rejected queries are surfaced with reasons (for manual correction/approval flow).
+
+---
+
+## 5) Validation Workflow (Current)
+
+Validation sources implemented:
+1. Manual verification entries per experiment.
+2. External analytics events via `/analytics/events`.
+
+Metrics computed:
+- verified runs
+- prediction accuracy
+- unlock status for insights
+
+Soft-gate rule:
+- unlock only when `>=10` verified and `>=75%` accuracy.
+
+---
+
+## 6) Admin Onboarding Workflow (Current)
+
+The Admin page is now step-ordered and collapsible:
+
+1. **Client profile**: select/create client, add client users.
+2. **Brand setup**: select/create brand under active client.
+3. **Product catalog**: select/create product; edit platform profile section.
+4. **Canonical intent spec**: controlled ontology-driven fields.
+5. **Review**: completion status of onboarding requirements.
+
+Operational controls (agent skills) are separated from onboarding fields.
+
+---
+
+## 7) Self-Learning Workflow (Current vs Planned)
+
+### Current
+- Simulation lessons are stored and retrievable.
+- Brand beliefs are generated from experiment outcomes.
+- Query generation can reuse high-confidence beliefs and archetypes.
 
 ### Planned (not built)
-- Automatic GA4 ingestion + mapping to experiments.
-- Automated live‑LLM verification harness.
-
----
-
-## 6) Self‑Learning / Distillation Workflow
-
-**Purpose:** Reuse learnings to improve future inference.
-
-### Current (built)
-- **Simulation lessons** are stored per run and retrievable.
-- **Brand beliefs** are generated from experiment results.
-
-### Planned (not built)
-- Distill lessons into reusable heuristics.
-- Categorize by domain/vertical.
-- Feed distilled lessons into intent inference and query battery generation.
-
----
-
-## 7) Protocol Readiness Workflow
-
-**Purpose:** Surface non‑copy readiness issues (UCP/ACP).
-
-**Current**
-- Readiness scores are generated during simulation runs.
-- Issues are surfaced as part of “why you lost” analysis.
-
-**Planned (not built)**
-- Full protocol validation and transaction flows.
+- Cross-run distillation into reusable heuristics by vertical/domain.
+- Confidence scoring for simulation lessons before memory reuse.
+- Automatic weekly ontology/synonym updates from failures.
 
 ---
 
 ## 8) Deployment Workflow
 
-### Current deployment path
-1. Run **FastAPI** backend (local or cloud runtime).
-2. Run **Next.js** frontend (local or Vercel).
-3. Configure environment variables for LLM provider + Clerk.
+Current supported path:
+- Backend: Python runtime (FastAPI)
+- Frontend: Vercel (Next.js)
 
-**Supported today**
-- Backend hosted on any Python‑compatible platform (e.g., Railway, Render, VPS).
-- Frontend hosted on Vercel.
+Planned (not built):
+- Full backend on Vercel Python runtime with production-grade external DB and serverless adaptations.
 
-### Planned (not built)
-- **Full Vercel deployment** using the Python runtime for FastAPI.
-  - Requires serverless adaptation and SQLite replacement or external DB.
-
----
-
-## 9) Admin + Skill Editing Workflow
-
-**Purpose:** Adjust skill prompts used by signal extraction and optimization.
-
-**Steps:**
-1. Open Admin → Skills.
-2. Edit skill content.
-3. Changes are stored in `skills` with a history trail in `skills_history`.
-
----
-
-## 10) Quick Validation Checklist
-
-1. Run a simulation → store lessons.
-2. Run an experiment → metrics appear.
-3. Log validation → accuracy updates.
-4. Pattern insights remain locked until thresholds.
-5. Multi‑judge metrics appear only when `JUDGE_PROVIDERS` is set.

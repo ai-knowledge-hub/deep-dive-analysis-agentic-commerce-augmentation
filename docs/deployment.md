@@ -44,6 +44,19 @@ pnpm dev
 
 Visit `http://localhost:3000` to interact with the assistant.
 
+### Database helpers (local)
+
+```bash
+make db-init
+make db-migrate
+make db-path
+make seed-demo
+```
+
+Notes:
+- `db-migrate` currently re-applies schema bootstrap (SQLite helper), not Alembic-style versioned migrations.
+- Use the same `DATABASE_PATH` for init/seed/run to keep tenant data consistent.
+
 ---
 
 ## 3. Production Deployment
@@ -73,6 +86,7 @@ runtime. This would require:
 - Serverless adaptation of FastAPI routes.
 - Replacing local SQLite with an external DB.
 - Explicit Vercel config for functions.
+- Runtime constraints testing for long experiment/simulation requests.
 
 Consider this **planned** work rather than a supported deployment path today.
 

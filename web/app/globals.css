@@ -2549,6 +2549,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 .admin__selector select,
+.admin__form select,
 .admin__form input,
 .admin__form textarea {
   background: var(--bg-tertiary);

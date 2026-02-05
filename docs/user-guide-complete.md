@@ -1,123 +1,169 @@
-# User Guide (Current Features)
+# User Guide (Current Features Only)
 
-**Version:** 1.1  
-**Date:** 2026-02-03  
-**Audience:** Brand marketing teams, ecommerce teams, and analysts
+**Version:** 1.2  
+**Date:** 2026-02-05
 
-This guide reflects **only what exists in the current codebase**. Planned items are labeled.
+This guide documents what is implemented now. Any future item is marked **Planned (not built)**.
 
 ---
 
-## 1) What This App Does (Today)
+## 1) Product Promise (Current)
 
-The app helps you make product descriptions **more legible to AI agents** by:
+The app helps teams improve product discoverability in LLM-driven shopping contexts by:
 - inferring intent,
 - scoring alignment,
-- explaining gaps,
-- testing improvements in simulation,
-- screening variants in experiments,
-- and validating results with manual logs.
+- surfacing evidence and gaps,
+- testing copy in simulation and experiments,
+- and validating lab outcomes with observed data.
 
-It does **not** guarantee production rankings. Results are **lab signals**.
-
----
-
-## 2) Primary Pages (UI)
-
-### Chat (Conversation)
-Start with a user query. The app infers intent, asks clarifying questions, and stores a session.
-
-### Alignment
-Shows inferred intent + alignment scores for candidate products.
-
-### Evidence
-Explains why winners rank and what signals are missing.
-
-### Simulation
-Run a scenario, view gap analysis, optimize copy, and retest.
-
-### Experiments
-Build query batteries, create variants, run experiments, and view metrics.
-Validation progress and unlock status are shown here.
+Important: experiment/simulation metrics are **lab signals**, not guaranteed production rankings.
 
 ---
 
-## 3) Core Workflows (Short)
+## 2) Navigation and Page Order
 
-For full end‑to‑end flow, see `docs/app-workflows.md`.
-
-### A) Manual Flow
-Chat → Alignment → Evidence → Simulation → Retest → Lessons
-
-### B) Lab Flow
-Query Battery → Experiment → Run Variants → Metrics → Beliefs → Next Test
-
-### C) Validation Flow
-Log validation results → Accuracy updates → Unlock Pattern Insights
+Sidebar workflow order:
+1. New Chat
+2. Alignment
+3. Evidence
+4. Simulation
+5. Experiments
+6. Overview
+7. Admin (separated as operational/onboarding area)
 
 ---
 
-## 4) Experiments (What’s Shipped)
+## 3) Experiments Module (Step by Step)
 
-**You can:**
-- Create batteries and variants.
-- Run experiments and see win rates.
-- See robust win rate (wins under both semantic + keyword judges).
-- Optionally enable multi‑judge consensus via `JUDGE_PROVIDERS`.
-- Log validations and track prediction accuracy.
+### Step 1 — Query Battery Builder
+- Create a battery (name, purpose, generation mode).
+- Pick generation mode:
+  - `Bottom-up`
+  - `Top-down`
+  - `Hybrid`
+- Optional: LLM-assisted generation.
+- Optional seeds:
+  - seed queries
+  - seed features
+  - seed use-cases
 
-**You cannot (yet):**
-- Automatically verify with live LLM platforms.
-- Automatically ingest GA4 data.
+### Step 2 — Generate queries
+- System generates candidate queries.
+- Validation runs before save.
+- Result includes accepted queries and rejected reasons.
+
+### Step 3 — Review battery content
+- Inspect generated query list.
+- Enable/disable/edit weights.
+- Save battery.
+
+### Step 4 — Create experiment
+- Select battery.
+- Define hypothesis JSON.
+- Create experiment record.
+
+### Step 5 — Add variants
+- Add control + test variants.
+- Keep clear naming for review and downstream validation.
+
+### Step 6 — Run experiment
+- Execute runs over battery queries.
+- Metrics displayed include win-rate signals.
+- Robust metrics and consensus fields appear when configured.
+
+### Step 7 — Validate
+- Log observed results (manual validation form).
+- Track prediction accuracy.
+- Pattern insights unlock when thresholds are met.
 
 ---
 
-## 5) Simulation (What’s Shipped)
+## 4) Lab vs Manual Mode (Experiments)
 
-**You can:**
-- Run a scenario with competitors.
-- See gap analysis + protocol readiness hints.
-- Optimize a product description.
-- Retest and see lift.
-- Store and list lessons.
+- **Lab mode**: optimized for structured, step-by-step experiment workflow.
+- **Manual mode**: controlled operation where user drives each step directly.
+
+Tooltips in UI explain both modes on hover (separately for each toggle).
+
+---
+
+## 5) Simulation Module (Current Behavior)
+
+1. Run simulation for current intent.
+2. System can identify best-matching product.
+3. Product selection now auto-updates to best match after run (while still allowing manual selection).
+4. Optimize copy and retest.
+5. Save lessons.
+
+---
+
+## 6) Query Generation Rules (Current)
+
+Bottom-up generation is constrained to improve objectivity:
+- avoids raw product description injection in bottom-up LLM pass,
+- uses canonical intent spec + seed context,
+- blocks banned terms (brand/product/model tokens),
+- rejects over-specific query patterns,
+- applies retry with stricter bans if acceptance is too low.
+
+Memory reuse is quality-gated:
+- low-confidence beliefs/archetypes are excluded,
+- simulation lessons are excluded from LLM memory until confidence scoring is available.
+
+---
+
+## 7) Admin Onboarding Workspace
+
+The Admin page now includes a step-ordered onboarding flow:
+1. Client profile
+2. Brand setup
+3. Product catalog
+4. Canonical intent spec
+5. Review
+
+Canonical intent spec fields currently captured:
+- category
+- sub-category
+- use-cases
+- audience archetypes
+- feature concepts
+- core constraints
+- must-not-target
+- objective keywords
+- banned keywords
+
+Agent skills are in a separate operational controls section.
+
+---
+
+## 8) Validation Data Sources
+
+Currently implemented:
+1. Manual validation logs in Experiments.
+2. External analytics events via API ingestion.
 
 **Planned (not built):**
-- Distill lessons into reusable heuristics across domains.
+- native GA4 connector with direct mapping flow.
 
 ---
 
-## 6) Validation (What’s Shipped)
+## 9) Deployment Snapshot
 
-**Built now**
-- Manual validation logging per experiment.
-- Brand‑level accuracy rollups.
+Current:
+- Backend on Python runtime.
+- Frontend on Vercel.
 
-**Planned**
-- Automated GA4 ingestion.
-- Live LLM verification harness.
+Planned:
+- Full Vercel backend runtime deployment after serverless + DB adaptations.
 
----
-
-## 7) Admin + Skills
-
-Admin users can edit skills used by signal extraction and optimization.
-All edits are stored with history for auditability.
+See `docs/deployment.md` for commands and environment setup.
 
 ---
 
-## 8) Deployment Notes
+## 10) Troubleshooting Quick Checks
 
-Current deployments are split:
-- FastAPI backend on a Python runtime.
-- Next.js frontend on Vercel.
-
-Planned: full Vercel deployment using the Python runtime (requires serverless adaptation).
-
----
-
-## 9) Troubleshooting
-
-- If results are missing, ensure a **client_id** is set.
-- If experiments show no metrics, run at least one variant.
-- If Pattern Insights are locked, log validation results.
+- If battery output is weak, verify canonical spec fields are populated.
+- If bottom-up quality is poor for new clients, add seed features/use-cases.
+- If insights are locked, check validation count/accuracy.
+- If admin changes do not appear, verify active client/brand/product context.
 

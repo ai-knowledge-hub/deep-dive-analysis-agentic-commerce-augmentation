@@ -51,6 +51,47 @@ const onboardingSteps = [
   { id: "review", label: "Review" },
 ] as const;
 
+const canonicalOntology: Record<
+  string,
+  {
+    label: string;
+    subCategories: string[];
+    useCases: string[];
+    archetypes: string[];
+    featureConcepts: string[];
+    constraints: string[];
+    exclusions: string[];
+  }
+> = {
+  running_shoes: {
+    label: "Running shoes",
+    subCategories: ["daily_trainer", "race_day", "stability", "trail"],
+    useCases: ["daily_training", "long_distance", "speed_work", "injury_prevention"],
+    archetypes: ["beginner_runner", "performance_runner", "injury_conscious_runner"],
+    featureConcepts: ["lightweight", "cushioning", "stability", "breathability"],
+    constraints: ["budget_sensitive", "availability_required", "fast_delivery"],
+    exclusions: ["elite_racer_only", "hiking_use", "indoor_only"],
+  },
+  television: {
+    label: "Television",
+    subCategories: ["living_room", "gaming_tv", "bright_room", "budget_tv"],
+    useCases: ["movie_night", "sports_viewing", "gaming", "bright_room_viewing"],
+    archetypes: ["value_seeker", "quality_seeker", "gamer"],
+    featureConcepts: ["brightness", "anti_reflective", "motion_clarity", "size_fit"],
+    constraints: ["budget_sensitive", "availability_required", "screen_size_required"],
+    exclusions: ["projector_only", "audio_only", "outdoor_only"],
+  },
+  sports_apparel: {
+    label: "Sports apparel",
+    subCategories: ["running_vest", "training_top", "weather_layer"],
+    useCases: ["road_running", "winter_training", "outdoor_sessions"],
+    archetypes: ["daily_athlete", "commuter_runner", "endurance_runner"],
+    featureConcepts: ["weather_protection", "breathability", "comfort_fit", "storage"],
+    constraints: ["budget_sensitive", "weather_specific", "availability_required"],
+    exclusions: ["formalwear_only", "kids_only", "non_sport_use"],
+  },
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -86,9 +127,18 @@ export default function AdminPage() {
     useCases: "",
     archetypes: "",
     featureConcepts: "",
+    constraints: "",
+    exclusions: "",
     objectiveKeywords: "",
     bannedKeywords: "",
   });
+
+  const parseCsv = useCallback((value: string) => {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }, []);
 
   const skillNames = useMemo(() => ["signal_extractor", "copy_generator"], []);
   const [activeSkillName, setActiveSkillName] = useState<string>("signal_extractor");
@@ -198,6 +248,8 @@ export default function AdminPage() {
       useCases: listToText(spec.use_cases),
       archetypes: listToText(spec.audience_archetypes),
       featureConcepts: listToText(spec.feature_concepts),
+      constraints: listToText(spec.core_constraints),
+      exclusions: listToText(spec.must_not_target),
       objectiveKeywords: listToText(spec.objective_keywords),
       bannedKeywords: listToText(spec.banned_keywords),
     });
@@ -247,6 +299,41 @@ export default function AdminPage() {
       doneIntent,
     };
   }, [activeBrandId, activeClientId, activeProductId, selectedProduct]);
+
+  const selectedOntology = useMemo(() => {
+    const key = intentSpecForm.category;
+    return key ? canonicalOntology[key] : null;
+  }, [intentSpecForm.category]);
+
+  const ontologyUseCases = useMemo(() => {
+    const selected = parseCsv(intentSpecForm.useCases);
+    const base = selectedOntology?.useCases ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [intentSpecForm.useCases, parseCsv, selectedOntology]);
+
+  const ontologyArchetypes = useMemo(() => {
+    const selected = parseCsv(intentSpecForm.archetypes);
+    const base = selectedOntology?.archetypes ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [intentSpecForm.archetypes, parseCsv, selectedOntology]);
+
+  const ontologyFeatureConcepts = useMemo(() => {
+    const selected = parseCsv(intentSpecForm.featureConcepts);
+    const base = selectedOntology?.featureConcepts ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [intentSpecForm.featureConcepts, parseCsv, selectedOntology]);
+
+  const ontologyConstraints = useMemo(() => {
+    const selected = parseCsv(intentSpecForm.constraints);
+    const base = selectedOntology?.constraints ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [intentSpecForm.constraints, parseCsv, selectedOntology]);
+
+  const ontologyExclusions = useMemo(() => {
+    const selected = parseCsv(intentSpecForm.exclusions);
+    const base = selectedOntology?.exclusions ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [intentSpecForm.exclusions, parseCsv, selectedOntology]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -314,20 +401,17 @@ export default function AdminPage() {
 
   const handleSaveIntentSpec = useCallback(async () => {
     if (!userId || !activeBrandId || !selectedProduct) return;
-    const splitList = (value: string) =>
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
     const currentMetadata = (selectedProduct.metadata ?? {}) as Record<string, unknown>;
     const canonicalSpec = {
       category: intentSpecForm.category.trim(),
       sub_category: intentSpecForm.subCategory.trim() || null,
-      use_cases: splitList(intentSpecForm.useCases),
-      audience_archetypes: splitList(intentSpecForm.archetypes),
-      feature_concepts: splitList(intentSpecForm.featureConcepts),
-      objective_keywords: splitList(intentSpecForm.objectiveKeywords),
-      banned_keywords: splitList(intentSpecForm.bannedKeywords),
+      use_cases: parseCsv(intentSpecForm.useCases),
+      audience_archetypes: parseCsv(intentSpecForm.archetypes),
+      feature_concepts: parseCsv(intentSpecForm.featureConcepts),
+      core_constraints: parseCsv(intentSpecForm.constraints),
+      must_not_target: parseCsv(intentSpecForm.exclusions),
+      objective_keywords: parseCsv(intentSpecForm.objectiveKeywords),
+      banned_keywords: parseCsv(intentSpecForm.bannedKeywords),
       source: ["admin_onboarding"],
       updated_at: new Date().toISOString(),
     };
@@ -356,7 +440,7 @@ export default function AdminPage() {
     } catch (error) {
       setIntentSpecError("Failed to save canonical intent spec.");
     }
-  }, [activeBrandId, intentSpecForm, selectedProduct, userId]);
+  }, [activeBrandId, intentSpecForm, parseCsv, selectedProduct, userId]);
 
   const handleAddClientUser = useCallback(async () => {
     if (!userId || !activeClientId || !userForm.memberUserId.trim()) return;
@@ -973,20 +1057,26 @@ export default function AdminPage() {
                     </button>
                   </div>
                   <div className="admin__form">
-                    <input
-                      type="text"
-                      placeholder="Category (required)"
+                    <label className="panel__label">Category (required)</label>
+                    <select
                       value={intentSpecForm.category}
                       onChange={(event) =>
                         setIntentSpecForm((current) => ({
                           ...current,
                           category: event.target.value,
+                          subCategory: "",
                         }))
                       }
-                    />
-                    <input
-                      type="text"
-                      placeholder="Sub category"
+                    >
+                      <option value="">Select category</option>
+                      {Object.entries(canonicalOntology).map(([key, value]) => (
+                        <option key={key} value={key}>
+                          {value.label}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Sub category</label>
+                    <select
                       value={intentSpecForm.subCategory}
                       onChange={(event) =>
                         setIntentSpecForm((current) => ({
@@ -994,43 +1084,122 @@ export default function AdminPage() {
                           subCategory: event.target.value,
                         }))
                       }
-                    />
-                    <textarea
-                      rows={2}
-                      placeholder="Use cases (comma separated)"
-                      value={intentSpecForm.useCases}
-                      onChange={(event) =>
+                    >
+                      <option value="">Select sub category</option>
+                      {(selectedOntology?.subCategories ?? []).map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Use cases (ontology)</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, ontologyUseCases.length || 3))}
+                      value={parseCsv(intentSpecForm.useCases)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
                         setIntentSpecForm((current) => ({
                           ...current,
-                          useCases: event.target.value,
-                        }))
-                      }
-                    />
-                    <textarea
-                      rows={2}
-                      placeholder="Audience archetypes (comma separated)"
-                      value={intentSpecForm.archetypes}
-                      onChange={(event) =>
+                          useCases: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {ontologyUseCases.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Audience archetypes (ontology)</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, ontologyArchetypes.length || 3))}
+                      value={parseCsv(intentSpecForm.archetypes)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
                         setIntentSpecForm((current) => ({
                           ...current,
-                          archetypes: event.target.value,
-                        }))
-                      }
-                    />
-                    <textarea
-                      rows={2}
-                      placeholder="Feature concepts (comma separated)"
-                      value={intentSpecForm.featureConcepts}
-                      onChange={(event) =>
+                          archetypes: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {ontologyArchetypes.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Feature concepts (ontology)</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, ontologyFeatureConcepts.length || 3))}
+                      value={parseCsv(intentSpecForm.featureConcepts)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
                         setIntentSpecForm((current) => ({
                           ...current,
-                          featureConcepts: event.target.value,
-                        }))
-                      }
-                    />
+                          featureConcepts: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {ontologyFeatureConcepts.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Core constraints</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, ontologyConstraints.length || 3))}
+                      value={parseCsv(intentSpecForm.constraints)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setIntentSpecForm((current) => ({
+                          ...current,
+                          constraints: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {ontologyConstraints.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Must-not-target segments</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, ontologyExclusions.length || 3))}
+                      value={parseCsv(intentSpecForm.exclusions)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setIntentSpecForm((current) => ({
+                          ...current,
+                          exclusions: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {ontologyExclusions.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
                     <textarea
                       rows={2}
-                      placeholder="Objective keywords (comma separated)"
+                      placeholder="Objective keywords (optional, comma separated)"
                       value={intentSpecForm.objectiveKeywords}
                       onChange={(event) =>
                         setIntentSpecForm((current) => ({
@@ -1041,7 +1210,7 @@ export default function AdminPage() {
                     />
                     <textarea
                       rows={2}
-                      placeholder="Banned keywords (comma separated)"
+                      placeholder="Banned keywords (optional, comma separated)"
                       value={intentSpecForm.bannedKeywords}
                       onChange={(event) =>
                         setIntentSpecForm((current) => ({

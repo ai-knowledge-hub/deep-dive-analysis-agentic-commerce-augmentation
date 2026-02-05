@@ -6,6 +6,14 @@ This document complements:
 - `docs/app-architecture.md` (current + planned architecture)
 - `docs/app-workflows.md` (current workflows + planned extensions)
 
+## Recently Completed (moved out of roadmap)
+
+- Admin onboarding workspace refactor (step-ordered, collapsible UX).
+- Canonical intent spec capture in admin (controlled ontology fields).
+- Query battery generation quality gates (banned terms, reject reasons, retry pass).
+- Confidence gating for archetype/belief memory reuse in query generation.
+- Experiment validation soft-gate with prediction-accuracy progress.
+
 ---
 
 ## 1) Protocol Layer — Full ACP/UCP Compliance (Deferred)

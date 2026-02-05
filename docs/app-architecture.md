@@ -1,177 +1,153 @@
-# App Architecture (Current + Planned)
+# App Architecture (Current State + Planned Extensions)
 
-This document describes the **current** architecture of the app and clearly labels
-anything that is **planned but not built**.
+This document reflects the **current implementation** and marks future work as **Planned (not built)**.
 
 ---
 
-## 1) High-Level System View
+## 1) System Overview
 
 ```
-User (Next.js UI)
-  ├─ Chat (Conversation)
-  ├─ Alignment / Evidence
+Next.js UI
+  ├─ Chat / Alignment / Evidence
   ├─ Simulation
-  ├─ Experiments
-  └─ Admin (Skills, Clients, Brands)
-          │
-          ▼
-FastAPI API Layer
-  ├─ Conversation / Alignment / Evidence routes
-  ├─ Simulation routes
-  ├─ Experiment routes + Validation routes
-  ├─ Brand / Product routes
-  └─ Admin routes
-          │
-          ▼
+  ├─ Experiments (Lab + Manual modes)
+  └─ Admin (onboarding + skills)
+            │
+            ▼
+FastAPI Routes
+  ├─ conversation / alignment / evidence
+  ├─ simulation
+  ├─ experiments / batteries / validations
+  ├─ analytics events
+  └─ admin / tenants
+            │
+            ▼
 Application Services
-  ├─ Intent inference + goal clarification
-  ├─ Alignment scoring + evidence analysis
-  ├─ Simulation runner + optimizer + retest
-  ├─ Experiment runner + orchestrator
-  ├─ Validation logging + calibration rollups
-  └─ Protocol readiness checks (UCP/ACP)
-          │
-          ▼
-Infrastructure Layer
-  ├─ LLM clients (Gemini/OpenRouter)
-  ├─ SQLite database
-  ├─ Protocol adapters (UCP/ACP readiness)
-  └─ Skill prompt storage
+  ├─ intent + goal clarification
+  ├─ alignment + evidence analysis
+  ├─ simulation + optimization + retest
+  ├─ query battery generation + validation
+  ├─ experiments + metrics + recommendations
+  └─ validation rollups + calibration summary
+            │
+            ▼
+Infrastructure
+  ├─ SQLite
+  ├─ LLM providers (Gemini/OpenRouter)
+  ├─ protocol readiness adapters
+  └─ skill prompt storage + history
 ```
 
 ---
 
-## 2) Runtime Components
+## 2) Frontend Structure (Current)
 
-### Frontend (Next.js)
-- Pages for **Chat**, **Alignment**, **Evidence**, **Simulation**, **Experiments**.
-- Admin views for **skills** and **tenant selection** (via admin mode).
+- `web/app/page.tsx`: Chat and manual workflow entry.
+- `web/app/alignment/page.tsx`: Intent-product alignment.
+- `web/app/evidence/page.tsx`: Evidence and signal diagnostics.
+- `web/app/simulation/page.tsx`: Simulation run/optimize/retest.
+- `web/app/experiments/page.tsx`: Battery + variants + experiment execution + validation status.
+- `web/app/admin/page.tsx`: Onboarding workspace and operational controls.
 
-### Backend (FastAPI)
-Key routes are grouped by module:
-- Conversation + alignment + evidence
-- Simulation (run, optimize, retest, lessons)
-- Experiments (batteries, variants, runs, metrics, recommendations)
-- Validation (manual logs + accuracy summaries)
-- Analytics events ingestion (external events)
-- Admin and tenant management
-
-### LLM Providers
-- **Gemini** and **OpenRouter** are supported providers.
-- Optional **multi‑judge** evaluation via `JUDGE_PROVIDERS` (comma‑separated providers).
-
-### Database
-SQLite is the default persistence layer in current deployments.
+### Admin onboarding workspace (current)
+- Step-oriented collapsible flow:
+  1. Client Profile
+  2. Brand Setup
+  3. Product Catalog
+  4. Canonical Intent Spec
+  5. Review
+- Canonical spec editor now uses controlled ontology fields (category, sub-category, use-cases, archetypes, feature concepts, constraints, must-not-target).
 
 ---
 
-## 3) Core Domains (Current)
+## 3) Backend Modules (Current)
 
-### Conversation + Intent
-**Purpose:** Understand user intent and contextual constraints.
-- Intent inference and goal clarification.
-- Stored as conversation sessions.
-
-### Alignment
-**Purpose:** Score how well products align with inferred intent.
-- Uses a transparent, signal‑based approach.
-- Hard category gate prevents category mismatches.
-
-### Evidence
-**Purpose:** Explain why winners appear and what signals matter.
-- Evidence analysis complements alignment with open‑web context.
-
-### Simulation
-**Purpose:** Test scenarios, identify gaps, optimize copy, retest.
-- Produces **lessons** that are stored per run.
-- Protocol readiness (UCP/ACP) is surfaced during simulation results.
-
-### Experiments
-**Purpose:** Run query batteries against variants and track lab signals.
-- Aggregated metrics include win rates, robust win rate, scores, and optional judge consensus.
-- Beliefs are generated when a brand is attached.
-
-### Validation + Calibration
-**Purpose:** Log real‑world observations and track prediction accuracy.
-- Manual validation logs.
-- Brand‑level calibration rollups (verified runs + accuracy).
+- `api/routes/experiments.py`: experiment runs, metrics, validation logs, summaries.
+- `api/routes/batteries.py`: create battery + generate queries.
+- `api/routes/admin.py`: clients/brands/products, platform profile, skill management.
+- `application/services/query_battery_builder.py`: top-down/bottom-up/hybrid generation, quality filtering, retry.
+- `application/services/query_battery_llm_generator.py`: LLM prompt contract for query generation.
+- `application/services/experiment_validation_service.py`: prediction accuracy and unlock thresholds.
 
 ---
 
 ## 4) Data Model Snapshot (Current)
 
-Key entities stored in SQLite include:
-- **Clients, Brands, Products**
-- **Conversation Sessions**
-- **Simulation Runs + Simulation Lessons**
-- **Query Batteries + Battery Queries**
-- **Experiments, Variants, Runs, Metrics**
-- **Brand Beliefs**
-- **Experiment Validations + Calibration Rollups**
-- **Analytics Events** (external event ingestion)
-- **Skills + Skill History** (editable prompts)
+Core tables/entities in active use:
+- Clients / Brands / Products
+- Conversation Sessions
+- Query Batteries / Battery Queries
+- Experiments / Variants / Runs / Metrics
+- Experiment Validations / Calibration rollups
+- Brand Beliefs
+- Simulation Runs / Lessons
+- Skills / Skills History
+- Analytics Events
+
+### Product canonical intent spec (stored in product metadata)
+`products.metadata.canonical_intent_spec` currently stores:
+- `category`
+- `sub_category`
+- `use_cases`
+- `audience_archetypes`
+- `feature_concepts`
+- `core_constraints`
+- `must_not_target`
+- `objective_keywords`
+- `banned_keywords`
+- `source`, `updated_at`
 
 ---
 
-## 5) System Boundaries and Contracts
+## 5) Query Battery Generation Architecture (Current)
+
+### Supported modes
+- `top_down`
+- `bottom_up`
+- `hybrid`
 
 ### Inputs
-- User queries (chat, simulation, experiments).
-- Product catalog data (client/brand/product tables).
-- Optional external events (`/analytics/events`).
-- Manual validation logs (`/experiments/{id}/validations`).
+- Battery context
+- Product metadata + canonical intent spec
+- Optional seed queries/features/use-cases
+- Optional LLM generation pass
 
-### Outputs
-- Alignment scores + explanations.
-- Evidence signals and gap analysis.
-- Simulation improvements and lessons.
-- Experiment metrics and recommendations.
-- Validation accuracy and unlock status.
+### Quality controls in service
+- Brand/product/features/use-cases banned-term filtering
+- Over-specific token rejection (e.g., hard numeric spec tokens)
+- Required category check (for bottom-up/hybrid)
+- Retry pass with stricter bans when accepted volume is too low
+- Structured report: accepted count, rejected count, rejected reasons
 
----
-
-## 6) Validation Sources (Current)
-
-**Built now**
-- **Manual validation logs** (operator‑entered).
-- **Analytics events ingestion** endpoint for external signals.
-
-**Planned (not built)**
-- Direct GA4 ingestion pipeline and mapping.
-- Automated live‑LLM verification harness.
+### Memory/archetype confidence gating
+- Archetypes loaded from store are filtered by confidence threshold.
+- Belief snippets are filtered by confidence threshold.
+- Simulation lessons are currently excluded from prompt memory until confidence metadata exists.
 
 ---
 
-## 7) Self‑Learning / Distillation (Current vs Planned)
+## 6) Validation & Calibration Architecture (Current)
 
-**Built now**
-- **Simulation lessons** are stored and retrievable per client.
-- **Brand beliefs** are generated from experiment results.
+Validation sources implemented:
+1. Manual validation logs via experiments routes.
+2. External analytics event ingestion endpoint (`/analytics/events`).
 
-**Planned (not built)**
-- Distillation of lessons across simulations into reusable heuristics.
-- Categorization by domain/vertical for reuse in intent inference.
-- Automatic feedback loop that updates prompts/scoring based on validated outcomes.
+Calibration outputs available now:
+- Verified runs
+- Prediction accuracy
+- Unlock eligibility for pattern insights
 
----
-
-## 8) Protocol Readiness (Current)
-
-The system computes **protocol readiness** for UCP/ACP as part of simulation output.
-This surfaces missing fields or readiness issues but does **not** execute transactions.
-
-**Planned (not built)**
-- Full protocol compliance validation + transaction flows.
+Unlock rule (soft gate):
+- `verified_runs >= 10`
+- `accuracy >= 0.75`
 
 ---
 
-## 9) Observability + Audit (Current)
+## 7) What Is Planned (Not Built Yet)
 
-**Built now**
-- Replay logging for simulation runs.
-- Skill history audit trail.
-
-**Planned (not built)**
-- Enterprise‑grade audit trails, RBAC, and compliance tooling.
+- Full normalization pipeline (spell/synonym/unit normalization + ontology confidence scoring).
+- Category inference classifier with confidence-based “block and clarify” step.
+- High-confidence simulation-lesson reuse (after confidence scoring is added).
+- Native GA4 connector (today: generic analytics event ingestion only).
+- Full serverless Vercel deployment of backend.
 

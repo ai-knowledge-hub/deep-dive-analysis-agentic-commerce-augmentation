@@ -1,14 +1,12 @@
-# Brand-Side Intentionality Optimization + Verification for LLM Commerce
+# Brand-Side Intentionality Optimization + Validation for LLM Commerce
 
-**Make products legible to reasoning agents. Prove the lift.**
-
-> Google built the roads (UCP). OpenAI built the cars (Shopping Research). We built the compass that helps products get discovered.
+**Make products legible to reasoning agents. Validate lift with real-world feedback.**
 
 ---
 
 ## What This Is
 
-This repository implements a **brand-side intentionality optimization + verification layer** that turns product data into intent‑legible structures and proves they lift organic AI recommendations.
+This repository implements a **brand-side intentionality optimization + validation layer** that turns product data into intent-legible structures and helps teams validate whether lab improvements hold in real traffic.
 
 We provide **the discovery layer that transaction protocols don't define**, working at the source data brands control:
 
@@ -33,14 +31,18 @@ We provide **the discovery layer that transaction protocols don't define**, work
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**We are protocol-agnostic.** The discovery layer works with Google's UCP, OpenAI's ACP, or any future commerce protocol.
+**We are protocol-agnostic.** The discovery layer works with UCP, ACP, or any future commerce protocol.
 
 ---
 
-## Core Innovation: Intentionality + Alignment
+## Product Positioning
 
-We make products **intent‑legible** and rank them by alignment with inferred goals.
-These alignment rankings are a **proxy for semantic match + intent coverage** (useful for “LLM‑friendliness”), not a guaranteed predictor of any closed‑box shopping ranking system.
+This app is a **screening + validation** system:
+- Lab metrics are directional signals for LLM-friendliness.
+- Manual validation logs and external analytics events provide reality checks.
+- Pattern insights are soft-gated by validation progress.
+
+We do **not** position lab scores as guaranteed production ranking outcomes.
 
 **Alignment (current model, explainable):**
 - Signal‑overlap scoring across **intent signals**, **evidence signals**, and **our copy**.
@@ -56,9 +58,11 @@ These alignment rankings are a **proxy for semantic match + intent coverage** (u
 | **Signal Extraction (Skills)** | Convert intent → phrase-level signals via editable skill prompts | `application/services/signal_extractor.py` + `infrastructure/db/skills.py` |
 | **Verification (Lift)** | Show before/after *simulated* discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
 | **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
-| **Validation Logging** | Track lab predictions vs. live outcomes | `api/routes/experiments.py` + `application/services/experiment_validation_service.py` |
+| **Validation Logging** | Track lab predictions vs. observed outcomes | `api/routes/experiments.py` + `application/services/experiment_validation_service.py` |
 | **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
 | **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
+| **Canonical Intent Spec** | Controlled onboarding fields for bottom-up query generation | `web/app/admin/page.tsx` + `products.metadata.canonical_intent_spec` |
+| **Query Quality Gating** | Accept/reject generated queries with reject reasons | `application/services/query_battery_builder.py` |
 
 ---
 
@@ -160,6 +164,9 @@ curl "http://localhost:8000/simulation/lessons?client_id=default"
 
 # Run test suite
 make test
+# Lint backend + frontend
+make lint
+make web-lint
 ```
 
 ---
@@ -239,6 +246,7 @@ Manual helpers:
 
 ```bash
 make db-init   # create/open DB and apply schema
+make db-migrate # alias of db-init (re-apply schema bootstrap)
 make db-reset  # delete local DB and re-init
 make db-path   # print current DB path
 make seed-demo # seed demo multi-tenant clients/brands/products
@@ -262,24 +270,6 @@ Quick verify:
 ```bash
 sqlite3 ./tmp/local.db "select id,name from clients order by name;"
 ```
-
----
-
-## Strategic Position
-
-We are **the missing brand-side discovery layer for agentic commerce**.
-
-UCP and ACP define *how* transactions flow. We define *why* a product gets recommended by a reasoning agent.
-
-| What They Built | What We Built |
-|-----------------|---------------|
-| Transaction plumbing | **Intent legibility layer** |
-| Shopping Research | **Alignment scoring** |
-| Checkout flow | **Product intentionality profiling** |
-| Catalog ingestion | **Discoverability metrics** |
-
-See [docs/strategic-positioning.md](docs/strategic-positioning.md) for the full positioning narrative.
-
 
 ---
 

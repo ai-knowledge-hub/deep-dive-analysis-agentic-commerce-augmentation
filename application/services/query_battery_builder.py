@@ -16,6 +16,9 @@ from application.services.query_battery_llm_generator import (
 )
 from application.services.query_battery_types import GeneratedQuery
 
+MIN_BELIEF_CONFIDENCE = 0.65
+MIN_ARCHETYPE_CONFIDENCE = 0.6
+
 
 class QueryBatteryBuilder:
     def __init__(
@@ -572,6 +575,15 @@ def _extract_archetypes_from_store(
         return []
     labels: List[str] = []
     for row in rows:
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        confidence = metadata.get("confidence")
+        if confidence is None and isinstance(row.get("archetype"), dict):
+            confidence = row.get("archetype", {}).get("confidence")
+        if (
+            not isinstance(confidence, (int, float))
+            or float(confidence) < MIN_ARCHETYPE_CONFIDENCE
+        ):
+            continue
         label = row.get("label")
         if isinstance(label, str) and label.strip():
             labels.append(label.strip())
@@ -603,6 +615,12 @@ def _extract_memory_snippets(
                 limit=5,
             )
             for belief in beliefs:
+                confidence = belief.get("confidence")
+                if (
+                    not isinstance(confidence, (int, float))
+                    or float(confidence) < MIN_BELIEF_CONFIDENCE
+                ):
+                    continue
                 recommendation = belief.get("recommendation")
                 summary = (belief.get("metadata") or {}).get("summary")
                 if isinstance(summary, str) and summary.strip():
@@ -611,17 +629,8 @@ def _extract_memory_snippets(
                     snippets.append(recommendation.strip())
         except Exception:
             pass
-    if simulation_runs_repo:
-        try:
-            lessons = simulation_runs_repo.list_lessons(
-                client_id=client_id, user_id=None, limit=5
-            )
-            for lesson in lessons:
-                text = lesson.get("lesson")
-                if isinstance(text, str) and text.strip():
-                    snippets.append(text.strip())
-        except Exception:
-            pass
+    # Simulation lessons currently do not carry confidence metadata.
+    # Keep them out of memory context until confidence scoring is available.
     return snippets
 
 
