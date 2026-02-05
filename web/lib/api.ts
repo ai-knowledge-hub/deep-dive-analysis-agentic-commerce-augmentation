@@ -652,6 +652,8 @@ export async function generateBatteryQueries(
   payload: {
     source: string;
     seed_queries?: string[];
+    seed_features?: string[];
+    seed_use_cases?: string[];
     limit?: number;
     user_id?: string | null;
     use_llm?: boolean;
@@ -665,6 +667,8 @@ export async function generateBatteryQueries(
       user_id: payload.user_id ?? undefined,
       source: payload.source,
       seed_queries: payload.seed_queries,
+      seed_features: payload.seed_features,
+      seed_use_cases: payload.seed_use_cases,
       limit: payload.limit ?? 15,
       use_llm: payload.use_llm ?? undefined,
     }),
@@ -1226,6 +1230,28 @@ export async function createAdminProduct(
       user_id: userId ?? undefined,
     }),
   });
+}
+
+export async function updateAdminProduct(
+  brandId: string,
+  productId: string,
+  payload: {
+    name?: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<{ product: AdminProduct | null }> {
+  return request<{ product: AdminProduct | null }>(
+    `/brands/${brandId}/products/${productId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        ...payload,
+        user_id: userId ?? undefined,
+      }),
+    },
+  );
 }
 
 export async function listAdminClientUsers(

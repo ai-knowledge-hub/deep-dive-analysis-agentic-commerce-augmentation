@@ -68,6 +68,34 @@ class AdminService:
     def list_products(self, *, brand_id: str) -> list[Dict[str, Any]]:
         return self._clients.list_products(brand_id=brand_id)
 
+    def update_product(
+        self,
+        *,
+        product_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any] | None:
+        existing = self._clients.get_product(product_id=product_id)
+        if not existing:
+            return None
+        current_metadata = dict(existing.get("metadata") or {})
+        next_metadata = (
+            _deep_merge_dict(current_metadata, metadata or {})
+            if metadata is not None
+            else current_metadata
+        )
+        next_description = (
+            description if description is not None else existing.get("description")
+        )
+        if name is not None and name.strip():
+            next_metadata["display_name"] = name.strip()
+        return self._clients.update_product(
+            product_id=product_id,
+            description=next_description,
+            metadata=next_metadata,
+        )
+
     def add_client_user(
         self, *, client_id: str, member_user_id: str, role: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -147,3 +175,13 @@ def _load_default_platform_profile() -> Dict[str, Any] | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _deep_merge_dict(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for key, value in updates.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged

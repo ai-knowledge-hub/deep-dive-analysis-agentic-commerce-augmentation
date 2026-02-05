@@ -71,6 +71,8 @@ class BatteryGenerateRequest(BaseModel):
     client_id: Optional[str] = None
     source: str = Field(..., min_length=1)
     seed_queries: Optional[list[str]] = None
+    seed_features: Optional[list[str]] = None
+    seed_use_cases: Optional[list[str]] = None
     limit: int = Field(default=15, ge=1, le=100)
     use_llm: Optional[bool] = False
 
@@ -194,17 +196,19 @@ def generate_queries(
 ) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        created = BUILDER.generate(
+        created, report = BUILDER.generate_with_report(
             battery_id=battery_id,
             client_id=client_id,
             source=payload.source,
             seed_queries=payload.seed_queries,
+            seed_features=payload.seed_features,
+            seed_use_cases=payload.seed_use_cases,
             limit=payload.limit,
             use_llm=bool(payload.use_llm),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"queries": created}
+    return {"queries": created, "report": report}
 
 
 @router.get("/{battery_id}/metrics")

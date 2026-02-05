@@ -41,6 +41,12 @@ if APIRouter:
         metadata: Dict[str, Any] = Field(default_factory=dict)
         user_id: Optional[str] = None
 
+    class ProductUpdateRequest(BaseModel):
+        user_id: Optional[str] = None
+        name: Optional[str] = None
+        description: Optional[str] = None
+        metadata: Dict[str, Any] = Field(default_factory=dict)
+
     class ClientUserCreateRequest(BaseModel):
         user_id: Optional[str] = None
         member_user_id: str = Field(..., min_length=1)
@@ -109,6 +115,21 @@ if APIRouter:
     def list_products(brand_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         require_admin(user_id)
         return {"products": admin_service.list_products(brand_id=brand_id)}
+
+    @router.put("/brands/{brand_id}/products/{product_id}")
+    def update_product(
+        brand_id: str,
+        product_id: str,
+        payload: ProductUpdateRequest,
+    ) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        product = admin_service.update_product(
+            product_id=product_id,
+            name=payload.name,
+            description=payload.description,
+            metadata=payload.metadata,
+        )
+        return {"product": product}
 
     @router.post("/clients/{client_id}/users")
     def add_client_user(

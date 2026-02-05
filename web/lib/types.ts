@@ -479,6 +479,12 @@ export type QueryBatteryListResponse = {
 
 export type QueryBatteryQueryListResponse = {
   queries: QueryBatteryQuery[];
+  report?: {
+    accepted_count: number;
+    rejected_count: number;
+    required_category?: string | null;
+    rejected?: { query_text: string; reason: string }[];
+  };
 };
 
 export type QueryBatteryMetrics = {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
+  AdminProduct,
   BrandBelief,
   Experiment,
   ExperimentMetric,
@@ -46,6 +47,7 @@ import {
   getExperimentValidationSummary,
   logExperimentValidation,
   getBrandPredictionAccuracy,
+  listAdminProducts,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -103,6 +105,9 @@ export default function ExperimentsPage() {
   );
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
   const [batteryUseLlm, setBatteryUseLlm] = useState(false);
+  const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
+  const [batterySeedUseCases, setBatterySeedUseCases] = useState("");
+  const [productDetail, setProductDetail] = useState<AdminProduct | null>(null);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
     batteryId: "",
@@ -117,6 +122,12 @@ export default function ExperimentsPage() {
   const [isSubmitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
+  const [batteryGenerationReport, setBatteryGenerationReport] = useState<{
+    accepted_count: number;
+    rejected_count: number;
+    required_category?: string | null;
+    rejected?: { query_text: string; reason: string }[];
+  } | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
   const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [scheduleForm, setScheduleForm] = useState({
@@ -182,6 +193,29 @@ export default function ExperimentsPage() {
       }
     });
   }, [productId, selectedExperimentId, userId]);
+
+  useEffect(() => {
+    if (!brandId || !productId || !userId) {
+      setProductDetail(null);
+      return;
+    }
+    let active = true;
+    listAdminProducts(brandId, userId)
+      .then((response) => {
+        if (!active) return;
+        const match = (response.products ?? []).find(
+          (product) => product.id === productId,
+        );
+        setProductDetail(match ?? null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setProductDetail(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [brandId, productId, userId]);
 
   useEffect(() => {
     const targetId = searchParams.get("experiment_id");
@@ -514,29 +548,87 @@ export default function ExperimentsPage() {
     }
   }, [batteryEdit, selectedBattery, userId]);
 
+  const parseSeedList = useCallback((value: string) => {
+    return value
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }, []);
+
+  const hasBottomUpMetadata = useMemo(() => {
+    const metadata = productDetail?.metadata ?? {};
+    const features = metadata.features;
+    const useCase = metadata.use_case ?? metadata.scenario;
+    const hasFeatures =
+      (Array.isArray(features) && features.length > 0) ||
+      (typeof features === "string" && features.trim() !== "");
+    const hasUseCase =
+      (Array.isArray(useCase) && useCase.length > 0) ||
+      (typeof useCase === "string" && useCase.trim() !== "");
+    const hasIntentLabels = Boolean(metadata.intent_labels || metadata.intent_archetypes);
+    const hasVertical = Boolean(metadata.vertical || metadata.domain || metadata.category);
+    return hasFeatures || hasUseCase || hasIntentLabels || hasVertical;
+  }, [productDetail]);
+
   const handleGenerateQueries = useCallback(
     async (batteryId: string) => {
       if (!batteryId) return;
       setFormError(null);
       setSubmitting(true);
       try {
-        const seedList = batterySeedQueries
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean);
-        await generateBatteryQueries(batteryId, {
-          source: batteryForm.generationMode,
+        const seedList = parseSeedList(batterySeedQueries);
+        const featureSeeds = parseSeedList(batterySeedFeatures);
+        const useCaseSeeds = parseSeedList(batterySeedUseCases);
+        let source = batteryForm.generationMode;
+        if (
+          source === "bottom_up" &&
+          !hasBottomUpMetadata &&
+          seedList.length === 0 &&
+          featureSeeds.length === 0 &&
+          useCaseSeeds.length === 0
+        ) {
+          const confirmSwitch = window.confirm(
+            "Bottom-up needs features/use-cases. Switch to top-down for this generation?",
+          );
+          if (!confirmSwitch) {
+            setFormError("Add features/use-cases or seed queries for bottom-up.");
+            setSubmitting(false);
+            return;
+          }
+          source = "top_down";
+          setBatteryForm((prev) => ({ ...prev, generationMode: "top_down" }));
+          setBatteryStatus("Bottom-up metadata missing. Generated with top-down.");
+        }
+        const response = await generateBatteryQueries(batteryId, {
+          source,
           seed_queries: seedList.length ? seedList : undefined,
+          seed_features: featureSeeds.length ? featureSeeds : undefined,
+          seed_use_cases: useCaseSeeds.length ? useCaseSeeds : undefined,
           user_id: userId,
           use_llm: batteryUseLlm,
         });
+        setBatteryGenerationReport(response.report ?? null);
+        if (response.report) {
+          setBatteryStatus(
+            `Accepted ${response.report.accepted_count}, rejected ${response.report.rejected_count}.`,
+          );
+        }
         const refreshed = await listBatteryQueries(batteryId, userId);
         setQueries(refreshed.queries ?? []);
       } finally {
         setSubmitting(false);
       }
     },
-    [batterySeedQueries, batteryForm.generationMode, batteryUseLlm, userId],
+    [
+      batterySeedFeatures,
+      batterySeedQueries,
+      batterySeedUseCases,
+      batteryForm.generationMode,
+      batteryUseLlm,
+      hasBottomUpMetadata,
+      parseSeedList,
+      userId,
+    ],
   );
 
   const handleQueryToggle = useCallback(
@@ -669,8 +761,29 @@ export default function ExperimentsPage() {
         const autoBatteryName = `${productName ?? "Product"} Battery`;
         const seedQueries =
           Object.keys(hypothesis).length > 0 ? buildSeedQueries() : [];
-        const generationMode =
+        const featureSeeds = parseSeedList(batterySeedFeatures);
+        const useCaseSeeds = parseSeedList(batterySeedUseCases);
+        let generationMode =
           seedQueries.length > 0 ? "hybrid" : batteryForm.generationMode;
+        if (
+          generationMode === "bottom_up" &&
+          !hasBottomUpMetadata &&
+          seedQueries.length === 0 &&
+          featureSeeds.length === 0 &&
+          useCaseSeeds.length === 0
+        ) {
+          const confirmSwitch = window.confirm(
+            "Bottom-up needs features/use-cases. Switch to top-down for this generation?",
+          );
+          if (!confirmSwitch) {
+            setFormError("Add features/use-cases or seed queries for bottom-up.");
+            setSubmitting(false);
+            return;
+          }
+          generationMode = "top_down";
+          setBatteryForm((prev) => ({ ...prev, generationMode: "top_down" }));
+          setBatteryStatus("Bottom-up metadata missing. Generated with top-down.");
+        }
         const batteryResponse = await createBattery({
           name: autoBatteryName,
           product_id: productId,
@@ -679,12 +792,15 @@ export default function ExperimentsPage() {
           user_id: userId,
         });
         batteryId = batteryResponse.battery.id;
-        await generateBatteryQueries(batteryId, {
+        const generationResponse = await generateBatteryQueries(batteryId, {
           source: generationMode,
           seed_queries: seedQueries.length > 0 ? seedQueries : undefined,
+          seed_features: featureSeeds.length > 0 ? featureSeeds : undefined,
+          seed_use_cases: useCaseSeeds.length > 0 ? useCaseSeeds : undefined,
           user_id: userId,
           use_llm: batteryUseLlm,
         });
+        setBatteryGenerationReport(generationResponse.report ?? null);
         const refreshedBatteries = await listBatteries(userId, productId);
         setBatteries(refreshedBatteries.batteries ?? []);
         setExperimentForm((prev) => ({ ...prev, batteryId }));
@@ -758,11 +874,15 @@ export default function ExperimentsPage() {
     }
   }, [
     batteryForm.generationMode,
+    batterySeedFeatures,
+    batterySeedUseCases,
     batteryUseLlm,
     brandId,
     experimentForm,
     jsonErrors,
     labMode,
+    hasBottomUpMetadata,
+    parseSeedList,
     productId,
     productName,
     userId,
@@ -1503,6 +1623,32 @@ export default function ExperimentsPage() {
                   />
                 </label>
                 <label className="panel__label">
+                  Seed features (recommended for bottom-up)
+                  <textarea
+                    className="panel__textarea"
+                    value={batterySeedFeatures}
+                    onChange={(event) => setBatterySeedFeatures(event.target.value)}
+                    rows={2}
+                    placeholder="lightweight cushioning, breathable upper, stable heel support"
+                  />
+                </label>
+                <label className="panel__label">
+                  Seed use-cases (recommended for bottom-up)
+                  <textarea
+                    className="panel__textarea"
+                    value={batterySeedUseCases}
+                    onChange={(event) => setBatterySeedUseCases(event.target.value)}
+                    rows={2}
+                    placeholder="daily training, long-distance running, injury prevention"
+                  />
+                </label>
+                {batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata ? (
+                  <div className="panel__notice panel__notice--info">
+                    Bottom-up has weak product metadata. Add seed features/use-cases or we
+                    will offer fallback to top-down at generation time.
+                  </div>
+                ) : null}
+                <label className="panel__label">
                   Generate for battery
                   <select
                     className="panel__input"
@@ -1528,8 +1674,37 @@ export default function ExperimentsPage() {
                   onClick={() => handleGenerateQueries(experimentForm.batteryId)}
                   disabled={!experimentForm.batteryId || isSubmitting}
                 >
-                  Generate queries
+                  {isSubmitting ? (
+                    <>
+                      Generating queries<span className="button__dots" />
+                    </>
+                  ) : (
+                    "Generate queries"
+                  )}
                 </button>
+                {batteryGenerationReport ? (
+                  <div className="panel__notice panel__notice--info">
+                    Accepted: {batteryGenerationReport.accepted_count} · Rejected:{" "}
+                    {batteryGenerationReport.rejected_count}
+                    {batteryGenerationReport.required_category ? (
+                      <>
+                        {" "}
+                        · Required category: {batteryGenerationReport.required_category}
+                      </>
+                    ) : null}
+                    {batteryGenerationReport.rejected &&
+                    batteryGenerationReport.rejected.length > 0 ? (
+                      <ul className="panel__list">
+                        {batteryGenerationReport.rejected.slice(0, 5).map((item) => (
+                          <li key={`${item.query_text}-${item.reason}`}>
+                            <span className="panel__muted">{item.reason}:</span>{" "}
+                            {item.query_text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <p className="panel__empty">Select a product to create a battery.</p>
