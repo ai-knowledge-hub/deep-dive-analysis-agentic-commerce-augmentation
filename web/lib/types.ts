@@ -336,6 +336,19 @@ export type AdminClientUserListResponse = {
   users: AdminClientUser[];
 };
 
+export type AdminCanonicalAutofillResult = {
+  product_id: string;
+  canonical_spec: Record<string, unknown>;
+  raw: Record<string, unknown>;
+  normalized: Record<string, unknown>;
+  mapping: Record<string, unknown>;
+  product?: AdminProduct | null;
+};
+
+export type AdminCanonicalAutofillResponse = {
+  result: AdminCanonicalAutofillResult;
+};
+
 export type EvidenceSignalExtraction = {
   intent_signals: string[];
   winner_signals: string[];
@@ -479,6 +492,18 @@ export type QueryBatteryListResponse = {
 
 export type QueryBatteryQueryListResponse = {
   queries: QueryBatteryQuery[];
+  report?: {
+    accepted_count: number;
+    rejected_count: number;
+    required_category?: string | null;
+    category_confidence?: number | null;
+    category_candidates?: { category: string; score: number }[];
+    clarification_required?: boolean;
+    clarification_prompt?: string | null;
+    regeneration_count?: number;
+    acceptance_rate?: number;
+    rejected?: { query_text: string; reason: string }[];
+  };
 };
 
 export type QueryBatteryMetrics = {
@@ -499,6 +524,32 @@ export type QueryBatteryMetrics = {
 
 export type QueryBatteryMetricsResponse = {
   metrics: QueryBatteryMetrics;
+};
+
+export type QueryBatteryEvalSummary = {
+  battery_id: string;
+  generation_events: number;
+  acceptance_rate: number;
+  regeneration_rate: number;
+  clarification_rate: number;
+  downstream_avg_win_rate_robust?: number | null;
+  validation_accuracy: number;
+  verified_runs: number;
+  evidence_strength_breakdown: Record<string, number>;
+};
+
+export type QueryBatteryEvalSummaryResponse = {
+  summary: QueryBatteryEvalSummary;
+};
+
+export type QueryBatteryOntologyUpdatesResponse = {
+  updates: {
+    battery_id: string;
+    rejected_sample_count: number;
+    typo_updates: { token: string; suggested: string; count: number }[];
+    synonym_updates: { token: string; suggested: string; count: number }[];
+    recommended_review_cadence: string;
+  };
 };
 
 export type Experiment = {

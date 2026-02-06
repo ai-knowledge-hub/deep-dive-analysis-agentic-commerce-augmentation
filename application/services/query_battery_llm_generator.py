@@ -28,6 +28,8 @@ def generate_llm_queries(
     min_per_archetype: int,
     include_protocol: bool,
     query_type_hint: str,
+    banned_terms: Optional[List[str]] = None,
+    include_description: bool = True,
 ) -> List[GeneratedQuery]:
     prompt = _build_prompt(
         capsule=capsule,
@@ -35,13 +37,15 @@ def generate_llm_queries(
         min_per_archetype=min_per_archetype,
         include_protocol=include_protocol,
         query_type_hint=query_type_hint,
+        banned_terms=banned_terms or [],
+        include_description=include_description,
     )
     try:
         raw = generate_fn(prompt)
     except Exception:
         return []
     parsed = _parse_response(raw)
-    return [
+    results = [
         GeneratedQuery(
             query_text=item["query_text"],
             query_type=item.get("query_type") or query_type_hint,
@@ -52,6 +56,16 @@ def generate_llm_queries(
         for item in parsed
         if item.get("query_text")
     ]
+    if not banned_terms:
+        return results
+    lowered_banned = {term.lower() for term in banned_terms if term}
+    filtered: List[GeneratedQuery] = []
+    for item in results:
+        query_lower = item.query_text.lower()
+        if any(term in query_lower for term in lowered_banned):
+            continue
+        filtered.append(item)
+    return filtered
 
 
 def _build_prompt(
@@ -61,13 +75,17 @@ def _build_prompt(
     min_per_archetype: int,
     include_protocol: bool,
     query_type_hint: str,
+    banned_terms: List[str],
+    include_description: bool,
 ) -> str:
     payload = {
         "task": "generate_query_battery",
         "capsule": {
             "domain_vertical": capsule.domain_vertical,
             "product_name": capsule.product_name,
-            "product_description": capsule.product_description,
+            "product_description": capsule.product_description
+            if include_description
+            else None,
             "product_features": capsule.product_features,
             "use_cases": capsule.use_cases,
             "constraints": capsule.constraints,
@@ -81,11 +99,17 @@ def _build_prompt(
             "include_protocol_queries": include_protocol,
             "query_type_hint": query_type_hint,
             "return_format": "json",
+            "banned_terms": banned_terms,
         },
     }
     return (
         "You are a marketing intent analyst. Generate search queries that reflect "
-        "product intent and audience behavior. Return ONLY JSON with shape: "
+        "intent and audience behavior, not branded or product-specific copy. "
+        "Do NOT include brand names, product names, internal model names, or direct feature keywords from the product description. "
+        "Translate concrete specs into objective, user-facing descriptors (e.g., 'lightweight cushioned running shoes'). "
+        "Avoid exact or near-exact matches for banned_terms. "
+        "If context is sparse, prefer broader intent-first phrasing instead of inventing details. "
+        "Return ONLY JSON with shape: "
         '{"queries":[{"query_text": "...", "query_type": "coverage|market|adversarial|protocol", '
         '"intent_archetype": "...", "constraints": {...}}]}. '
         "Do not include commentary.\n\n"

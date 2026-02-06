@@ -2549,6 +2549,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 .admin__selector select,
+.admin__form select,
 .admin__form input,
 .admin__form textarea {
   background: var(--bg-tertiary);
@@ -2587,6 +2588,109 @@ input[type="checkbox"]:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.admin-onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-onboarding__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.admin-onboarding__step {
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.admin-onboarding__step.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.admin-onboarding__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.admin-onboarding__summary-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-onboarding__summary-card span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.admin-onboarding__summary-card strong {
+  font-size: 13px;
+}
+
+.admin-onboarding__panels details {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.admin-onboarding__panels summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.admin-onboarding__drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-onboarding__drawer {
+  width: min(480px, 92vw);
+  height: 100%;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border);
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-ops {
+  margin-top: 12px;
+}
+
+.admin-ops__details {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.admin-ops__details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .clerk-card,

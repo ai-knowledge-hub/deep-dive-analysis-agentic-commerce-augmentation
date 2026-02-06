@@ -98,6 +98,44 @@ def test_battery_crud_and_queries(client: TestClient):
     assert generate_response.status_code == 200
     assert len(generate_response.json()["queries"]) >= 1
 
+    eval_summary = client.get(
+        f"/batteries/{battery_id}/eval-summary?client_id={CLIENT_ID}"
+    )
+    assert eval_summary.status_code == 200
+    assert "summary" in eval_summary.json()
+
+    ontology_updates = client.get(
+        f"/batteries/{battery_id}/ontology-updates?client_id={CLIENT_ID}"
+    )
+    assert ontology_updates.status_code == 200
+    assert "updates" in ontology_updates.json()
+
+
+def test_bottom_up_generation_requires_category_clarification(client: TestClient):
+    battery_response = client.post(
+        "/batteries",
+        json={
+            "client_id": CLIENT_ID,
+            "product_id": PRODUCT_ID,
+            "name": "Battery Clarify",
+            "generation_mode": "bottom_up",
+        },
+    )
+    battery_id = battery_response.json()["battery"]["id"]
+    generate_response = client.post(
+        f"/batteries/{battery_id}/generate",
+        json={
+            "client_id": CLIENT_ID,
+            "source": "bottom_up",
+            "limit": 5,
+        },
+    )
+    assert generate_response.status_code == 200
+    payload = generate_response.json()
+    assert payload["queries"] == []
+    assert payload["report"]["clarification_required"] is True
+    assert isinstance(payload["report"]["clarification_prompt"], str)
+
 
 def test_experiments_and_variants(client: TestClient):
     battery_response = client.post(

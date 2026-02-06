@@ -254,8 +254,7 @@ Measurements of how well intentionality optimization works.
 | Inference Quality | Accuracy of inferred intents (human evaluation) |
 
 **In Code**
-
-Planned (see `docs/build-plan.md` Phase 4).
+- Alignment and experiment metrics are implemented in current backend services and routes.
 
 ---
 
