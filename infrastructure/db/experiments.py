@@ -6,6 +6,15 @@ from typing import Any, Dict, List, Optional
 from infrastructure.db.connection import get_connection
 from infrastructure.db.json import from_json, to_json
 from infrastructure.db.tenancy import ensure_client
+from infrastructure.db.analytics_events import delete_events_for_experiment
+from infrastructure.db.experiment_recommendations import (
+    delete_recommendations_for_experiment,
+)
+from infrastructure.db.experiment_runs import (
+    delete_metrics_for_experiment,
+    delete_runs_for_experiment,
+)
+from infrastructure.db.experiment_validations import delete_validations_for_experiment
 
 
 def create_experiment(
@@ -244,6 +253,28 @@ def list_all_experiments(
     return [_experiment_row(row) for row in rows]
 
 
+def delete_experiment(*, experiment_id: str, client_id: str) -> bool:
+    conn = get_connection()
+    existing = get_experiment(experiment_id, client_id=client_id)
+    if not existing:
+        return False
+    delete_metrics_for_experiment(experiment_id)
+    delete_runs_for_experiment(experiment_id)
+    delete_recommendations_for_experiment(experiment_id)
+    delete_validations_for_experiment(experiment_id)
+    delete_events_for_experiment(experiment_id)
+    conn.execute(
+        "DELETE FROM experiment_variants WHERE experiment_id = ?",
+        (experiment_id,),
+    )
+    conn.execute(
+        "DELETE FROM experiments WHERE id = ? AND client_id = ?",
+        (experiment_id, client_id),
+    )
+    conn.commit()
+    return True
+
+
 def _experiment_row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -283,6 +314,7 @@ __all__ = [
     "list_experiments",
     "list_all_experiments",
     "update_experiment",
+    "delete_experiment",
     "add_variant",
     "get_variant",
     "list_variants",

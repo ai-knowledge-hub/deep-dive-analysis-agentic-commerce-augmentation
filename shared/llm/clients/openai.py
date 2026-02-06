@@ -1,4 +1,4 @@
-"""OpenRouter-backed LLM client for local/testing usage."""
+"""OpenAI-backed LLM client implementation."""
 
 from __future__ import annotations
 
@@ -10,51 +10,40 @@ import requests
 from shared.config.env import get_settings
 from shared.llm.clients.base import LLMClient
 
-OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
+OPENAI_API_BASE = "https://api.openai.com/v1/chat/completions"
 
 
 @dataclass
-class OpenRouterConfig:
+class OpenAIConfig:
     api_key: str | None = None
-    model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model: str = "gpt-4o-mini"
     temperature: float = 0.3
     max_tokens: int = 1024
-    site_url: str | None = None
-    app_name: str | None = None
 
     @classmethod
-    def from_settings(cls) -> "OpenRouterConfig":
+    def from_settings(cls) -> "OpenAIConfig":
         settings = get_settings()
         return cls(
-            api_key=settings.openrouter_api_key,
-            model=settings.openrouter_model,
-            temperature=float(settings.__dict__.get("openrouter_temperature", 0.3)),
-            max_tokens=int(settings.__dict__.get("openrouter_max_tokens", 1024)),
-            site_url=settings.openrouter_site_url,
-            app_name=settings.openrouter_app_name,
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            temperature=float(settings.openai_temperature),
+            max_tokens=int(settings.openai_max_tokens),
         )
 
 
-class OpenRouterLLMClient(LLMClient):
-    """Minimal OpenRouter client that hits the chat completions endpoint."""
-
-    def __init__(self, config: OpenRouterConfig | None = None) -> None:
-        self.config = config or OpenRouterConfig.from_settings()
+class OpenAILLMClient(LLMClient):
+    def __init__(self, config: OpenAIConfig | None = None) -> None:
+        self.config = config or OpenAIConfig.from_settings()
         if not self.config.api_key:
             raise ValueError(
-                "OPENROUTER_API_KEY must be set when using LLM_PROVIDER=openrouter"
+                "OPENAI_API_KEY must be set when using LLM_PROVIDER=openai"
             )
 
     def _headers(self) -> dict[str, str]:
-        headers = {
+        return {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
         }
-        if self.config.site_url:
-            headers["HTTP-Referer"] = self.config.site_url
-        if self.config.app_name:
-            headers["X-Title"] = self.config.app_name
-        return headers
 
     def _request(self, messages: list[dict[str, str]]) -> str:
         payload = {
@@ -64,11 +53,11 @@ class OpenRouterLLMClient(LLMClient):
             "max_tokens": self.config.max_tokens,
         }
         response = requests.post(
-            OPENROUTER_API_BASE, headers=self._headers(), json=payload, timeout=60
+            OPENAI_API_BASE, headers=self._headers(), json=payload, timeout=60
         )
         if response.status_code >= 400:
             raise requests.HTTPError(
-                f"OpenRouter error {response.status_code}: {response.text}",
+                f"OpenAI error {response.status_code}: {response.text}",
                 response=response,
             )
         data = response.json()
@@ -88,13 +77,11 @@ class OpenRouterLLMClient(LLMClient):
     def chat(
         self, messages: list[dict[str, str]], system_instruction: str | None = None
     ) -> str:
-        openrouter_messages = []
+        openai_messages = []
         if system_instruction:
-            openrouter_messages.append(
-                {"role": "system", "content": system_instruction}
-            )
-        openrouter_messages.extend(messages)
-        return self._request(openrouter_messages)
+            openai_messages.append({"role": "system", "content": system_instruction})
+        openai_messages.extend(messages)
+        return self._request(openai_messages)
 
     def generate_with_tools(
         self,
@@ -117,19 +104,19 @@ class OpenRouterLLMClient(LLMClient):
         return None
 
 
-_openrouter_client: Optional[OpenRouterLLMClient] = None
+_openai_client: Optional[OpenAILLMClient] = None
 
 
-def get_client() -> OpenRouterLLMClient:
-    global _openrouter_client
-    if _openrouter_client is None:
-        _openrouter_client = OpenRouterLLMClient()
-    return _openrouter_client
+def get_client() -> OpenAILLMClient:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAILLMClient()
+    return _openai_client
 
 
 def reset_client() -> None:
-    global _openrouter_client
-    _openrouter_client = None
+    global _openai_client
+    _openai_client = None
 
 
-__all__ = ["OpenRouterLLMClient", "get_client", "reset_client", "OpenRouterConfig"]
+__all__ = ["OpenAILLMClient", "get_client", "reset_client", "OpenAIConfig"]

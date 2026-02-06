@@ -135,6 +135,11 @@ Canonical intent spec fields currently captured:
 
 Agent skills are in a separate operational controls section.
 
+Model gateway (operational controls):
+- Add **chat/generation** and **validation** keys per provider (BYOK).
+- Choose active provider + model for chat; validation can use a separate model.
+- Activating a provider updates `.env.local` and refreshes the backend runtime.
+
 Canonical intent spec editor also supports:
 - **Preview UCP/ACP autofill** (no save).
 - **Apply autofill** (writes canonical spec + raw/normalized/mapping metadata).
@@ -146,6 +151,13 @@ Canonical intent spec editor also supports:
 Currently implemented:
 1. Manual validation logs in Experiments.
 2. External analytics events via API ingestion.
+3. Validation Jobs (Validation page): in-app BYOK and external paste-back.
+
+Validation page (current):
+- Select entity (experiment, simulation, or battery).
+- Choose provider (OpenAI, Gemini, Claude, OpenRouter) and mode (in-app/external).
+- In-app runs immediately via BYOK; external requires structured JSON paste-back.
+- Results stored with raw output + structured result.
 
 **Planned (not built):**
 - native GA4 connector with direct mapping flow.

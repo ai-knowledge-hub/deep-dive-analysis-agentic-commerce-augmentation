@@ -140,6 +140,72 @@ export type ProtocolReadinessReport = {
   issues: ProtocolReadinessIssue[];
 };
 
+export type OverviewSummaryResponse = {
+  scope: string;
+  range_days: number;
+  kpis: {
+    experiments: {
+      latest_win_rate?: number | null;
+      latest_avg_score?: number | null;
+      last_updated?: string | null;
+    };
+    validation: {
+      accuracy?: number | null;
+      verified_runs?: number | null;
+      required_runs?: number | null;
+      unlock_ready?: boolean | null;
+    };
+    simulation: {
+      avg_lift?: number | null;
+      runs?: number | null;
+      lessons?: number | null;
+    };
+    evidence: {
+      avg_lift?: number | null;
+      evidence_items?: number | null;
+    };
+    battery_health: {
+      enabled_queries?: number | null;
+      redundancy_rate?: number | null;
+      coverage_score?: number | null;
+    };
+    protocol_readiness: {
+      score?: number | null;
+    };
+  };
+};
+
+export type OverviewTimeseriesResponse = {
+  range_days: number;
+  series: {
+    win_rate: { date: string; value: number }[];
+    avg_score: { date: string; value: number }[];
+    validation_accuracy: { date: string; value: number }[];
+    simulation_lift: { date: string; value: number }[];
+    evidence_lift: { date: string; value: number }[];
+    belief_count: { date: string; value: number }[];
+  };
+};
+
+export type OverviewChangesResponse = {
+  latest_experiment: {
+    id?: string | null;
+    name?: string | null;
+    winner_label?: string | null;
+    lift?: number | null;
+    created_at?: string | null;
+  } | null;
+  latest_simulation_lesson:
+    | {
+        summary?: string | null;
+        confidence?: number | null;
+        created_at?: string | null;
+      }
+    | null;
+  top_gap_signals: { signal: string; count: number }[];
+  next_test: Record<string, unknown> | null;
+};
+
 export type SimulationRunResponse = {
   run_id: string;
   result: {
@@ -486,12 +552,21 @@ export type QueryBatteryQuery = {
   created_at?: string;
 };
 
+export type QueryBatteryCandidate = {
+  query_text: string;
+  query_type?: string | null;
+  intent_archetype?: string | null;
+  constraints?: Record<string, unknown> | null;
+  weight?: number | null;
+};
+
 export type QueryBatteryListResponse = {
   batteries: QueryBattery[];
 };
 
 export type QueryBatteryQueryListResponse = {
   queries: QueryBatteryQuery[];
+  candidates?: QueryBatteryCandidate[];
   report?: {
     accepted_count: number;
     rejected_count: number;
@@ -726,6 +801,87 @@ export type ExperimentValidationSummaryResponse = {
 
 export type BrandPredictionAccuracyResponse = {
   summary: ValidationSummary;
+};
+
+export type ValidationJob = {
+  id: string;
+  client_id: string;
+  brand_id?: string | null;
+  product_id?: string | null;
+  entity_type: "experiment_run" | "simulation_run" | "battery";
+  entity_id: string;
+  provider: string;
+  mode: "in_app" | "external";
+  model?: string | null;
+  prompt_version?: string | null;
+  status: string;
+  input_payload?: Record<string, unknown>;
+  requested_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  external_instructions?: string | null;
+  external_payload_template?: Record<string, unknown> | null;
+};
+
+export type ValidationResult = {
+  id: string;
+  job_id: string;
+  provider: string;
+  model?: string | null;
+  structured_result?: Record<string, unknown>;
+  raw_response?: string | null;
+  score?: number | null;
+  winner_id?: string | null;
+  evidence_strength?: string | null;
+  latency_ms?: number | null;
+  cost_usd?: number | null;
+  created_at?: string | null;
+};
+
+export type ValidationJobResponse = {
+  job: ValidationJob;
+  result?: ValidationResult | null;
+};
+
+export type ValidationJobListResponse = {
+  jobs: ValidationJob[];
+};
+
+export type HealthLLMResponse = {
+  providers: Record<
+    string,
+    { configured: boolean; error?: string | null }
+  >;
+};
+
+export type LLMProviderSummary = {
+  configured: boolean;
+  chat_configured?: boolean;
+  validation_configured?: boolean;
+  model?: string | null;
+  validation_model?: string | null;
+  is_active?: boolean;
+};
+
+export type LLMConfigSummaryResponse = {
+  can_manage: boolean;
+  active_provider?: string | null;
+  providers: Record<string, LLMProviderSummary>;
+};
+
+export type AdminLLMConfig = {
+  provider: string;
+  configured: boolean;
+  model?: string | null;
+  validation_model?: string | null;
+  is_active?: boolean;
+  updated_at?: string | null;
+};
+
+export type AdminLLMConfigResponse = {
+  active_provider?: string | null;
+  providers: Record<string, LLMProviderSummary>;
+  configs: AdminLLMConfig[];
 };
 
 export type AnalyticsEvent = {

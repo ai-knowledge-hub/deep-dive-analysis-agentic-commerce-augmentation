@@ -55,6 +55,16 @@ def list_recommendations(
     return [_row(row) for row in rows]
 
 
+def delete_recommendations_for_experiment(experiment_id: str) -> int:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM experiment_recommendations WHERE experiment_id = ?",
+        (experiment_id,),
+    )
+    conn.commit()
+    return result.rowcount if result else 0
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -64,4 +74,9 @@ def _row(row) -> Dict[str, Any]:
     }
 
 
-__all__ = ["create_recommendation", "get_recommendation", "list_recommendations"]
+__all__ = [
+    "create_recommendation",
+    "get_recommendation",
+    "list_recommendations",
+    "delete_recommendations_for_experiment",
+]

@@ -78,6 +78,10 @@ db-init:
 db-migrate:
 	$(PYTHON) -m shared.db.connection
 
+.PHONY: db-validate-migrate
+db-validate-migrate:
+	$(PYTHON) -m shared.db.connection
+
 .PHONY: db-reset
 db-reset:
 	@DB_PATH="$$( $(PYTHON) -c "from shared.db.connection import DEFAULT_DB_PATH; print(DEFAULT_DB_PATH)" )"; \
@@ -106,4 +110,20 @@ seed-demo:
 		./.venv/bin/python -m scripts.seed_demo_competitors; \
 	else \
 		$(PYTHON) -m scripts.seed_demo_competitors; \
+	fi
+
+.PHONY: seed-canonical
+seed-canonical:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.seed_canonical_intent_specs; \
+	else \
+		$(PYTHON) -m scripts.seed_canonical_intent_specs; \
+	fi
+
+.PHONY: seed-demo-acme
+seed-demo-acme:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.seed_demo_acme; \
+	else \
+		$(PYTHON) -m scripts.seed_demo_acme; \
 	fi

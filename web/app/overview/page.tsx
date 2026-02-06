@@ -4,112 +4,58 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
-  ConversationResponse,
-  EvidenceAnalyzeResponse,
-  ExperimentMetric,
-  Experiment,
-  RecommendationVerifyResponse,
-  RepresentationOptimizeResponse,
   SessionSummary,
-  SimulationLesson,
+  OverviewSummaryResponse,
+  OverviewTimeseriesResponse,
+  OverviewChangesResponse,
   SimulationRunSummary,
+  Experiment,
 } from "../../lib/types";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import {
   deleteConversationSession,
+  deleteExperiment,
+  deleteSimulationRun,
   listConversationSessions,
-  listExperimentMetrics,
-  listExperiments,
-  listSimulationLessons,
+  getOverviewSummary,
+  getOverviewTimeseries,
+  getOverviewChanges,
   listSimulationRuns,
+  listExperiments,
 } from "../../lib/api";
 import { useTenant } from "../../components/tenant/TenantProvider";
-
-type AlignmentSnapshot = {
-  intent?: ConversationResponse["intent"];
-  goal_state?: ConversationResponse["goal_state"];
-  plan?: ConversationResponse["plan"];
-  clarifications?: string[];
-  product_reasoning?: ConversationResponse["product_explanations"];
-  research_results?: ConversationResponse["plan"]["research_results"];
-  last_query?: string | null;
-};
-
-type EvidenceSnapshot = {
-  analysis?: EvidenceAnalyzeResponse | null;
-  optimization?: RepresentationOptimizeResponse | null;
-  verification?: RecommendationVerifyResponse | null;
-};
-
-type SimulationSnapshot = {
-  scenario?: string;
-  products?: unknown[];
-  run?: unknown;
-};
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  BarChart,
+  Bar,
+} from "recharts";
 
 export default function OverviewPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
-  const { productId } = useTenant();
+  const { clientId } = useTenant();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
-  const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
-  const [experimentMetrics, setExperimentMetrics] = useState<ExperimentMetric[]>([]);
-  const [latestExperiment, setLatestExperiment] = useState<Experiment | null>(null);
-  const [trendMetric, setTrendMetric] = useState<"win_rate" | "avg_score">(
-    "win_rate",
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);
+  const [timeseries, setTimeseries] = useState<OverviewTimeseriesResponse | null>(
+    null,
   );
-  const [alignment, setAlignment] = useState<AlignmentSnapshot>({});
-  const [evidence, setEvidence] = useState<EvidenceSnapshot>({});
-  const [simulation, setSimulation] = useState<SimulationSnapshot>({});
+  const [changes, setChanges] = useState<OverviewChangesResponse | null>(null);
+  const [rangeDays, setRangeDays] = useState(30);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-
-  const alignmentStorageKey = useMemo(
-    () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
-    [userId],
-  );
-  const evidenceStorageKey = useMemo(
-    () => (userId ? `intentionality.evidence.${userId}` : "intentionality.evidence.anonymous"),
-    [userId],
-  );
-  const simulationStorageKey = useMemo(
-    () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [userId],
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const rawAlignment = localStorage.getItem(alignmentStorageKey);
-    if (rawAlignment) {
-      try {
-        setAlignment(JSON.parse(rawAlignment) as AlignmentSnapshot);
-      } catch {
-        localStorage.removeItem(alignmentStorageKey);
-      }
-    }
-    const rawEvidence = localStorage.getItem(evidenceStorageKey);
-    if (rawEvidence) {
-      try {
-        setEvidence(JSON.parse(rawEvidence) as EvidenceSnapshot);
-      } catch {
-        localStorage.removeItem(evidenceStorageKey);
-      }
-    }
-    const rawSimulation = localStorage.getItem(simulationStorageKey);
-    if (rawSimulation) {
-      try {
-        setSimulation(JSON.parse(rawSimulation) as SimulationSnapshot);
-      } catch {
-        localStorage.removeItem(simulationStorageKey);
-      }
-    }
-  }, [alignmentStorageKey, evidenceStorageKey, simulationStorageKey]);
 
   useEffect(() => {
     if (!userId) return;
@@ -119,21 +65,17 @@ export default function OverviewPage() {
     void listSimulationRuns(userId).then((response) => {
       setSimulationRuns(response.runs ?? []);
     });
-    void listSimulationLessons(userId).then((response) => {
-      setSimulationLessons(response.lessons ?? []);
+    void listExperiments(userId).then((response) => {
+      setExperiments(response.experiments ?? []);
     });
-    void listExperiments(userId, productId ?? undefined).then((response) => {
-      const experiment = response.experiments?.[0] ?? null;
-      setLatestExperiment(experiment);
-      if (!experiment) {
-        setExperimentMetrics([]);
-        return;
-      }
-      void listExperimentMetrics(experiment.id, userId).then((metricsResponse) => {
-        setExperimentMetrics(metricsResponse.metrics ?? []);
-      });
-    });
-  }, [productId, userId]);
+  }, [userId, clientId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void getOverviewSummary("client", rangeDays, userId).then(setSummary);
+    void getOverviewTimeseries("client", rangeDays, userId).then(setTimeseries);
+    void getOverviewChanges("client", rangeDays, userId).then(setChanges);
+  }, [clientId, rangeDays, userId]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -143,6 +85,34 @@ export default function OverviewPage() {
       setHistoryClosing(false);
     }, 200);
   }, [isHistoryClosing]);
+
+  const handleDeleteSimulationRun = useCallback(
+    async (runId: string) => {
+      if (!userId) return;
+      try {
+        await deleteSimulationRun(runId, userId, clientId ?? undefined);
+        setSimulationRuns((current) => current.filter((run) => run.id !== runId));
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const handleDeleteExperiment = useCallback(
+    async (experimentId: string) => {
+      if (!userId) return;
+      try {
+        await deleteExperiment(experimentId, userId, clientId ?? undefined);
+        setExperiments((current) =>
+          current.filter((experiment) => experiment.id !== experimentId),
+        );
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
 
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
@@ -154,61 +124,38 @@ export default function OverviewPage() {
     }
   }, [deleteTargetId, userId]);
 
-  const plan = alignment.plan;
-  const lastQuery = alignment.last_query;
-  const evidenceCount = evidence.analysis?.evidence_products?.length ?? 0;
-  const evidenceLift =
-    evidence.verification?.lift !== undefined
-      ? `${Math.round(evidence.verification.lift * 100)}%`
-      : "—";
-
-  const experimentTrend = useMemo(() => {
-    if (!experimentMetrics.length) return [];
-    return [...experimentMetrics]
-      .filter((metric) =>
-        trendMetric === "win_rate"
-          ? metric.metrics?.win_rate !== undefined
-          : metric.metrics?.avg_score !== undefined,
-      )
-      .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
-      .slice(-12)
-      .map((metric) =>
-        Number(
-          trendMetric === "win_rate"
-            ? metric.metrics?.win_rate ?? 0
-            : metric.metrics?.avg_score ?? 0,
-        ),
-      );
-  }, [experimentMetrics, trendMetric]);
-
-  const latestTrendValue = experimentTrend.length
-    ? trendMetric === "win_rate"
-      ? `${Math.round(experimentTrend[experimentTrend.length - 1] * 100)}%`
-      : `${Math.round(experimentTrend[experimentTrend.length - 1] * 100) / 100}`
-    : "—";
-
-  const renderSparkline = (values: number[]) => {
-    if (values.length === 0) return null;
-    const width = 120;
-    const height = 36;
-    const max = Math.max(...values, 1);
-    const min = Math.min(...values, 0);
-    const range = max - min || 1;
-    const points = values.map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${x},${y}`;
+  const winRateSeries = timeseries?.series.win_rate ?? [];
+  const avgScoreSeries = timeseries?.series.avg_score ?? [];
+  const combinedExperimentSeries = useMemo(() => {
+    const map = new Map<string, { date: string; win_rate?: number; avg_score?: number }>();
+    winRateSeries.forEach((item) => {
+      map.set(item.date, { date: item.date, win_rate: item.value });
     });
-    return (
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <polyline
-          fill="none"
-          stroke="rgba(28, 200, 134, 0.7)"
-          strokeWidth="2"
-          points={points.join(" ")}
-        />
-      </svg>
-    );
+    avgScoreSeries.forEach((item) => {
+      map.set(item.date, {
+        date: item.date,
+        ...(map.get(item.date) ?? {}),
+        avg_score: item.value,
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [avgScoreSeries, winRateSeries]);
+
+  const latestWinRate = summary?.kpis.experiments.latest_win_rate;
+  const latestAvgScore = summary?.kpis.experiments.latest_avg_score;
+  const evidenceLift = summary?.kpis.evidence.avg_lift;
+  const simulationLift = summary?.kpis.simulation.avg_lift;
+  const validationAccuracy = summary?.kpis.validation.accuracy;
+  const batteryCoverage = summary?.kpis.battery_health.coverage_score;
+  const redundancyRate = summary?.kpis.battery_health.redundancy_rate;
+  const protocolScore = summary?.kpis.protocol_readiness.score;
+
+  const tooltipStyle = {
+    backgroundColor: "rgba(10, 12, 16, 0.9)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    borderRadius: 8,
+    color: "#f3f4f6",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.45)",
   };
 
   return (
@@ -262,13 +209,25 @@ export default function OverviewPage() {
         isOpen={isHistoryOpen}
         isClosing={isHistoryClosing}
         sessions={sessions}
+        simulations={simulationRuns}
+        experiments={experiments}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(selectedId) => {
-          router.push(`/?session=${selectedId}`);
+        onSelect={(session) => {
+          router.push(`/?session=${session.id}`);
+          handleCloseHistory();
+        }}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          handleCloseHistory();
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
+        onRequestDeleteSimulation={handleDeleteSimulationRun}
+        onRequestDeleteExperiment={handleDeleteExperiment}
       />
       <main className="main main--detail">
         <div className="detail">
@@ -279,10 +238,29 @@ export default function OverviewPage() {
             onBack={() => router.push("/")}
             backLabel="Back to chat"
           />
+          <div className="overview__controls">
+            <div className="overview__control">
+              <span className="overview__label">Scope</span>
+              <span className="overview__value">Client</span>
+            </div>
+            <label className="overview__control">
+              <span className="overview__label">Range</span>
+              <select
+                className="panel__input"
+                value={rangeDays}
+                onChange={(event) => setRangeDays(Number(event.target.value))}
+              >
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={365}>All</option>
+              </select>
+            </label>
+          </div>
           <div className="detail__grid">
             <div className="summary-card">
               <div className="summary-card__header">
-                <h4>Experiment Trend</h4>
+                <h4>Experiment performance</h4>
                 <button
                   type="button"
                   className="summary-card__link"
@@ -291,44 +269,40 @@ export default function OverviewPage() {
                   Open
                 </button>
               </div>
-              <p className="summary-card__meta">
-                {latestExperiment?.name ?? "No experiment selected"}
-              </p>
-              <div className="summary-card__row">
-                <div className="summary-card__stat">
-                  <span className="summary-card__label">Latest {trendMetric.replace("_", " ")}</span>
-                  <span className="summary-card__value">{latestTrendValue}</span>
-                  <div className="summary-card__toggle">
-                    <button
-                      type="button"
-                      className={`summary-card__toggle-btn ${
-                        trendMetric === "win_rate" ? "is-active" : ""
-                      }`}
-                      onClick={() => setTrendMetric("win_rate")}
-                    >
-                      Win rate
-                    </button>
-                    <button
-                      type="button"
-                      className={`summary-card__toggle-btn ${
-                        trendMetric === "avg_score" ? "is-active" : ""
-                      }`}
-                      onClick={() => setTrendMetric("avg_score")}
-                    >
-                      Avg score
-                    </button>
-                  </div>
-                </div>
-                <div className="summary-card__sparkline">
-                  {renderSparkline(experimentTrend) ?? (
-                    <span className="summary-card__empty">No trend yet.</span>
-                  )}
-                </div>
+              <div className="summary-card__meta">
+                <span>
+                  Win rate:{" "}
+                  {typeof latestWinRate === "number"
+                    ? `${Math.round(latestWinRate * 100)}%`
+                    : "—"}
+                </span>
+                <span>
+                  Avg score:{" "}
+                  {typeof latestAvgScore === "number"
+                    ? Math.round(latestAvgScore * 100) / 100
+                    : "—"}
+                </span>
               </div>
             </div>
             <div className="summary-card">
               <div className="summary-card__header">
-                <h4>Simulation Sandbox</h4>
+                <h4>Validation accuracy</h4>
+              </div>
+              <div className="summary-card__meta">
+                <span>
+                  Accuracy:{" "}
+                  {typeof validationAccuracy === "number"
+                    ? `${Math.round(validationAccuracy * 100)}%`
+                    : "—"}
+                </span>
+                <span>
+                  Verified runs: {summary?.kpis.validation.verified_runs ?? 0}
+                </span>
+              </div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-card__header">
+                <h4>Simulation lift</h4>
                 <button
                   type="button"
                   className="summary-card__link"
@@ -337,29 +311,20 @@ export default function OverviewPage() {
                   Open
                 </button>
               </div>
-              <p className="summary-card__text">
-                {simulation.scenario?.trim() || lastQuery
-                  ? `Scenario: ${simulation.scenario?.trim() || lastQuery}`
-                  : "No scenario yet."}
-              </p>
               <div className="summary-card__meta">
-                <span>Runs: {simulationRuns.length}</span>
-                <span>Lessons: {simulationLessons.length}</span>
-                {typeof simulationRuns?.[0]?.protocol_readiness_score === "number" && (
-                  <span>
-                    <span
-                      title="UCP readiness score based on business profile validation and platform capability intersection."
-                    >
-                      Protocol readiness: {simulationRuns[0].protocol_readiness_score}/100
-                    </span>
-                  </span>
-                )}
+                <span>
+                  Avg lift:{" "}
+                  {typeof simulationLift === "number"
+                    ? `${Math.round(simulationLift * 100)}%`
+                    : "—"}
+                </span>
+                <span>Runs: {summary?.kpis.simulation.runs ?? 0}</span>
+                <span>Lessons: {summary?.kpis.simulation.lessons ?? 0}</span>
               </div>
             </div>
-
             <div className="summary-card">
               <div className="summary-card__header">
-                <h4>Evidence + Research</h4>
+                <h4>Evidence signals</h4>
                 <button
                   type="button"
                   className="summary-card__link"
@@ -368,46 +333,228 @@ export default function OverviewPage() {
                   Open
                 </button>
               </div>
-              <p className="summary-card__text">
-                {evidenceCount > 0
-                  ? `${evidenceCount} evidence items analyzed.`
-                  : "No evidence analysis yet."}
-              </p>
               <div className="summary-card__meta">
-                <span>Lift: {evidenceLift}</span>
-                <span>Research: {alignment.research_results?.length ?? 0}</span>
+                <span>
+                  Avg lift:{" "}
+                  {typeof evidenceLift === "number"
+                    ? `${Math.round(evidenceLift * 100)}%`
+                    : "—"}
+                </span>
+                <span>Evidence items: {summary?.kpis.evidence.evidence_items ?? 0}</span>
               </div>
             </div>
-
             <div className="summary-card">
               <div className="summary-card__header">
-                <h4>Alignment</h4>
-                <button
-                  type="button"
-                  className="summary-card__link"
-                  onClick={() => router.push("/alignment")}
-                >
-                  Open
-                </button>
+                <h4>Battery health</h4>
               </div>
-              <p className="summary-card__text">
-                {plan?.products?.length
-                  ? `${plan.products.length} products scored.`
-                  : "No alignment results yet."}
-              </p>
+              <div className="summary-card__meta">
+                <span>
+                  Coverage:{" "}
+                  {typeof batteryCoverage === "number"
+                    ? `${Math.round(batteryCoverage * 100)}%`
+                    : "—"}
+                </span>
+                <span>
+                  Redundancy:{" "}
+                  {typeof redundancyRate === "number"
+                    ? `${Math.round(redundancyRate * 100)}%`
+                    : "—"}
+                </span>
+                <span>
+                  Enabled: {summary?.kpis.battery_health.enabled_queries ?? 0}
+                </span>
+              </div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-card__header">
+                <h4>Protocol readiness</h4>
+              </div>
               <div className="summary-card__meta">
                 <span>
                   Score:{" "}
-                  {plan?.alignment?.goal_alignment?.score !== undefined
-                    ? `${Math.round(plan.alignment.goal_alignment.score * 100)}%`
-                    : "—"}
+                  {typeof protocolScore === "number" ? `${protocolScore}/100` : "—"}
                 </span>
-                <span>Clarifications: {alignment.clarifications?.length ?? 0}</span>
               </div>
             </div>
           </div>
-          <div className="detail__note">
-            Overview snapshots update after each chat run. Open any section to dive deeper.
+          <div className="overview__charts">
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Experiment trend</h3>
+              </div>
+              <div className="panel__chart panel__chart--tall">
+                {combinedExperimentSeries.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={combinedExperimentSeries}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" tick={{ fill: "#8f98a8" }} />
+                      <YAxis tick={{ fill: "#8f98a8" }} />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: "#e2e8f0" }}
+                        labelStyle={{ color: "#94a3b8" }}
+                        cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="win_rate"
+                        stroke="#1cc486"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Win rate"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="avg_score"
+                        stroke="#8b5cf6"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Avg score"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="summary-card__empty">No experiment trend yet.</div>
+                )}
+              </div>
+            </section>
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Validation accuracy</h3>
+              </div>
+              <div className="panel__chart">
+                {timeseries?.series.validation_accuracy?.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={timeseries.series.validation_accuracy}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" tick={{ fill: "#8f98a8" }} />
+                      <YAxis tick={{ fill: "#8f98a8" }} />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: "#e2e8f0" }}
+                        labelStyle={{ color: "#94a3b8" }}
+                        cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#1cc486"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Accuracy"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="summary-card__empty">No validations yet.</div>
+                )}
+              </div>
+            </section>
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Simulation lift</h3>
+              </div>
+              <div className="panel__chart">
+                {timeseries?.series.simulation_lift?.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={timeseries.series.simulation_lift}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" tick={{ fill: "#8f98a8" }} />
+                      <YAxis tick={{ fill: "#8f98a8" }} />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: "#e2e8f0" }}
+                        labelStyle={{ color: "#94a3b8" }}
+                        cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#1cc486"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Lift"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="summary-card__empty">No simulation lift yet.</div>
+                )}
+              </div>
+            </section>
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Belief updates</h3>
+              </div>
+              <div className="panel__chart">
+                {timeseries?.series.belief_count?.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={timeseries.series.belief_count}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" tick={{ fill: "#8f98a8" }} />
+                      <YAxis tick={{ fill: "#8f98a8" }} />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: "#e2e8f0" }}
+                        labelStyle={{ color: "#94a3b8" }}
+                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                      />
+                      <Bar dataKey="value" fill="#1cc486" name="Beliefs" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="summary-card__empty">No belief updates yet.</div>
+                )}
+              </div>
+            </section>
+          </div>
+          <div className="overview__changes">
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>What changed</h3>
+              </div>
+              <div className="panel__grid">
+                <div>
+                  <p className="panel__subtitle">Latest experiment</p>
+                  <p className="panel__text">
+                    {changes?.latest_experiment?.name ?? "No experiment yet."}
+                  </p>
+                  <p className="panel__muted">
+                    {changes?.latest_experiment?.created_at
+                      ? new Date(changes.latest_experiment.created_at).toLocaleString()
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="panel__subtitle">Latest simulation lesson</p>
+                  <p className="panel__text">
+                    {changes?.latest_simulation_lesson?.summary ??
+                      "No lessons yet."}
+                  </p>
+                </div>
+                <div>
+                  <p className="panel__subtitle">Top gap signals</p>
+                  {changes?.top_gap_signals?.length ? (
+                    <ul className="panel__list panel__list--compact">
+                      {changes.top_gap_signals.map((item) => (
+                        <li key={item.signal}>
+                          {item.signal} · {item.count}x
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="panel__muted">No gap signals yet.</p>
+                  )}
+                </div>
+                <div>
+                  <p className="panel__subtitle">Next test</p>
+                  <p className="panel__text">
+                    {changes?.next_test?.reason ??
+                      "No recommendation yet."}
+                  </p>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </main>

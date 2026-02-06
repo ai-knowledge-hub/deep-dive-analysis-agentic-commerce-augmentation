@@ -80,6 +80,7 @@ class QueryBatteryBuilder:
         seed_use_cases: Optional[List[str]] = None,
         limit: int = 15,
         use_llm: bool = False,
+        persist: bool = True,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         battery = self._batteries.get_battery(
             battery_id=battery_id, client_id=client_id
@@ -232,18 +233,21 @@ class QueryBatteryBuilder:
             rejected.extend(rejected_retry)
 
         created: List[Dict[str, Any]] = []
-        for item in validated:
-            created.append(
-                self._batteries.add_query(
-                    battery_id=battery_id,
-                    query_text=item.query_text,
-                    query_type=item.query_type,
-                    intent_archetype=item.intent_archetype,
-                    constraints=item.constraints,
-                    weight=item.weight,
-                    enabled=True,
+        if persist:
+            for item in validated:
+                created.append(
+                    self._batteries.add_query(
+                        battery_id=battery_id,
+                        query_text=item.query_text,
+                        query_type=item.query_type,
+                        intent_archetype=item.intent_archetype,
+                        constraints=item.constraints,
+                        weight=item.weight,
+                        enabled=True,
+                    )
                 )
-            )
+        else:
+            created = [_candidate_to_dict(item) for item in validated]
         acceptance_rate = round((len(validated) / len(deduped)), 4) if deduped else 0.0
         report = {
             "accepted_count": len(validated),
@@ -296,6 +300,16 @@ class QueryBatteryBuilder:
             )
         except Exception:
             return
+
+
+def _candidate_to_dict(item: GeneratedQuery) -> Dict[str, Any]:
+    return {
+        "query_text": item.query_text,
+        "query_type": item.query_type,
+        "intent_archetype": item.intent_archetype,
+        "constraints": item.constraints,
+        "weight": item.weight,
+    }
 
 
 def _seed_queries(seed_queries: Iterable[str]) -> List[GeneratedQuery]:

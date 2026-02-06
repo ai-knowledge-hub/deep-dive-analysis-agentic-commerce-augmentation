@@ -91,6 +91,13 @@ Current safeguards:
 Validation sources implemented:
 1. Manual verification entries per experiment.
 2. External analytics events via `/analytics/events`.
+3. **Validation Jobs** (new Validation page): in-app BYOK or external paste-back.
+
+Validation flow (current):
+1. Pick entity (experiment, simulation, or battery).
+2. Choose provider (OpenAI, Gemini, Claude) and mode (in-app/external).
+3. Create job → run (in-app) or paste structured JSON (external).
+4. Results stored with raw output + structured result.
 
 Metrics computed:
 - verified runs

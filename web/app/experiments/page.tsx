@@ -15,9 +15,11 @@ import type {
   ValidationSummary,
   QueryBattery,
   QueryBatteryQuery,
+  QueryBatteryCandidate,
   SessionSummary,
   SimulationGapReport,
   SimulationRunDetailResponse,
+  SimulationRunSummary,
 } from "../../lib/types";
 import {
   createBattery,
@@ -25,7 +27,10 @@ import {
   createExperimentVariant,
   deleteBatteryQuery,
   deleteConversationSession,
+  deleteExperiment,
+  deleteSimulationRun,
   generateBatteryQueries,
+  addBatteryQuery,
   getBatteryMetrics,
   listConversationSessions,
   listBatteries,
@@ -48,6 +53,7 @@ import {
   logExperimentValidation,
   getBrandPredictionAccuracy,
   listAdminProducts,
+  listSimulationRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -65,6 +71,7 @@ export default function ExperimentsPage() {
   const { productId, productName, brandId, clientId } = useTenant();
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
@@ -107,6 +114,10 @@ export default function ExperimentsPage() {
   const [batteryUseLlm, setBatteryUseLlm] = useState(false);
   const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
   const [batterySeedUseCases, setBatterySeedUseCases] = useState("");
+  const [advancedOverridesOpen, setAdvancedOverridesOpen] = useState(false);
+  const [generatedCandidates, setGeneratedCandidates] = useState<
+    (QueryBatteryCandidate & { selected: boolean })[]
+  >([]);
   const [productDetail, setProductDetail] = useState<AdminProduct | null>(null);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
@@ -166,26 +177,86 @@ export default function ExperimentsPage() {
     competitorPolicy: null as string | null,
     variantPayload: null as string | null,
   });
+  const [restoreDraft, setRestoreDraft] = useState<{
+    labMode?: "lab" | "manual";
+    selectedExperimentId?: string | null;
+    experimentForm?: typeof experimentForm;
+    variantForm?: typeof variantForm;
+    batteryForm?: typeof batteryForm;
+    batteryEdit?: typeof batteryEdit;
+    batterySeedQueries?: string;
+    batterySeedFeatures?: string;
+    batterySeedUseCases?: string;
+    batteryUseLlm?: boolean;
+    advancedOverridesOpen?: boolean;
+  } | null>(null);
+  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
+  const autosaveEnabled = useRef(false);
 
   useEffect(() => {
     if (!userId) return;
     void listConversationSessions(userId).then((response) => {
       setSessions(response.sessions ?? []);
     });
-  }, [userId]);
+    void listSimulationRuns(userId).then((response) => {
+      setSimulationRuns(response.runs ?? []);
+    });
+  }, [userId, clientId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem("experiments_mode");
-    if (saved === "manual" || saved === "lab") {
-      setLabMode(saved);
+    const saved = window.localStorage.getItem("experiments_draft");
+    if (!saved) {
+      autosaveEnabled.current = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved);
+      setRestoreDraft(parsed);
+      setShowRestorePrompt(true);
+    } catch {
+      window.localStorage.removeItem("experiments_draft");
+      autosaveEnabled.current = true;
     }
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("experiments_mode", labMode);
-  }, [labMode]);
+  const handleRestoreDraft = useCallback(() => {
+    if (!restoreDraft) return;
+    setLabMode(restoreDraft.labMode ?? "lab");
+    setSelectedExperimentId(restoreDraft.selectedExperimentId ?? null);
+    setExperimentForm((prev) => ({
+      ...prev,
+      ...(restoreDraft.experimentForm ?? {}),
+    }));
+    setVariantForm((prev) => ({
+      ...prev,
+      ...(restoreDraft.variantForm ?? {}),
+    }));
+    setBatteryForm((prev) => ({
+      ...prev,
+      ...(restoreDraft.batteryForm ?? {}),
+    }));
+    setBatteryEdit((prev) => ({
+      ...prev,
+      ...(restoreDraft.batteryEdit ?? {}),
+    }));
+    setBatterySeedQueries(restoreDraft.batterySeedQueries ?? "");
+    setBatterySeedFeatures(restoreDraft.batterySeedFeatures ?? "");
+    setBatterySeedUseCases(restoreDraft.batterySeedUseCases ?? "");
+    setBatteryUseLlm(Boolean(restoreDraft.batteryUseLlm));
+    setAdvancedOverridesOpen(Boolean(restoreDraft.advancedOverridesOpen));
+    setShowRestorePrompt(false);
+    autosaveEnabled.current = true;
+  }, [restoreDraft]);
+
+  const handleDismissDraft = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("experiments_draft");
+    }
+    setRestoreDraft(null);
+    setShowRestorePrompt(false);
+    autosaveEnabled.current = true;
+  }, []);
 
   useEffect(() => {
     void listBatteries(userId, productId ?? undefined).then((response) => {
@@ -194,11 +265,39 @@ export default function ExperimentsPage() {
     void listExperiments(userId, productId ?? undefined).then((response) => {
       const items = response.experiments ?? [];
       setExperiments(items);
-      if (!selectedExperimentId && items[0]?.id) {
-        setSelectedExperimentId(items[0].id);
-      }
     });
   }, [productId, selectedExperimentId, userId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!autosaveEnabled.current) return;
+    const payload = {
+      labMode,
+      selectedExperimentId,
+      experimentForm,
+      variantForm,
+      batteryForm,
+      batteryEdit,
+      batterySeedQueries,
+      batterySeedFeatures,
+      batterySeedUseCases,
+      batteryUseLlm,
+      advancedOverridesOpen,
+    };
+    window.localStorage.setItem("experiments_draft", JSON.stringify(payload));
+  }, [
+    labMode,
+    selectedExperimentId,
+    experimentForm,
+    variantForm,
+    batteryForm,
+    batteryEdit,
+    batterySeedQueries,
+    batterySeedFeatures,
+    batterySeedUseCases,
+    batteryUseLlm,
+    advancedOverridesOpen,
+  ]);
 
   useEffect(() => {
     if (!brandId || !productId || !userId) {
@@ -417,6 +516,37 @@ export default function ExperimentsPage() {
     }, 200);
   }, [isHistoryClosing]);
 
+  const handleDeleteSimulationRun = useCallback(
+    async (runId: string) => {
+      if (!userId) return;
+      try {
+        await deleteSimulationRun(runId, userId, clientId ?? undefined);
+        setSimulationRuns((current) => current.filter((run) => run.id !== runId));
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const handleDeleteExperiment = useCallback(
+    async (experimentId: string) => {
+      if (!userId) return;
+      try {
+        await deleteExperiment(experimentId, userId, clientId ?? undefined);
+        setExperiments((current) =>
+          current.filter((experiment) => experiment.id !== experimentId),
+        );
+        setSelectedExperimentId((current) =>
+          current === experimentId ? null : current,
+        );
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
     try {
@@ -563,6 +693,8 @@ export default function ExperimentsPage() {
 
   const hasBottomUpMetadata = useMemo(() => {
     const metadata = productDetail?.metadata ?? {};
+    const canonicalSpec =
+      (metadata.canonical_intent_spec as Record<string, unknown> | undefined) ?? {};
     const features = metadata.features;
     const useCase = metadata.use_case ?? metadata.scenario;
     const hasFeatures =
@@ -571,10 +703,36 @@ export default function ExperimentsPage() {
     const hasUseCase =
       (Array.isArray(useCase) && useCase.length > 0) ||
       (typeof useCase === "string" && useCase.trim() !== "");
+    const canonicalFeatures = canonicalSpec.feature_concepts;
+    const canonicalUseCases = canonicalSpec.use_cases;
+    const hasCanonicalFeatures =
+      (Array.isArray(canonicalFeatures) && canonicalFeatures.length > 0) ||
+      (typeof canonicalFeatures === "string" && canonicalFeatures.trim() !== "");
+    const hasCanonicalUseCases =
+      (Array.isArray(canonicalUseCases) && canonicalUseCases.length > 0) ||
+      (typeof canonicalUseCases === "string" && canonicalUseCases.trim() !== "");
     const hasIntentLabels = Boolean(metadata.intent_labels || metadata.intent_archetypes);
-    const hasVertical = Boolean(metadata.vertical || metadata.domain || metadata.category);
-    return hasFeatures || hasUseCase || hasIntentLabels || hasVertical;
+    const hasVertical = Boolean(
+      metadata.vertical ||
+        metadata.domain ||
+        metadata.category ||
+        canonicalSpec.category,
+    );
+    return (
+      hasFeatures ||
+      hasUseCase ||
+      hasCanonicalFeatures ||
+      hasCanonicalUseCases ||
+      hasIntentLabels ||
+      hasVertical
+    );
   }, [productDetail]);
+
+  useEffect(() => {
+    if (batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata) {
+      setAdvancedOverridesOpen(true);
+    }
+  }, [batteryForm.generationMode, hasBottomUpMetadata]);
 
   const handleGenerateQueries = useCallback(
     async (batteryId: string) => {
@@ -612,15 +770,20 @@ export default function ExperimentsPage() {
           seed_use_cases: useCaseSeeds.length ? useCaseSeeds : undefined,
           user_id: userId,
           use_llm: batteryUseLlm,
+          persist: false,
         });
         setBatteryGenerationReport(response.report ?? null);
+        const candidates = (response.candidates ?? []).map((candidate) => ({
+          ...candidate,
+          selected: true,
+          weight: typeof candidate.weight === "number" ? candidate.weight : 1,
+        }));
+        setGeneratedCandidates(candidates);
         if (response.report) {
           setBatteryStatus(
             `Accepted ${response.report.accepted_count}, rejected ${response.report.rejected_count}.`,
           );
         }
-        const refreshed = await listBatteryQueries(batteryId, userId);
-        setQueries(refreshed.queries ?? []);
       } finally {
         setSubmitting(false);
       }
@@ -635,6 +798,34 @@ export default function ExperimentsPage() {
       parseSeedList,
       userId,
     ],
+  );
+
+  const handleSaveGeneratedCandidates = useCallback(
+    async (batteryId: string) => {
+      if (!batteryId || generatedCandidates.length === 0) return;
+      setSubmitting(true);
+      try {
+        const selected = generatedCandidates.filter((item) => item.selected);
+        for (const item of selected) {
+          await addBatteryQuery(batteryId, {
+            query_text: item.query_text,
+            query_type: item.query_type ?? undefined,
+            intent_archetype: item.intent_archetype ?? undefined,
+            constraints: item.constraints ?? undefined,
+            weight: typeof item.weight === "number" ? item.weight : 1,
+            enabled: true,
+            user_id: userId,
+          });
+        }
+        setBatteryStatus(`Saved ${selected.length} queries to battery.`);
+        const refreshed = await listBatteryQueries(batteryId, userId);
+        setQueries(refreshed.queries ?? []);
+        setGeneratedCandidates([]);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [generatedCandidates, userId],
   );
 
   const handleQueryToggle = useCallback(
@@ -1391,15 +1582,25 @@ export default function ExperimentsPage() {
         onOpenHistory={() => setHistoryOpen(true)}
       />
       <HistoryDrawer
-        open={isHistoryOpen}
-        closing={isHistoryClosing}
+        isOpen={isHistoryOpen}
+        isClosing={isHistoryClosing}
         sessions={sessions}
+        simulations={simulationRuns}
+        experiments={experiments}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(id) => router.push(`/?session=${id}`)}
-        onDelete={(id) => setDeleteTargetId(id)}
-        confirmDeleteId={deleteTargetId}
-        onConfirmDelete={confirmDeleteSession}
+        onSelect={(session) => router.push(`/?session=${session.id}`)}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          handleCloseHistory();
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
+          handleCloseHistory();
+        }}
+        onRequestDelete={(id) => setDeleteTargetId(id)}
+        onRequestDeleteSimulation={handleDeleteSimulationRun}
+        onRequestDeleteExperiment={handleDeleteExperiment}
       />
       <main className="main main--detail">
         <div className="detail">
@@ -1443,6 +1644,28 @@ export default function ExperimentsPage() {
               signals from simulated judges. Validate winners with live tests
               before rollout.
             </section>
+            {showRestorePrompt ? (
+              <section className="panel__notice panel__notice--info">
+                <strong>Restore last session?</strong> Your last experiment draft
+                is available.
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action"
+                    onClick={handleRestoreDraft}
+                  >
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleDismissDraft}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </section>
+            ) : null}
             <section className="panel__card lab-loop">
             <div className="panel__header">
               <h3>Lab Loop</h3>
@@ -1619,41 +1842,53 @@ export default function ExperimentsPage() {
                     "Create battery"
                   )}
                 </button>
-                <label className="panel__label">
-                  Seed queries (optional, one per line)
-                  <textarea
-                    className="panel__textarea"
-                    value={batterySeedQueries}
-                    onChange={(event) => setBatterySeedQueries(event.target.value)}
-                    rows={3}
-                  />
-                </label>
-                <label className="panel__label">
-                  Seed features (recommended for bottom-up)
-                  <textarea
-                    className="panel__textarea"
-                    value={batterySeedFeatures}
-                    onChange={(event) => setBatterySeedFeatures(event.target.value)}
-                    rows={2}
-                    placeholder="lightweight cushioning, breathable upper, stable heel support"
-                  />
-                </label>
-                <label className="panel__label">
-                  Seed use-cases (recommended for bottom-up)
-                  <textarea
-                    className="panel__textarea"
-                    value={batterySeedUseCases}
-                    onChange={(event) => setBatterySeedUseCases(event.target.value)}
-                    rows={2}
-                    placeholder="daily training, long-distance running, injury prevention"
-                  />
-                </label>
                 {batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata ? (
                   <div className="panel__notice panel__notice--info">
-                    Bottom-up has weak product metadata. Add seed features/use-cases or we
+                    Bottom-up has weak product metadata. Use Advanced overrides below or we
                     will offer fallback to top-down at generation time.
                   </div>
                 ) : null}
+                <details
+                  open={advancedOverridesOpen}
+                  onToggle={(event) =>
+                    setAdvancedOverridesOpen(event.currentTarget.open)
+                  }
+                >
+                  <summary className="panel__label">
+                    Advanced overrides (optional)
+                  </summary>
+                  <div className="panel__form">
+                    <label className="panel__label">
+                      Seed queries (optional, one per line)
+                      <textarea
+                        className="panel__textarea"
+                        value={batterySeedQueries}
+                        onChange={(event) => setBatterySeedQueries(event.target.value)}
+                        rows={3}
+                      />
+                    </label>
+                    <label className="panel__label">
+                      Seed features (recommended for bottom-up)
+                      <textarea
+                        className="panel__textarea"
+                        value={batterySeedFeatures}
+                        onChange={(event) => setBatterySeedFeatures(event.target.value)}
+                        rows={2}
+                        placeholder="lightweight cushioning, breathable upper, stable heel support"
+                      />
+                    </label>
+                    <label className="panel__label">
+                      Seed use-cases (recommended for bottom-up)
+                      <textarea
+                        className="panel__textarea"
+                        value={batterySeedUseCases}
+                        onChange={(event) => setBatterySeedUseCases(event.target.value)}
+                        rows={2}
+                        placeholder="daily training, long-distance running, injury prevention"
+                      />
+                    </label>
+                  </div>
+                </details>
                 <label className="panel__label">
                   Generate for battery
                   <select
@@ -1717,9 +1952,18 @@ export default function ExperimentsPage() {
                     ) : null}
                     {batteryGenerationReport.clarification_required &&
                     batteryGenerationReport.clarification_prompt ? (
-                      <p className="panel__error">
-                        {batteryGenerationReport.clarification_prompt}
-                      </p>
+                      <>
+                        <p className="panel__error">
+                          {batteryGenerationReport.clarification_prompt}
+                        </p>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => router.push("/admin")}
+                        >
+                          Open Admin to set canonical spec
+                        </button>
+                      </>
                     ) : null}
                     {batteryGenerationReport.rejected &&
                     batteryGenerationReport.rejected.length > 0 ? (
@@ -1732,6 +1976,77 @@ export default function ExperimentsPage() {
                         ))}
                       </ul>
                     ) : null}
+                  </div>
+                ) : null}
+                {generatedCandidates.length > 0 ? (
+                  <div className="panel__card">
+                    <div className="panel__header">
+                      <h4>Preview & approve queries</h4>
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() => setGeneratedCandidates([])}
+                      >
+                        Clear preview
+                      </button>
+                    </div>
+                    <div className="panel__form">
+                      {generatedCandidates.map((candidate, index) => (
+                        <div
+                          className="panel__row panel__row--dense"
+                          key={`${candidate.query_text}-${index}`}
+                        >
+                          <label className="panel__toggle">
+                            <input
+                              type="checkbox"
+                              checked={candidate.selected}
+                              onChange={(event) =>
+                                setGeneratedCandidates((current) =>
+                                  current.map((item, idx) =>
+                                    idx === index
+                                      ? { ...item, selected: event.target.checked }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            <span>{candidate.query_text}</span>
+                          </label>
+                          <input
+                            className="panel__input panel__input--tiny"
+                            type="number"
+                            min={0}
+                            step={0.1}
+                            value={candidate.weight ?? 1}
+                            onChange={(event) =>
+                              setGeneratedCandidates((current) =>
+                                current.map((item, idx) =>
+                                  idx === index
+                                    ? { ...item, weight: Number(event.target.value) }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="panel__action"
+                        onClick={() =>
+                          handleSaveGeneratedCandidates(experimentForm.batteryId)
+                        }
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? (
+                          <>
+                            Saving queries<span className="button__dots" />
+                          </>
+                        ) : (
+                          "Save selected queries"
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1795,7 +2110,7 @@ export default function ExperimentsPage() {
                   onClick={handleUpdateBattery}
                   disabled={isSubmitting}
                 >
-                  Save battery
+                  Save battery details
                 </button>
                 {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
                 {queries.length === 0 ? (

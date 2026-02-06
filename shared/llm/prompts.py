@@ -154,6 +154,22 @@ Then provide 3-6 comma-separated adjectives on a new line prefixed with "Adjecti
 Do not invent facts beyond the provided copy.
 """
 
+VALIDATION_PROMPT = """You are a validation judge for commerce relevance.
+Return ONLY a valid JSON object that matches the schema provided.
+Do not add extra keys. Do not include any commentary or markdown.
+Use evidence_strength values: "weak", "moderate", or "strong".
+If uncertain, lower confidence and mark evidence_strength as "weak".
+"""
+
+VALIDATION_OUTPUT_SCHEMA = {
+    "winner_id": "string",
+    "score": "number (0-1)",
+    "confidence": "number (0-1)",
+    "evidence_strength": "weak | moderate | strong",
+    "rationale_bullets": ["string"],
+    "flags": ["string"],
+}
+
 
 def build_brand_tone_prompt(
     brand_name: str,
@@ -185,6 +201,10 @@ def build_optimization_prompt(
     )
 
 
+def build_validation_prompt(*, input_payload: dict, schema: dict) -> str:
+    return f"{VALIDATION_PROMPT}\nSchema:\n{schema}\n\nInput:\n{input_payload}\n"
+
+
 __all__ = [
     "VALUES_CLARIFICATION_PROMPT",
     "PRODUCT_REASONING_PROMPT",
@@ -193,4 +213,7 @@ __all__ = [
     "build_optimization_prompt",
     "BRAND_TONE_PROMPT",
     "build_brand_tone_prompt",
+    "VALIDATION_PROMPT",
+    "VALIDATION_OUTPUT_SCHEMA",
+    "build_validation_prompt",
 ]

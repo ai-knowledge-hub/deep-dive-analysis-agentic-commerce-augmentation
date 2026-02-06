@@ -275,3 +275,8 @@ def get_client() -> GeminiLLMClient:
     if _client_singleton is None:
         _client_singleton = GeminiLLMClient()
     return _client_singleton
+
+
+def reset_client() -> None:
+    global _client_singleton
+    _client_singleton = None

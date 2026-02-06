@@ -360,6 +360,20 @@ CREATE TABLE IF NOT EXISTS experiment_recommendations (
     FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS llm_provider_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    api_key TEXT,
+    validation_api_key TEXT,
+    model TEXT,
+    validation_model TEXT,
+    is_active INTEGER DEFAULT 0,
+    updated_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE (provider)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_client ON sessions(client_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
@@ -378,6 +392,7 @@ CREATE INDEX IF NOT EXISTS idx_experiments_client ON experiments(client_id);
 CREATE INDEX IF NOT EXISTS idx_experiments_product ON experiments(product_id);
 CREATE INDEX IF NOT EXISTS idx_experiments_battery ON experiments(battery_id);
 CREATE INDEX IF NOT EXISTS idx_experiments_next_run ON experiments(next_run_at);
+CREATE INDEX IF NOT EXISTS idx_llm_provider_configs_active ON llm_provider_configs(is_active);
 CREATE INDEX IF NOT EXISTS idx_experiment_metrics_experiment ON experiment_metrics(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_validations_experiment ON experiment_validations(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_validations_brand ON experiment_validations(brand_id);

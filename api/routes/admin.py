@@ -20,6 +20,7 @@ if APIRouter:
         clients_repo=deps.clients,
         platform_profiles_repo=deps.platform_profiles,
         skills_repo=deps.skills,
+        llm_provider_configs_repo=deps.llm_provider_configs,
     )
 
     class ClientCreateRequest(BaseModel):
@@ -74,6 +75,19 @@ if APIRouter:
 
     class SkillHistoryResponse(BaseModel):
         history: list[Dict[str, Any]]
+
+    class LLMProviderConfigRequest(BaseModel):
+        user_id: Optional[str] = None
+        api_key: Optional[str] = None
+        validation_api_key: Optional[str] = None
+        model: Optional[str] = None
+        validation_model: Optional[str] = None
+        activate: Optional[bool] = None
+
+    class LLMProviderActivateRequest(BaseModel):
+        user_id: Optional[str] = None
+        provider: str = Field(..., min_length=1)
+        model: Optional[str] = None
 
     @router.post("/clients")
     def create_client(payload: ClientCreateRequest) -> Dict[str, Any]:
@@ -214,6 +228,58 @@ if APIRouter:
         require_admin(user_id)
         history = admin_service.list_skill_history(name=skill_name, limit=limit)
         return {"history": history}
+
+    @router.get("/llm/config")
+    def list_llm_configs(user_id: Optional[str] = None) -> Dict[str, Any]:
+        require_admin(user_id)
+        configs = admin_service.list_llm_provider_configs()
+        summary = admin_service.get_llm_provider_summary()
+        providers = summary.get("providers", {})
+        sanitized = []
+        for item in configs:
+            provider = item.get("provider")
+            provider_summary = providers.get(provider, {})
+            sanitized.append(
+                {
+                    "provider": provider,
+                    "configured": provider_summary.get("configured", False),
+                    "model": provider_summary.get("model"),
+                    "validation_model": provider_summary.get("validation_model"),
+                    "is_active": provider_summary.get("is_active", False),
+                    "updated_at": item.get("updated_at"),
+                }
+            )
+        return {
+            "active_provider": summary.get("active_provider"),
+            "providers": providers,
+            "configs": sanitized,
+        }
+
+    @router.put("/llm/config/{provider}")
+    def update_llm_config(
+        provider: str, payload: LLMProviderConfigRequest
+    ) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        config = admin_service.update_llm_provider_config(
+            provider=provider,
+            api_key=payload.api_key,
+            validation_api_key=payload.validation_api_key,
+            model=payload.model,
+            validation_model=payload.validation_model,
+            activate=payload.activate,
+            updated_by=payload.user_id,
+        )
+        summary = admin_service.get_llm_provider_summary()
+        return {"config": config, "summary": summary}
+
+    @router.post("/llm/config/activate")
+    def activate_llm_provider(payload: LLMProviderActivateRequest) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        config = admin_service.set_active_llm_provider(
+            provider=payload.provider, model=payload.model, updated_by=payload.user_id
+        )
+        summary = admin_service.get_llm_provider_summary()
+        return {"config": config, "summary": summary}
 else:  # pragma: no cover
     router = None
 

@@ -150,6 +150,19 @@ def update_experiment(
     return {"experiment": experiment}
 
 
+@router.delete("/{experiment_id}")
+def delete_experiment(
+    experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    deleted = SERVICE.delete_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return {"deleted": True, "experiment_id": experiment_id}
+
+
 @router.post("/{experiment_id}/variants")
 def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)

@@ -3,17 +3,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import type { EvidenceAnalyzeResponse, SessionSummary } from "../../lib/types";
+import type {
+  EvidenceAnalyzeResponse,
+  SessionSummary,
+  SimulationRunSummary,
+  Experiment,
+} from "../../lib/types";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { EvidencePanel } from "../../components/evidence/EvidencePanel";
 import {
   deleteConversationSession,
+  deleteExperiment,
+  deleteSimulationRun,
   extractEvidenceSignals,
   getConversationSnapshot,
   listConversationSessions,
   listProductsByBrand,
+  listSimulationRuns,
+  listExperiments,
 } from "../../lib/api";
 import { useTenant } from "../../components/tenant/TenantProvider";
 
@@ -35,6 +44,8 @@ export default function EvidencePage() {
       : `intentionality.evidence.anonymous${clientTag}`;
   }, [storageClientId, userId]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [analysis, setAnalysis] = useState<EvidenceAnalyzeResponse | null>(null);
   const [signalExtraction, setSignalExtraction] = useState<
     EvidenceAnalyzeResponse["signal_extraction"] | null
@@ -200,7 +211,13 @@ export default function EvidencePage() {
     void listConversationSessions(userId).then((response) => {
       setSessions(response.sessions ?? []);
     });
-  }, [userId]);
+    void listSimulationRuns(userId).then((response) => {
+      setSimulationRuns(response.runs ?? []);
+    });
+    void listExperiments(userId).then((response) => {
+      setExperiments(response.experiments ?? []);
+    });
+  }, [userId, clientId]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -210,6 +227,34 @@ export default function EvidencePage() {
       setHistoryClosing(false);
     }, 200);
   }, [isHistoryClosing]);
+
+  const handleDeleteSimulationRun = useCallback(
+    async (runId: string) => {
+      if (!userId) return;
+      try {
+        await deleteSimulationRun(runId, userId, clientId ?? undefined);
+        setSimulationRuns((current) => current.filter((run) => run.id !== runId));
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const handleDeleteExperiment = useCallback(
+    async (experimentId: string) => {
+      if (!userId) return;
+      try {
+        await deleteExperiment(experimentId, userId, clientId ?? undefined);
+        setExperiments((current) =>
+          current.filter((experiment) => experiment.id !== experimentId),
+        );
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
 
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
@@ -272,13 +317,25 @@ export default function EvidencePage() {
         isOpen={isHistoryOpen}
         isClosing={isHistoryClosing}
         sessions={sessions}
+        simulations={simulationRuns}
+        experiments={experiments}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(selectedId) => {
-          router.push(`/?session=${selectedId}`);
+        onSelect={(session) => {
+          router.push(`/?session=${session.id}`);
+          handleCloseHistory();
+        }}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          handleCloseHistory();
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
+        onRequestDeleteSimulation={handleDeleteSimulationRun}
+        onRequestDeleteExperiment={handleDeleteExperiment}
       />
       <main className="main main--detail">
         <div className="detail">

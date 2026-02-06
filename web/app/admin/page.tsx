@@ -10,6 +10,7 @@ import type {
   AdminProduct,
   AdminPlatformProfile,
   AdminSkill,
+  AdminLLMConfigResponse,
   SessionSummary,
 } from "../../lib/types";
 import {
@@ -30,6 +31,9 @@ import {
   updateAdminSkill,
   updateAdminProduct,
   updateAdminPlatformProfile,
+  getAdminLlmConfig,
+  updateAdminLlmConfig,
+  activateAdminLlmProvider,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -91,6 +95,20 @@ const canonicalOntology: Record<
     constraints: ["budget_sensitive", "weather_specific", "availability_required"],
     exclusions: ["formalwear_only", "kids_only", "non_sport_use"],
   },
+};
+
+const LLM_PROVIDERS = [
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "openai", label: "OpenAI" },
+  { id: "anthropic", label: "Claude (Anthropic)" },
+  { id: "gemini", label: "Gemini" },
+] as const;
+
+const LLM_MODEL_OPTIONS: Record<string, string[]> = {
+  openrouter: ["openai/gpt-oss-120b"],
+  openai: ["gpt-5.2-2025-12-11"],
+  anthropic: ["claude-sonnet-4-5-20250929"],
+  gemini: ["gemini-3-flash-preview"],
 };
 
 export default function AdminPage() {
@@ -157,6 +175,20 @@ export default function AdminPage() {
     { id: number; version?: string; changed_at?: string }[]
   >([]);
 
+  const [llmConfig, setLlmConfig] = useState<AdminLLMConfigResponse | null>(null);
+  const [llmConfigError, setLlmConfigError] = useState<string | null>(null);
+  const [llmInputs, setLlmInputs] = useState<
+    Record<
+      string,
+      {
+        apiKey: string;
+        validationApiKey: string;
+        model: string;
+        validationModel: string;
+      }
+    >
+  >({});
+
   const [clientForm, setClientForm] = useState({ ...emptyForm });
   const [brandForm, setBrandForm] = useState({ ...emptyForm });
   const [productForm, setProductForm] = useState({ ...emptyForm });
@@ -200,6 +232,38 @@ export default function AdminPage() {
       setSkillHistory(response.history ?? []);
     });
   }, [activeSkillName, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void getAdminLlmConfig(userId)
+      .then((response) => {
+        setLlmConfig(response);
+        setLlmConfigError(null);
+        setLlmInputs((current) => {
+          const next = { ...current };
+          LLM_PROVIDERS.forEach((provider) => {
+            const summary = response.providers?.[provider.id] ?? {};
+            next[provider.id] = {
+              apiKey: "",
+              validationApiKey: "",
+              model:
+                summary.model ||
+                LLM_MODEL_OPTIONS[provider.id]?.[0] ||
+                "",
+              validationModel:
+                summary.validation_model ||
+                LLM_MODEL_OPTIONS[provider.id]?.[0] ||
+                "",
+            };
+          });
+          return next;
+        });
+      })
+      .catch((err) => {
+        setLlmConfig(null);
+        setLlmConfigError(err instanceof Error ? err.message : "Unable to load");
+      });
+  }, [userId]);
 
   useEffect(() => {
     if (!activeClientId || !userId) {
@@ -567,6 +631,83 @@ export default function AdminPage() {
     }
   }, [activeSkillName, skillContent, skillDescription, skillEnabled, skillVersion, userId]);
 
+  const handleLlmInputChange = useCallback(
+    (
+      provider: string,
+      field: "apiKey" | "validationApiKey" | "model" | "validationModel",
+      value: string,
+    ) => {
+      setLlmInputs((current) => ({
+        ...current,
+        [provider]: {
+          apiKey: current[provider]?.apiKey ?? "",
+          validationApiKey: current[provider]?.validationApiKey ?? "",
+          model: current[provider]?.model ?? "",
+          validationModel: current[provider]?.validationModel ?? "",
+          [field]: value,
+        },
+      }));
+    },
+    [],
+  );
+
+  const handleSaveLlmProvider = useCallback(
+    async (provider: string) => {
+      if (!userId) return;
+      const input = llmInputs[provider];
+      if (!input) return;
+      const payload: {
+        user_id: string;
+        api_key?: string;
+        validation_api_key?: string;
+        model?: string;
+        validation_model?: string;
+        activate?: boolean;
+      } = {
+        user_id: userId,
+        model: input.model || undefined,
+        validation_model: input.validationModel || undefined,
+      };
+      if (input.apiKey) payload.api_key = input.apiKey;
+      if (input.validationApiKey) payload.validation_api_key = input.validationApiKey;
+      try {
+        const summary = await updateAdminLlmConfig(provider, payload);
+        setLlmConfig(summary);
+        setLlmConfigError(null);
+        setLlmInputs((current) => ({
+          ...current,
+          [provider]: {
+            ...current[provider],
+            apiKey: "",
+            validationApiKey: "",
+          },
+        }));
+      } catch (error) {
+        setLlmConfigError("Failed to save model configuration.");
+      }
+    },
+    [llmInputs, userId],
+  );
+
+  const handleActivateLlmProvider = useCallback(
+    async (provider: string) => {
+      if (!userId) return;
+      const input = llmInputs[provider];
+      try {
+        const summary = await activateAdminLlmProvider({
+          user_id: userId,
+          provider,
+          model: input?.model || undefined,
+        });
+        setLlmConfig(summary);
+        setLlmConfigError(null);
+      } catch (error) {
+        setLlmConfigError("Failed to activate provider.");
+      }
+    },
+    [llmInputs, userId],
+  );
+
   return (
     <div className="app">
       <Sidebar
@@ -620,8 +761,8 @@ export default function AdminPage() {
         sessions={sessions}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(selectedId) => {
-          router.push(`/?session=${selectedId}`);
+        onSelect={(session) => {
+          router.push(`/?session=${session.id}`);
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
@@ -1025,6 +1166,165 @@ export default function AdminPage() {
               <div className="panel__header">
                 <h3>Operational controls</h3>
               </div>
+              <details className="admin-ops__details">
+                <summary>Model gateway</summary>
+                {!userId ? (
+                  <p className="panel__empty">Sign in to manage model keys.</p>
+                ) : (
+                  <div className="admin__form">
+                    {llmConfigError ? (
+                      <p className="panel__error">{llmConfigError}</p>
+                    ) : null}
+                    <div className="panel__chips">
+                      {LLM_PROVIDERS.map((provider) => {
+                        const summary = llmConfig?.providers?.[provider.id];
+                        const status = summary?.configured ? "ready" : "missing";
+                        return (
+                          <span
+                            key={provider.id}
+                            className={`panel__chip ${
+                              summary?.is_active ? "is-ready" : summary?.configured ? "is-ready" : "is-missing"
+                            }`}
+                          >
+                            {provider.label}: {summary?.is_active ? "active" : status}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {LLM_PROVIDERS.map((provider) => {
+                      const summary = llmConfig?.providers?.[provider.id];
+                      const input = llmInputs[provider.id] || {
+                        apiKey: "",
+                        validationApiKey: "",
+                        model: summary?.model || LLM_MODEL_OPTIONS[provider.id]?.[0] || "",
+                        validationModel:
+                          summary?.validation_model ||
+                          LLM_MODEL_OPTIONS[provider.id]?.[0] ||
+                          "",
+                      };
+                      const baseOptions = LLM_MODEL_OPTIONS[provider.id] || [];
+                      const modelOptions = input.model && !baseOptions.includes(input.model)
+                        ? [input.model, ...baseOptions]
+                        : baseOptions;
+                      const validationOptions =
+                        input.validationModel &&
+                        !baseOptions.includes(input.validationModel)
+                          ? [input.validationModel, ...baseOptions]
+                          : baseOptions;
+                      return (
+                        <div key={provider.id} className="panel__card panel__card--compact">
+                          <div className="panel__header">
+                            <h4>{provider.label}</h4>
+                            <span className="panel__meta">
+                              Chat: {summary?.chat_configured ? "set" : "missing"} ·
+                              Validation: {summary?.validation_configured ? "set" : "missing"}
+                            </span>
+                          </div>
+                          <div className="panel__grid">
+                            <label className="panel__label">
+                              <span>Chat model</span>
+                              <input
+                                className="panel__input panel__input--neutral"
+                                type="text"
+                                spellCheck={false}
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                                value={input.model}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "model",
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+                            <label className="panel__label">
+                              <span>Validation model</span>
+                              <input
+                                className="panel__input panel__input--neutral"
+                                type="text"
+                                list={`admin-llm-validation-models-${provider.id}`}
+                                spellCheck={false}
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                                value={input.validationModel}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "validationModel",
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                              <datalist
+                                id={`admin-llm-validation-models-${provider.id}`}
+                              >
+                                {validationOptions.map((option) => (
+                                  <option key={option} value={option} />
+                                ))}
+                              </datalist>
+                            </label>
+                            <label className="panel__label">
+                              <span>Chat key (BYOK)</span>
+                              <input
+                                className="panel__input"
+                                type="password"
+                                value={input.apiKey}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "apiKey",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={
+                                  summary?.configured ? "Saved" : "Paste API key"
+                                }
+                              />
+                            </label>
+                            <label className="panel__label">
+                              <span>Validation key (BYOK)</span>
+                              <input
+                                className="panel__input"
+                                type="password"
+                                value={input.validationApiKey}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "validationApiKey",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={
+                                  summary?.configured ? "Saved (optional)" : "Paste API key"
+                                }
+                              />
+                            </label>
+                          </div>
+                          <div className="panel__actions">
+                            <button
+                              type="button"
+                              className="button button--primary-subtle"
+                              onClick={() => void handleSaveLlmProvider(provider.id)}
+                            >
+                              Save provider
+                            </button>
+                            <button
+                              type="button"
+                              className="button button--ghost"
+                              onClick={() => void handleActivateLlmProvider(provider.id)}
+                              disabled={!summary?.chat_configured}
+                            >
+                              Use for chat
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </details>
               <details className="admin-ops__details">
                 <summary>Agent skills</summary>
                 {!userId ? (

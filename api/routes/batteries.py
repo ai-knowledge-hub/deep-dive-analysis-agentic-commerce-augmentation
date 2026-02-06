@@ -78,6 +78,7 @@ class BatteryGenerateRequest(BaseModel):
     seed_use_cases: Optional[list[str]] = None
     limit: int = Field(default=15, ge=1, le=100)
     use_llm: Optional[bool] = False
+    persist: Optional[bool] = True
 
 
 @router.post("")
@@ -208,9 +209,12 @@ def generate_queries(
             seed_use_cases=payload.seed_use_cases,
             limit=payload.limit,
             use_llm=bool(payload.use_llm),
+            persist=bool(payload.persist),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload.persist is False:
+        return {"candidates": created, "report": report}
     return {"queries": created, "report": report}
 
 

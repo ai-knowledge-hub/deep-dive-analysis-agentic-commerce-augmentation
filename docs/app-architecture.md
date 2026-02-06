@@ -144,6 +144,7 @@ Additional metadata saved by autofill flow:
 Validation sources implemented:
 1. Manual validation logs via experiments routes.
 2. External analytics event ingestion endpoint (`/analytics/events`).
+3. Validation jobs + results (Validation page, BYOK or external paste-back).
 
 Calibration outputs available now:
 - Verified runs

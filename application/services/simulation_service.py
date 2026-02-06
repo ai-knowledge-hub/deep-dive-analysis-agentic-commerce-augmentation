@@ -68,6 +68,19 @@ class SimulationService:
             )
         }
 
+    def delete_run(
+        self,
+        *,
+        run_id: str,
+        client_id: str,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        _get_run(self._deps, run_id, user_id=user_id, client_id=client_id)
+        deleted = self._deps.simulation_runs.delete_run(
+            run_id=run_id, client_id=client_id
+        )
+        return {"deleted": bool(deleted), "run_id": run_id}
+
     def run(
         self,
         *,

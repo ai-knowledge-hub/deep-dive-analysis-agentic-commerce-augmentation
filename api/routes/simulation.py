@@ -97,6 +97,17 @@ if APIRouter:
             run_id=run_id, client_id=client_scope, user_id=user_id
         )
 
+    @router.delete("/runs/{run_id}")
+    def delete_run(
+        run_id: str,
+        user_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        client_scope = require_client_id(client_id, user_id)
+        return simulation_service.delete_run(
+            run_id=run_id, client_id=client_scope, user_id=user_id
+        )
+
     @router.get("/lessons")
     def list_lessons(
         user_id: Optional[str] = None,

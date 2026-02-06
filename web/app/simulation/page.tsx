@@ -12,6 +12,7 @@ import type {
   SimulationRunSummary,
   SessionSummary,
   ConversationResponse,
+  Experiment,
 } from "../../lib/types";
 import {
   listSimulationLessons,
@@ -28,6 +29,9 @@ import {
   attachSimulationProduct,
   listConversationSessions,
   deleteConversationSession,
+  deleteExperiment,
+  deleteSimulationRun,
+  listExperiments,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -77,6 +81,7 @@ export default function SimulationPage() {
     useState<SimulationRetestResponse | null>(null);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedSimulationProductId, setSelectedSimulationProductId] =
     useState<string | null>(null);
   const [simulationToneSuggestion, setSimulationToneSuggestion] = useState<string | null>(null);
@@ -237,7 +242,12 @@ export default function SimulationPage() {
         setSessions(response.sessions ?? []);
       });
     }
-  }, [userId]);
+    if (userId) {
+      void listExperiments(userId).then((response) => {
+        setExperiments(response.experiments ?? []);
+      });
+    }
+  }, [userId, clientId]);
 
   useEffect(() => {
     if (!brandId) return;
@@ -771,6 +781,34 @@ export default function SimulationPage() {
     }, 200);
   }, [isHistoryClosing]);
 
+  const handleDeleteSimulationRun = useCallback(
+    async (runId: string) => {
+      if (!userId) return;
+      try {
+        await deleteSimulationRun(runId, userId, clientId ?? undefined);
+        setSimulationRuns((current) => current.filter((run) => run.id !== runId));
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const handleDeleteExperiment = useCallback(
+    async (experimentId: string) => {
+      if (!userId) return;
+      try {
+        await deleteExperiment(experimentId, userId, clientId ?? undefined);
+        setExperiments((current) =>
+          current.filter((experiment) => experiment.id !== experimentId),
+        );
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
     try {
@@ -832,13 +870,25 @@ export default function SimulationPage() {
         isOpen={isHistoryOpen}
         isClosing={isHistoryClosing}
         sessions={sessions}
+        simulations={simulationRuns}
+        experiments={experiments}
         activeSessionId={null}
         onClose={handleCloseHistory}
         onSelect={(session) => {
           router.push(`/?session=${session.id}`);
           handleCloseHistory();
         }}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          handleCloseHistory();
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
+          handleCloseHistory();
+        }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
+        onRequestDeleteSimulation={handleDeleteSimulationRun}
+        onRequestDeleteExperiment={handleDeleteExperiment}
       />
       <main className="main main--detail">
         <div className="detail">

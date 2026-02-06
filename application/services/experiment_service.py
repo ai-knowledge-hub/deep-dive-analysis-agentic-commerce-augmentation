@@ -85,6 +85,11 @@ class ExperimentService:
             next_run_at=next_run_at,
         )
 
+    def delete_experiment(self, *, experiment_id: str, client_id: str) -> bool:
+        return self._repo.delete_experiment(
+            experiment_id=experiment_id, client_id=client_id
+        )
+
     def add_variant(
         self,
         *,
