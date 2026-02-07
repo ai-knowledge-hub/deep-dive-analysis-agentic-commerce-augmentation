@@ -256,6 +256,7 @@ export type SimulationOptimizeResponse = {
     after: string;
   };
   gap: SimulationGapReport;
+  copy_revision?: CopyRevision;
 };
 
 export type SimulationRetestResponse = {
@@ -808,7 +809,7 @@ export type ValidationJob = {
   client_id: string;
   brand_id?: string | null;
   product_id?: string | null;
-  entity_type: "experiment_run" | "simulation_run" | "battery";
+  entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
   entity_id: string;
   provider: string;
   mode: "in_app" | "external";
@@ -845,6 +846,33 @@ export type ValidationJobResponse = {
 
 export type ValidationJobListResponse = {
   jobs: ValidationJob[];
+};
+
+export type CopyRevision = {
+  id: string;
+  client_id: string;
+  brand_id?: string | null;
+  product_id: string;
+  source_type: string;
+  source_id?: string | null;
+  source_variant_id?: string | null;
+  base_description: string;
+  candidate_description: string;
+  status: string;
+  notes?: string | null;
+  metadata?: Record<string, unknown>;
+  created_by?: string | null;
+  approved_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CopyRevisionListResponse = {
+  revisions: CopyRevision[];
+};
+
+export type CopyRevisionResponse = {
+  revision: CopyRevision;
 };
 
 export type HealthLLMResponse = {

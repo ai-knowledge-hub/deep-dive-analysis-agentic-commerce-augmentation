@@ -48,6 +48,8 @@ import {
   AnalyticsEventResponse,
   ValidationJobResponse,
   ValidationJobListResponse,
+  CopyRevisionListResponse,
+  CopyRevisionResponse,
   HealthLLMResponse,
   LLMConfigSummaryResponse,
   AdminLLMConfigResponse,
@@ -521,7 +523,7 @@ export async function deleteExperiment(
 
 export async function createValidationJob(
   payload: {
-    entity_type: "experiment_run" | "simulation_run" | "battery";
+    entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
     entity_id: string;
     provider: string;
     mode: "in_app" | "external";
@@ -596,7 +598,7 @@ export async function getValidationJob(
 
 export async function listValidationJobs(
   payload: {
-    entity_type?: "experiment_run" | "simulation_run" | "battery";
+    entity_type?: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
     entity_id?: string;
     limit?: number;
   },
@@ -611,6 +613,58 @@ export async function listValidationJobs(
   if (payload.limit) params.set("limit", String(payload.limit));
   return request<ValidationJobListResponse>(
     `/validation/jobs?${params.toString()}`,
+  );
+}
+
+export async function listCopyRevisions(
+  payload: {
+    user_id?: string | null;
+    product_id?: string | null;
+    source_type?: string | null;
+    status?: string | null;
+    limit?: number;
+  } = {},
+): Promise<CopyRevisionListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (payload.user_id) params.set("user_id", payload.user_id);
+  if (payload.product_id) params.set("product_id", payload.product_id);
+  if (payload.source_type) params.set("source_type", payload.source_type);
+  if (payload.status) params.set("status", payload.status);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<CopyRevisionListResponse>(`/copy-revisions?${params.toString()}`);
+}
+
+export async function getCopyRevision(
+  revisionId: string,
+  userId?: string | null,
+): Promise<CopyRevisionResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  return request<CopyRevisionResponse>(
+    `/copy-revisions/${revisionId}${query ? `?${query}` : ""}`,
+  );
+}
+
+export async function publishCopyRevision(
+  revisionId: string,
+  payload: { user_id?: string | null; notes?: string | null } = {},
+): Promise<{ revision: CopyRevisionResponse["revision"]; product: AdminProduct | null }> {
+  const clientId = getClientId();
+  return request<{ revision: CopyRevisionResponse["revision"]; product: AdminProduct | null }>(
+    `/copy-revisions/${revisionId}/publish`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: payload.user_id ?? undefined,
+        client_id: clientId ?? undefined,
+        notes: payload.notes ?? undefined,
+      }),
+    },
   );
 }
 

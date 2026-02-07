@@ -8,9 +8,11 @@ import type {
   ExperimentMetric,
   ExperimentRun,
   ExperimentVariant,
+  ValidationSummary,
   QueryBattery,
   QueryBatteryQuery,
   SimulationRunSummary,
+  CopyRevision,
   ValidationJob,
   ValidationResult,
   LLMConfigSummaryResponse,
@@ -28,13 +30,19 @@ import {
   listBatteries,
   listBatteryQueries,
   getLlmConfig,
+  listCopyRevisions,
+  getCopyRevision,
+  publishCopyRevision,
+  getExperimentValidationSummary,
+  getBrandPredictionAccuracy,
+  logExperimentValidation,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 
-type EntityType = "experiment_run" | "simulation_run" | "battery";
+type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
 type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
 type ModeType = "in_app" | "external";
 
@@ -52,6 +60,38 @@ const MODEL_OPTIONS: Record<ProviderType, string[]> = {
   openrouter: ["openai/gpt-oss-120b"],
 };
 
+const OBSERVED_PLATFORM_LABELS: Record<ProviderType, string> = {
+  openai: "ChatGPT (OpenAI)",
+  gemini: "Gemini",
+  anthropic: "Claude (Anthropic)",
+  openrouter: "OpenRouter",
+};
+
+function normalizeProvider(value: string | null | undefined): ProviderType | null {
+  if (!value) return null;
+  if (value === "claude") return "anthropic";
+  if (value === "openai") return "openai";
+  if (value === "gemini") return "gemini";
+  if (value === "anthropic") return "anthropic";
+  if (value === "openrouter") return "openrouter";
+  return null;
+}
+
+function getPreferredProvider(
+  config: LLMConfigSummaryResponse | null,
+): ProviderType | null {
+  if (!config) return null;
+  const active = normalizeProvider(config.active_provider);
+  if (active) return active;
+  const configured = (Object.keys(OBSERVED_PLATFORM_LABELS) as ProviderType[]).find(
+    (name) => {
+      const entry = config.providers?.[name];
+      return Boolean(entry?.validation_configured ?? entry?.configured);
+    },
+  );
+  return configured ?? null;
+}
+
 export default function ValidationPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -63,6 +103,7 @@ export default function ValidationPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [batteries, setBatteries] = useState<QueryBattery[]>([]);
+  const [copyRevisions, setCopyRevisions] = useState<CopyRevision[]>([]);
   const [llmConfig, setLlmConfig] = useState<LLMConfigSummaryResponse | null>(null);
   const [llmConfigError, setLlmConfigError] = useState<string | null>(null);
   const [entityType, setEntityType] = useState<EntityType>("experiment_run");
@@ -77,6 +118,23 @@ export default function ValidationPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setSubmitting] = useState(false);
+  const [manualExperimentId, setManualExperimentId] = useState<string>("");
+  const [manualVariants, setManualVariants] = useState<ExperimentVariant[]>([]);
+  const [manualSummary, setManualSummary] = useState<ValidationSummary | null>(null);
+  const [manualBrandSummary, setManualBrandSummary] = useState<ValidationSummary | null>(
+    null,
+  );
+  const [manualStatus, setManualStatus] = useState<string | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualForm, setManualForm] = useState({
+    variantId: "",
+    platform: "openrouter",
+    queryText: "",
+    observedProducts: "",
+    observedWinnerVariantId: "",
+    observedPosition: "",
+    notes: "",
+  });
 
   useEffect(() => {
     if (!userId) return;
@@ -89,19 +147,57 @@ export default function ValidationPage() {
     void listBatteries(userId).then((response) =>
       setBatteries(response.batteries ?? []),
     );
+    void listCopyRevisions({ user_id: userId, limit: 200 }).then((response) =>
+      setCopyRevisions(response.revisions ?? []),
+    );
   }, [userId, clientId]);
+
+  useEffect(() => {
+    if (!experiments.length) {
+      setManualExperimentId("");
+      return;
+    }
+    if (manualExperimentId) return;
+    setManualExperimentId(experiments[0].id);
+  }, [experiments, manualExperimentId]);
+
+  useEffect(() => {
+    if (!manualExperimentId || !userId) {
+      setManualVariants([]);
+      setManualSummary(null);
+      setManualBrandSummary(null);
+      return;
+    }
+    const selectedExperiment = experiments.find((exp) => exp.id === manualExperimentId);
+    void listExperimentVariants(manualExperimentId, userId).then((response) => {
+      const variants = response.variants ?? [];
+      setManualVariants(variants);
+      setManualForm((prev) => ({
+        ...prev,
+        variantId: prev.variantId || variants[0]?.id || "",
+      }));
+    });
+    void getExperimentValidationSummary(manualExperimentId, userId).then((response) =>
+      setManualSummary(response.summary),
+    );
+    if (selectedExperiment?.brand_id) {
+      void getBrandPredictionAccuracy(selectedExperiment.brand_id, userId).then(
+        (response) => setManualBrandSummary(response.summary),
+      );
+    } else {
+      setManualBrandSummary(null);
+    }
+  }, [experiments, manualExperimentId, userId]);
 
   useEffect(() => {
     void getLlmConfig(userId ?? undefined)
       .then((response) => {
         setLlmConfig(response);
         setLlmConfigError(null);
-        if (response.active_provider) {
-          const active =
-            response.active_provider === "claude"
-              ? "anthropic"
-              : response.active_provider;
-          setProvider(active as ProviderType);
+        const preferred = getPreferredProvider(response);
+        if (preferred) {
+          setProvider(preferred);
+          setManualForm((prev) => ({ ...prev, platform: preferred }));
         }
       })
       .catch((err) => {
@@ -132,14 +228,44 @@ export default function ValidationPage() {
         label: run.query || "Simulation run",
       }));
     }
+    if (entityType === "copy_revision") {
+      return copyRevisions.map((revision) => ({
+        id: revision.id,
+        label: `${revision.source_type} · ${revision.status} · ${revision.id.slice(0, 8)}`,
+      }));
+    }
     return batteries.map((battery) => ({
       id: battery.id,
       label: battery.name || "Battery",
     }));
-  }, [batteries, entityType, experiments, simulationRuns]);
+  }, [batteries, copyRevisions, entityType, experiments, simulationRuns]);
 
   const winnerContext = useMemo(() => {
     if (!result?.winner_id || !job?.input_payload) return null;
+    if (job.entity_type === "copy_revision") {
+      const payload = job.input_payload as Record<string, unknown>;
+      const revision =
+        payload.revision && typeof payload.revision === "object"
+          ? (payload.revision as Record<string, unknown>)
+          : null;
+      const winner = String(result.winner_id || "").toLowerCase();
+      const winnerLabel =
+        winner === "candidate"
+          ? "Candidate copy"
+          : winner === "control"
+            ? "Control copy"
+            : result.winner_id;
+      const simulationRunId =
+        revision && revision.source_type === "simulation"
+          ? String(revision.source_id || "")
+          : null;
+      return {
+        winnerLabel,
+        experimentName: null,
+        queryText: null,
+        simulationRunId: simulationRunId || null,
+      };
+    }
     if (job.entity_type !== "experiment_run") return null;
 
     const payload = job.input_payload as Record<string, unknown>;
@@ -192,6 +318,59 @@ export default function ValidationPage() {
     };
   }, [job?.entity_type, job?.input_payload, result?.winner_id]);
 
+  const observedPlatformOptions = useMemo(() => {
+    const configured = (Object.keys(OBSERVED_PLATFORM_LABELS) as ProviderType[]).filter(
+      (name) => {
+        const entry = llmConfig?.providers?.[name];
+        return Boolean(entry?.validation_configured ?? entry?.configured);
+      },
+    );
+    if (configured.length > 0) {
+      return configured.map((name) => ({
+        value: name,
+        label: OBSERVED_PLATFORM_LABELS[name],
+      }));
+    }
+    return [
+      { value: "openai", label: OBSERVED_PLATFORM_LABELS.openai },
+      { value: "gemini", label: OBSERVED_PLATFORM_LABELS.gemini },
+      { value: "anthropic", label: OBSERVED_PLATFORM_LABELS.anthropic },
+      { value: "openrouter", label: OBSERVED_PLATFORM_LABELS.openrouter },
+    ];
+  }, [llmConfig]);
+
+  const providerStatusItems = useMemo(
+    () =>
+      (
+        [
+          ["openai", "OPENAI_API_KEY"],
+          ["gemini", "GEMINI_API_KEY"],
+          ["anthropic", "ANTHROPIC_API_KEY"],
+          ["openrouter", "OPENROUTER_API_KEY"],
+        ] as const
+      ).map(([name, envKey]) => {
+        const entry = llmConfig?.providers?.[name];
+        const configured = entry?.configured ?? false;
+        const label = name === "anthropic" ? "claude" : name;
+        const tooltip = configured
+          ? `${label} is configured`
+          : `Missing ${envKey}`;
+        return { name, label, configured, isActive: entry?.is_active ?? false, tooltip };
+      }),
+    [llmConfig],
+  );
+
+  useEffect(() => {
+    if (!observedPlatformOptions.length) return;
+    const current = manualForm.platform;
+    const exists = observedPlatformOptions.some((item) => item.value === current);
+    if (exists) return;
+    setManualForm((prev) => ({
+      ...prev,
+      platform: observedPlatformOptions[0].value,
+    }));
+  }, [manualForm.platform, observedPlatformOptions]);
+
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
     setHistoryClosing(true);
@@ -223,6 +402,19 @@ export default function ValidationPage() {
         runs: runsResponse.runs as ExperimentRun[],
         metrics: metricsResponse.metrics as ExperimentMetric[],
         variants: variantsResponse.variants as ExperimentVariant[],
+      };
+    }
+    if (entityType === "copy_revision") {
+      const revisionResponse = await getCopyRevision(selectedEntityId, userId);
+      const revision = revisionResponse.revision;
+      return {
+        type: "copy_revision",
+        revision,
+        control: { id: "control", text: revision.base_description },
+        candidate: { id: "candidate", text: revision.candidate_description },
+        query_set:
+          (revision.metadata?.query_set as string[] | undefined) ??
+          (revision.metadata?.query ? [String(revision.metadata.query)] : []),
       };
     }
     const battery = batteries.find((item) => item.id === selectedEntityId);
@@ -304,6 +496,68 @@ export default function ValidationPage() {
     }
   }, [externalJson, externalRaw, job, model, provider, userId]);
 
+  const handlePublishCandidate = useCallback(async () => {
+    if (!job || !result || !userId) return;
+    if (job.entity_type !== "copy_revision") return;
+    if (String(result.winner_id || "").toLowerCase() !== "candidate") return;
+    await publishCopyRevision(job.entity_id, { user_id: userId });
+    setStatus("Candidate copy published to product.");
+    window.setTimeout(() => setStatus(null), 4000);
+  }, [job, result, userId]);
+
+  const handleLogObservedValidation = useCallback(async () => {
+    if (!manualExperimentId || !userId) return;
+    setManualStatus(null);
+    setManualError(null);
+    setSubmitting(true);
+    try {
+      const observedProducts = manualForm.observedProducts
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const response = await logExperimentValidation(manualExperimentId, {
+        variant_id: manualForm.variantId || undefined,
+        platform: manualForm.platform || undefined,
+        query_text: manualForm.queryText || undefined,
+        observed_products: observedProducts,
+        observed_winner_variant_id:
+          manualForm.observedWinnerVariantId || undefined,
+        observed_position: manualForm.observedPosition
+          ? Number(manualForm.observedPosition)
+          : undefined,
+        notes: manualForm.notes || undefined,
+        user_id: userId,
+      });
+      setManualSummary(response.summary);
+      const selectedExperiment = experiments.find(
+        (exp) => exp.id === manualExperimentId,
+      );
+      if (selectedExperiment?.brand_id) {
+        const brandResponse = await getBrandPredictionAccuracy(
+          selectedExperiment.brand_id,
+          userId,
+        );
+        setManualBrandSummary(brandResponse.summary);
+      }
+      setManualStatus("Observed validation logged.");
+      setManualForm((prev) => ({
+        ...prev,
+        queryText: "",
+        observedProducts: "",
+        observedWinnerVariantId: "",
+        observedPosition: "",
+        notes: "",
+      }));
+    } catch (err) {
+      setManualError(
+        err instanceof Error ? err.message : "Unable to log observed validation.",
+      );
+    } finally {
+      setSubmitting(false);
+      window.setTimeout(() => setManualStatus(null), 4000);
+    }
+  }, [experiments, manualExperimentId, manualForm, userId]);
+
   return (
     <div className="app">
       <Sidebar
@@ -336,7 +590,7 @@ export default function ValidationPage() {
         onRequestDelete={() => {}}
       />
       <main className="main main--detail">
-        <div className="detail">
+        <div className="detail detail--validation">
           <DetailHeader
             title="Validation"
             subtitle="Run in-app validation or collect structured external feedback."
@@ -345,46 +599,41 @@ export default function ValidationPage() {
             backLabel="Back to experiments"
           />
           <section className="panel__card">
-            <div className="panel__header">
-              <h3>Validation setup</h3>
-            </div>
-            <div className="panel__subheading">Provider status</div>
+            <div className="panel__subheading">Provider status (shared)</div>
             {llmConfigError ? (
               <div className="panel__notice panel__notice--error">
                 Unable to load provider configuration.
               </div>
             ) : (
               <div className="panel__chips">
-                {(
-                  [
-                    ["openai", "OPENAI_API_KEY"],
-                    ["gemini", "GEMINI_API_KEY"],
-                    ["anthropic", "ANTHROPIC_API_KEY"],
-                    ["openrouter", "OPENROUTER_API_KEY"],
-                  ] as const
-                ).map(([name, envKey]) => {
-                  const entry = llmConfig?.providers?.[name];
-                  const configured = entry?.configured ?? false;
-                  const label = name === "anthropic" ? "claude" : name;
-                  const tooltip = configured
-                    ? `${label} is configured`
-                    : `Missing ${envKey}`;
-                  return (
-                    <span
-                      key={name}
-                      className={`panel__chip ${
-                        entry?.is_active ? "is-ready" : configured ? "is-ready" : "is-missing"
-                      }`}
-                      title={tooltip}
-                    >
-                      {label}:{" "}
-                      {entry?.is_active ? "active" : configured ? "ready" : "missing"}
-                    </span>
-                  );
-                })}
+                {providerStatusItems.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    className={`panel__chip panel__chip--button ${
+                      item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
+                    }`}
+                    title={item.tooltip}
+                    onClick={() => {
+                      setProvider(item.name);
+                      setManualForm((prev) => ({ ...prev, platform: item.name }));
+                    }}
+                  >
+                    {item.label}:{" "}
+                    {item.isActive ? "active" : item.configured ? "ready" : "missing"}
+                  </button>
+                ))}
               </div>
             )}
-            <div className="panel__grid">
+          </section>
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Synthetic validation signal</h3>
+            </div>
+            <p className="panel__muted">
+              LLM judge validation for fast screening, consistency checks, and copy-vs-copy comparisons.
+            </p>
+            <div className="panel__grid validation__grid">
               <label className="panel__label">
                 <span>Entity type</span>
                 <select
@@ -400,6 +649,7 @@ export default function ValidationPage() {
                   <option value="experiment_run">Experiment</option>
                   <option value="simulation_run">Simulation</option>
                   <option value="battery">Query battery</option>
+                  <option value="copy_revision">Copy revision</option>
                 </select>
               </label>
               <label className="panel__label">
@@ -531,13 +781,187 @@ export default function ValidationPage() {
             ) : null}
           </section>
 
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Observed reality signal</h3>
+            </div>
+            <p className="panel__muted">
+              Manual validation of what actually surfaced on real platforms for real queries.
+            </p>
+            <div className="panel__form">
+              <div className="panel__meta panel__meta--stack">
+                <span className="panel__muted">
+                  Logged validations: {manualSummary?.total_logged ?? 0}
+                </span>
+                <span className="panel__muted">
+                  Verified runs: {manualSummary?.verified_runs ?? 0} / 10
+                </span>
+                <span className="panel__muted">
+                  Accuracy:{" "}
+                  {manualSummary
+                    ? `${Math.round(manualSummary.accuracy * 100)}%`
+                    : "—"}
+                </span>
+              </div>
+              <div className="progress-bar">
+                <div
+                  className="progress-bar__fill"
+                  style={{
+                    width: `${Math.round((manualSummary?.progress ?? 0) * 100)}%`,
+                  }}
+                />
+              </div>
+              {manualBrandSummary ? (
+                <div className="panel__meta panel__meta--stack">
+                  <span className="panel__muted">
+                    Brand accuracy: {Math.round(manualBrandSummary.accuracy * 100)}%
+                  </span>
+                  <span className="panel__muted">
+                    Verified (brand): {manualBrandSummary.verified_runs}
+                  </span>
+                </div>
+              ) : null}
+              <div className="panel__grid validation__grid">
+                <label className="panel__label">
+                  <span>Experiment</span>
+                  <select
+                    className="panel__input"
+                    value={manualExperimentId}
+                    onChange={(event) => setManualExperimentId(event.target.value)}
+                  >
+                    <option value="">Select experiment</option>
+                    {experiments.map((experiment) => (
+                      <option key={experiment.id} value={experiment.id}>
+                        {experiment.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  <span>Variant (lab winner)</span>
+                  <select
+                    className="panel__input"
+                    value={manualForm.variantId}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, variantId: event.target.value }))
+                    }
+                  >
+                    <option value="">Select variant</option>
+                    {manualVariants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  <span>Platform</span>
+                  <select
+                    className="panel__input"
+                    value={manualForm.platform}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, platform: event.target.value }))
+                    }
+                  >
+                    {observedPlatformOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  <span>Query tested</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.queryText}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, queryText: event.target.value }))
+                    }
+                    placeholder="e.g., running shoes for marathon training"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Products shown (comma-separated)</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.observedProducts}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        observedProducts: event.target.value,
+                      }))
+                    }
+                    placeholder="Product A, Product B"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Observed winner variant (optional)</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.observedWinnerVariantId}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        observedWinnerVariantId: event.target.value,
+                      }))
+                    }
+                    placeholder="Variant ID (if known)"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Observed position (optional)</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.observedPosition}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        observedPosition: event.target.value,
+                      }))
+                    }
+                    placeholder="1"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Notes</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={manualForm.notes}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, notes: event.target.value }))
+                    }
+                    rows={2}
+                    placeholder="Any observations..."
+                  />
+                </label>
+              </div>
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action"
+                  onClick={handleLogObservedValidation}
+                  disabled={isSubmitting || !manualExperimentId}
+                >
+                  {isSubmitting ? "Logging..." : "Log observed validation"}
+                </button>
+              </div>
+              {manualStatus ? (
+                <div className="panel__notice panel__notice--info">{manualStatus}</div>
+              ) : null}
+              {manualError ? (
+                <div className="panel__notice panel__notice--error">{manualError}</div>
+              ) : null}
+            </div>
+          </section>
+
           {job?.mode === "external" && job?.external_instructions ? (
             <section className="panel__card">
               <div className="panel__header">
                 <h3>External validation instructions</h3>
               </div>
               <pre className="panel__pre">{job.external_instructions}</pre>
-              <div className="panel__grid">
+              <div className="panel__grid validation__grid">
                 <label className="panel__label">
                   <span>Paste structured JSON</span>
                   <textarea
@@ -545,7 +969,7 @@ export default function ValidationPage() {
                     rows={6}
                     value={externalJson}
                     onChange={(event) => setExternalJson(event.target.value)}
-                    placeholder='{"winner_id":"variant_a","score":0.72,"confidence":0.8,"evidence_strength":"moderate","rationale_bullets":["..."],"flags":[]}'
+                    placeholder='{"winner_id":"candidate","score":0.72,"confidence":0.8,"evidence_strength":"moderate","rationale_bullets":["..."],"flags":[]}'
                   />
                 </label>
                 <label className="panel__label">
@@ -610,6 +1034,18 @@ export default function ValidationPage() {
                   {winnerContext.queryText ? (
                     <span>Query: {winnerContext.queryText}</span>
                   ) : null}
+                </div>
+              ) : null}
+              {job?.entity_type === "copy_revision" &&
+              String(result.winner_id || "").toLowerCase() === "candidate" ? (
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action"
+                    onClick={handlePublishCandidate}
+                  >
+                    Publish candidate copy
+                  </button>
                 </div>
               ) : null}
               {result.structured_result ? (

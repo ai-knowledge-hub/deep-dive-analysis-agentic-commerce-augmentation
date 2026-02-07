@@ -229,6 +229,16 @@ class ValidationResultsStore(Protocol):
     def get_latest_for_job(self, **kwargs: Any) -> dict | None: ...
 
 
+class CopyRevisionsStore(Protocol):
+    def create_revision(self, **kwargs: Any) -> dict: ...
+
+    def get_revision(self, **kwargs: Any) -> dict | None: ...
+
+    def list_revisions(self, **kwargs: Any) -> list[dict]: ...
+
+    def update_revision_status(self, **kwargs: Any) -> dict | None: ...
+
+
 class BrandBeliefsStore(Protocol):
     def create_belief(self, **kwargs: Any) -> dict: ...
 
@@ -297,6 +307,7 @@ class AppDeps:
     analytics_events: AnalyticsEventsStore
     validation_jobs: ValidationJobsStore
     validation_results: ValidationResultsStore
+    copy_revisions: CopyRevisionsStore
     brand_beliefs: BrandBeliefsStore
     audience_archetypes: AudienceArchetypesStore
     skills: SkillsStore

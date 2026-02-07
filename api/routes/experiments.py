@@ -172,6 +172,42 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
         variant_type=payload.type,
         payload=payload.payload,
     )
+    try:
+        experiment = SERVICE.get_experiment(experiment_id=experiment_id)
+        candidate_description = ""
+        if isinstance(payload.payload, dict):
+            candidate_description = str(
+                payload.payload.get("description") or ""
+            ).strip()
+        if experiment and candidate_description:
+            product = DEPS.clients.get_product_for_client(
+                client_id=experiment["client_id"], product_id=experiment["product_id"]
+            )
+            base_description = str(
+                (product or {}).get("description")
+                or (product or {}).get("name")
+                or "base copy"
+            ).strip()
+            if base_description and candidate_description != base_description:
+                DEPS.copy_revisions.create_revision(
+                    client_id=experiment["client_id"],
+                    brand_id=experiment.get("brand_id"),
+                    product_id=experiment["product_id"],
+                    source_type="experiment",
+                    source_id=experiment_id,
+                    source_variant_id=variant.get("id"),
+                    base_description=base_description,
+                    candidate_description=candidate_description,
+                    notes=f"Auto-created from experiment variant {variant.get('label')}.",
+                    metadata={
+                        "variant_label": variant.get("label"),
+                        "variant_type": variant.get("type"),
+                    },
+                    created_by=payload.user_id,
+                )
+    except Exception:
+        # Non-blocking: variant creation should not fail if revision persistence fails.
+        pass
     return {"variant": variant}
 
 

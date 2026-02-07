@@ -303,10 +303,37 @@ class SimulationService:
             versions=default_versions(scoring_version="n/a"),
         )
         logger = ReplayLogger(persist_fn=self._deps.replays.create_replay_record)
+        revision = self._deps.copy_revisions.create_revision(
+            client_id=client_id,
+            brand_id=run_record.get("brand_id"),
+            product_id=product_id,
+            source_type="simulation",
+            source_id=run_id,
+            source_variant_id=None,
+            base_description=target.get("description")
+            or target.get("name")
+            or "base copy",
+            candidate_description=(
+                (optimized or {}).get("after")
+                or target.get("description")
+                or target.get("name")
+                or ""
+            ),
+            notes="Auto-created from simulation optimize.",
+            metadata={
+                "query": run_record.get("query"),
+                "gap": target_gap,
+                "optimization_mode": (run_record.get("scenario") or {}).get(
+                    "optimization_mode"
+                ),
+            },
+            created_by=user_id,
+        )
         return {
             "run_id": run_id,
             "optimized": optimized,
             "gap": target_gap,
+            "copy_revision": revision,
             "replay": replay.to_dict(),
             "replay_id": logger.persist(
                 run_type="simulation.optimize",

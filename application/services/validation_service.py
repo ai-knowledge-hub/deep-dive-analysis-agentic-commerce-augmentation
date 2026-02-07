@@ -80,7 +80,11 @@ class ValidationService:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         latency_ms = int((time.perf_counter() - start) * 1000)
         structured = _parse_json_response(response)
-        _validate_structured_result(structured)
+        _validate_structured_result(
+            structured,
+            entity_type=job.get("entity_type"),
+            input_payload=job.get("input_payload") or {},
+        )
         result = self._deps.validation_results.create_result(
             job_id=job_id,
             provider=job.get("provider"),
@@ -110,7 +114,11 @@ class ValidationService:
             raise HTTPException(status_code=404, detail="Validation job not found")
         if job.get("mode") != "external":
             raise HTTPException(status_code=400, detail="Job is in-app only")
-        _validate_structured_result(structured_result)
+        _validate_structured_result(
+            structured_result,
+            entity_type=job.get("entity_type"),
+            input_payload=job.get("input_payload") or {},
+        )
         result = self._deps.validation_results.create_result(
             job_id=job_id,
             provider=provider or job.get("provider"),
@@ -180,7 +188,12 @@ def _parse_json_response(text: str) -> Dict[str, Any]:
             ) from exc
 
 
-def _validate_structured_result(result: Dict[str, Any]) -> None:
+def _validate_structured_result(
+    result: Dict[str, Any],
+    *,
+    entity_type: Optional[str] = None,
+    input_payload: Optional[Dict[str, Any]] = None,
+) -> None:
     required = ["winner_id", "score", "confidence", "evidence_strength"]
     missing = [key for key in required if key not in result]
     if missing:
@@ -192,6 +205,16 @@ def _validate_structured_result(result: Dict[str, Any]) -> None:
         raise HTTPException(
             status_code=400, detail="evidence_strength must be weak/moderate/strong"
         )
+    if (
+        entity_type == "copy_revision"
+        or (input_payload or {}).get("type") == "copy_revision"
+    ):
+        winner = str(result.get("winner_id") or "").strip().lower()
+        if winner not in {"control", "candidate"}:
+            raise HTTPException(
+                status_code=400,
+                detail='winner_id must be "control" or "candidate" for copy_revision',
+            )
 
 
 def _safe_float(value: Any) -> Optional[float]:

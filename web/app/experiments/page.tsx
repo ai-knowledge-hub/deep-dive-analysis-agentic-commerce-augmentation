@@ -2672,21 +2672,19 @@ export default function ExperimentsPage() {
                   </span>
                 )}
               </div>
-              <div className="panel__form">
-                <div className="panel__meta panel__meta--stack">
-                  <span className="panel__muted">
-                    Logged validations: {validationSummary?.total_logged ?? 0}
-                  </span>
-                  <span className="panel__muted">
-                    Verified runs: {validationSummary?.verified_runs ?? 0} / 10
-                  </span>
-                  <span className="panel__muted">
-                    Accuracy:{" "}
-                    {validationSummary
-                      ? `${Math.round(validationSummary.accuracy * 100)}%`
-                      : "—"}
-                  </span>
-                </div>
+              <div className="panel__meta panel__meta--stack">
+                <span className="panel__muted">
+                  Logged validations: {validationSummary?.total_logged ?? 0}
+                </span>
+                <span className="panel__muted">
+                  Verified runs: {validationSummary?.verified_runs ?? 0} / 10
+                </span>
+                <span className="panel__muted">
+                  Accuracy:{" "}
+                  {validationSummary
+                    ? `${Math.round(validationSummary.accuracy * 100)}%`
+                    : "—"}
+                </span>
                 <div className="progress-bar">
                   <div
                     className="progress-bar__fill"
@@ -2705,126 +2703,18 @@ export default function ExperimentsPage() {
                     </span>
                   </div>
                 ) : null}
-                <label className="panel__label">
-                  Variant (lab winner)
-                  <select
-                    className="panel__input"
-                    value={validationForm.variantId}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        variantId: event.target.value,
-                      }))
-                    }
+                <p className="panel__muted">
+                  Log and compare synthetic vs observed validation signals in the Validation page.
+                </p>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => router.push("/validation")}
                   >
-                    <option value="">Select variant</option>
-                    {variants.map((variant) => (
-                      <option key={variant.id} value={variant.id}>
-                        {variant.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="panel__label">
-                  Platform
-                  <select
-                    className="panel__input"
-                    value={validationForm.platform}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        platform: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="chatgpt">ChatGPT</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="perplexity">Perplexity</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-                <label className="panel__label">
-                  Query tested
-                  <input
-                    className="panel__input"
-                    value={validationForm.queryText}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        queryText: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g., running shoes for marathon training"
-                  />
-                </label>
-                <label className="panel__label">
-                  Products shown (comma-separated)
-                  <input
-                    className="panel__input"
-                    value={validationForm.observedProducts}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        observedProducts: event.target.value,
-                      }))
-                    }
-                    placeholder="Product A, Product B"
-                  />
-                </label>
-                <label className="panel__label">
-                  Observed winner variant (optional)
-                  <input
-                    className="panel__input"
-                    value={validationForm.observedWinnerVariantId}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        observedWinnerVariantId: event.target.value,
-                      }))
-                    }
-                    placeholder="Variant ID (if known)"
-                  />
-                </label>
-                <label className="panel__label">
-                  Observed position (optional)
-                  <input
-                    className="panel__input"
-                    value={validationForm.observedPosition}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        observedPosition: event.target.value,
-                      }))
-                    }
-                    placeholder="1"
-                  />
-                </label>
-                <label className="panel__label">
-                  Notes
-                  <textarea
-                    className="panel__textarea"
-                    value={validationForm.notes}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        notes: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="Any observations..."
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="panel__action"
-                  onClick={handleLogValidation}
-                  disabled={isSubmitting || !selectedExperimentId}
-                >
-                  Log verification result
-                </button>
-                {validationStatus ? (
-                  <p className="panel__success">{validationStatus}</p>
-                ) : null}
+                    Open Validation page
+                  </button>
+                </div>
               </div>
             </section>
           </div>

@@ -300,8 +300,6 @@ DATABASE_PATH=./tmp/local.db make seed-demo-acme
 DATABASE_PATH=./tmp/local.db make db-validate-migrate
 DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
 
-Seed demo data (Acme Sports):
-make seed-demo-acme
 ```
 
 `seed-canonical` populates `canonical_intent_spec` for existing products so bottom-up

@@ -161,6 +161,17 @@ Use evidence_strength values: "weak", "moderate", or "strong".
 If uncertain, lower confidence and mark evidence_strength as "weak".
 """
 
+COPY_REVISION_VALIDATION_PROMPT = """You are validating two product copy versions for intent discoverability.
+You must choose which version better satisfies the query set while staying factual.
+
+Rules:
+- Compare ONLY control vs candidate copy in the input payload.
+- Prefer copy that better matches user intent and constraints.
+- Penalize unsupported claims or invented details.
+- winner_id must be exactly "control" or "candidate".
+- score is confidence that the chosen winner is better (0-1).
+"""
+
 VALIDATION_OUTPUT_SCHEMA = {
     "winner_id": "string",
     "score": "number (0-1)",
@@ -202,6 +213,12 @@ def build_optimization_prompt(
 
 
 def build_validation_prompt(*, input_payload: dict, schema: dict) -> str:
+    if input_payload.get("type") == "copy_revision":
+        return (
+            f"{COPY_REVISION_VALIDATION_PROMPT}\n"
+            f"Schema:\n{schema}\n\n"
+            f"Input:\n{input_payload}\n"
+        )
     return f"{VALIDATION_PROMPT}\nSchema:\n{schema}\n\nInput:\n{input_payload}\n"
 
 
