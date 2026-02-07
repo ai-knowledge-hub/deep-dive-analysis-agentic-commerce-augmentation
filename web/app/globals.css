@@ -344,6 +344,32 @@ ul { list-style: none; }
   margin-bottom: 12px;
 }
 
+.history-panel__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-panel__action {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 0 8px;
+}
+
+.history-panel__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.history-panel__action--danger {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
 .history-panel__header h4 {
   font-size: 14px;
   font-weight: 600;
@@ -390,7 +416,14 @@ ul { list-style: none; }
 .history-panel__row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
+}
+
+.history-panel__check {
+  width: 14px;
+  height: 14px;
+  accent-color: #1cc886;
 }
 
 .history-panel__section {
