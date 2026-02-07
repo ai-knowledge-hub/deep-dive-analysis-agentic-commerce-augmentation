@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from shared.config.env import settings
+from shared.db.connection import get_connection
 from infrastructure.db.tenancy import DEFAULT_CLIENT_ID
 
 
@@ -32,4 +33,51 @@ def require_admin(user_id: str | None) -> None:
         raise HTTPException(status_code=403, detail="admin access required")
 
 
-__all__ = ["require_client_id", "is_admin", "require_admin"]
+def has_client_role(
+    *,
+    client_id: str,
+    user_id: str | None,
+    allowed_roles: set[str],
+) -> bool:
+    if not user_id:
+        return False
+    if is_admin(user_id):
+        return True
+    row = (
+        get_connection()
+        .execute(
+            """
+        SELECT role
+        FROM client_users
+        WHERE client_id = ? AND user_id = ?
+        LIMIT 1
+        """,
+            (client_id, user_id),
+        )
+        .fetchone()
+    )
+    if not row:
+        return False
+    role = str(row["role"] or "").strip().lower()
+    return role in {item.strip().lower() for item in allowed_roles if item.strip()}
+
+
+def require_client_role(
+    *,
+    client_id: str,
+    user_id: str | None,
+    allowed_roles: set[str],
+) -> None:
+    if not has_client_role(
+        client_id=client_id, user_id=user_id, allowed_roles=allowed_roles
+    ):
+        raise HTTPException(status_code=403, detail="insufficient client role")
+
+
+__all__ = [
+    "require_client_id",
+    "is_admin",
+    "require_admin",
+    "has_client_role",
+    "require_client_role",
+]

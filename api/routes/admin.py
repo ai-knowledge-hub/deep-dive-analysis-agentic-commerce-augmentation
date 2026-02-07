@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_admin
 from application.services.admin_service import AdminService
+from application.services.loop_maintenance_service import LoopMaintenanceService
 from api.composition import default_deps
 
 if APIRouter:
@@ -22,6 +23,7 @@ if APIRouter:
         skills_repo=deps.skills,
         llm_provider_configs_repo=deps.llm_provider_configs,
     )
+    loop_maintenance_service = LoopMaintenanceService(deps=deps)
 
     class ClientCreateRequest(BaseModel):
         id: str = Field(..., min_length=1)
@@ -88,6 +90,15 @@ if APIRouter:
         user_id: Optional[str] = None
         provider: str = Field(..., min_length=1)
         model: Optional[str] = None
+
+    class LoopMaintenanceRunRequest(BaseModel):
+        user_id: Optional[str] = None
+        client_id: Optional[str] = None
+        lookback_days: int = Field(default=30, ge=1, le=365)
+        min_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+
+    class LoopMaintenanceHistoryResponse(BaseModel):
+        runs: list[Dict[str, Any]]
 
     @router.post("/clients")
     def create_client(payload: ClientCreateRequest) -> Dict[str, Any]:
@@ -280,6 +291,69 @@ if APIRouter:
         )
         summary = admin_service.get_llm_provider_summary()
         return {"config": config, "summary": summary}
+
+    @router.post("/ops/loop-maintenance")
+    def run_loop_maintenance(payload: LoopMaintenanceRunRequest) -> Dict[str, Any]:
+        require_admin(payload.user_id)
+        target_client_ids = (
+            [payload.client_id]
+            if payload.client_id
+            else [item["id"] for item in deps.clients.list_clients()]
+        )
+        results: list[Dict[str, Any]] = []
+        for target_client_id in target_client_ids:
+            calibration = loop_maintenance_service.refresh_calibration_profiles(
+                client_id=target_client_id,
+                lookback_days=payload.lookback_days,
+            )
+            distilled = loop_maintenance_service.distill_recent_beliefs(
+                client_id=target_client_id,
+                min_confidence=payload.min_confidence,
+            )
+            results.append(
+                {
+                    "client_id": target_client_id,
+                    "calibration_profiles_updated": len(calibration),
+                    "memory_artifacts_distilled": len(distilled),
+                }
+            )
+            deps.loop_maintenance_runs.create_run(
+                client_id=target_client_id,
+                lookback_days=payload.lookback_days,
+                min_confidence=payload.min_confidence,
+                calibration_profiles_updated=len(calibration),
+                memory_artifacts_distilled=len(distilled),
+                triggered_by=payload.user_id,
+            )
+        history_client_id = payload.client_id or (
+            target_client_ids[0] if target_client_ids else None
+        )
+        history = (
+            deps.loop_maintenance_runs.list_runs(client_id=history_client_id, limit=20)
+            if history_client_id
+            else []
+        )
+        return {
+            "results": results,
+            "lookback_days": payload.lookback_days,
+            "min_confidence": payload.min_confidence,
+            "history": history,
+        }
+
+    @router.get("/ops/loop-maintenance/history")
+    def list_loop_maintenance_runs(
+        user_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        require_admin(user_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required")
+        return {
+            "runs": deps.loop_maintenance_runs.list_runs(
+                client_id=client_id, limit=max(1, min(100, int(limit)))
+            )
+        }
 else:  # pragma: no cover
     router = None
 

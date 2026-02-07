@@ -156,3 +156,33 @@ Planned (not built):
 2. System logs acceptance/rejection/regeneration instrumentation.
 3. Review battery-level dashboard via eval summary endpoint.
 4. Review weekly ontology update suggestions from rejected samples.
+
+---
+
+## 10) Learning Loop Control Workflow (Current)
+
+Endpoints now wired for the backend learning loop:
+
+1. `POST /beliefs/update`
+- Writes auditable belief revisions from evidence packets.
+
+2. `POST /loop/step`
+- Applies calibration-aware policy scoring and records a decision event.
+
+3. `GET /loop/state`
+- Returns latest world state + latest belief revision + latest decision for scope.
+
+4. `GET /loop/metrics`
+- Returns loop health counters:
+  - update frequency
+  - drift trend
+  - action distribution
+  - acceptance/regeneration rates from query generation eval events
+  - observed-vs-synthetic agreement from validation results
+
+5. `POST /ops/loop-maintenance` (admin)
+- Runs calibration refresh and memory distillation.
+- Persists maintenance run history.
+
+6. `GET /ops/loop-maintenance/history` (admin)
+- Returns historical maintenance runs per client.

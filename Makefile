@@ -127,3 +127,11 @@ seed-demo-acme:
 	else \
 		$(PYTHON) -m scripts.seed_demo_acme; \
 	fi
+
+.PHONY: loop-maintenance
+loop-maintenance:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.run_learning_loop_maintenance; \
+	else \
+		$(PYTHON) -m scripts.run_learning_loop_maintenance; \
+	fi

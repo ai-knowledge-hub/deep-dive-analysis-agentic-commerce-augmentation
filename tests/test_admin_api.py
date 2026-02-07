@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 from fastapi.testclient import TestClient
+
+if "google" not in sys.modules:
+    google_pkg = types.ModuleType("google")
+    genai_pkg = types.ModuleType("google.genai")
+    genai_types_pkg = types.ModuleType("google.genai.types")
+    genai_pkg.Client = lambda *args, **kwargs: None
+    genai_pkg.types = genai_types_pkg
+    google_pkg.genai = genai_pkg
+    sys.modules["google"] = google_pkg
+    sys.modules["google.genai"] = genai_pkg
+    sys.modules["google.genai.types"] = genai_types_pkg
 
 from shared.db.connection import init_db, set_database_path
 from api.main import app
@@ -146,3 +160,33 @@ def test_admin_canonical_spec_autofill_preview_and_apply(client: TestClient):
     metadata = product.get("metadata") or {}
     assert "canonical_intent_spec" in metadata
     assert "canonical_intent_spec_raw" in metadata
+
+
+def test_admin_loop_maintenance_run_endpoint(client: TestClient):
+    client.post(
+        "/clients",
+        json={"id": "client-maint", "name": "Client Maint", "user_id": ADMIN_USER_ID},
+    )
+    response = client.post(
+        "/ops/loop-maintenance",
+        json={
+            "user_id": ADMIN_USER_ID,
+            "client_id": "client-maint",
+            "lookback_days": 30,
+            "min_confidence": 0.7,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["results"]
+    assert payload["results"][0]["client_id"] == "client-maint"
+    assert "history" in payload
+    assert isinstance(payload["history"], list)
+
+    history_response = client.get(
+        "/ops/loop-maintenance/history?client_id=client-maint&user_id=admin-user"
+    )
+    assert history_response.status_code == 200
+    history_payload = history_response.json()
+    assert history_payload["runs"]
+    assert history_payload["runs"][0]["client_id"] == "client-maint"

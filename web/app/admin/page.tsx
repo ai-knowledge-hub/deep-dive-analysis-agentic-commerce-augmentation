@@ -11,6 +11,8 @@ import type {
   AdminPlatformProfile,
   AdminSkill,
   AdminLLMConfigResponse,
+  LoopMaintenanceRunHistoryItem,
+  LoopMaintenanceRunResponse,
   SessionSummary,
 } from "../../lib/types";
 import {
@@ -34,6 +36,8 @@ import {
   getAdminLlmConfig,
   updateAdminLlmConfig,
   activateAdminLlmProvider,
+  listAdminLoopMaintenanceRuns,
+  runAdminLoopMaintenance,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -186,6 +190,15 @@ export default function AdminPage() {
 
   const [llmConfig, setLlmConfig] = useState<AdminLLMConfigResponse | null>(null);
   const [llmConfigError, setLlmConfigError] = useState<string | null>(null);
+  const [loopMaintenanceRunning, setLoopMaintenanceRunning] = useState(false);
+  const [loopMaintenanceError, setLoopMaintenanceError] = useState<string | null>(null);
+  const [loopMaintenanceResult, setLoopMaintenanceResult] =
+    useState<LoopMaintenanceRunResponse | null>(null);
+  const [loopMaintenanceHistory, setLoopMaintenanceHistory] = useState<
+    LoopMaintenanceRunHistoryItem[]
+  >([]);
+  const [loopMaintenanceLookbackDays, setLoopMaintenanceLookbackDays] = useState("30");
+  const [loopMaintenanceMinConfidence, setLoopMaintenanceMinConfidence] = useState("0.7");
   const [llmInputs, setLlmInputs] = useState<
     Record<
       string,
@@ -774,6 +787,54 @@ export default function AdminPage() {
     },
     [llmInputs, userId],
   );
+
+  const handleRunLoopMaintenance = useCallback(async () => {
+    if (!userId) return;
+    setLoopMaintenanceRunning(true);
+    try {
+      const response = await runAdminLoopMaintenance(
+        {
+          client_id: activeClientId || undefined,
+          lookback_days: Number(loopMaintenanceLookbackDays) || 30,
+          min_confidence: Number(loopMaintenanceMinConfidence) || 0.7,
+        },
+        userId,
+      );
+      setLoopMaintenanceResult(response);
+      setLoopMaintenanceHistory(response.history ?? []);
+      setLoopMaintenanceError(null);
+    } catch (error) {
+      setLoopMaintenanceResult(null);
+      setLoopMaintenanceError("Failed to run loop maintenance.");
+    } finally {
+      setLoopMaintenanceRunning(false);
+    }
+  }, [
+    activeClientId,
+    loopMaintenanceLookbackDays,
+    loopMaintenanceMinConfidence,
+    userId,
+  ]);
+
+  useEffect(() => {
+    if (!userId || !activeClientId) {
+      setLoopMaintenanceHistory([]);
+      return;
+    }
+    void listAdminLoopMaintenanceRuns(
+      {
+        client_id: activeClientId,
+        limit: 20,
+      },
+      userId,
+    )
+      .then((response) => {
+        setLoopMaintenanceHistory(response.runs ?? []);
+      })
+      .catch(() => {
+        setLoopMaintenanceHistory([]);
+      });
+  }, [activeClientId, userId]);
 
   return (
     <div className="app">
@@ -1471,6 +1532,106 @@ export default function AdminPage() {
                     >
                       Save skill
                     </button>
+                  </div>
+                )}
+              </details>
+              <details className="admin-ops__details">
+                <summary>Learning loop maintenance</summary>
+                {!userId ? (
+                  <p className="panel__empty">Sign in to run maintenance.</p>
+                ) : (
+                  <div className="admin__form">
+                    <p className="panel__meta">
+                      Refresh calibration profiles and distill high-confidence belief memory.
+                    </p>
+                    <div className="panel__grid">
+                      <label className="panel__label">
+                        <span>Client scope</span>
+                        <input
+                          className="panel__input panel__input--neutral"
+                          type="text"
+                          readOnly
+                          value={activeClientId || "all clients"}
+                        />
+                      </label>
+                      <label className="panel__label">
+                        <span>Lookback days</span>
+                        <input
+                          className="panel__input panel__input--neutral"
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={loopMaintenanceLookbackDays}
+                          onChange={(event) =>
+                            setLoopMaintenanceLookbackDays(event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="panel__label">
+                        <span>Min confidence</span>
+                        <input
+                          className="panel__input panel__input--neutral"
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={loopMaintenanceMinConfidence}
+                          onChange={(event) =>
+                            setLoopMaintenanceMinConfidence(event.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="button button--primary-subtle"
+                        onClick={() => void handleRunLoopMaintenance()}
+                        disabled={loopMaintenanceRunning}
+                      >
+                        {loopMaintenanceRunning ? "Running..." : "Run maintenance"}
+                      </button>
+                    </div>
+                    {loopMaintenanceError ? (
+                      <p className="panel__error">{loopMaintenanceError}</p>
+                    ) : null}
+                    {loopMaintenanceResult ? (
+                      <div className="admin__history">
+                        <span className="panel__label">Last run summary</span>
+                        <ul className="admin__list">
+                          {loopMaintenanceResult.results.map((item) => (
+                            <li key={item.client_id}>
+                              <span>{item.client_id}</span>
+                              <span className="admin__meta">
+                                calibration {item.calibration_profiles_updated} · distilled{" "}
+                                {item.memory_artifacts_distilled}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div className="admin__history">
+                      <span className="panel__label">Recent runs</span>
+                      {loopMaintenanceHistory.length === 0 ? (
+                        <p className="panel__meta">No maintenance runs logged yet.</p>
+                      ) : (
+                        <ul className="admin__list">
+                          {loopMaintenanceHistory.map((item) => (
+                            <li key={item.id}>
+                              <span>
+                                {item.created_at ?? "n/a"} · lookback {item.lookback_days}d ·
+                                min conf {item.min_confidence}
+                              </span>
+                              <span className="admin__meta">
+                                calibration {item.calibration_profiles_updated} · distilled{" "}
+                                {item.memory_artifacts_distilled}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 )}
               </details>

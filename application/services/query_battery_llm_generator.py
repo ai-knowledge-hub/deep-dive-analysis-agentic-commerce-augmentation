@@ -18,6 +18,7 @@ class IntentCapsule:
     audience_archetypes: List[str]
     intent_labels: List[str]
     memory_snippets: List[str]
+    memory_artifact_ids: List[str]
 
 
 def generate_llm_queries(
@@ -92,6 +93,7 @@ def _build_prompt(
             "audience_archetypes": capsule.audience_archetypes,
             "intent_labels": capsule.intent_labels,
             "memory_snippets": capsule.memory_snippets,
+            "memory_artifact_ids": capsule.memory_artifact_ids,
         },
         "rules": {
             "max_queries": limit,

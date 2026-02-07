@@ -397,6 +397,97 @@ CREATE TABLE IF NOT EXISTS copy_revisions (
     FOREIGN KEY (source_variant_id) REFERENCES experiment_variants(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS world_states (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    brand_id TEXT,
+    product_id TEXT,
+    vertical TEXT,
+    state_json TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS belief_revisions (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    brand_id TEXT,
+    product_id TEXT,
+    hypothesis_key TEXT NOT NULL,
+    prior REAL NOT NULL,
+    likelihood REAL NOT NULL,
+    posterior REAL NOT NULL,
+    confidence REAL NOT NULL,
+    evidence_ref_json TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS decision_events (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    brand_id TEXT,
+    product_id TEXT,
+    policy_action TEXT NOT NULL,
+    uncertainty REAL,
+    expected_gain REAL,
+    selected_reason TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_artifacts (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    brand_id TEXT,
+    product_id TEXT,
+    vertical TEXT,
+    artifact_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    quality_score REAL DEFAULT 0,
+    support_count INTEGER DEFAULT 0,
+    source TEXT,
+    last_used_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS calibration_profiles (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    brand_id TEXT,
+    provider TEXT NOT NULL,
+    metric_weights_json TEXT,
+    drift_score REAL DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE (client_id, brand_id, provider),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS loop_maintenance_runs (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    lookback_days INTEGER NOT NULL,
+    min_confidence REAL NOT NULL,
+    calibration_profiles_updated INTEGER NOT NULL DEFAULT 0,
+    memory_artifacts_distilled INTEGER NOT NULL DEFAULT 0,
+    triggered_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_client ON sessions(client_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
@@ -419,6 +510,14 @@ CREATE INDEX IF NOT EXISTS idx_llm_provider_configs_active ON llm_provider_confi
 CREATE INDEX IF NOT EXISTS idx_copy_revisions_client ON copy_revisions(client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_copy_revisions_product ON copy_revisions(product_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_copy_revisions_source ON copy_revisions(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_world_states_scope ON world_states(client_id, brand_id, product_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_belief_revisions_scope ON belief_revisions(client_id, brand_id, product_id, hypothesis_key, created_at);
+CREATE INDEX IF NOT EXISTS idx_decision_events_scope ON decision_events(client_id, brand_id, product_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memory_artifacts_scope ON memory_artifacts(client_id, brand_id, vertical, artifact_type);
+CREATE INDEX IF NOT EXISTS idx_memory_artifacts_quality ON memory_artifacts(quality_score, support_count, created_at);
+CREATE INDEX IF NOT EXISTS idx_calibration_profiles_scope ON calibration_profiles(client_id, brand_id, provider);
+CREATE INDEX IF NOT EXISTS idx_calibration_profiles_updated ON calibration_profiles(updated_at);
+CREATE INDEX IF NOT EXISTS idx_loop_maintenance_runs_client ON loop_maintenance_runs(client_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_experiment_metrics_experiment ON experiment_metrics(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_validations_experiment ON experiment_validations(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_validations_brand ON experiment_validations(brand_id);

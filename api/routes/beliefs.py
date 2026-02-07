@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
+from application.services.belief_update_service import BeliefUpdateService
 from application.services.brand_belief_service import BrandBeliefService
 
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/beliefs", tags=["beliefs"])
 
 DEPS = default_deps()
 SERVICE = BrandBeliefService(repo=DEPS.brand_beliefs)
+BELIEF_UPDATE_SERVICE = BeliefUpdateService(deps=DEPS)
 
 
 class BeliefCreateRequest(BaseModel):
@@ -26,6 +28,17 @@ class BeliefCreateRequest(BaseModel):
     recommendation: Optional[str] = None
     confidence: Optional[float] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class BeliefUpdateRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    brand_id: Optional[str] = None
+    product_id: Optional[str] = None
+    hypothesis_key: str = Field(..., min_length=1)
+    evidence: Dict[str, Any] = Field(default_factory=dict)
+    prior: Optional[float] = None
+    likelihood: Optional[float] = None
 
 
 @router.post("")
@@ -42,6 +55,21 @@ def create_belief(payload: BeliefCreateRequest) -> Dict[str, Any]:
         metadata=payload.metadata,
     )
     return {"belief": belief}
+
+
+@router.post("/update")
+def update_belief(payload: BeliefUpdateRequest) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    revision = BELIEF_UPDATE_SERVICE.update(
+        client_id=client_id,
+        brand_id=payload.brand_id,
+        product_id=payload.product_id,
+        hypothesis_key=payload.hypothesis_key,
+        evidence=payload.evidence,
+        prior=payload.prior,
+        likelihood=payload.likelihood,
+    )
+    return {"revision": revision}
 
 
 @router.get("")
@@ -67,3 +95,23 @@ def latest_belief(
     scoped_client_id = require_client_id(client_id, user_id)
     belief = SERVICE.latest_belief(client_id=scoped_client_id, brand_id=brand_id)
     return {"belief": belief}
+
+
+@router.get("/revisions")
+def list_belief_revisions(
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    brand_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    hypothesis_key: Optional[str] = None,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    revisions = DEPS.belief_revisions.list_belief_revisions(
+        client_id=scoped_client_id,
+        brand_id=brand_id,
+        product_id=product_id,
+        hypothesis_key=hypothesis_key,
+        limit=limit,
+    )
+    return {"revisions": revisions}

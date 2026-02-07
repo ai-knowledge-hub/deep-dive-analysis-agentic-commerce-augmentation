@@ -40,7 +40,11 @@ def set_database_path(path: str | Path) -> None:
     DEFAULT_DB_PATH = resolved
     with _lock:
         for conn in _connections_by_thread.values():
-            conn.close()
+            try:
+                conn.close()
+            except sqlite3.ProgrammingError:
+                # Connection belongs to another thread; drop reference and let thread clean up.
+                pass
         _connections_by_thread.clear()
         if hasattr(_thread_local, "conn"):
             delattr(_thread_local, "conn")

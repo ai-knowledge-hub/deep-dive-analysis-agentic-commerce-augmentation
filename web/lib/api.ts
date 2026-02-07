@@ -53,6 +53,8 @@ import {
   HealthLLMResponse,
   LLMConfigSummaryResponse,
   AdminLLMConfigResponse,
+  LoopMaintenanceRunResponse,
+  LoopMaintenanceRunHistoryResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
@@ -1722,6 +1724,39 @@ export async function listAdminSkillHistory(
   if (limit) params.set("limit", String(limit));
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return request<AdminSkillHistoryResponse>(`/skills/${name}/history${suffix}`);
+}
+
+export async function runAdminLoopMaintenance(
+  payload: {
+    client_id?: string;
+    lookback_days?: number;
+    min_confidence?: number;
+  },
+  userId?: string | null,
+): Promise<LoopMaintenanceRunResponse> {
+  return request<LoopMaintenanceRunResponse>("/ops/loop-maintenance", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminLoopMaintenanceRuns(
+  payload: {
+    client_id: string;
+    limit?: number;
+  },
+  userId?: string | null,
+): Promise<LoopMaintenanceRunHistoryResponse> {
+  const params = new URLSearchParams();
+  params.set("client_id", payload.client_id);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  if (userId) params.set("user_id", userId);
+  return request<LoopMaintenanceRunHistoryResponse>(
+    `/ops/loop-maintenance/history?${params.toString()}`,
+  );
 }
 
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {

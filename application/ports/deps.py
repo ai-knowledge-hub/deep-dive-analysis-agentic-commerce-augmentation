@@ -255,6 +255,56 @@ class AudienceArchetypesStore(Protocol):
     def list_archetypes(self, **kwargs: Any) -> list[dict]: ...
 
 
+class WorldStatesStore(Protocol):
+    def create_world_state_snapshot(self, **kwargs: Any) -> dict: ...
+
+    def list_world_states(self, **kwargs: Any) -> list[dict]: ...
+
+    def get_latest_world_state(self, **kwargs: Any) -> dict | None: ...
+
+
+class BeliefRevisionsStore(Protocol):
+    def create_belief_revision(self, **kwargs: Any) -> dict: ...
+
+    def list_belief_revisions(self, **kwargs: Any) -> list[dict]: ...
+
+    def get_latest_belief_revision(self, **kwargs: Any) -> dict | None: ...
+
+
+class DecisionEventsStore(Protocol):
+    def create_decision_event(self, **kwargs: Any) -> dict: ...
+
+    def list_decision_events(self, **kwargs: Any) -> list[dict]: ...
+
+    def get_latest_decision_event(self, **kwargs: Any) -> dict | None: ...
+
+
+class MemoryArtifactsStore(Protocol):
+    def create_memory_artifact(self, **kwargs: Any) -> dict: ...
+
+    def update_memory_artifact_score(self, **kwargs: Any) -> dict | None: ...
+
+    def list_memory_artifacts(self, **kwargs: Any) -> list[dict]: ...
+
+    def mark_memory_artifact_used(self, **kwargs: Any) -> dict | None: ...
+
+
+class CalibrationProfilesStore(Protocol):
+    def get_calibration_profile(self, **kwargs: Any) -> dict | None: ...
+
+    def upsert_calibration_profile(self, **kwargs: Any) -> dict: ...
+
+    def list_calibration_profiles(self, **kwargs: Any) -> list[dict]: ...
+
+
+class LoopMaintenanceRunsStore(Protocol):
+    def create_run(self, **kwargs: Any) -> dict: ...
+
+    def get_run(self, **kwargs: Any) -> dict | None: ...
+
+    def list_runs(self, **kwargs: Any) -> list[dict]: ...
+
+
 class SkillsStore(Protocol):
     def get_skill(self, **kwargs: Any) -> dict | None: ...
 
@@ -310,6 +360,12 @@ class AppDeps:
     copy_revisions: CopyRevisionsStore
     brand_beliefs: BrandBeliefsStore
     audience_archetypes: AudienceArchetypesStore
+    world_states: WorldStatesStore
+    belief_revisions: BeliefRevisionsStore
+    decision_events: DecisionEventsStore
+    memory_artifacts: MemoryArtifactsStore
+    calibration_profiles: CalibrationProfilesStore
+    loop_maintenance_runs: LoopMaintenanceRunsStore
     skills: SkillsStore
     llm_provider_configs: LLMProviderConfigsStore
 

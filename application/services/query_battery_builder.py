@@ -8,6 +8,7 @@ from application.ports.deps import (
     AudienceArchetypesStore,
     BrandBeliefsStore,
     ClientsStore,
+    MemoryArtifactsStore,
     QueryBatteriesStore,
     SimulationRunsStore,
 )
@@ -36,6 +37,7 @@ class QueryBatteryBuilder:
         simulation_runs_repo: SimulationRunsStore | None = None,
         archetypes_repo: AudienceArchetypesStore | None = None,
         analytics_events_repo: AnalyticsEventsStore | None = None,
+        memory_artifacts_repo: MemoryArtifactsStore | None = None,
     ) -> None:
         self._batteries = batteries_repo
         self._clients = clients_repo
@@ -44,6 +46,7 @@ class QueryBatteryBuilder:
         self._simulation_runs = simulation_runs_repo
         self._archetypes = archetypes_repo
         self._analytics_events = analytics_events_repo
+        self._memory_artifacts = memory_artifacts_repo
 
     def generate(
         self,
@@ -105,6 +108,7 @@ class QueryBatteryBuilder:
             beliefs_repo=self._beliefs,
             simulation_runs_repo=self._simulation_runs,
             archetypes_repo=self._archetypes,
+            memory_artifacts_repo=self._memory_artifacts,
             allow_description=True,
             seed_features=seed_features,
             seed_use_cases=seed_use_cases,
@@ -116,6 +120,7 @@ class QueryBatteryBuilder:
             beliefs_repo=self._beliefs,
             simulation_runs_repo=self._simulation_runs,
             archetypes_repo=self._archetypes,
+            memory_artifacts_repo=self._memory_artifacts,
             allow_description=False,
             seed_features=seed_features,
             seed_use_cases=seed_use_cases,
@@ -188,6 +193,11 @@ class QueryBatteryBuilder:
                 "clarification_prompt": clarification_prompt,
                 "regeneration_count": 0,
                 "acceptance_rate": 0.0,
+                "memory_artifact_ids": sorted(
+                    set(
+                        capsule.memory_artifact_ids + bottom_capsule.memory_artifact_ids
+                    )
+                ),
                 "rejected": [],
             }
             self._record_eval_event(
@@ -259,6 +269,9 @@ class QueryBatteryBuilder:
             "clarification_prompt": None,
             "regeneration_count": 1 if retried else 0,
             "acceptance_rate": acceptance_rate,
+            "memory_artifact_ids": sorted(
+                set(capsule.memory_artifact_ids + bottom_capsule.memory_artifact_ids)
+            ),
             "rejected": rejected[:20],
         }
         self._record_eval_event(
@@ -494,6 +507,7 @@ def _build_intent_capsule(
     beliefs_repo: BrandBeliefsStore | None,
     simulation_runs_repo: SimulationRunsStore | None,
     archetypes_repo: AudienceArchetypesStore | None,
+    memory_artifacts_repo: MemoryArtifactsStore | None,
     allow_description: bool,
     seed_features: Optional[List[str]] = None,
     seed_use_cases: Optional[List[str]] = None,
@@ -539,6 +553,24 @@ def _build_intent_capsule(
         client_id=client_id,
         brand_id=brand_id,
     )
+    memory_artifacts = _extract_memory_artifacts(
+        memory_artifacts_repo=memory_artifacts_repo,
+        client_id=client_id,
+        brand_id=brand_id,
+        product_id=product.get("id"),
+        vertical=domain_vertical,
+    )
+    artifact_snippets = [
+        snippet
+        for snippet in (
+            _artifact_snippet(item.get("payload") or {}) for item in memory_artifacts
+        )
+        if snippet
+    ]
+    memory_snippets = list(dict.fromkeys(memory_snippets + artifact_snippets))
+    memory_artifact_ids = [
+        str(item.get("id")) for item in memory_artifacts if item.get("id")
+    ]
     return IntentCapsule(
         domain_vertical=domain_vertical,
         product_name=name,
@@ -549,6 +581,7 @@ def _build_intent_capsule(
         audience_archetypes=archetypes,
         intent_labels=intent_labels,
         memory_snippets=memory_snippets,
+        memory_artifact_ids=memory_artifact_ids,
     )
 
 
@@ -741,6 +774,51 @@ def _extract_memory_snippets(
     # Simulation lessons currently do not carry confidence metadata.
     # Keep them out of memory context until confidence scoring is available.
     return snippets
+
+
+def _extract_memory_artifacts(
+    *,
+    memory_artifacts_repo: MemoryArtifactsStore | None,
+    client_id: str,
+    brand_id: Optional[str],
+    product_id: Optional[str],
+    vertical: Optional[str],
+) -> List[Dict[str, Any]]:
+    if not memory_artifacts_repo:
+        return []
+    try:
+        artifacts = memory_artifacts_repo.list_memory_artifacts(
+            client_id=client_id,
+            artifact_type="query_pattern",
+            min_quality=0.65,
+            limit=30,
+        )
+    except Exception:
+        return []
+    product_bucket: List[Dict[str, Any]] = []
+    brand_vertical_bucket: List[Dict[str, Any]] = []
+    vertical_bucket: List[Dict[str, Any]] = []
+    for item in artifacts:
+        if product_id and item.get("product_id") == product_id:
+            product_bucket.append(item)
+        elif (
+            brand_id
+            and vertical
+            and item.get("brand_id") == brand_id
+            and item.get("vertical") == vertical
+        ):
+            brand_vertical_bucket.append(item)
+        elif vertical and item.get("vertical") == vertical:
+            vertical_bucket.append(item)
+    return (product_bucket + brand_vertical_bucket + vertical_bucket)[:8]
+
+
+def _artifact_snippet(payload: Dict[str, Any]) -> str:
+    for key in ("query_template", "pattern", "summary", "text"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _dedupe_queries(queries: Iterable[GeneratedQuery]) -> List[GeneratedQuery]:

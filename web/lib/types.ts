@@ -912,6 +912,32 @@ export type AdminLLMConfigResponse = {
   configs: AdminLLMConfig[];
 };
 
+export type LoopMaintenanceRunResponse = {
+  lookback_days: number;
+  min_confidence: number;
+  results: Array<{
+    client_id: string;
+    calibration_profiles_updated: number;
+    memory_artifacts_distilled: number;
+  }>;
+  history?: LoopMaintenanceRunHistoryItem[];
+};
+
+export type LoopMaintenanceRunHistoryItem = {
+  id: string;
+  client_id: string;
+  lookback_days: number;
+  min_confidence: number;
+  calibration_profiles_updated: number;
+  memory_artifacts_distilled: number;
+  triggered_by?: string | null;
+  created_at?: string | null;
+};
+
+export type LoopMaintenanceRunHistoryResponse = {
+  runs: LoopMaintenanceRunHistoryItem[];
+};
+
 export type AnalyticsEvent = {
   id: string;
   client_id: string;

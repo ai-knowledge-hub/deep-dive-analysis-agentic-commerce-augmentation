@@ -7,6 +7,9 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
+from application.services.belief_update_service import BeliefUpdateService
+from application.services.policy_service import PolicyService
+from application.services.state_service import StateService
 from shared.llm.prompts import build_validation_prompt, VALIDATION_OUTPUT_SCHEMA
 from shared.config.env import get_settings
 from shared.llm.clients.openai import OpenAIConfig, OpenAILLMClient
@@ -18,6 +21,9 @@ from shared.llm.clients.gemini import GeminiConfig, GeminiLLMClient
 class ValidationService:
     def __init__(self, *, deps: AppDeps) -> None:
         self._deps = deps
+        self._belief_updates = BeliefUpdateService(deps=deps)
+        self._policy = PolicyService(deps=deps)
+        self._state = StateService(deps=deps)
 
     def create_job(
         self,
@@ -98,6 +104,7 @@ class ValidationService:
             cost_usd=None,
         )
         self._deps.validation_jobs.update_job_status(job_id=job_id, status="completed")
+        self._record_learning_loop(job=job, result=result, source="synthetic")
         return {"job": job, "result": result}
 
     def submit_external_result(
@@ -134,6 +141,7 @@ class ValidationService:
         self._deps.validation_jobs.update_job_status(
             job_id=job_id, status="completed", model=model or job.get("model")
         )
+        self._record_learning_loop(job=job, result=result, source="observed")
         return {"job": job, "result": result}
 
     def get_job(self, *, job_id: str) -> Dict[str, Any]:
@@ -158,6 +166,66 @@ class ValidationService:
             limit=limit,
         )
         return {"jobs": jobs}
+
+    def _record_learning_loop(
+        self,
+        *,
+        job: Dict[str, Any],
+        result: Dict[str, Any],
+        source: str,
+    ) -> None:
+        client_id = str(job.get("client_id") or "")
+        if not client_id:
+            return
+        brand_id = job.get("brand_id")
+        product_id = job.get("product_id")
+        structured = result.get("structured_result") or {}
+        hypothesis_key = f"validation:{job.get('entity_type')}:{job.get('entity_id')}"
+        evidence = {
+            "source": source,
+            "provider": result.get("provider") or job.get("provider"),
+            "model": result.get("model") or job.get("model"),
+            "score": structured.get("score", result.get("score", 0.5)),
+            "confidence": structured.get("confidence", 0.5),
+            "winner_id": structured.get("winner_id", result.get("winner_id")),
+            "evidence_strength": structured.get(
+                "evidence_strength", result.get("evidence_strength")
+            ),
+            "validation_job_id": job.get("id"),
+            "validation_result_id": result.get("id"),
+            "entity_type": job.get("entity_type"),
+            "entity_id": job.get("entity_id"),
+            "support_size": 1,
+        }
+        revision = self._belief_updates.update(
+            client_id=client_id,
+            brand_id=brand_id,
+            product_id=product_id,
+            hypothesis_key=hypothesis_key,
+            evidence=evidence,
+        )
+        uncertainty = 1.0 - float(revision.get("confidence", 0.0))
+        self._policy.record_decision(
+            client_id=client_id,
+            brand_id=brand_id,
+            product_id=product_id,
+            policy_action="update_belief_only",
+            uncertainty=uncertainty,
+            expected_gain=float(revision.get("posterior", 0.0)),
+            selected_reason="validation_completed",
+        )
+        self._state.snapshot(
+            client_id=client_id,
+            brand_id=brand_id,
+            product_id=product_id,
+            state={
+                "hypothesis_key": hypothesis_key,
+                "posterior": revision.get("posterior"),
+                "confidence": revision.get("confidence"),
+                "source": source,
+                "winner_id": evidence.get("winner_id"),
+            },
+        )
 
 
 def _normalize_provider(provider: Optional[str]) -> str:

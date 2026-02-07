@@ -65,6 +65,7 @@ We do **not** position lab scores as guaranteed production ranking outcomes.
 | **Canonical Intent Spec** | Controlled onboarding fields for bottom-up query generation | `web/app/admin/page.tsx` + `products.metadata.canonical_intent_spec` |
 | **Query Quality Gating** | Accept/reject generated queries with reject reasons | `application/services/query_battery_builder.py` |
 | **Canonical Autofill** | UCP/ACP/feed to canonical spec (preview/apply) | `application/services/canonical_intent_spec_service.py` + `api/routes/admin.py` |
+| **Learning Loop Control** | Belief revisions, policy decisions, calibration profiles, loop metrics | `api/routes/beliefs.py` + `api/routes/loop.py` + `api/routes/calibration.py` |
 
 ---
 
@@ -280,6 +281,7 @@ Manual helpers:
 make db-init   # create/open DB and apply schema
 make db-migrate # alias of db-init (re-apply schema bootstrap)
 make db-validate-migrate # apply validation job/result migrations
+make loop-maintenance # refresh calibration + distill high-confidence beliefs
 make db-reset  # delete local DB and re-init
 make db-path   # print current DB path
 make seed-demo # seed demo multi-tenant clients/brands/products
@@ -304,6 +306,14 @@ DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
 
 `seed-canonical` populates `canonical_intent_spec` for existing products so bottom-up
 query generation can run without clarification blocks.
+
+After pulling schema changes, always re-run:
+
+```bash
+DATABASE_PATH=./tmp/local.db make db-migrate
+```
+
+This applies new learning-loop tables (belief/memory/calibration/maintenance history) to existing local DBs.
 
 Quick verify:
 

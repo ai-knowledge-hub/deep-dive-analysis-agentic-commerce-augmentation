@@ -139,6 +139,45 @@ Scope: incidents discovered during iterative dev/test in this cycle and already 
 
 ---
 
+## 8) Test fixture DB reset failure after thread-local sqlite rollout
+
+- Symptom:
+  - Pytest setup intermittently failed on `set_database_path(...)` with:
+    - `sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread`
+- Root cause:
+  - After moving to per-thread sqlite connections, global cleanup attempted `conn.close()` on connections created by other threads.
+- Fix:
+  - Wrapped close in `try/except sqlite3.ProgrammingError` and always clear registry references.
+  - This preserves test isolation without cross-thread close violations.
+- Key files:
+  - `shared/db/connection.py`
+- Pattern:
+  - Thread-local sqlite requires thread-safe cleanup semantics; never assume all connection objects are closeable from current thread.
+
+---
+
+## 9) Missing manual ops visibility for loop maintenance
+
+- Symptom:
+  - Maintenance could run from CLI/GitHub but had no in-app audit visibility.
+- Root cause:
+  - No persistent run history table or admin history endpoint.
+- Fix:
+  - Added `loop_maintenance_runs` table + migration.
+  - Added admin APIs:
+    - `POST /ops/loop-maintenance`
+    - `GET /ops/loop-maintenance/history`
+  - Added admin UI section to execute and review recent runs.
+- Key files:
+  - `shared/db/migrations/018_loop_maintenance_runs.sql`
+  - `infrastructure/db/loop_maintenance_runs.py`
+  - `api/routes/admin.py`
+  - `web/app/admin/page.tsx`
+- Pattern:
+  - Every operational job should have both trigger and history surfaces.
+
+---
+
 ## Pre-release checks to re-run
 
 1. Tenant switch matrix:
@@ -153,4 +192,3 @@ Scope: incidents discovered during iterative dev/test in this cycle and already 
    - verify no `InterfaceError`/`SystemError` from sqlite layer
 4. Route contract checks:
    - ensure frontend helpers still match backend path prefixes (`/llm/config`, `/validation/*`, `/experiments/*`)
-

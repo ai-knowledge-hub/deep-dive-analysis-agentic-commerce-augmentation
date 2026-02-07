@@ -88,7 +88,27 @@ Relationship: complements `docs/debug/incidents-fixed.md`.
      - experiments list/create/run
      - validation create/run/log
      - overview summary/timeseries
-  2. Add lightweight contract tests for helper path map.
+2. Add lightweight contract tests for helper path map.
+
+---
+
+## 7) RBAC enforcement still admin-heavy
+
+- Status: partially mitigated.
+- Why it matters:
+  - Multi-tenant isolation is in place, but most privileged operations still rely on admin checks rather than tenant role checks.
+- Trigger indicators:
+  - Need to expose client-scoped operator actions to non-admin users.
+- Current mitigation:
+  - Added reusable RBAC hook functions:
+    - `has_client_role(...)`
+    - `require_client_role(...)`
+  - Current admin operations remain admin-only.
+- Validation checks:
+  1. Add route-level tests for client-role gated endpoints once first non-admin operation is introduced.
+  2. Ensure role comparisons are normalized/lowercase.
+- Planned follow-up:
+  - Introduce first client-role-protected endpoint and cover with API tests.
 
 ---
 
@@ -114,4 +134,3 @@ Relationship: complements `docs/debug/incidents-fixed.md`.
 2. Run API route smoke checks (backend up, expected 200/4xx only).
 3. Run frontend lint and targeted backend tests.
 4. Perform one clean-browser demo pass (no cached legacy keys).
-

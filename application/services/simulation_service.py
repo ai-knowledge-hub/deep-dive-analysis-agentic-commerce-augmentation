@@ -14,6 +14,7 @@ from domain.protocol.types import ProtocolCandidate
 from application.ports.deps import AppDeps
 from application.services.simulation_optimizer import optimize_product
 from application.services.simulation_runner import run_simulation
+from application.services.memory_service import MemoryService
 
 
 class SimulationService:
@@ -277,13 +278,31 @@ class SimulationService:
         if not target:
             raise HTTPException(status_code=404, detail="Product not found")
 
+        memory_service = MemoryService(deps=self._deps)
+        memory_artifacts = memory_service.retrieve(
+            client_id=client_id,
+            artifact_type="copy_pattern",
+            brand_id=run_record.get("brand_id"),
+            product_id=product_id,
+            vertical=(target.get("metadata") or {}).get("vertical")
+            or (target.get("metadata") or {}).get("domain")
+            or (target.get("metadata") or {}).get("category"),
+            min_quality=0.65,
+            freshness_days=180,
+            limit=6,
+        )
+        memory_snippets = [
+            _memory_payload_text(item.get("payload") or {}) for item in memory_artifacts
+        ]
+        memory_snippets = [item for item in memory_snippets if item]
+
         optimized = optimize_product(
             _to_simulation_product(target),
             target_gap.get("missing_signals") or [],
             generate_fn=self._deps.generate,
             build_optimization_prompt_fn=self._deps.build_optimization_prompt,
             tone=tone,
-            lessons=(result.get("lessons") or []),
+            lessons=(result.get("lessons") or []) + memory_snippets,
         )
         replay = ReplayRecord(
             run_type="simulation.optimize",
@@ -331,6 +350,9 @@ class SimulationService:
                     "optimization_mode": (run_record.get("scenario") or {}).get(
                         "optimization_mode"
                     ),
+                    "memory_artifact_ids": [
+                        item.get("id") for item in memory_artifacts if item.get("id")
+                    ],
                 },
                 created_by=user_id,
             )
@@ -561,6 +583,14 @@ class SimulationService:
             "product_id": updated.get("product_id"),
             "brand_id": updated.get("brand_id"),
         }
+
+
+def _memory_payload_text(payload: Dict[str, Any]) -> str:
+    for key in ("copy_template", "pattern", "summary", "text"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _to_simulation_product(item: Dict[str, Any]) -> SimulationProduct:

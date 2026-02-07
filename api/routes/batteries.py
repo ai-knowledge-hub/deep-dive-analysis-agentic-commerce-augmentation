@@ -24,6 +24,7 @@ BUILDER = QueryBatteryBuilder(
     simulation_runs_repo=DEPS.simulation_runs,
     archetypes_repo=DEPS.audience_archetypes,
     analytics_events_repo=DEPS.analytics_events,
+    memory_artifacts_repo=DEPS.memory_artifacts,
 )
 
 
