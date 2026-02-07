@@ -6,6 +6,8 @@ import os
 import sqlite3
 from pathlib import Path
 from threading import Lock
+from threading import local
+from threading import get_ident
 from typing import Callable, Iterator, Optional
 
 from shared.db.migrations import apply_migrations
@@ -13,38 +15,47 @@ from shared.db.migrations import apply_migrations
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "./db/discovery.db")).resolve()
 
-_connection: Optional[sqlite3.Connection] = None
 _lock = Lock()
+_thread_local = local()
+_connections_by_thread: dict[int, sqlite3.Connection] = {}
+
+
+def _create_connection() -> sqlite3.Connection:
+    DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(
+        DEFAULT_DB_PATH,
+        detect_types=sqlite3.PARSE_DECLTYPES,
+        check_same_thread=True,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    return conn
 
 
 def set_database_path(path: str | Path) -> None:
     """Override the default DB path (useful for tests)."""
-    global DEFAULT_DB_PATH, _connection
+    global DEFAULT_DB_PATH
     resolved = Path(path).resolve()
     DEFAULT_DB_PATH = resolved
-    if _connection is not None:
-        with _lock:
-            _connection.close()
-            _connection = None
+    with _lock:
+        for conn in _connections_by_thread.values():
+            conn.close()
+        _connections_by_thread.clear()
+        if hasattr(_thread_local, "conn"):
+            delattr(_thread_local, "conn")
 
 
 def get_connection() -> sqlite3.Connection:
-    """Return a singleton SQLite connection configured for concurrency."""
-    global _connection
-    if _connection is None:
-        with _lock:
-            if _connection is None:
-                DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-                conn = sqlite3.connect(
-                    DEFAULT_DB_PATH,
-                    detect_types=sqlite3.PARSE_DECLTYPES,
-                    check_same_thread=False,
-                )
-                conn.row_factory = sqlite3.Row
-                conn.execute("PRAGMA foreign_keys = ON;")
-                conn.execute("PRAGMA journal_mode = WAL;")
-                _connection = conn
-    return _connection
+    """Return a per-thread SQLite connection to avoid cross-thread API misuse."""
+    conn: Optional[sqlite3.Connection] = getattr(_thread_local, "conn", None)
+    if conn is not None:
+        return conn
+    with _lock:
+        conn = _create_connection()
+        _thread_local.conn = conn
+        _connections_by_thread[get_ident()] = conn
+        return conn
 
 
 def init_db(schema_path: Path | None = None) -> None:

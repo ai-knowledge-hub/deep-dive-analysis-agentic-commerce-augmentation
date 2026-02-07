@@ -38,6 +38,7 @@ import {
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
+import { useTenant } from "../../components/tenant/TenantProvider";
 
 const emptyForm = {
   id: "",
@@ -114,6 +115,14 @@ const LLM_MODEL_OPTIONS: Record<string, string[]> = {
 export default function AdminPage() {
   const router = useRouter();
   const { user } = useUser();
+  const {
+    clientId: tenantClientId,
+    brandId: tenantBrandId,
+    productId: tenantProductId,
+    setClientId: setTenantClientId,
+    setBrandId: setTenantBrandId,
+    setProductId: setTenantProductId,
+  } = useTenant();
   const userId = user?.id ?? null;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -199,11 +208,15 @@ export default function AdminPage() {
     void listAdminClients(userId).then((response) => {
       const items = response.clients ?? [];
       setClients(items);
-      if (!activeClientId && items[0]?.id) {
+      if (items.length === 0) {
+        setActiveClientId("");
+      } else if (tenantClientId && items.some((item) => item.id === tenantClientId)) {
+        setActiveClientId(tenantClientId);
+      } else if (!activeClientId && items[0]?.id) {
         setActiveClientId(items[0].id);
       }
     });
-  }, [activeClientId, userId]);
+  }, [activeClientId, tenantClientId, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -275,14 +288,18 @@ export default function AdminPage() {
     void listAdminBrands(activeClientId, userId).then((response) => {
       const items = response.brands ?? [];
       setBrands(items);
-      if (!activeBrandId && items[0]?.id) {
+      if (items.length === 0) {
+        setActiveBrandId("");
+      } else if (tenantBrandId && items.some((item) => item.id === tenantBrandId)) {
+        setActiveBrandId(tenantBrandId);
+      } else if (!activeBrandId && items[0]?.id) {
         setActiveBrandId(items[0].id);
       }
     });
     void listAdminClientUsers(activeClientId, userId).then((response) => {
       setClientUsers(response.users ?? []);
     });
-  }, [activeBrandId, activeClientId, userId]);
+  }, [activeBrandId, activeClientId, tenantBrandId, userId]);
 
   useEffect(() => {
     if (!activeBrandId || !userId) {
@@ -299,10 +316,38 @@ export default function AdminPage() {
       setActiveProductId("");
       return;
     }
+    if (
+      tenantProductId &&
+      products.some((product) => product.id === tenantProductId) &&
+      activeProductId !== tenantProductId
+    ) {
+      setActiveProductId(tenantProductId);
+      return;
+    }
     if (!products.some((product) => product.id === activeProductId)) {
       setActiveProductId(products[0].id);
     }
-  }, [activeProductId, products]);
+  }, [activeProductId, products, tenantProductId]);
+
+  useEffect(() => {
+    if (!tenantClientId || clients.length === 0) return;
+    if (
+      clients.some((client) => client.id === tenantClientId) &&
+      activeClientId !== tenantClientId
+    ) {
+      setActiveClientId(tenantClientId);
+    }
+  }, [activeClientId, clients, tenantClientId]);
+
+  useEffect(() => {
+    if (!tenantBrandId || brands.length === 0) return;
+    if (
+      brands.some((brand) => brand.id === tenantBrandId) &&
+      activeBrandId !== tenantBrandId
+    ) {
+      setActiveBrandId(tenantBrandId);
+    }
+  }, [activeBrandId, brands, tenantBrandId]);
 
   useEffect(() => {
     const product = products.find((item) => item.id === activeProductId);
@@ -422,6 +467,24 @@ export default function AdminPage() {
     }
   }, [deleteTargetId, userId]);
 
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
+      setDeleteTargetId(null);
+    },
+    [userId],
+  );
+
   const handleCreateClient = useCallback(async () => {
     if (!userId || !clientForm.id.trim() || !clientForm.name.trim()) return;
     const response = await createAdminClient(
@@ -430,8 +493,9 @@ export default function AdminPage() {
     );
     setClients((current) => [...current, response.client]);
     setActiveClientId(response.client.id);
+    setTenantClientId(response.client.id);
     setClientForm({ ...emptyForm });
-  }, [clientForm, userId]);
+  }, [clientForm, setTenantClientId, userId]);
 
   const handleCreateBrand = useCallback(async () => {
     if (!userId || !activeClientId || !brandForm.id.trim() || !brandForm.name.trim())
@@ -443,8 +507,9 @@ export default function AdminPage() {
     );
     setBrands((current) => [...current, response.brand]);
     setActiveBrandId(response.brand.id);
+    setTenantBrandId(response.brand.id);
     setBrandForm({ ...emptyForm });
-  }, [activeClientId, brandForm, userId]);
+  }, [activeClientId, brandForm, setTenantBrandId, userId]);
 
   const handleCreateProduct = useCallback(async () => {
     if (!userId || !activeBrandId || !productForm.id.trim() || !productForm.name.trim())
@@ -464,8 +529,10 @@ export default function AdminPage() {
       userId,
     );
     setProducts((current) => [...current, response.product]);
+    setActiveProductId(response.product.id);
+    setTenantProductId(response.product.id);
     setProductForm({ ...emptyForm });
-  }, [activeBrandId, productForm, userId]);
+  }, [activeBrandId, productForm, setTenantProductId, userId]);
 
   const handleSaveIntentSpec = useCallback(async () => {
     if (!userId || !activeBrandId || !selectedProduct) return;
@@ -766,6 +833,7 @@ export default function AdminPage() {
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
       />
       <main className="main main--detail">
         <div className="detail admin">
@@ -832,8 +900,11 @@ export default function AdminPage() {
                       id="admin-client-select"
                       value={activeClientId}
                       onChange={(event) => {
-                        setActiveClientId(event.target.value);
+                        const nextClientId = event.target.value;
+                        setActiveClientId(nextClientId);
+                        setTenantClientId(nextClientId);
                         setActiveBrandId("");
+                        setActiveProductId("");
                       }}
                     >
                       {clients.map((client) => (
@@ -938,7 +1009,11 @@ export default function AdminPage() {
                         <select
                           id="admin-brand-select"
                           value={activeBrandId}
-                          onChange={(event) => setActiveBrandId(event.target.value)}
+                          onChange={(event) => {
+                            const nextBrandId = event.target.value;
+                            setActiveBrandId(nextBrandId);
+                            setTenantBrandId(nextBrandId || null);
+                          }}
                         >
                           {brands.map((brand) => (
                             <option key={brand.id} value={brand.id}>
@@ -1001,7 +1076,11 @@ export default function AdminPage() {
                         <select
                           id="admin-product-select"
                           value={activeProductId}
-                          onChange={(event) => setActiveProductId(event.target.value)}
+                          onChange={(event) => {
+                            const nextProductId = event.target.value;
+                            setActiveProductId(nextProductId);
+                            setTenantProductId(nextProductId || null);
+                          }}
                         >
                           {products.map((product) => (
                             <option key={product.id} value={product.id}>

@@ -60,6 +60,7 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
 import { MLPrediction } from "../../components/experiments/MLPrediction";
 import { ThompsonSamplingGauge } from "../../components/experiments/ThompsonSamplingGauge";
+import { buildTenantStorageKey } from "../../lib/storage";
 
 export default function ExperimentsPage() {
   const router = useRouter();
@@ -67,6 +68,16 @@ export default function ExperimentsPage() {
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, clientId } = useTenant();
+  const storageClientId =
+    clientId ??
+    (typeof window !== "undefined"
+      ? window.localStorage.getItem("client_id")
+      : null) ??
+    undefined;
+  const experimentsDraftStorageKey = useMemo(
+    () => buildTenantStorageKey("experiments_draft", userId, storageClientId),
+    [storageClientId, userId],
+  );
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
@@ -124,10 +135,13 @@ export default function ExperimentsPage() {
     competitorPolicy: "",
   });
   const [variantForm, setVariantForm] = useState({
-    label: "",
+    label: "Hypothesis (variant)",
+    role: "candidate",
+    description: "",
     type: "copy",
     payload: "",
   });
+  const [variantAdvancedOpen, setVariantAdvancedOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
@@ -169,6 +183,7 @@ export default function ExperimentsPage() {
     selectedExperimentId?: string | null;
     experimentForm?: typeof experimentForm;
     variantForm?: typeof variantForm;
+    variantAdvancedOpen?: boolean;
     batteryForm?: typeof batteryForm;
     batteryEdit?: typeof batteryEdit;
     batterySeedQueries?: string;
@@ -192,7 +207,9 @@ export default function ExperimentsPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem("experiments_draft");
+    const saved =
+      window.localStorage.getItem(experimentsDraftStorageKey) ??
+      window.localStorage.getItem("experiments_draft");
     if (!saved) {
       autosaveEnabled.current = true;
       return;
@@ -202,10 +219,11 @@ export default function ExperimentsPage() {
       setRestoreDraft(parsed);
       setShowRestorePrompt(true);
     } catch {
+      window.localStorage.removeItem(experimentsDraftStorageKey);
       window.localStorage.removeItem("experiments_draft");
       autosaveEnabled.current = true;
     }
-  }, []);
+  }, [experimentsDraftStorageKey]);
 
   const handleRestoreDraft = useCallback(() => {
     if (!restoreDraft) return;
@@ -219,6 +237,7 @@ export default function ExperimentsPage() {
       ...prev,
       ...(restoreDraft.variantForm ?? {}),
     }));
+    setVariantAdvancedOpen(Boolean(restoreDraft.variantAdvancedOpen));
     setBatteryForm((prev) => ({
       ...prev,
       ...(restoreDraft.batteryForm ?? {}),
@@ -238,12 +257,13 @@ export default function ExperimentsPage() {
 
   const handleDismissDraft = useCallback(() => {
     if (typeof window !== "undefined") {
+      window.localStorage.removeItem(experimentsDraftStorageKey);
       window.localStorage.removeItem("experiments_draft");
     }
     setRestoreDraft(null);
     setShowRestorePrompt(false);
     autosaveEnabled.current = true;
-  }, []);
+  }, [experimentsDraftStorageKey]);
 
   useEffect(() => {
     void listBatteries(userId, productId ?? undefined).then((response) => {
@@ -263,6 +283,7 @@ export default function ExperimentsPage() {
       selectedExperimentId,
       experimentForm,
       variantForm,
+      variantAdvancedOpen,
       batteryForm,
       batteryEdit,
       batterySeedQueries,
@@ -271,12 +292,14 @@ export default function ExperimentsPage() {
       batteryUseLlm,
       advancedOverridesOpen,
     };
-    window.localStorage.setItem("experiments_draft", JSON.stringify(payload));
+    window.localStorage.setItem(experimentsDraftStorageKey, JSON.stringify(payload));
   }, [
+    experimentsDraftStorageKey,
     labMode,
     selectedExperimentId,
     experimentForm,
     variantForm,
+    variantAdvancedOpen,
     batteryForm,
     batteryEdit,
     batterySeedQueries,
@@ -528,6 +551,63 @@ export default function ExperimentsPage() {
       setDeleteTargetId(null);
     }
   }, [deleteTargetId, userId]);
+
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
+      setDeleteTargetId(null);
+    },
+    [userId],
+  );
+
+  const handleBulkDeleteSimulations = useCallback(
+    async (runIds: string[]) => {
+      if (!runIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${runIds.length} simulation run${runIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        runIds.map((id) =>
+          deleteSimulationRun(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setSimulationRuns((current) => current.filter((run) => !runIds.includes(run.id)));
+    },
+    [clientId, userId],
+  );
+
+  const handleBulkDeleteExperiments = useCallback(
+    async (experimentIds: string[]) => {
+      if (!experimentIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${experimentIds.length} experiment${experimentIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        experimentIds.map((id) =>
+          deleteExperiment(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setExperiments((current) =>
+        current.filter((experiment) => !experimentIds.includes(experiment.id)),
+      );
+      setSelectedExperimentId((current) =>
+        current && experimentIds.includes(current) ? null : current,
+      );
+    },
+    [clientId, userId],
+  );
 
   const handleRunVariant = useCallback(
     async (variantId: string) => {
@@ -1058,24 +1138,45 @@ export default function ExperimentsPage() {
   ]);
 
   const handleCreateVariant = useCallback(async () => {
-    if (!selectedExperimentId || !variantForm.label.trim()) return;
+    if (!selectedExperimentId) return;
     if (jsonErrors.variantPayload) return;
     setFormError(null);
     setSubmitting(true);
     try {
-      const payload =
+      const basePayload =
         variantForm.payload.trim() !== ""
           ? JSON.parse(variantForm.payload)
           : {};
+      const payload: Record<string, unknown> =
+        basePayload && typeof basePayload === "object"
+          ? { ...(basePayload as Record<string, unknown>) }
+          : {};
+      const description = variantForm.description.trim();
+      if (description) {
+        payload.description = description;
+      }
+      payload.role = variantForm.role;
+      const normalizedLabel = variantForm.label.trim()
+        ? variantForm.label.trim()
+        : variantForm.role === "control"
+          ? "Control (current copy)"
+          : "Hypothesis (variant)";
       await createExperimentVariant(selectedExperimentId, {
-        label: variantForm.label.trim(),
+        label: normalizedLabel,
         type: variantForm.type.trim() || "copy",
         payload,
         user_id: userId,
       });
       const refreshed = await listExperimentVariants(selectedExperimentId, userId);
       setVariants(refreshed.variants ?? []);
-      setVariantForm({ label: "", type: "copy", payload: "" });
+      setVariantForm({
+        label: "Hypothesis (variant)",
+        role: "candidate",
+        description: "",
+        type: "copy",
+        payload: "",
+      });
+      setVariantAdvancedOpen(false);
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : "Invalid JSON payload.",
@@ -1256,6 +1357,17 @@ export default function ExperimentsPage() {
   );
 
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
+  const metricsByVariant = useMemo(() => {
+    const map = new Map<string, ExperimentMetric>();
+    metrics.forEach((metric) => {
+      if (!metric.variant_id) return;
+      const existing = map.get(metric.variant_id);
+      if (!existing || (metric.created_at || "") > (existing.created_at || "")) {
+        map.set(metric.variant_id, metric);
+      }
+    });
+    return map;
+  }, [metrics]);
   const beliefsRef = useRef<HTMLDivElement | null>(null);
 
   const labLoopSteps = useMemo(() => {
@@ -1500,6 +1612,9 @@ export default function ExperimentsPage() {
         onRequestDelete={(id) => setDeleteTargetId(id)}
         onRequestDeleteSimulation={handleDeleteSimulationRun}
         onRequestDeleteExperiment={handleDeleteExperiment}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
+        onRequestDeleteSimulationsBulk={handleBulkDeleteSimulations}
+        onRequestDeleteExperimentsBulk={handleBulkDeleteExperiments}
       />
       <main className="main main--detail">
         <div className="detail">
@@ -2284,7 +2399,7 @@ export default function ExperimentsPage() {
           </section>
 
           <div className="detail__grid">
-            <section className="panel__card">
+            <section className="panel__card panel__card--full-row">
               <div className="panel__header">
                 <h3>Variants</h3>
                 <div className="panel__meta">
@@ -2301,7 +2416,44 @@ export default function ExperimentsPage() {
                   </button>
                 </div>
               </div>
+              <p className="panel__muted">
+                Variants are copy candidates tested against the same query battery.
+              </p>
+              <div className="variant-flow">
+                <span className="variant-flow__step is-active">1. Define</span>
+                <span className="variant-flow__step is-active">2. Create</span>
+                <span
+                  className={`variant-flow__step ${
+                    variants.length > 0 ? "is-active" : ""
+                  }`}
+                >
+                  3. Run
+                </span>
+              </div>
               <div className="panel__form">
+                <label className="panel__label">
+                  Role
+                  <select
+                    className="panel__input"
+                    value={variantForm.role}
+                    onChange={(event) => {
+                      const role = event.target.value as "candidate" | "control";
+                      setVariantForm((prev) => ({
+                        ...prev,
+                        role,
+                        label:
+                          role === "control"
+                            ? "Control (current copy)"
+                            : prev.label === "Control (current copy)"
+                              ? "Hypothesis (variant)"
+                              : prev.label,
+                      }));
+                    }}
+                  >
+                    <option value="candidate">Candidate</option>
+                    <option value="control">Control</option>
+                  </select>
+                </label>
                 <label className="panel__label">
                   Label
                   <input
@@ -2317,51 +2469,78 @@ export default function ExperimentsPage() {
                   />
                 </label>
                 <label className="panel__label">
-                  Type
-                  <input
-                    className="panel__input"
-                    value={variantForm.type}
-                    onChange={(event) =>
-                      setVariantForm((prev) => ({
-                        ...prev,
-                        type: event.target.value,
-                      }))
-                    }
-                    placeholder="copy"
-                  />
-                </label>
-                <label className="panel__label">
-                  Payload (JSON)
+                  Candidate description
                   <textarea
                     className="panel__textarea"
-                    value={variantForm.payload}
+                    value={variantForm.description}
                     onChange={(event) =>
                       setVariantForm((prev) => ({
                         ...prev,
-                        payload: event.target.value,
+                        description: event.target.value,
                       }))
                     }
-                    rows={3}
-                    placeholder='{"description":"Updated copy"}'
+                    rows={5}
+                    placeholder="Write the copy variation to test..."
                   />
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() =>
-                        setVariantForm((prev) => ({
-                          ...prev,
-                          payload: '{"description":"Outcome-led copy that emphasizes user goals and capabilities."}',
-                        }))
-                      }
-                    >
-                      Use template
-                    </button>
-                  </div>
-                  {jsonErrors.variantPayload ? (
-                    <span className="panel__error">{jsonErrors.variantPayload}</span>
-                  ) : null}
                 </label>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() =>
+                      setVariantForm((prev) => ({
+                        ...prev,
+                        description:
+                          "Outcome-led copy that emphasizes user goals and capabilities.",
+                      }))
+                    }
+                  >
+                    Use description template
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => setVariantAdvancedOpen((open) => !open)}
+                  >
+                    {variantAdvancedOpen ? "Hide advanced" : "Advanced JSON"}
+                  </button>
+                </div>
+                {variantAdvancedOpen ? (
+                  <>
+                    <label className="panel__label">
+                      Type
+                      <input
+                        className="panel__input"
+                        value={variantForm.type}
+                        onChange={(event) =>
+                          setVariantForm((prev) => ({
+                            ...prev,
+                            type: event.target.value,
+                          }))
+                        }
+                        placeholder="copy"
+                      />
+                    </label>
+                    <label className="panel__label">
+                      Payload overrides (JSON)
+                      <textarea
+                        className="panel__textarea"
+                        value={variantForm.payload}
+                        onChange={(event) =>
+                          setVariantForm((prev) => ({
+                            ...prev,
+                            payload: event.target.value,
+                          }))
+                        }
+                        rows={3}
+                        placeholder='{"metadata":{"channel":"web"}}'
+                      />
+                    </label>
+                    {jsonErrors.variantPayload ? (
+                      <span className="panel__error">{jsonErrors.variantPayload}</span>
+                    ) : null}
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className="panel__action"
@@ -2385,24 +2564,61 @@ export default function ExperimentsPage() {
                 <p className="panel__empty">Add variants to run experiments.</p>
               ) : (
                 <ul className="panel__list">
-                  {variants.map((variant) => (
-                    <li key={variant.id}>
+                {variants.map((variant) => (
+                  <li key={variant.id}>
+                    <div className="panel__meta">
+                      <span>{variant.label}</span>
+                      <span className="panel__badge panel__badge--secondary">
+                        {variant.type}
+                      </span>
+                      <span
+                        className={`panel__badge ${
+                          metricsByVariant.has(variant.id)
+                            ? "panel__badge--success"
+                            : "panel__badge--secondary"
+                        }`}
+                      >
+                        {metricsByVariant.has(variant.id) ? "Tested" : "Draft"}
+                      </span>
+                    </div>
+                    {typeof variant.payload?.description === "string" &&
+                    variant.payload.description.trim() ? (
+                      <div className="panel__muted">
+                        {variant.payload.description}
+                      </div>
+                    ) : null}
+                    {metricsByVariant.has(variant.id) ? (
                       <div className="panel__meta">
-                        <span>{variant.label}</span>
-                        <span className="panel__badge panel__badge--secondary">
-                          {variant.type}
+                        <span className="panel__muted">
+                          Win rate:{" "}
+                          {(
+                            (metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >
+                          ).win_rate ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Runs:{" "}
+                          {(
+                            (metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >
+                          ).total_runs ?? "—"}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className="panel__action"
-                        onClick={() => handleRunVariant(variant.id)}
-                        disabled={runningVariantId === variant.id}
-                      >
-                        {runningVariantId === variant.id ? "Running…" : "Run battery"}
-                      </button>
-                    </li>
-                  ))}
+                    ) : null}
+                    <button
+                      type="button"
+                      className="panel__action"
+                      onClick={() => handleRunVariant(variant.id)}
+                      disabled={runningVariantId === variant.id}
+                    >
+                        {runningVariantId === variant.id ? "Running…" : "Run variant test"}
+                    </button>
+                  </li>
+                ))}
                 </ul>
               )}
               {nextTest ? (

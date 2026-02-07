@@ -622,25 +622,30 @@ export default function ValidationPage() {
                 Unable to load provider configuration.
               </div>
             ) : (
-              <div className="panel__chips">
-                {providerStatusItems.map((item) => (
-                  <button
-                    key={item.name}
-                    type="button"
-                    className={`panel__chip panel__chip--button ${
-                      item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
-                    }`}
-                    title={item.tooltip}
-                    onClick={() => {
-                      setProvider(item.name);
-                      setManualForm((prev) => ({ ...prev, platform: item.name }));
-                    }}
-                  >
-                    {item.label}:{" "}
-                    {item.isActive ? "active" : item.configured ? "ready" : "missing"}
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="panel__chips">
+                  {providerStatusItems.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      className={`panel__chip panel__chip--button ${
+                        item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
+                      }`}
+                      title={item.tooltip}
+                      onClick={() => {
+                        setProvider(item.name);
+                        setManualForm((prev) => ({ ...prev, platform: item.name }));
+                      }}
+                    >
+                      {item.label}:{" "}
+                      {item.isActive ? "active" : item.configured ? "ready" : "missing"}
+                    </button>
+                  ))}
+                </div>
+                <p className="panel__muted">
+                  Selecting a provider here sets the default for both synthetic and observed validation panels.
+                </p>
+              </>
             )}
           </section>
           <section className="panel__card">
@@ -689,9 +694,11 @@ export default function ValidationPage() {
                 <select
                   className="panel__input"
                   value={provider}
-                  onChange={(event) =>
-                    setProvider(event.target.value as ProviderType)
-                  }
+                  onChange={(event) => {
+                    const selected = event.target.value as ProviderType;
+                    setProvider(selected);
+                    setManualForm((prev) => ({ ...prev, platform: selected }));
+                  }}
                 >
                   <option
                     value="openai"
@@ -873,13 +880,15 @@ export default function ValidationPage() {
                 </label>
                 <label className="panel__label">
                   <span>Platform</span>
-                  <select
-                    className="panel__input"
-                    value={manualForm.platform}
-                    onChange={(event) =>
-                      setManualForm((prev) => ({ ...prev, platform: event.target.value }))
-                    }
-                  >
+                <select
+                  className="panel__input"
+                  value={manualForm.platform}
+                  onChange={(event) => {
+                    const selected = event.target.value as ProviderType;
+                    setManualForm((prev) => ({ ...prev, platform: selected }));
+                    setProvider(selected);
+                  }}
+                >
                     {observedPlatformOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}

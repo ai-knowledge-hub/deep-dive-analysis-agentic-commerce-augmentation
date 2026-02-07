@@ -124,9 +124,63 @@ export default function OverviewPage() {
     }
   }, [deleteTargetId, userId]);
 
-  const winRateSeries = timeseries?.series.win_rate ?? [];
-  const avgScoreSeries = timeseries?.series.avg_score ?? [];
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
+      setDeleteTargetId(null);
+    },
+    [userId],
+  );
+
+  const handleBulkDeleteSimulations = useCallback(
+    async (runIds: string[]) => {
+      if (!runIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${runIds.length} simulation run${runIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        runIds.map((id) =>
+          deleteSimulationRun(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setSimulationRuns((current) => current.filter((run) => !runIds.includes(run.id)));
+    },
+    [clientId, userId],
+  );
+
+  const handleBulkDeleteExperiments = useCallback(
+    async (experimentIds: string[]) => {
+      if (!experimentIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${experimentIds.length} experiment${experimentIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        experimentIds.map((id) =>
+          deleteExperiment(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setExperiments((current) =>
+        current.filter((experiment) => !experimentIds.includes(experiment.id)),
+      );
+    },
+    [clientId, userId],
+  );
+
   const combinedExperimentSeries = useMemo(() => {
+    const winRateSeries = timeseries?.series.win_rate ?? [];
+    const avgScoreSeries = timeseries?.series.avg_score ?? [];
     const map = new Map<string, { date: string; win_rate?: number; avg_score?: number }>();
     winRateSeries.forEach((item) => {
       map.set(item.date, { date: item.date, win_rate: item.value });
@@ -139,7 +193,7 @@ export default function OverviewPage() {
       });
     });
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [avgScoreSeries, winRateSeries]);
+  }, [timeseries?.series.avg_score, timeseries?.series.win_rate]);
 
   const latestWinRate = summary?.kpis.experiments.latest_win_rate;
   const latestAvgScore = summary?.kpis.experiments.latest_avg_score;
@@ -228,6 +282,9 @@ export default function OverviewPage() {
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
         onRequestDeleteSimulation={handleDeleteSimulationRun}
         onRequestDeleteExperiment={handleDeleteExperiment}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
+        onRequestDeleteSimulationsBulk={handleBulkDeleteSimulations}
+        onRequestDeleteExperimentsBulk={handleBulkDeleteExperiments}
       />
       <main className="main main--detail">
         <div className="detail">

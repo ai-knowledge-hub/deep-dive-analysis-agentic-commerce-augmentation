@@ -17,6 +17,7 @@ import { IntentionalityProfileCard } from "../../components/products/Intentional
 import { GoalClarificationPanel } from "../../components/values/GoalClarificationPanel";
 import { ProductReasoning } from "../../components/products/ProductReasoning";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { buildTenantStorageKey } from "../../lib/storage";
 import {
   createBattery,
   deleteConversationSession,
@@ -41,9 +42,16 @@ export default function AlignmentPage() {
   const router = useRouter();
   const { user } = useUser();
   const userId = user?.id ?? null;
+  const { brandId, brandName, productName, clientId } = useTenant();
+  const storageClientId =
+    clientId ??
+    (typeof window !== "undefined"
+      ? window.localStorage.getItem("client_id")
+      : null) ??
+    undefined;
   const storageKey = useMemo(
-    () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
-    [userId],
+    () => buildTenantStorageKey("intentionality.alignment", userId, storageClientId),
+    [storageClientId, userId],
   );
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
@@ -54,18 +62,19 @@ export default function AlignmentPage() {
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
-  const { brandId, brandName, productName, clientId } = useTenant();
-
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = localStorage.getItem(storageKey);
+    const legacyKey = userId
+      ? `intentionality.alignment.${userId}`
+      : "intentionality.alignment.anonymous";
+    const raw = localStorage.getItem(storageKey) ?? localStorage.getItem(legacyKey);
     if (!raw) return;
     try {
       setSnapshot(JSON.parse(raw) as AlignmentSnapshot);
     } catch {
       localStorage.removeItem(storageKey);
     }
-  }, [storageKey]);
+  }, [storageKey, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -127,6 +136,60 @@ export default function AlignmentPage() {
     }
   }, [deleteTargetId, userId]);
 
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
+      setDeleteTargetId(null);
+    },
+    [userId],
+  );
+
+  const handleBulkDeleteSimulations = useCallback(
+    async (runIds: string[]) => {
+      if (!runIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${runIds.length} simulation run${runIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        runIds.map((id) =>
+          deleteSimulationRun(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setSimulationRuns((current) => current.filter((run) => !runIds.includes(run.id)));
+    },
+    [clientId, userId],
+  );
+
+  const handleBulkDeleteExperiments = useCallback(
+    async (experimentIds: string[]) => {
+      if (!experimentIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${experimentIds.length} experiment${experimentIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        experimentIds.map((id) =>
+          deleteExperiment(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setExperiments((current) =>
+        current.filter((experiment) => !experimentIds.includes(experiment.id)),
+      );
+    },
+    [clientId, userId],
+  );
+
   const handleQuickCreateBattery = useCallback(
     async (productId: string, productName?: string) => {
       if (!productId) return;
@@ -152,7 +215,10 @@ export default function AlignmentPage() {
 
   const plan = snapshot.plan;
   const products = plan?.products ?? [];
-  const research = snapshot.research_results ?? plan?.research_results ?? [];
+  const research = useMemo(
+    () => snapshot.research_results ?? plan?.research_results ?? [],
+    [plan?.research_results, snapshot.research_results],
+  );
   const normalizedBrand = useMemo(
     () => (brandName ? brandName.toLowerCase().trim() : ""),
     [brandName],
@@ -255,6 +321,9 @@ export default function AlignmentPage() {
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
         onRequestDeleteSimulation={handleDeleteSimulationRun}
         onRequestDeleteExperiment={handleDeleteExperiment}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
+        onRequestDeleteSimulationsBulk={handleBulkDeleteSimulations}
+        onRequestDeleteExperimentsBulk={handleBulkDeleteExperiments}
       />
       <main className="main main--detail">
         <div className="detail">

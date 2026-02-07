@@ -45,6 +45,7 @@ import { ProductReasoning } from "../components/products/ProductReasoning";
 import { HistoryDrawer } from "../components/layout/HistoryDrawer";
 import { useUser } from "@clerk/nextjs";
 import { useTenant } from "../components/tenant/TenantProvider";
+import { buildTenantStorageKey } from "../lib/storage";
 
 const CHAT_PROVIDER_MODELS: Record<string, string[]> = {
   openrouter: ["openai/gpt-oss-120b"],
@@ -134,8 +135,12 @@ export default function HomePage() {
       : `intentionality.last_session.anonymous${clientTag}`;
   }, [storageClientId, userId]);
   const simulationStorageKey = useMemo(
-    () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [userId],
+    () => buildTenantStorageKey("intentionality.simulation", userId, storageClientId),
+    [storageClientId, userId],
+  );
+  const simulationLatestStorageKey = useMemo(
+    () => buildTenantStorageKey("intentionality.simulation.latest", userId, storageClientId),
+    [storageClientId, userId],
   );
   const evidenceStorageKey = useMemo(() => {
     const clientTag = storageClientId ? `.${storageClientId}` : "";
@@ -144,8 +149,8 @@ export default function HomePage() {
       : `intentionality.evidence.anonymous${clientTag}`;
   }, [storageClientId, userId]);
   const alignmentStorageKey = useMemo(
-    () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
-    [userId],
+    () => buildTenantStorageKey("intentionality.alignment", userId, storageClientId),
+    [storageClientId, userId],
   );
   const chatModelOptions = useMemo(() => {
     const base = CHAT_PROVIDER_MODELS[chatProvider] ?? [];
@@ -649,11 +654,12 @@ export default function HomePage() {
       tone: simulationTone,
     };
     localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
-    localStorage.setItem("intentionality.simulation.latest", JSON.stringify(payload));
+    localStorage.setItem(simulationLatestStorageKey, JSON.stringify(payload));
   }, [
     simulationProducts,
     simulationScenario,
     simulationStorageKey,
+    simulationLatestStorageKey,
     simulationTone,
     selectedSimulationProductId,
     lastQuery,
@@ -741,7 +747,7 @@ export default function HomePage() {
           JSON.stringify(payload),
         );
         localStorage.setItem(
-          "intentionality.simulation.latest",
+          simulationLatestStorageKey,
           JSON.stringify(payload),
         );
       }
@@ -792,7 +798,14 @@ export default function HomePage() {
       }
       setSimulationTone("");
     },
-    [clientId, evidenceStorageKey, setClientId, userId],
+    [
+      clientId,
+      evidenceStorageKey,
+      setClientId,
+      simulationLatestStorageKey,
+      simulationStorageKey,
+      userId,
+    ],
   );
 
   useEffect(() => {
@@ -829,7 +842,7 @@ export default function HomePage() {
     };
     localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
     localStorage.setItem(
-      "intentionality.simulation.latest",
+      simulationLatestStorageKey,
       JSON.stringify(payload),
     );
     const target = sessionId ? `/simulation?session=${sessionId}` : "/simulation";
@@ -841,6 +854,7 @@ export default function HomePage() {
     simulationProducts,
     simulationScenario,
     simulationStorageKey,
+    simulationLatestStorageKey,
     simulationTone,
     sessionId,
   ]);
@@ -869,6 +883,67 @@ export default function HomePage() {
     }
     },
     [deleteTargetId, resetConversation, sessionId, updateSessions, userId],
+  );
+
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      updateSessions((current) =>
+        current.filter((item) => !sessionIds.includes(item.id)),
+      );
+      if (sessionId && sessionIds.includes(sessionId)) {
+        resetConversation();
+      }
+      setDeleteTargetId(null);
+    },
+    [resetConversation, sessionId, updateSessions, userId],
+  );
+
+  const handleBulkDeleteSimulations = useCallback(
+    async (runIds: string[]) => {
+      if (!runIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${runIds.length} simulation run${runIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        runIds.map((id) =>
+          deleteSimulationRun(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setSimulationRuns((current) =>
+        current.filter((run) => !runIds.includes(run.id)),
+      );
+    },
+    [clientId, userId],
+  );
+
+  const handleBulkDeleteExperiments = useCallback(
+    async (experimentIds: string[]) => {
+      if (!experimentIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${experimentIds.length} experiment${experimentIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        experimentIds.map((id) =>
+          deleteExperiment(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setExperiments((current) =>
+        current.filter((experiment) => !experimentIds.includes(experiment.id)),
+      );
+    },
+    [clientId, userId],
   );
 
 
@@ -942,6 +1017,9 @@ export default function HomePage() {
         onRequestDelete={handleDeleteSession}
         onRequestDeleteSimulation={handleDeleteSimulationRun}
         onRequestDeleteExperiment={handleDeleteExperiment}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
+        onRequestDeleteSimulationsBulk={handleBulkDeleteSimulations}
+        onRequestDeleteExperimentsBulk={handleBulkDeleteExperiments}
       />
       <main className="main">
         <div className="main__content">

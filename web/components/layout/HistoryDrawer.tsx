@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Experiment, SessionSummary, SimulationRunSummary } from "../../lib/types";
 
 type Props = {
@@ -112,14 +112,11 @@ export function HistoryDrawer({
     setIsSelecting(false);
   };
 
-  const sectionCounts = useMemo(
-    () => ({
-      sessions: selectedSessions.length,
-      simulations: selectedSimulations.length,
-      experiments: selectedExperiments.length,
-    }),
-    [selectedExperiments.length, selectedSessions.length, selectedSimulations.length],
-  );
+  const sectionCounts = {
+    sessions: selectedSessions.length,
+    simulations: selectedSimulations.length,
+    experiments: selectedExperiments.length,
+  };
 
   return (
     <div

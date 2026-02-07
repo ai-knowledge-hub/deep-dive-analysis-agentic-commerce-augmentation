@@ -112,7 +112,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [clientId, isAdminMode, userId]);
+  }, [clientId, shouldLoadCatalog, userId]);
 
   useEffect(() => {
     if (!shouldLoadCatalog || !userId || !clientId) return;
@@ -148,7 +148,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [brandId, clientId, isAdminMode, userId]);
+  }, [brandId, clientId, shouldLoadCatalog, userId]);
 
   const setClientId = useCallback((nextClientId: string) => {
     setClientIdState(nextClientId);
