@@ -142,7 +142,7 @@ Additional metadata saved by autofill flow:
 ## 6) Validation & Calibration Architecture (Current)
 
 Validation sources implemented:
-1. Manual validation logs via experiments routes.
+1. Manual observed-reality validation logs from the Validation page (persisted through experiment validation routes).
 2. External analytics event ingestion endpoint (`/analytics/events`).
 3. Validation jobs + results (Validation page, BYOK or external paste-back).
 

@@ -120,6 +120,7 @@ export default function ValidationPage() {
   const [isSubmitting, setSubmitting] = useState(false);
   const [manualExperimentId, setManualExperimentId] = useState<string>("");
   const [manualVariants, setManualVariants] = useState<ExperimentVariant[]>([]);
+  const [manualMetrics, setManualMetrics] = useState<ExperimentMetric[]>([]);
   const [manualSummary, setManualSummary] = useState<ValidationSummary | null>(null);
   const [manualBrandSummary, setManualBrandSummary] = useState<ValidationSummary | null>(
     null,
@@ -164,6 +165,7 @@ export default function ValidationPage() {
   useEffect(() => {
     if (!manualExperimentId || !userId) {
       setManualVariants([]);
+      setManualMetrics([]);
       setManualSummary(null);
       setManualBrandSummary(null);
       return;
@@ -177,6 +179,9 @@ export default function ValidationPage() {
         variantId: prev.variantId || variants[0]?.id || "",
       }));
     });
+    void listExperimentMetrics(manualExperimentId, userId).then((response) => {
+      setManualMetrics(response.metrics ?? []);
+    });
     void getExperimentValidationSummary(manualExperimentId, userId).then((response) =>
       setManualSummary(response.summary),
     );
@@ -188,6 +193,18 @@ export default function ValidationPage() {
       setManualBrandSummary(null);
     }
   }, [experiments, manualExperimentId, userId]);
+
+  const manualMetricsByVariant = useMemo(() => {
+    const map = new Map<string, ExperimentMetric>();
+    manualMetrics.forEach((metric) => {
+      if (!metric.variant_id) return;
+      const existing = map.get(metric.variant_id);
+      if (!existing || (metric.created_at || "") > (existing.created_at || "")) {
+        map.set(metric.variant_id, metric);
+      }
+    });
+    return map;
+  }, [manualMetrics]);
 
   useEffect(() => {
     void getLlmConfig(userId ?? undefined)
@@ -953,6 +970,56 @@ export default function ValidationPage() {
                 <div className="panel__notice panel__notice--error">{manualError}</div>
               ) : null}
             </div>
+          </section>
+
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Variant comparison</h3>
+            </div>
+            <p className="panel__muted">
+              Latest per-variant lab metrics for the selected experiment.
+            </p>
+            {!manualExperimentId || manualVariants.length === 0 ? (
+              <p className="panel__empty">
+                Select an experiment to compare variants.
+              </p>
+            ) : (
+              <ul className="panel__list">
+                {manualVariants.map((variant) => {
+                  const metric = manualMetricsByVariant.get(variant.id);
+                  const values = (metric?.metrics ?? {}) as Record<string, unknown>;
+                  return (
+                    <li key={variant.id}>
+                      <div className="panel__meta">
+                        <span>{variant.label}</span>
+                        <span className="panel__badge panel__badge--secondary">
+                          {variant.type}
+                        </span>
+                      </div>
+                      <div className="panel__meta">
+                        <span className="panel__muted">
+                          Win rate: {values.win_rate ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Robust win rate: {values.win_rate_robust ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Avg score: {values.avg_score ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Runs: {values.total_runs ?? "—"}
+                        </span>
+                      </div>
+                      {metric?.created_at ? (
+                        <span className="panel__muted">
+                          Last run: {new Date(metric.created_at).toLocaleDateString()}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
 
           {job?.mode === "external" && job?.external_instructions ? (

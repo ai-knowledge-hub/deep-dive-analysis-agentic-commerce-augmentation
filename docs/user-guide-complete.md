@@ -149,7 +149,7 @@ Canonical intent spec editor also supports:
 ## 8) Validation Data Sources
 
 Currently implemented:
-1. Manual validation logs in Experiments.
+1. Manual observed-reality validation logs in the Validation page.
 2. External analytics events via API ingestion.
 3. Validation Jobs (Validation page): in-app BYOK and external paste-back.
 

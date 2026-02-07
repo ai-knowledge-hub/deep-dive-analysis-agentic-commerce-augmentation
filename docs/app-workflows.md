@@ -89,7 +89,7 @@ Current safeguards:
 ## 5) Validation Workflow (Current)
 
 Validation sources implemented:
-1. Manual verification entries per experiment.
+1. Manual observed-reality verification entries in the Validation page (scoped per experiment).
 2. External analytics events via `/analytics/events`.
 3. **Validation Jobs** (new Validation page): in-app BYOK or external paste-back.
 

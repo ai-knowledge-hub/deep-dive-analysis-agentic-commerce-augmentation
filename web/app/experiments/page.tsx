@@ -50,8 +50,6 @@ import {
   listBrandBeliefs,
   getSimulationRun,
   getExperimentValidationSummary,
-  logExperimentValidation,
-  getBrandPredictionAccuracy,
   listAdminProducts,
   listSimulationRuns,
 } from "../../lib/api";
@@ -161,17 +159,6 @@ export default function ExperimentsPage() {
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
     null,
   );
-  const [validationStatus, setValidationStatus] = useState<string | null>(null);
-  const [brandAccuracy, setBrandAccuracy] = useState<ValidationSummary | null>(null);
-  const [validationForm, setValidationForm] = useState({
-    variantId: "",
-    platform: "chatgpt",
-    queryText: "",
-    observedProducts: "",
-    observedWinnerVariantId: "",
-    observedPosition: "",
-    notes: "",
-  });
   const [jsonErrors, setJsonErrors] = useState({
     hypothesis: null as string | null,
     competitorPolicy: null as string | null,
@@ -402,19 +389,9 @@ export default function ExperimentsPage() {
   }, [runs, simulationDetails, userId]);
 
   useEffect(() => {
-    if (!variants.length) return;
-    if (validationForm.variantId) return;
-    setValidationForm((prev) => ({
-      ...prev,
-      variantId: variants[0]?.id ?? "",
-    }));
-  }, [validationForm.variantId, variants]);
-
-  useEffect(() => {
     if (!brandId) {
       setBeliefCount(0);
       setLatestBelief(null);
-      setBrandAccuracy(null);
       return;
     }
     void listBrandBeliefs(brandId, userId, 25)
@@ -427,11 +404,6 @@ export default function ExperimentsPage() {
         setLatestBelief(response.belief ?? null);
       })
       .catch(() => setLatestBelief(null));
-    void getBrandPredictionAccuracy(brandId, userId)
-      .then((response) => {
-        setBrandAccuracy(response.summary ?? null);
-      })
-      .catch(() => setBrandAccuracy(null));
   }, [brandId, userId]);
 
   useEffect(() => {
@@ -1145,44 +1117,6 @@ export default function ExperimentsPage() {
     }
   }, [selectedExperimentId, userId]);
 
-  const handleLogValidation = useCallback(async () => {
-    if (!selectedExperimentId) return;
-    setValidationStatus(null);
-    setSubmitting(true);
-    try {
-      const observedProducts = validationForm.observedProducts
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const response = await logExperimentValidation(selectedExperimentId, {
-        variant_id: validationForm.variantId || undefined,
-        platform: validationForm.platform || undefined,
-        query_text: validationForm.queryText || undefined,
-        observed_products: observedProducts,
-        observed_winner_variant_id: validationForm.observedWinnerVariantId || undefined,
-        observed_position: validationForm.observedPosition
-          ? Number(validationForm.observedPosition)
-          : undefined,
-        notes: validationForm.notes || undefined,
-        user_id: userId ?? undefined,
-      });
-      setValidationSummary(response.summary);
-      setValidationStatus("Validation logged.");
-      setValidationForm((prev) => ({
-        ...prev,
-        queryText: "",
-        observedProducts: "",
-        observedWinnerVariantId: "",
-        observedPosition: "",
-        notes: "",
-      }));
-    } catch {
-      setValidationStatus("Unable to log validation.");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [selectedExperimentId, userId, validationForm]);
-
   const handleRunRecommended = useCallback(async () => {
     if (!selectedExperimentId || !nextTest?.variant_id) return;
     setRunningVariantId(nextTest.variant_id);
@@ -1323,17 +1257,6 @@ export default function ExperimentsPage() {
 
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
   const beliefsRef = useRef<HTMLDivElement | null>(null);
-  const metricsByVariant = useMemo(() => {
-    const map = new Map<string, ExperimentMetric>();
-    metrics.forEach((metric) => {
-      if (!metric.variant_id) return;
-      const existing = map.get(metric.variant_id);
-      if (!existing || (metric.created_at || "") > (existing.created_at || "")) {
-        map.set(metric.variant_id, metric);
-      }
-    });
-    return map;
-  }, [metrics]);
 
   const labLoopSteps = useMemo(() => {
     const hypothesisReady = Boolean(
@@ -1456,30 +1379,6 @@ export default function ExperimentsPage() {
       total: runs.filter((run) => Boolean(run.simulation_run_id)).length,
     };
   }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
-
-  const perVariantGaps = useMemo(() => {
-    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
-    if (!targetProductId) return new Map<string, SimulationGapReport>();
-    const result = new Map<string, SimulationGapReport>();
-    metricsByVariant.forEach((metric, variantId) => {
-      const runsForVariant = runs.filter(
-        (run) => run.variant_id === variantId && run.simulation_run_id,
-      );
-      for (const run of runsForVariant) {
-        const detail = simulationDetails[run.simulation_run_id as string];
-        if (!detail?.result?.gap_analysis) continue;
-        const gap =
-          detail.result.gap_analysis.find(
-            (item) => item.product_id === targetProductId,
-          ) ?? detail.result.gap_analysis[0];
-        if (gap) {
-          result.set(variantId, gap as SimulationGapReport);
-          break;
-        }
-      }
-    });
-    return result;
-  }, [metricsByVariant, productId, runs, selectedExperiment?.product_id, simulationDetails]);
 
   const runGapDetails = useMemo(() => {
     const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
@@ -1641,8 +1540,8 @@ export default function ExperimentsPage() {
           <div className="detail__stack">
             <section className="panel__notice panel__notice--info">
               <strong>Lab signals only:</strong> Experiment results are screening
-              signals from simulated judges. Validate winners with live tests
-              before rollout.
+              signals from simulated judges. Use them to prioritize what to test
+              next.
             </section>
             {showRestorePrompt ? (
               <section className="panel__notice panel__notice--info">
@@ -2659,64 +2558,6 @@ export default function ExperimentsPage() {
               )}
             </section>
 
-            <section className="panel__card">
-              <div className="panel__header">
-                <h3>Validation Progress</h3>
-                {validationSummary?.unlock_ready ? (
-                  <span className="panel__badge panel__badge--success">
-                    Insights unlocked
-                  </span>
-                ) : (
-                  <span className="panel__badge panel__badge--secondary">
-                    Lab-only
-                  </span>
-                )}
-              </div>
-              <div className="panel__meta panel__meta--stack">
-                <span className="panel__muted">
-                  Logged validations: {validationSummary?.total_logged ?? 0}
-                </span>
-                <span className="panel__muted">
-                  Verified runs: {validationSummary?.verified_runs ?? 0} / 10
-                </span>
-                <span className="panel__muted">
-                  Accuracy:{" "}
-                  {validationSummary
-                    ? `${Math.round(validationSummary.accuracy * 100)}%`
-                    : "—"}
-                </span>
-                <div className="progress-bar">
-                  <div
-                    className="progress-bar__fill"
-                    style={{
-                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
-                    }}
-                  />
-                </div>
-                {brandAccuracy ? (
-                  <div className="panel__meta panel__meta--stack">
-                    <span className="panel__muted">
-                      Brand accuracy: {Math.round(brandAccuracy.accuracy * 100)}%
-                    </span>
-                    <span className="panel__muted">
-                      Verified (brand): {brandAccuracy.verified_runs}
-                    </span>
-                  </div>
-                ) : null}
-                <p className="panel__muted">
-                  Log and compare synthetic vs observed validation signals in the Validation page.
-                </p>
-                <div className="panel__actions">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={() => router.push("/validation")}
-                  >
-                    Open Validation page
-                  </button>
-                </div>
-              </div>
-            </section>
           </div>
 
           {brandId ? (
@@ -2737,12 +2578,11 @@ export default function ExperimentsPage() {
                 <div className="panel__header">
                   <h3>Pattern Insights (Locked)</h3>
                   <span className="panel__badge panel__badge--secondary">
-                    Validation required
+                    Locked
                   </span>
                 </div>
                 <p className="panel__muted">
-                  Unlock after 10+ verified experiments and ≥75% prediction
-                  accuracy. Log live validation results to progress.
+                  Insights appear after enough experiment evidence accumulates.
                 </p>
                 <div className="progress-bar">
                   <div
@@ -2753,70 +2593,11 @@ export default function ExperimentsPage() {
                   />
                 </div>
                 <p className="panel__muted">
-                  Progress: {validationSummary?.verified_runs ?? 0}/10 verified
+                  Progress: {Math.round((validationSummary?.progress ?? 0) * 100)}%
                 </p>
               </section>
             )
           ) : null}
-
-          <section className="panel__card">
-            <div className="panel__header">
-              <h3>Variant Comparison</h3>
-            </div>
-            {variants.length === 0 ? (
-              <p className="panel__empty">Add variants to compare results.</p>
-            ) : (
-              <ul className="panel__list">
-                {variants.map((variant) => {
-                  const metric = metricsByVariant.get(variant.id);
-                  const values = (metric?.metrics ?? {}) as Record<string, unknown>;
-                  const gap = perVariantGaps.get(variant.id);
-                  return (
-                    <li key={variant.id}>
-                      <div className="panel__meta">
-                        <span>{variant.label}</span>
-                        <span className="panel__badge panel__badge--secondary">
-                          {variant.type}
-                        </span>
-                        {gap?.severity ? (
-                          <span
-                            className={`panel__badge panel__badge--severity-${gap.severity}`}
-                          >
-                            {gap.severity} gap
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="panel__meta">
-                        <span className="panel__muted">
-                          Win rate: {values.win_rate ?? "—"}
-                        </span>
-                        <span className="panel__muted">
-                          Robust win rate: {values.win_rate_robust ?? "—"}
-                        </span>
-                        <span className="panel__muted">
-                          Avg score: {values.avg_score ?? "—"}
-                        </span>
-                        <span className="panel__muted">
-                          Runs: {values.total_runs ?? "—"}
-                        </span>
-                      </div>
-                      {gap ? (
-                        <div className="panel__muted">
-                          Missing: {(gap.missing_signals ?? []).slice(0, 3).join(", ") || "—"}
-                        </div>
-                      ) : null}
-                      {metric?.created_at ? (
-                        <span className="panel__muted">
-                          Last run:{" "}
-                          {new Date(metric.created_at).toLocaleDateString()}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
 
           <section className="panel__card">
             <div className="panel__header">
