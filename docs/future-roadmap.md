@@ -40,7 +40,7 @@ This document complements:
 
 ## 2) Brand/Customer Feedback Loop (Deferred)
 
-**Current:** Manual validation logs + external analytics event ingestion.
+**Current:** Observed reality signal logging + external analytics event ingestion.
 
 **Planned:**
 1. **Feedback collection**

@@ -1,338 +1,215 @@
-# Brand-Side Intentionality Optimization + Validation for LLM Commerce
+# Agentic Commerce Learning Loop (Bayesian-Style)
 
-**Make products legible to reasoning agents. Validate lift with real-world feedback.**
+**Optimize product discoverability for LLM shopping flows with a closed learning loop: simulate -> validate -> update beliefs -> distill memory -> optimize again.**
 
 ---
 
-## What This Is
+## What This Repository Is
 
-This repository implements a **brand-side intentionality optimization + validation layer** that turns product data into intent-legible structures and helps teams validate whether lab improvements hold in real traffic.
+This project is a multi-tenant agentic commerce system for:
+- intent-aware product discoverability optimization,
+- experiment/simulation-based screening,
+- real-world validation capture,
+- Bayesian-style belief updates,
+- memory distillation and reuse.
 
-We provide **the discovery layer that transaction protocols don't define**, working at the source data brands control:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              AI Agents (Gemini, ChatGPT, Claude)            │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│      THIS REPO: Brand-Side Optimization + Verification      │
-│                                                             │
-│   "What is the user trying to achieve?"                     │
-│   "Which products enable that goal?"                        │
-│   "Why does this product align with intent?"                │
-│   "Did optimization improve discoverability?"               │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│         Commerce Protocols (UCP, ACP, etc.)                 │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**We are protocol-agnostic.** The discovery layer works with UCP, ACP, or any future commerce protocol.
+The core moat is not a single score. It is the **feedback loop** that continuously updates decisions using observed evidence.
 
 ---
 
 ## Product Positioning
 
-This app is a **screening + validation** system:
-- Lab metrics are directional signals for LLM-friendliness.
-- Manual validation logs and external analytics events provide reality checks.
-- Pattern insights are soft-gated by validation progress.
+This app is a **screening + validation + learning** platform.
 
-We do **not** position lab scores as guaranteed production ranking outcomes.
+- **Screening:** synthetic LLM judge signals (fast iteration).
+- **Validation:** observed reality signals (manual/external evidence).
+- **Learning:** belief revision + memory distillation + calibration profiles.
 
-**Alignment (current model, explainable):**
-- Signal‑overlap scoring across **intent signals**, **evidence signals**, and **our copy**.
-- **Hard category gate**: if the query specifies a category (e.g., *shoes*) and the product copy doesn’t mention that category (or synonyms), the score is forced to **0** to prevent false positives.
-- This baseline is transparent and auditable; semantic/Bayesian weighting is on the roadmap.
-
-| Capability | What It Does | Implementation |
-|-----------|--------------|----------------|
-| **Intent Inference** | Model user goals from query + context | `domain/intent/` + `application/services/*` |
-| **Intentionality Profiling** | Transform specs → capabilities → outcomes | `domain/intentionality/` + `application/services/intentionality_profiler.py` |
-| **Alignment Scoring** | Score products against inferred intent | `domain/alignment/` + `infrastructure/alignment/goal_alignment_gateway.py` |
-| **Evidence Discovery** | Analyze open-web representations for intent legibility | `domain/evidence/` + `application/services/evidence_service.py` |
-| **Signal Extraction (Skills)** | Convert intent → phrase-level signals via editable skill prompts | `application/services/signal_extractor.py` + `infrastructure/db/skills.py` |
-| **Verification (Lift)** | Show before/after *simulated* discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
-| **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
-| **Validation Logging** | Track lab predictions vs. observed outcomes | `api/routes/experiments.py` + `application/services/experiment_validation_service.py` |
-| **Validation Jobs (BYOK)** | Run in-app or external validation with structured results | `api/routes/validation.py` + `application/services/validation_service.py` |
-| **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
-| **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
-| **Canonical Intent Spec** | Controlled onboarding fields for bottom-up query generation | `web/app/admin/page.tsx` + `products.metadata.canonical_intent_spec` |
-| **Query Quality Gating** | Accept/reject generated queries with reject reasons | `application/services/query_battery_builder.py` |
-| **Canonical Autofill** | UCP/ACP/feed to canonical spec (preview/apply) | `application/services/canonical_intent_spec_service.py` + `api/routes/admin.py` |
-| **Learning Loop Control** | Belief revisions, policy decisions, calibration profiles, loop metrics | `api/routes/beliefs.py` + `api/routes/loop.py` + `api/routes/calibration.py` |
+It does **not** claim guaranteed production ranking outcomes from lab scores alone.
 
 ---
 
-## Repository Structure
+## Core Learning Loop
 
-```
-├── domain/                   # Pure types + pure logic (no IO)
-├── application/              # Use-cases / orchestration services
-├── infrastructure/           # DB/LLM/adapters (IO boundaries)
-│   ├── llm/                  # Gemini/OpenRouter clients + gateway
-├── shared/                   # Cross-cutting infrastructure
-│   ├── llm/                  # Prompt templates
-│   ├── db/                  # SQLite schema + connection
-│   └── config/             # Environment configuration
-│
-├── api/                      # FastAPI routes
-├── web/                      # Next.js chat + discovery dashboard
-├── data/                     # Product data mocks, intent taxonomy
-├── docs/                     # Architecture & design documentation
-├── scripts/                  # Local dev utilities (seed, exports, etc.)
-└── tests/                    # Module + integration tests
-```
+1. Run simulation/experiments to generate candidate improvements.
+2. Validate with synthetic and/or observed signals.
+3. Update scoped beliefs (`client_id`, `brand_id`, `product_id`) via Bayesian-style weighting.
+4. Distill high-quality memory artifacts.
+5. Use those artifacts in future query generation and copy optimization.
+6. Recalibrate policy weights from drift between synthetic vs observed outcomes.
 
-**Key principle:** `domain/` + `application/` define the system’s behavior; `infrastructure/` can be swapped without changing what the system optimizes for.
+Loop APIs:
+- `GET /loop/state`
+- `POST /loop/step`
+- `POST /beliefs/update`
+- `GET /calibration/profile`
+- `GET /memory/artifacts`
+- `POST /memory/distill`
 
-**Primary users:** Brand marketing managers, ecommerce growth teams, and agencies optimizing product visibility in AI discovery. Secondary users include commerce developers integrating intent alignment into their stacks.
+Operational endpoints:
+- `POST /admin/ops/loop-maintenance`
+- `GET /admin/ops/loop-maintenance/history`
+
+---
+
+## Architecture (Current)
+
+- `domain/` -> pure business logic/types.
+- `application/services/` -> orchestrators grouped by capability:
+  - `application/services/admin/`
+  - `application/services/conversation/`
+  - `application/services/evidence/`
+  - `application/services/experiment/`
+  - `application/services/loop/`
+  - `application/services/query_battery/`
+  - `application/services/simulation/`
+  - `application/services/validation_service.py`
+- `infrastructure/` -> DB + LLM adapters + protocol adapters.
+- `api/` -> FastAPI routes (composition root at `api/composition.py`).
+- `web/` -> Next.js app.
+- `shared/` -> schema, config, common utilities.
+
+Layer rule enforced by architecture checks:
+- Application layer must not import infrastructure directly.
+
+---
+
+## Key Capabilities
+
+- Intent inference + alignment scoring.
+- Evidence analysis and protocol readiness (UCP/ACP).
+- Simulation sandbox (`run -> optimize -> retest`).
+- Query battery generation (top-down / bottom-up / hybrid).
+- Canonical intent spec and controlled onboarding.
+- Experiment orchestration with variants/runs/metrics.
+- Validation system with two signals:
+  - Synthetic validation (LLM judge signal).
+  - Observed reality validation (manual/external outcomes).
+- Belief revisions, decision events, calibration profiles.
+- Memory artifacts with quality/support gating and provenance tracking.
+
+---
+
+## Validation Model
+
+Validation now lives in the dedicated Validation flow/page and splits into:
+
+1. **Synthetic validation signal**
+- Uses configured provider/model (BYOK).
+- Fast consistency and copy-vs-copy checks.
+
+2. **Observed reality signal**
+- Manual/external capture of what actually surfaced.
+- Tracks validation progress and agreement with lab winners.
+
+This separation keeps experiment UX focused on design/run/analyze while validation remains centralized.
 
 ---
 
 ## Quick Start
 
-### Backend (FastAPI)
+### Backend
 
 ```bash
-# 1. Set up environment
 cp .env.example .env.local
-# Edit .env.local: set OPENROUTER_API_KEY for local dev
-# Optional: ADMIN_USER_IDS=user_123,user_456 (bypass client_id requirement)
-# Optional: CLERK_WEBHOOK_SECRET=whsec_... (for Clerk user sync)
-
-# 2. Install dependencies
 uv sync
-
-# 3. Run (use uv to ensure the venv is active)
-uv run uvicorn api.main:app --reload
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
-### Frontend (Next.js)
+### Frontend
 
 ```bash
 cd web
 cp ../.env.example .env.local
-# Edit web/.env.local: set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY
-# Optional: NEXT_PUBLIC_API_URL=http://localhost:8000
-# Required: NEXT_PUBLIC_CLIENT_ID=default (or your tenant id)
-# Optional: NEXT_PUBLIC_ADMIN_MODE=true (shows manual client/brand/product pickers)
-pnpm install && pnpm dev
+pnpm install
+pnpm dev
 ```
 
-Visit `http://localhost:3000` for the chat interface.
+Open:
+- App: `http://localhost:3000`
+- Validation: `http://localhost:3000/validation`
 
-### Multi-tenant scoping
+---
 
-All API calls require `client_id` unless the caller is an admin user (see `ADMIN_USER_IDS`).
-`brand_id` and `product_id` are optional on simulation endpoints for tying runs to a product record.
-The UI exposes a manual admin context picker when `NEXT_PUBLIC_ADMIN_MODE=true` so you can
-switch client/brand/product without automated onboarding.
+## Local DB Setup (Recommended)
 
-### Model gateway (BYOK)
+Use one DB file for migrations + seeds + backend runtime.
 
-Use **Admin → Operational controls → Model gateway** to set provider keys and active models:
-- **Chat/generation key + model** drive all in-app LLM calls.
-- **Validation key + model** are used only for validation jobs (fallbacks to chat key if empty).
-- Activating a provider updates `.env.local` and refreshes the backend runtime.
+```bash
+rm -f ./tmp/local.db
+DATABASE_PATH=./tmp/local.db make db-init
+DATABASE_PATH=./tmp/local.db make seed-demo
+DATABASE_PATH=./tmp/local.db make seed-canonical
+DATABASE_PATH=./tmp/local.db make seed-demo-acme
+DATABASE_PATH=./tmp/local.db make db-validate-migrate
+DATABASE_PATH=./tmp/local.db make db-migrate
+DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
+```
 
-Default model shortcuts (override in Admin if needed):
+Useful helpers:
+
+```bash
+make db-path
+make db-reset
+make loop-maintenance
+```
+
+---
+
+## Model Gateway (BYOK)
+
+Admin -> Operational controls -> Model gateway:
+- Set per-provider keys and models.
+- Separate chat/generation and validation model settings.
+- Activate provider centrally.
+
+Default model presets:
 - OpenRouter: `openai/gpt-oss-120b`
 - OpenAI: `gpt-5.2-2025-12-11`
 - Claude (Anthropic): `claude-sonnet-4-5-20250929`
 - Gemini: `gemini-3-flash-preview`
 
-### Skill prompts (admin-editable)
+Health endpoint:
+- `GET /health/llm`
 
-Signal extraction and copy generation run from **skills stored in the DB**.  
-You can edit them in **Admin → Agent skills**. Each update writes an **audit trail** into
-`skills_history` for traceability and safe iteration.
+---
 
-### Clerk user sync (webhook)
+## Operations and Scheduling
 
-Set a Clerk webhook pointing to `POST /webhooks/clerk` with signing enabled, then store
-`CLERK_WEBHOOK_SECRET` in `.env.local`. We upsert the local `users` table with email/name
-metadata on `user.created` / `user.updated`, and mark as deleted on `user.deleted`.
+Loop maintenance can run:
+- manually from Admin (`Run loop maintenance`),
+- via CLI (`make loop-maintenance`),
+- on schedule (template workflow):
+  - `.github/workflows/loop-maintenance-template.yml`
 
-### Verify
+---
+
+## Testing and Quality Gates
 
 ```bash
-# Test product search
-curl "http://localhost:8000/products/search?query=workspace&client_id=default"
-
-# Evidence-first demo flow
-curl -X POST "http://localhost:8000/evidence/analyze" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "TV for a bright living room", "client_id": "default"}'
-
-# Simulation sandbox
-curl -X POST "http://localhost:8000/simulation/run" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "running vest", "client_id": "default", "products": [{"id":"sim-1","name":"Trail Runner Vest","description":"Lightweight vest for long runs with breathable mesh.","source":"web"}]}'
-
-# List lessons learned (optional)
-curl "http://localhost:8000/simulation/lessons?client_id=default"
-
-# Battery eval loop summary
-curl "http://localhost:8000/batteries/<battery_id>/eval-summary?client_id=default"
-
-# Run test suite
-make test
-# Lint backend + frontend
 make lint
+make arch-check
+make test
 make web-lint
 ```
 
-### LLM Provider Health
-
-Check which providers are configured:
-
-```
-curl "http://localhost:8000/health/llm"
-```
-
-### Validation Page
-
-Open `http://localhost:3000/validation` to run in-app BYOK validations or submit
-external paste-back JSON. Provider readiness is shown at the top of the page.
+Architecture checks are part of CI and enforce layer boundaries.
 
 ---
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [docs/user-guide-complete.md](docs/user-guide-complete.md) | User manual (current features) |
-| [docs/app-architecture.md](docs/app-architecture.md) | Comprehensive architecture (current + planned) |
-| [docs/app-workflows.md](docs/app-workflows.md) | All workflows and how they connect |
-| [docs/terminology.md](docs/terminology.md) | Glossary + quick reference |
-| [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features (planned) |
-| [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
-| [docs/validation-mcp.md](docs/validation-mcp.md) | Validation MCP tool schema (draft) |
-
----
-
-## Architectural Invariants
-
-These rules keep the system grounded in intent legibility:
-
-1. **Intent inference drives proxy ranking**
-2. **Products are represented as capabilities, not specs**
-3. **Alignment scores are explainable**
-4. **Memory improves inference (not surveillance)**
-5. **Adapters stay protocol-agnostic**
-
----
-
-## Key Concepts
-
-| Term | Definition |
-|------|------------|
-| **Intentionality Profile** | Product representation in terms of capabilities and outcomes |
-| **Intent Inference** | Modeling user goals from query + context |
-| **Alignment Score** | Match confidence between intent and product |
-| **Discoverability Lift** | Improvement in simulated “LLM‑friendliness” metrics |
-
-See [docs/terminology.md](docs/terminology.md) for complete definitions.
-
----
-
-## Environment Configuration
-
-| Environment | LLM Provider | Use Case |
-|-------------|--------------|----------|
-| **Local** | `openrouter` | Development without API costs |
-| **Dev** | `gemini` | Preview deployments |
-| **Prod** | `gemini` | Production with full telemetry |
-
-Evidence data is generated from the latest chat session and stored per client.
-(default). Override with `EVIDENCE_DEMO_PATH` if you want a different dataset.
-
-Protocol readiness (UCP/ACP) is computed from brand profiles + feed metadata and shown in the
-Simulation Sandbox “Why you lost” section and history list. Seeded demo brands include
-mock UCP business profiles and ACP feed fields to make readiness scores visible.
-
-Copy `.env.example` to `.env.local` for backend settings, and add Clerk keys to
-`web/.env.local` for the frontend.
-
----
-
-## Testing
-
-```bash
-make test          # Run full test suite
-make lint          # Check code style
-```
-
-The test suite covers module-level unit tests, MCP tool execution, conversation API routes, and clarification workflow integration.
-
-## Database Initialization
-
-SQLite is initialized automatically when `SessionManager` or any memory repository is used. The schema is loaded from `shared/db/schema.sql`.
-
-Manual helpers:
-
-```bash
-make db-init   # create/open DB and apply schema
-make db-migrate # alias of db-init (re-apply schema bootstrap)
-make db-validate-migrate # apply validation job/result migrations
-make loop-maintenance # refresh calibration + distill high-confidence beliefs
-make db-reset  # delete local DB and re-init
-make db-path   # print current DB path
-make seed-demo # seed demo multi-tenant clients/brands/products
-```
-
-### Local dev DB (seeded demo tenants)
-
-If you want the UI client dropdown to show the seeded demo tenants (Nike/Adidas/Under Armour/New Balance/Reebok), make sure you **seed and run against the same SQLite file**.
-
-Example using the local dev DB (`./tmp/local.db`):
-
-```bash
-rm -f ./tmp/local.db
-DATABASE_PATH=./tmp/local.db ./.venv/bin/python -m shared.db.connection
-DATABASE_PATH=./tmp/local.db make seed-demo
-DATABASE_PATH=./tmp/local.db make seed-canonical
-DATABASE_PATH=./tmp/local.db make seed-demo-acme
-DATABASE_PATH=./tmp/local.db make db-validate-migrate
-DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
-
-```
-
-`seed-canonical` populates `canonical_intent_spec` for existing products so bottom-up
-query generation can run without clarification blocks.
-
-After pulling schema changes, always re-run:
-
-```bash
-DATABASE_PATH=./tmp/local.db make db-migrate
-```
-
-This applies new learning-loop tables (belief/memory/calibration/maintenance history) to existing local DBs.
-
-Quick verify:
-
-```bash
-sqlite3 ./tmp/local.db "select id,name from clients order by name;"
-```
-
----
-
-## Contributing
-
-This is an open-source project exploring LLM commerce discovery. Contributions welcome.
+- `docs/app-architecture.md`
+- `docs/app-workflows.md`
+- `docs/architecture-learning-loop.md`
+- `docs/implementation-learning-loop-checklist.md`
+- `docs/user-guide-complete.md`
+- `docs/deployment.md`
+- `docs/debug/incidents-fixed.md`
+- `docs/debug/open-risks.md`
 
 ---
 
 ## License
 
 Apache 2.0
-
----
-
-> *Discovery without intent legibility is noise. This repo makes it signal.*

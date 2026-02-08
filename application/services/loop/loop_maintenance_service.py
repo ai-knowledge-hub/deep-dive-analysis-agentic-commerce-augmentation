@@ -48,7 +48,9 @@ class LoopMaintenanceService:
             result = self._deps.validation_results.get_latest_for_job(job_id=job["id"])
             if not result:
                 continue
-            provider = str(result.get("provider") or job.get("provider") or "").strip().lower()
+            provider = (
+                str(result.get("provider") or job.get("provider") or "").strip().lower()
+            )
             if not provider:
                 continue
             mode = str(job.get("mode") or "").strip().lower()

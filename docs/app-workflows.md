@@ -1,30 +1,38 @@
 # App Workflows (Current + Planned)
 
-This is the operational workflow map for the current codebase.
-Anything not implemented is explicitly labeled **Planned (not built)**.
+This document maps implemented workflows and highlights planned gaps.
 
 ---
 
-## 1) Workflow Graph
+## 1) End-to-End Workflow Graph
 
 ```
 Chat
-  → Alignment
-    → Evidence
-      → Simulation (optimize + retest + lessons)
-  → Experiments
-      → Query Battery Builder
-      → Variants
-      → Run + Metrics
-      → Validation Logging
-      → Prediction Accuracy + Unlock status
+  -> Alignment
+    -> Evidence
+      -> Simulation (run -> optimize -> retest)
+  -> Experiments
+      -> Query Battery Builder
+      -> Variants
+      -> Run + Metrics
+
+Validation (centralized)
+  -> Synthetic validation signal
+  -> Observed reality signal
+  -> Agreement + accuracy tracking
+
+Learning Loop
+  -> Belief revisions
+  -> Policy decisions
+  -> Memory distillation/retrieval
+  -> Calibration refresh
 
 Admin Onboarding
-  → Client
-  → Brand
-  → Product
-  → Canonical Intent Spec
-  → Review
+  -> Client
+  -> Brand
+  -> Product
+  -> Canonical Intent Spec
+  -> Review
 ```
 
 ---
@@ -32,157 +40,135 @@ Admin Onboarding
 ## 2) Manual Workflow (Chat-first)
 
 1. User starts in Chat.
-2. System infers intent + clarifies goal.
-3. Alignment ranks candidate products.
-4. Evidence explains wins/gaps.
-5. Simulation runs scenario and can optimize copy.
-6. Retest confirms lab delta; lesson is stored.
+2. Intent and goals are inferred/clarified.
+3. Alignment evaluates product fit.
+4. Evidence explains wins and gaps.
+5. Simulation runs the scenario.
+6. Optimization rewrites copy candidate.
+7. Retest compares lift and stores lesson context.
 
-Current outputs:
-- intent/goals
-- alignment breakdown
-- evidence signals
-- simulation scores + protocol readiness
-- lesson snapshots
-
----
-
-## 3) Experiment Workflow (Lab Mode)
-
-1. Create/select a query battery.
-2. Generate queries (top-down, bottom-up, or hybrid; optional LLM-assisted).
-3. Review generated queries and rejection reasons.
-4. Create experiment and add variants.
-5. Run experiment.
-6. Read metrics (win rate, robust win rate, evidence strength/consensus when available).
-7. Log validations and monitor prediction accuracy.
-
-Current safeguards:
-- Query filtering before persistence.
-- Soft-gated pattern insights until validation thresholds are met.
-- Lab result messaging that requires real-world validation.
+Outputs currently available:
+- intent/goals and rationale
+- alignment scoring output
+- evidence signal analysis
+- simulation result + protocol readiness
+- optimized candidate copy and retest lift summary
 
 ---
 
-## 4) Query Battery Builder Workflow (Current)
+## 3) Experiment Workflow (Lab)
+
+1. Create/select query battery.
+2. Generate queries (`top_down`, `bottom_up`, `hybrid`).
+3. Review accepted/rejected generation output.
+4. Create experiment and variants.
+5. Run experiment battery.
+6. Review metrics and winners.
+7. Send winner candidates to Validation flow.
+
+Current guardrails:
+- query quality gating before persistence
+- bottom-up category confidence gate
+- lab-only messaging separated from observed validation
+
+---
+
+## 4) Query Battery Workflow (Current)
 
 ### Inputs
-- Battery metadata
-- Seed queries (optional)
-- Seed features/use-cases (optional; useful for bottom-up)
-- Product metadata + canonical intent spec
-- LLM-assist toggle
+- battery metadata
+- optional seed queries/features/use-cases
+- canonical intent spec + product metadata
+- optional LLM assist
 
-### Processing
-1. Build capsule context.
-2. Generate deterministic base queries by selected mode.
-3. Optionally add LLM-generated queries.
-4. Deduplicate + validate.
-5. Retry once with stricter banned terms if acceptance is low.
+### Execution
+1. Build context capsule.
+2. Generate deterministic baseline by mode.
+3. Add optional LLM candidates.
+4. Deduplicate and validate.
+5. Retry once with stricter constraints if acceptance is low.
 
-### Review surface
-- Accepted queries are saved to battery.
-- Rejected queries are surfaced with reasons (for manual correction/approval flow).
+### Outputs
+- accepted queries saved
+- rejected queries + reasons surfaced
+- eval counters logged (`query_generation_eval`)
 
----
-
-## 5) Validation Workflow (Current)
-
-Validation sources implemented:
-1. Manual observed-reality verification entries in the Validation page (scoped per experiment).
-2. External analytics events via `/analytics/events`.
-3. **Validation Jobs** (new Validation page): in-app BYOK or external paste-back.
-
-Validation flow (current):
-1. Pick entity (experiment, simulation, or battery).
-2. Choose provider (OpenAI, Gemini, Claude) and mode (in-app/external).
-3. Create job → run (in-app) or paste structured JSON (external).
-4. Results stored with raw output + structured result.
-
-Metrics computed:
-- verified runs
-- prediction accuracy
-- unlock status for insights
-
-Soft-gate rule:
-- unlock only when `>=10` verified and `>=75%` accuracy.
+### Important bottom-up behavior
+- If category confidence is low, generation is blocked with a clarification prompt.
+- User must set canonical category in Admin (Canonical Intent Spec) for that product.
 
 ---
 
-## 6) Admin Onboarding Workflow (Current)
+## 5) Validation Workflow (Centralized)
 
-The Admin page is now step-ordered and collapsible:
+Validation is intentionally decoupled from Experiment page and lives in Validation page:
 
-1. **Client profile**: select/create client, add client users.
-2. **Brand setup**: select/create brand under active client.
-3. **Product catalog**: select/create product; edit platform profile section.
-4. **Canonical intent spec**: controlled ontology-driven fields.
-   - Supports **Preview UCP/ACP autofill** and **Apply autofill** (confirm/edit mode).
-   - Stores raw + normalized + mapping metadata for traceability.
-5. **Review**: completion status of onboarding requirements.
+### A) Synthetic validation signal
+- LLM judge mode (BYOK provider/model)
+- fast screening and copy-vs-copy consistency checks
 
-Operational controls (agent skills) are separated from onboarding fields.
+### B) Observed reality signal
+- manual/external logging of what actually surfaced
+- used for true agreement and calibration
 
----
-
-## 7) Self-Learning Workflow (Current vs Planned)
-
-### Current
-- Simulation lessons are stored and retrievable.
-- Brand beliefs are generated from experiment outcomes.
-- Query generation can reuse high-confidence beliefs and archetypes.
-
-### Planned (not built)
-- Cross-run distillation into reusable heuristics by vertical/domain.
-- Confidence scoring for simulation lessons before memory reuse.
-- Automatic weekly ontology/synonym updates from failures.
+### Current data flow
+1. Choose entity (experiment/simulation/battery).
+2. Choose provider + mode.
+3. Run job (in-app) or submit structured external result.
+4. Persist validation job/result.
+5. Update validation summaries and accuracy.
 
 ---
 
-## 8) Deployment Workflow
+## 6) Learning Loop Workflow (Current)
 
-Current supported path:
-- Backend: Python runtime (FastAPI)
-- Frontend: Vercel (Next.js)
+Loop control endpoints:
+- `POST /beliefs/update`
+- `POST /loop/step`
+- `GET /loop/state`
+- `GET /loop/metrics`
+- `GET /memory/artifacts`
+- `POST /memory/distill`
+- `GET /calibration/profile`
 
-Planned (not built):
-- Full backend on Vercel Python runtime with production-grade external DB and serverless adaptations.
+Maintenance endpoints:
+- `POST /admin/ops/loop-maintenance`
+- `GET /admin/ops/loop-maintenance/history`
+
+Current loop behavior:
+1. Validation and run evidence contribute to belief revisions.
+2. Policy service logs auditable decision events.
+3. Memory service distills high-confidence/high-support artifacts.
+4. Retrieval injects only quality-gated artifacts into generation.
+5. Calibration profiles update from synthetic-vs-observed drift.
 
 ---
 
-## 9) Eval Loop Workflow (Current)
+## 7) Admin Onboarding Workflow (Current)
 
-1. Generate battery queries.
-2. System logs acceptance/rejection/regeneration instrumentation.
-3. Review battery-level dashboard via eval summary endpoint.
-4. Review weekly ontology update suggestions from rejected samples.
+Admin onboarding sections:
+1. Client profile
+2. Brand setup
+3. Product catalog
+4. Canonical intent spec
+5. Review
+
+Canonical spec supports:
+- controlled ontology fields
+- preview/apply autofill from UCP/ACP/feed
+- raw + normalized + mapping traceability metadata
+
+Operational controls:
+- model gateway (BYOK chat/validation models)
+- agent skills
+- loop maintenance trigger and run history
 
 ---
 
-## 10) Learning Loop Control Workflow (Current)
+## 8) Planned (Not Built Yet)
 
-Endpoints now wired for the backend learning loop:
-
-1. `POST /beliefs/update`
-- Writes auditable belief revisions from evidence packets.
-
-2. `POST /loop/step`
-- Applies calibration-aware policy scoring and records a decision event.
-
-3. `GET /loop/state`
-- Returns latest world state + latest belief revision + latest decision for scope.
-
-4. `GET /loop/metrics`
-- Returns loop health counters:
-  - update frequency
-  - drift trend
-  - action distribution
-  - acceptance/regeneration rates from query generation eval events
-  - observed-vs-synthetic agreement from validation results
-
-5. `POST /ops/loop-maintenance` (admin)
-- Runs calibration refresh and memory distillation.
-- Persists maintenance run history.
-
-6. `GET /ops/loop-maintenance/history` (admin)
-- Returns historical maintenance runs per client.
+- richer normalization/ontology confidence pipeline
+- stronger category classifier
+- native GA4 connector (current analytics ingestion is generic)
+- deeper automatic promotion logic for simulation lessons
+- full backend serverless hardening for Vercel Python runtime

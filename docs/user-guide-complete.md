@@ -73,7 +73,7 @@ Sidebar workflow order:
 - Robust metrics and consensus fields appear when configured.
 
 ### Step 7 — Validate
-- Log observed results (manual validation form).
+- Log observed results (observed reality signal form).
 - Track prediction accuracy.
 - Pattern insights unlock when thresholds are met.
 
@@ -146,18 +146,22 @@ Canonical intent spec editor also supports:
 
 ---
 
-## 8) Validation Data Sources
+## 8) Validation Signals (Current)
 
 Currently implemented:
-1. Manual observed-reality validation logs in the Validation page.
-2. External analytics events via API ingestion.
-3. Validation Jobs (Validation page): in-app BYOK and external paste-back.
+1. **Synthetic validation signal** via Validation Jobs (in-app BYOK or external paste-back).
+2. **Observed reality signal** via manual observed validation logging.
+3. External analytics events via API ingestion.
 
 Validation page (current):
 - Select entity (experiment, simulation, or battery).
 - Choose provider (OpenAI, Gemini, Claude, OpenRouter) and mode (in-app/external).
 - In-app runs immediately via BYOK; external requires structured JSON paste-back.
 - Results stored with raw output + structured result.
+
+Interpretation rule:
+- Synthetic validation signal is a fast screening signal.
+- Observed reality signal is the grounding signal for real performance decisions.
 
 **Planned (not built):**
 - native GA4 connector with direct mapping flow.
