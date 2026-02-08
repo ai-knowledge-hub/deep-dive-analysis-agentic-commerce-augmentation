@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from application.services.signal_extractor import (
+from application.services.evidence.signal_extractor import (
     DEFAULT_SKILL_CONTENT as DEFAULT_SIGNAL_SKILL,
     SKILL_DESCRIPTION as SIGNAL_DESCRIPTION,
     SKILL_ID as SIGNAL_ID,

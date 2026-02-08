@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Callable, Dict, List
 
 from domain.evidence.types import EvidenceProduct
-from application.services.intentionality_profiler import build_profile
+from application.services.evidence.intentionality_profiler import build_profile
 
-from application.services.evidence_normalizer import to_product
+from application.services.evidence.normalizer import to_product
 
 
 def optimize(

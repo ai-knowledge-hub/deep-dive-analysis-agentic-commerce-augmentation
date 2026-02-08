@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
-from application.services.belief_update_service import BeliefUpdateService
-from application.services.brand_belief_service import BrandBeliefService
+from application.services.loop.belief_update_service import BeliefUpdateService
+from application.services.experiment.brand_belief_service import BrandBeliefService
 
 
 router = APIRouter(prefix="/beliefs", tags=["beliefs"])

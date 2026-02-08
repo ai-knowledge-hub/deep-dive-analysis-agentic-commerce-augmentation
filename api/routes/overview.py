@@ -8,7 +8,7 @@ from api.utils.tenancy import require_client_id
 from infrastructure.db.connection import get_connection
 from infrastructure.db.json import from_json
 from infrastructure.db.query_batteries import list_batteries
-from application.services.query_battery_service import QueryBatteryService
+from application.services.query_battery.service import QueryBatteryService
 from infrastructure.db import query_batteries as query_batteries_repo
 from infrastructure.db.experiment_validations import accuracy_summary
 from infrastructure.db.simulation_runs import list_lessons

@@ -7,9 +7,9 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
-from application.services.belief_update_service import BeliefUpdateService
-from application.services.policy_service import PolicyService
-from application.services.state_service import StateService
+from application.services.loop.belief_update_service import BeliefUpdateService
+from application.services.loop.policy_service import PolicyService
+from application.services.loop.state_service import StateService
 from shared.llm.prompts import build_validation_prompt, VALIDATION_OUTPUT_SCHEMA
 from shared.config.env import get_settings
 from shared.llm.clients.openai import OpenAIConfig, OpenAILLMClient

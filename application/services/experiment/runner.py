@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from application.ports.deps import AppDeps
-from application.services.simulation_service import SimulationService
-from application.services.brand_belief_service import BrandBeliefService
-from application.services.belief_update_agent import BeliefUpdateAgent
-from application.services.pairwise_judge import judge_pairwise
+from application.services.simulation.service import SimulationService
+from application.services.experiment.brand_belief_service import BrandBeliefService
+from application.services.experiment.belief_update_agent import BeliefUpdateAgent
+from application.services.experiment.pairwise_judge import judge_pairwise
 from domain.simulation.ranking import score_for_product
 from domain.simulation.types import SimulationProduct
 from shared.config.env import settings

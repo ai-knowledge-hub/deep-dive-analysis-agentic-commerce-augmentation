@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
-from application.services.experiment_validation_service import (
+from application.services.experiment.validation_service import (
     ExperimentValidationService,
 )
 

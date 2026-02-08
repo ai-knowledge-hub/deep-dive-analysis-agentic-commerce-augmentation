@@ -9,13 +9,13 @@ from domain.simulation import ranking as domain_ranking
 from shared.agents.replay_logger import ReplayLogger, ReplayRecord, ToolCall
 from domain.evidence.types import EvidenceProduct
 from application.ports.deps import AppDeps
-from application.services.alignment_service import AlignmentService
-from application.services.evidence_retriever import retrieve as retrieve_evidence
-from application.services.evidence_normalizer import to_product
-from application.services.evidence_optimizer import optimize
-from application.services.evidence_verify import average_alignment, simulate_actual
-from application.services.intentionality_profiler import build_profile
-from application.services.signal_extractor import SignalExtractor
+from application.services.evidence.alignment_service import AlignmentService
+from application.services.evidence.retriever import retrieve as retrieve_evidence
+from application.services.evidence.normalizer import to_product
+from application.services.evidence.optimizer import optimize
+from application.services.evidence.verify import average_alignment, simulate_actual
+from application.services.evidence.intentionality_profiler import build_profile
+from application.services.evidence.signal_extractor import SignalExtractor
 
 
 class EvidenceService:

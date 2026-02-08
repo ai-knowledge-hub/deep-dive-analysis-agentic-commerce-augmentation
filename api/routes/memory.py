@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
-from application.services.memory_service import MemoryService
+from application.services.loop.memory_service import MemoryService
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 

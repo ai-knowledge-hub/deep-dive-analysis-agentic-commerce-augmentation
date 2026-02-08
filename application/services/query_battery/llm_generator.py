@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from application.services.query_battery_types import GeneratedQuery
+from application.services.query_battery.types import GeneratedQuery
 
 
 @dataclass(frozen=True)

@@ -12,11 +12,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from application.ports.deps import AppDeps
-from application.services.experiment_ml import (
+from application.services.experiment.ml import (
     ExperimentMLEngine,
     HypothesisRecommendation,
 )
-from application.services.experiment_statistics import (
+from application.services.experiment.statistics import (
     StatisticalResult,
     compare_variants,
     detect_diminishing_returns,

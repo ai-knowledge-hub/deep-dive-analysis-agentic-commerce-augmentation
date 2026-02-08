@@ -15,8 +15,8 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 from api.composition import default_deps
-from application.services.belief_update_service import BeliefUpdateService
-from application.services.belief_update_service import bayesian_posterior
+from application.services.loop.belief_update_service import BeliefUpdateService
+from application.services.loop.belief_update_service import bayesian_posterior
 from shared.db.connection import init_db, set_database_path
 
 

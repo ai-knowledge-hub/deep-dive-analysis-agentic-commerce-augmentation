@@ -12,9 +12,9 @@ from domain.simulation.ranking import lift_summary
 from domain.simulation.types import SimulationProduct
 from domain.protocol.types import ProtocolCandidate
 from application.ports.deps import AppDeps
-from application.services.simulation_optimizer import optimize_product
-from application.services.simulation_runner import run_simulation
-from application.services.memory_service import MemoryService
+from application.services.simulation.optimizer import optimize_product
+from application.services.simulation.runner import run_simulation
+from application.services.loop.memory_service import MemoryService
 
 
 class SimulationService:

@@ -6,17 +6,17 @@ import pytest
 
 from domain.commerce.types import Product
 from infrastructure.memory.semantic_memory import SemanticMemory
-from application.services.conversation_agents import (
+from application.services.conversation.agents import (
     CommerceAgent,
     IntentAgent,
     CapabilityAgent,
     ExplainAgent,
 )
-from application.services.commerce_plan_builder import CommercePlanBuilder
+from application.services.conversation.commerce_plan_builder import CommercePlanBuilder
 from api.composition import default_deps
-from application.services.alignment_service import AlignmentService
-from application.services.intentionality_profiler import build_profile
-from application.services.context_builder import context_for
+from application.services.evidence.alignment_service import AlignmentService
+from application.services.evidence.intentionality_profiler import build_profile
+from application.services.conversation.context_builder import context_for
 
 # Provide lightweight google.genai stubs before importing modules that rely on them.
 if "google" not in sys.modules:

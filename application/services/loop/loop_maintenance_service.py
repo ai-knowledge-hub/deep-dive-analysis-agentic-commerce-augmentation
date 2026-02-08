@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from application.ports.deps import AppDeps
-from application.services.memory_service import MemoryService
+from application.services.loop.memory_service import MemoryService
 from infrastructure.db.connection import get_connection
 
 

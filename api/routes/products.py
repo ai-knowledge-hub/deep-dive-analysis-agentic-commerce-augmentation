@@ -9,15 +9,15 @@ except ImportError:  # pragma: no cover - optional dependency
     APIRouter = None  # type: ignore
 
 from infrastructure.llm.intent_classifier import build_intent_classifier
-from application.services.intentionality_profiler import build_profile
-from application.services.alignment_service import AlignmentService
+from application.services.evidence.intentionality_profiler import build_profile
+from application.services.evidence.alignment_service import AlignmentService
 from application.agents.layer2_agent import Layer2Agent
-from application.services.simulation_service import _protocol_readiness_for_items
+from application.services.simulation.service import _protocol_readiness_for_items
 from pydantic import BaseModel, Field
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 
-from application.services.product_search import search_products_for_client
+from application.services.conversation.product_search import search_products_for_client
 
 
 class HybridIntentClassifier:

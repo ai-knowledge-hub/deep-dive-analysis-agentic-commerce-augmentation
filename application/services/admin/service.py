@@ -11,11 +11,11 @@ from application.ports.deps import (
     SkillsStore,
     LLMProviderConfigsStore,
 )
-from application.services.canonical_intent_spec_service import (
+from application.services.admin.canonical_intent_spec_service import (
     CanonicalIntentSpecService,
     DEFAULT_SOURCE_PRIORITY,
 )
-from application.services.skill_defaults import (
+from application.services.admin.skill_defaults import (
     ensure_default_skill,
     default_skill_names,
 )

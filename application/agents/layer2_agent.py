@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from application.ports.deps import AppDeps
-from application.services.protocol_discovery_service import ProtocolDiscoveryService
+from application.services.admin.protocol_discovery_service import (
+    ProtocolDiscoveryService,
+)
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 from domain.simulation.types import SimulationProduct
-from application.services.simulation_service import SimulationService
+from application.services.simulation.service import SimulationService
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 

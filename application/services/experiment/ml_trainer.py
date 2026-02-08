@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, List
 
 from application.ports.deps import AppDeps
-from application.services.experiment_ml import ExperimentMLEngine
+from application.services.experiment.ml import ExperimentMLEngine
 
 logger = logging.getLogger(__name__)
 

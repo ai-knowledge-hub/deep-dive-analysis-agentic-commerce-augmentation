@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 
 from domain.conversation.context import ContextPacket, render_context
-from application.services.session_manager import SessionManager
+from application.services.conversation.session_manager import SessionManager
 
 if TYPE_CHECKING:  # pragma: no cover
     from domain.values.types import GoalClarificationState

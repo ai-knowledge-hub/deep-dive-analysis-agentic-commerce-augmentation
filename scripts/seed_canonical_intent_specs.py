@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
-from application.services.canonical_intent_spec_service import (
+from application.services.admin.canonical_intent_spec_service import (
     CanonicalIntentSpecService,
     DEFAULT_SOURCE_PRIORITY,
 )

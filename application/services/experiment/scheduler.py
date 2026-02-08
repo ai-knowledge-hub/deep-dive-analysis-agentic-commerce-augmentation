@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from application.ports.deps import AppDeps
-from application.services.experiment_runner import ExperimentRunner, ExperimentRunResult
+from application.services.experiment.runner import ExperimentRunner, ExperimentRunResult
 
 
 def _utc_now() -> datetime:

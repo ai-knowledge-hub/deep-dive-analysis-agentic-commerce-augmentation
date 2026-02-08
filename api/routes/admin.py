@@ -10,8 +10,8 @@ except ImportError:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_admin
-from application.services.admin_service import AdminService
-from application.services.loop_maintenance_service import LoopMaintenanceService
+from application.services.admin.service import AdminService
+from application.services.loop.loop_maintenance_service import LoopMaintenanceService
 from api.composition import default_deps
 
 if APIRouter:

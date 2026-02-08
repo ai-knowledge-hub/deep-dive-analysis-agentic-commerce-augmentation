@@ -15,9 +15,9 @@ from application.ports.deps import AppDeps
 from domain.commerce.types import Product
 from domain.intent.goals import extract_intent_goals
 from domain.simulation import ranking as domain_ranking
-from application.services.alignment_service import AlignmentService
-from application.services.intentionality_profiler import build_profile
-from application.services.signal_extractor import SignalExtractor
+from application.services.evidence.alignment_service import AlignmentService
+from application.services.evidence.intentionality_profiler import build_profile
+from application.services.evidence.signal_extractor import SignalExtractor
 from domain.simulation.types import SimulationProduct
 from domain.simulation.tone import derive_tone
 

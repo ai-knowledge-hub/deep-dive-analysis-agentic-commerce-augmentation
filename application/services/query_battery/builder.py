@@ -12,15 +12,15 @@ from application.ports.deps import (
     QueryBatteriesStore,
     SimulationRunsStore,
 )
-from application.services.canonical_intent_spec_service import (
+from application.services.admin.canonical_intent_spec_service import (
     CATEGORY_CONFIDENCE_THRESHOLD,
     infer_category_from_context,
 )
-from application.services.query_battery_llm_generator import (
+from application.services.query_battery.llm_generator import (
     IntentCapsule,
     generate_llm_queries,
 )
-from application.services.query_battery_types import GeneratedQuery
+from application.services.query_battery.types import GeneratedQuery
 
 MIN_BELIEF_CONFIDENCE = 0.65
 MIN_ARCHETYPE_CONFIDENCE = 0.6

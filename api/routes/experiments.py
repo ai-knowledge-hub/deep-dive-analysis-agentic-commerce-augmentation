@@ -7,11 +7,11 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
-from application.services.experiment_service import ExperimentService
-from application.services.experiment_runner import ExperimentRunner
-from application.services.experiment_scheduler import ExperimentScheduler
-from application.services.experiment_orchestrator import ExperimentOrchestrator
-from application.services.experiment_validation_service import (
+from application.services.experiment.service import ExperimentService
+from application.services.experiment.runner import ExperimentRunner
+from application.services.experiment.scheduler import ExperimentScheduler
+from application.services.experiment.orchestrator import ExperimentOrchestrator
+from application.services.experiment.validation_service import (
     ExperimentValidationService,
 )
 

@@ -11,7 +11,7 @@ import os
 from typing import Any, Dict, List
 
 from api.composition import default_deps
-from application.services.loop_maintenance_service import LoopMaintenanceService
+from application.services.loop.loop_maintenance_service import LoopMaintenanceService
 from shared.db.connection import DEFAULT_DB_PATH
 
 

@@ -8,9 +8,12 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
-from application.services.query_battery_service import QueryBatteryService
-from application.services.query_battery_builder import QueryBatteryBuilder
-from application.services.canonical_intent_spec_service import TOKEN_SYNONYMS, TYPO_MAP
+from application.services.query_battery.service import QueryBatteryService
+from application.services.query_battery.builder import QueryBatteryBuilder
+from application.services.admin.canonical_intent_spec_service import (
+    TOKEN_SYNONYMS,
+    TYPO_MAP,
+)
 
 router = APIRouter(prefix="/batteries", tags=["batteries"])
 

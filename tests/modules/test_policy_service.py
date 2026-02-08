@@ -15,7 +15,7 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 from api.composition import default_deps
-from application.services.policy_service import PolicyService
+from application.services.loop.policy_service import PolicyService
 from shared.db.connection import init_db, set_database_path
 
 

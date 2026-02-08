@@ -7,8 +7,8 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
-from application.services.context_builder import context_for
-from application.services.session_manager import SessionManager
+from application.services.conversation.context_builder import context_for
+from application.services.conversation.session_manager import SessionManager
 from domain.intent.goals import extract_intent_goals
 
 
