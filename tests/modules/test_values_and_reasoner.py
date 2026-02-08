@@ -53,7 +53,9 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from application.services.goal_clarification_service import GoalClarificationService
+from application.services.conversation.goal_clarification_service import (
+    GoalClarificationService,
+)
 from domain.values.types import GoalClarificationState
 from domain.intent.types import InferredIntent as KeywordIntent
 from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from application.services.goal_clarification_service import GoalClarificationService
+from application.services.conversation.goal_clarification_service import (
+    GoalClarificationService,
+)
 from domain.values.types import GoalClarificationState
 
 

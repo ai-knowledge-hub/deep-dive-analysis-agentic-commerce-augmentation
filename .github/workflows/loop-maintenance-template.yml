@@ -1,0 +1,51 @@
+name: Loop Maintenance (Template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "Validation lookback window in days"
+        required: false
+        default: "30"
+      min_confidence:
+        description: "Minimum belief confidence for distillation"
+        required: false
+        default: "0.7"
+      client_id:
+        description: "Optional client scope (empty = all clients)"
+        required: false
+        default: ""
+
+  # Enable this later when ready for automated cadence:
+  # schedule:
+  #   - cron: "0 3 * * *"
+
+jobs:
+  loop-maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run loop maintenance
+        env:
+          DATABASE_PATH: ./tmp/local.db
+        run: |
+          CLIENT_ARG=""
+          if [ -n "${{ github.event.inputs.client_id }}" ]; then
+            CLIENT_ARG="--client-id ${{ github.event.inputs.client_id }}"
+          fi
+          python -m scripts.run_learning_loop_maintenance \
+            --lookback-days "${{ github.event.inputs.lookback_days }}" \
+            --min-confidence "${{ github.event.inputs.min_confidence }}" \
+            ${CLIENT_ARG}

@@ -28,6 +28,14 @@ from api.routes import admin as admin_route
 from api.routes import replay as replay_route
 from api.routes import agents as agents_route
 from api.routes import analytics as analytics_route
+from api.routes import health as health_route
+from api.routes import llm_config as llm_config_route
+from api.routes import overview as overview_route
+from api.routes import validation as validation_route
+from api.routes import copy_revisions as copy_revisions_route
+from api.routes import loop as loop_route
+from api.routes import memory as memory_route
+from api.routes import calibration as calibration_route
 
 if FastAPI:
     app = FastAPI(title="Contextual Commerce Optimization API")
@@ -54,6 +62,14 @@ if FastAPI:
     app.include_router(experiments_route.router)
     app.include_router(beliefs_route.router)
     app.include_router(analytics_route.router)
+    app.include_router(health_route.router)
+    app.include_router(llm_config_route.router)
+    app.include_router(overview_route.router)
+    app.include_router(validation_route.router)
+    app.include_router(copy_revisions_route.router)
+    app.include_router(loop_route.router)
+    app.include_router(memory_route.router)
+    app.include_router(calibration_route.router)
     if replay_route.router:
         app.include_router(replay_route.router)
     if webhooks_route.router:

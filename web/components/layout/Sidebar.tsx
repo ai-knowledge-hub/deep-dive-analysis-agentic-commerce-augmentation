@@ -115,6 +115,19 @@ export function Sidebar({
       ),
     },
     {
+      href: "/validation",
+      label: "Validation",
+      shortLabel: "V",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M9 12l2 2 4-4 1.4 1.4-5.4 5.4-3.4-3.4L9 12zm3-10a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
+    {
       href: "/overview",
       label: "Overview",
       shortLabel: "O",

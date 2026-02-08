@@ -99,6 +99,16 @@ def list_events(
     return [_row(row) for row in rows]
 
 
+def delete_events_for_experiment(experiment_id: str) -> int:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM analytics_events WHERE experiment_id = ?",
+        (experiment_id,),
+    )
+    conn.commit()
+    return result.rowcount if result else 0
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -115,4 +125,9 @@ def _row(row) -> Dict[str, Any]:
     }
 
 
-__all__ = ["create_event", "get_event", "list_events"]
+__all__ = [
+    "create_event",
+    "get_event",
+    "list_events",
+    "delete_events_for_experiment",
+]

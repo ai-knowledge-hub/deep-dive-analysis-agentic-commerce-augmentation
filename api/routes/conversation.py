@@ -11,26 +11,26 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from application.agents.goal_clarification_agent import GoalClarificationAgent
-from application.services.conversation_service import ConversationService
-from application.services.conversation_agents import (
+from application.services.conversation.service import ConversationService
+from application.services.conversation.agents import (
     CommerceAgent,
     ExplainAgent,
     IntentAgent,
 )
-from application.services.commerce_plan_builder import CommercePlanBuilder
-from application.services.product_search import search_products_for_client
-from application.services.context_builder import context_for
+from application.services.conversation.commerce_plan_builder import CommercePlanBuilder
+from application.services.conversation.product_search import search_products_for_client
+from application.services.conversation.context_builder import context_for
 from infrastructure.llm.intent_classifier import (
     build_intent_classifier,
     log_intent_replay,
 )
 from infrastructure.llm.research_agent import run_research
-from application.services.alignment_service import AlignmentService
+from application.services.evidence.alignment_service import AlignmentService
 from infrastructure.llm.gateway import chat
 from infrastructure.llm.prompts import VALUES_CLARIFICATION_PROMPT
 from infrastructure.llm.product_reasoner import reason_about_products_default
 from domain.commerce.compare import compare as compare_products
-from application.services.intentionality_profiler import build_profile
+from application.services.evidence.intentionality_profiler import build_profile
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 

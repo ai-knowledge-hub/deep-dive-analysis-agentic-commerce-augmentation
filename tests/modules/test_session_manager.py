@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from application.services.session_manager import SessionManager
+from application.services.conversation.session_manager import SessionManager
 from api.composition import default_deps
 
 

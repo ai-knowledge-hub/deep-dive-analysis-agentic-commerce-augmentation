@@ -9,6 +9,7 @@ from infrastructure.db.connection import get_connection
 from infrastructure.db.json import from_json, to_json
 from infrastructure.db.tenancy import ensure_client
 from infrastructure.db.users import ensure_user
+from infrastructure.db.experiment_runs import delete_runs_for_simulation_run
 
 
 def create_run(
@@ -171,6 +172,24 @@ def list_lessons(
     ]
 
 
+def delete_run(*, run_id: str, client_id: str) -> bool:
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM simulation_runs WHERE id = ? AND client_id = ?",
+        (run_id, client_id),
+    ).fetchone()
+    if not existing:
+        return False
+    delete_runs_for_simulation_run(run_id)
+    conn.execute("DELETE FROM simulation_lessons WHERE run_id = ?", (run_id,))
+    conn.execute(
+        "DELETE FROM simulation_runs WHERE id = ? AND client_id = ?",
+        (run_id, client_id),
+    )
+    conn.commit()
+    return True
+
+
 def _row_to_dict(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -208,9 +227,9 @@ __all__ = [
     "create_run",
     "get_run",
     "list_runs",
+    "delete_run",
     "update_retest",
     "update_scenario",
     "update_run_linkage",
     "list_lessons",
 ]
-

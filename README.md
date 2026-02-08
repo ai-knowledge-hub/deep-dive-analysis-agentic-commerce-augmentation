@@ -59,11 +59,13 @@ We do **not** position lab scores as guaranteed production ranking outcomes.
 | **Verification (Lift)** | Show before/after *simulated* discoverability impact | `domain/evidence/` + `application/services/evidence_verify.py` |
 | **Simulation Sandbox** | Run → optimize → retest competitive scenarios | `domain/simulation/` + `application/services/simulation_service.py` |
 | **Validation Logging** | Track lab predictions vs. observed outcomes | `api/routes/experiments.py` + `application/services/experiment_validation_service.py` |
+| **Validation Jobs (BYOK)** | Run in-app or external validation with structured results | `api/routes/validation.py` + `application/services/validation_service.py` |
 | **Context Memory** | Persist goals and preferences for better inference | `domain/memory/` + `infrastructure/db/*` |
 | **Protocol Readiness** | Score UCP/ACP readiness (profiles + feed freshness + checkout/payment) | `infrastructure/protocol/*` + `application/services/simulation_service.py` |
 | **Canonical Intent Spec** | Controlled onboarding fields for bottom-up query generation | `web/app/admin/page.tsx` + `products.metadata.canonical_intent_spec` |
 | **Query Quality Gating** | Accept/reject generated queries with reject reasons | `application/services/query_battery_builder.py` |
 | **Canonical Autofill** | UCP/ACP/feed to canonical spec (preview/apply) | `application/services/canonical_intent_spec_service.py` + `api/routes/admin.py` |
+| **Learning Loop Control** | Belief revisions, policy decisions, calibration profiles, loop metrics | `api/routes/beliefs.py` + `api/routes/loop.py` + `api/routes/calibration.py` |
 
 ---
 
@@ -132,6 +134,19 @@ All API calls require `client_id` unless the caller is an admin user (see `ADMIN
 The UI exposes a manual admin context picker when `NEXT_PUBLIC_ADMIN_MODE=true` so you can
 switch client/brand/product without automated onboarding.
 
+### Model gateway (BYOK)
+
+Use **Admin → Operational controls → Model gateway** to set provider keys and active models:
+- **Chat/generation key + model** drive all in-app LLM calls.
+- **Validation key + model** are used only for validation jobs (fallbacks to chat key if empty).
+- Activating a provider updates `.env.local` and refreshes the backend runtime.
+
+Default model shortcuts (override in Admin if needed):
+- OpenRouter: `openai/gpt-oss-120b`
+- OpenAI: `gpt-5.2-2025-12-11`
+- Claude (Anthropic): `claude-sonnet-4-5-20250929`
+- Gemini: `gemini-3-flash-preview`
+
 ### Skill prompts (admin-editable)
 
 Signal extraction and copy generation run from **skills stored in the DB**.  
@@ -173,6 +188,19 @@ make lint
 make web-lint
 ```
 
+### LLM Provider Health
+
+Check which providers are configured:
+
+```
+curl "http://localhost:8000/health/llm"
+```
+
+### Validation Page
+
+Open `http://localhost:3000/validation` to run in-app BYOK validations or submit
+external paste-back JSON. Provider readiness is shown at the top of the page.
+
 ---
 
 ## Documentation
@@ -185,6 +213,7 @@ make web-lint
 | [docs/terminology.md](docs/terminology.md) | Glossary + quick reference |
 | [docs/future-roadmap.md](docs/future-roadmap.md) | Deferred features (planned) |
 | [docs/deployment.md](docs/deployment.md) | Environment setup, deployment guide |
+| [docs/validation-mcp.md](docs/validation-mcp.md) | Validation MCP tool schema (draft) |
 
 ---
 
@@ -251,6 +280,8 @@ Manual helpers:
 ```bash
 make db-init   # create/open DB and apply schema
 make db-migrate # alias of db-init (re-apply schema bootstrap)
+make db-validate-migrate # apply validation job/result migrations
+make loop-maintenance # refresh calibration + distill high-confidence beliefs
 make db-reset  # delete local DB and re-init
 make db-path   # print current DB path
 make seed-demo # seed demo multi-tenant clients/brands/products
@@ -266,8 +297,23 @@ Example using the local dev DB (`./tmp/local.db`):
 rm -f ./tmp/local.db
 DATABASE_PATH=./tmp/local.db ./.venv/bin/python -m shared.db.connection
 DATABASE_PATH=./tmp/local.db make seed-demo
+DATABASE_PATH=./tmp/local.db make seed-canonical
+DATABASE_PATH=./tmp/local.db make seed-demo-acme
+DATABASE_PATH=./tmp/local.db make db-validate-migrate
 DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000
+
 ```
+
+`seed-canonical` populates `canonical_intent_spec` for existing products so bottom-up
+query generation can run without clarification blocks.
+
+After pulling schema changes, always re-run:
+
+```bash
+DATABASE_PATH=./tmp/local.db make db-migrate
+```
+
+This applies new learning-loop tables (belief/memory/calibration/maintenance history) to existing local DBs.
 
 Quick verify:
 

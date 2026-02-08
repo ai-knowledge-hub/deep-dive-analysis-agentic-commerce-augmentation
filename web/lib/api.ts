@@ -38,11 +38,23 @@ import {
   ExperimentMetricListResponse,
   ExperimentRunResponse,
   NextTestRecommendationResponse,
+  OverviewSummaryResponse,
+  OverviewTimeseriesResponse,
+  OverviewChangesResponse,
   ExperimentRecommendationListResponse,
   ExperimentValidationResponse,
   ExperimentValidationSummaryResponse,
   BrandPredictionAccuracyResponse,
   AnalyticsEventResponse,
+  ValidationJobResponse,
+  ValidationJobListResponse,
+  CopyRevisionListResponse,
+  CopyRevisionResponse,
+  HealthLLMResponse,
+  LLMConfigSummaryResponse,
+  AdminLLMConfigResponse,
+  LoopMaintenanceRunResponse,
+  LoopMaintenanceRunHistoryResponse,
   QueryBattery,
   Experiment,
   ExperimentVariant,
@@ -473,6 +485,243 @@ export async function deleteConversationSession(
   });
 }
 
+export async function deleteSimulationRun(
+  runId: string,
+  userId?: string | null,
+  clientIdOverride?: string | null,
+): Promise<{ deleted: boolean; run_id: string }> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const clientId = clientIdOverride ?? getClientId();
+  if (clientId) params.set("client_id", clientId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<{ deleted: boolean; run_id: string }>(
+    `/simulation/runs/${runId}${suffix}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function deleteExperiment(
+  experimentId: string,
+  userId?: string | null,
+  clientIdOverride?: string | null,
+): Promise<{ deleted: boolean; experiment_id: string }> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  const clientId = clientIdOverride ?? getClientId();
+  if (clientId) params.set("client_id", clientId);
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  return request<{ deleted: boolean; experiment_id: string }>(
+    `/experiments/${experimentId}${suffix}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function createValidationJob(
+  payload: {
+    entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
+    entity_id: string;
+    provider: string;
+    mode: "in_app" | "external";
+    model?: string | null;
+    prompt_version?: string | null;
+    input_payload: Record<string, unknown>;
+    brand_id?: string | null;
+    product_id?: string | null;
+  },
+  userId?: string | null,
+): Promise<ValidationJobResponse> {
+  const clientId = getClientId();
+  return request<ValidationJobResponse>("/validation/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
+export async function runValidationJob(
+  jobId: string,
+  userId?: string | null,
+): Promise<ValidationJobResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  return request<ValidationJobResponse>(
+    `/validation/jobs/${jobId}/run${query ? `?${query}` : ""}`,
+    { method: "POST" },
+  );
+}
+
+export async function submitValidationExternal(
+  jobId: string,
+  payload: {
+    provider?: string | null;
+    model?: string | null;
+    structured_result: Record<string, unknown>;
+    raw_response?: string | null;
+  },
+  userId?: string | null,
+): Promise<ValidationJobResponse> {
+  const clientId = getClientId();
+  return request<ValidationJobResponse>(`/validation/jobs/${jobId}/external`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
+export async function getValidationJob(
+  jobId: string,
+  userId?: string | null,
+): Promise<ValidationJobResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  return request<ValidationJobResponse>(
+    `/validation/jobs/${jobId}${query ? `?${query}` : ""}`,
+  );
+}
+
+export async function listValidationJobs(
+  payload: {
+    entity_type?: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
+    entity_id?: string;
+    limit?: number;
+  },
+  userId?: string | null,
+): Promise<ValidationJobListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  if (payload.entity_type) params.set("entity_type", payload.entity_type);
+  if (payload.entity_id) params.set("entity_id", payload.entity_id);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<ValidationJobListResponse>(
+    `/validation/jobs?${params.toString()}`,
+  );
+}
+
+export async function listCopyRevisions(
+  payload: {
+    user_id?: string | null;
+    product_id?: string | null;
+    source_type?: string | null;
+    status?: string | null;
+    limit?: number;
+  } = {},
+): Promise<CopyRevisionListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (payload.user_id) params.set("user_id", payload.user_id);
+  if (payload.product_id) params.set("product_id", payload.product_id);
+  if (payload.source_type) params.set("source_type", payload.source_type);
+  if (payload.status) params.set("status", payload.status);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<CopyRevisionListResponse>(`/copy-revisions?${params.toString()}`);
+}
+
+export async function getCopyRevision(
+  revisionId: string,
+  userId?: string | null,
+): Promise<CopyRevisionResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  const query = params.toString();
+  return request<CopyRevisionResponse>(
+    `/copy-revisions/${revisionId}${query ? `?${query}` : ""}`,
+  );
+}
+
+export async function publishCopyRevision(
+  revisionId: string,
+  payload: { user_id?: string | null; notes?: string | null } = {},
+): Promise<{ revision: CopyRevisionResponse["revision"]; product: AdminProduct | null }> {
+  const clientId = getClientId();
+  return request<{ revision: CopyRevisionResponse["revision"]; product: AdminProduct | null }>(
+    `/copy-revisions/${revisionId}/publish`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: payload.user_id ?? undefined,
+        client_id: clientId ?? undefined,
+        notes: payload.notes ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function getHealthLLM(): Promise<HealthLLMResponse> {
+  return request<HealthLLMResponse>("/health/llm");
+}
+
+export async function getLlmConfig(userId?: string): Promise<LLMConfigSummaryResponse> {
+  const params = new URLSearchParams();
+  if (userId) params.set("user_id", userId);
+  return request<LLMConfigSummaryResponse>(`/llm/config?${params.toString()}`);
+}
+
+export async function getAdminLlmConfig(
+  userId: string,
+): Promise<AdminLLMConfigResponse> {
+  const params = new URLSearchParams();
+  params.set("user_id", userId);
+  return request<AdminLLMConfigResponse>(`/llm/config?${params.toString()}`);
+}
+
+export async function updateAdminLlmConfig(
+  provider: string,
+  payload: {
+    user_id: string;
+    api_key?: string;
+    validation_api_key?: string;
+    model?: string;
+    validation_model?: string;
+    activate?: boolean;
+  },
+): Promise<AdminLLMConfigResponse> {
+  const response = await request<{ summary: AdminLLMConfigResponse }>(
+    `/llm/config/${provider}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+  return response.summary;
+}
+
+export async function activateAdminLlmProvider(
+  payload: { user_id: string; provider: string; model?: string },
+): Promise<AdminLLMConfigResponse> {
+  const response = await request<{ summary: AdminLLMConfigResponse }>(
+    "/llm/config/activate",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return response.summary;
+}
+
 export async function listBatteries(
   userId?: string | null,
   productId?: string | null,
@@ -650,6 +899,50 @@ export async function getBatteryMetrics(
   );
 }
 
+export async function getOverviewSummary(
+  scope: "client" | "brand" | "product" = "client",
+  rangeDays = 30,
+  userId?: string | null,
+): Promise<OverviewSummaryResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("scope", scope);
+  params.set("range_days", String(rangeDays));
+  return request<OverviewSummaryResponse>(`/overview/summary?${params.toString()}`);
+}
+
+export async function getOverviewTimeseries(
+  scope: "client" | "brand" | "product" = "client",
+  rangeDays = 30,
+  userId?: string | null,
+): Promise<OverviewTimeseriesResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("scope", scope);
+  params.set("range_days", String(rangeDays));
+  return request<OverviewTimeseriesResponse>(
+    `/overview/timeseries?${params.toString()}`,
+  );
+}
+
+export async function getOverviewChanges(
+  scope: "client" | "brand" | "product" = "client",
+  rangeDays = 30,
+  userId?: string | null,
+): Promise<OverviewChangesResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  params.set("scope", scope);
+  params.set("range_days", String(rangeDays));
+  return request<OverviewChangesResponse>(`/overview/changes?${params.toString()}`);
+}
+
 export async function getBatteryEvalSummary(
   batteryId: string,
   userId?: string | null,
@@ -686,6 +979,7 @@ export async function generateBatteryQueries(
     limit?: number;
     user_id?: string | null;
     use_llm?: boolean;
+    persist?: boolean;
   },
 ): Promise<QueryBatteryQueryListResponse> {
   const clientId = getClientId();
@@ -700,6 +994,35 @@ export async function generateBatteryQueries(
       seed_use_cases: payload.seed_use_cases,
       limit: payload.limit ?? 15,
       use_llm: payload.use_llm ?? undefined,
+      persist: payload.persist ?? true,
+    }),
+  });
+}
+
+export async function addBatteryQuery(
+  batteryId: string,
+  payload: {
+    query_text: string;
+    query_type?: string | null;
+    intent_archetype?: string | null;
+    constraints?: Record<string, unknown> | null;
+    weight?: number | null;
+    enabled?: boolean | null;
+    user_id?: string | null;
+  },
+): Promise<{ query: QueryBatteryQuery }> {
+  const clientId = getClientId();
+  return request<{ query: QueryBatteryQuery }>(`/batteries/${batteryId}/queries`, {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: payload.user_id ?? undefined,
+      query_text: payload.query_text,
+      query_type: payload.query_type ?? undefined,
+      intent_archetype: payload.intent_archetype ?? undefined,
+      constraints: payload.constraints ?? undefined,
+      weight: payload.weight ?? undefined,
+      enabled: payload.enabled ?? undefined,
     }),
   });
 }
@@ -1401,6 +1724,39 @@ export async function listAdminSkillHistory(
   if (limit) params.set("limit", String(limit));
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return request<AdminSkillHistoryResponse>(`/skills/${name}/history${suffix}`);
+}
+
+export async function runAdminLoopMaintenance(
+  payload: {
+    client_id?: string;
+    lookback_days?: number;
+    min_confidence?: number;
+  },
+  userId?: string | null,
+): Promise<LoopMaintenanceRunResponse> {
+  return request<LoopMaintenanceRunResponse>("/ops/loop-maintenance", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+    }),
+  });
+}
+
+export async function listAdminLoopMaintenanceRuns(
+  payload: {
+    client_id: string;
+    limit?: number;
+  },
+  userId?: string | null,
+): Promise<LoopMaintenanceRunHistoryResponse> {
+  const params = new URLSearchParams();
+  params.set("client_id", payload.client_id);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  if (userId) params.set("user_id", userId);
+  return request<LoopMaintenanceRunHistoryResponse>(
+    `/ops/loop-maintenance/history?${params.toString()}`,
+  );
 }
 
 export async function analyzeEvidence(query: string): Promise<EvidenceAnalyzeResponse> {

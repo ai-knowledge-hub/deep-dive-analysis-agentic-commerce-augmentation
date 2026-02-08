@@ -10,7 +10,7 @@ import argparse
 import os
 
 from api.composition import default_deps
-from application.services.experiment_scheduler import ExperimentScheduler
+from application.services.experiment.scheduler import ExperimentScheduler
 from shared.db.connection import DEFAULT_DB_PATH
 
 

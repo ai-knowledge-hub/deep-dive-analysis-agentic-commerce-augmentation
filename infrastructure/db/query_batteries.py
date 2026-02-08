@@ -169,6 +169,9 @@ def get_query(query_id: str) -> Dict[str, Any] | None:
 
 
 def list_queries(battery_id: str) -> List[Dict[str, Any]]:
+    if not battery_id:
+        return []
+    battery_id = str(battery_id)
     rows = (
         get_connection()
         .execute(

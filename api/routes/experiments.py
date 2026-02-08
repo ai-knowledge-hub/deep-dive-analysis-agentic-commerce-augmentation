@@ -7,11 +7,11 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
-from application.services.experiment_service import ExperimentService
-from application.services.experiment_runner import ExperimentRunner
-from application.services.experiment_scheduler import ExperimentScheduler
-from application.services.experiment_orchestrator import ExperimentOrchestrator
-from application.services.experiment_validation_service import (
+from application.services.experiment.service import ExperimentService
+from application.services.experiment.runner import ExperimentRunner
+from application.services.experiment.scheduler import ExperimentScheduler
+from application.services.experiment.orchestrator import ExperimentOrchestrator
+from application.services.experiment.validation_service import (
     ExperimentValidationService,
 )
 
@@ -150,6 +150,19 @@ def update_experiment(
     return {"experiment": experiment}
 
 
+@router.delete("/{experiment_id}")
+def delete_experiment(
+    experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    deleted = SERVICE.delete_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return {"deleted": True, "experiment_id": experiment_id}
+
+
 @router.post("/{experiment_id}/variants")
 def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
@@ -159,6 +172,42 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
         variant_type=payload.type,
         payload=payload.payload,
     )
+    try:
+        experiment = SERVICE.get_experiment(experiment_id=experiment_id)
+        candidate_description = ""
+        if isinstance(payload.payload, dict):
+            candidate_description = str(
+                payload.payload.get("description") or ""
+            ).strip()
+        if experiment and candidate_description:
+            product = DEPS.clients.get_product_for_client(
+                client_id=experiment["client_id"], product_id=experiment["product_id"]
+            )
+            base_description = str(
+                (product or {}).get("description")
+                or (product or {}).get("name")
+                or "base copy"
+            ).strip()
+            if base_description and candidate_description != base_description:
+                DEPS.copy_revisions.create_revision(
+                    client_id=experiment["client_id"],
+                    brand_id=experiment.get("brand_id"),
+                    product_id=experiment["product_id"],
+                    source_type="experiment",
+                    source_id=experiment_id,
+                    source_variant_id=variant.get("id"),
+                    base_description=base_description,
+                    candidate_description=candidate_description,
+                    notes=f"Auto-created from experiment variant {variant.get('label')}.",
+                    metadata={
+                        "variant_label": variant.get("label"),
+                        "variant_type": variant.get("type"),
+                    },
+                    created_by=payload.user_id,
+                )
+    except Exception:
+        # Non-blocking: variant creation should not fail if revision persistence fails.
+        pass
     return {"variant": variant}
 
 

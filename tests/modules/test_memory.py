@@ -3,7 +3,7 @@ from pathlib import Path
 from dataclasses import replace
 
 from infrastructure.memory.semantic_memory import SemanticMemory
-from application.services.session_manager import SessionManager
+from application.services.conversation.session_manager import SessionManager
 from infrastructure.db import goals as goals_repo
 from domain.memory.working import WorkingMemory
 from api.composition import default_deps

@@ -10,6 +10,9 @@ import type {
   AdminProduct,
   AdminPlatformProfile,
   AdminSkill,
+  AdminLLMConfigResponse,
+  LoopMaintenanceRunHistoryItem,
+  LoopMaintenanceRunResponse,
   SessionSummary,
 } from "../../lib/types";
 import {
@@ -30,10 +33,16 @@ import {
   updateAdminSkill,
   updateAdminProduct,
   updateAdminPlatformProfile,
+  getAdminLlmConfig,
+  updateAdminLlmConfig,
+  activateAdminLlmProvider,
+  listAdminLoopMaintenanceRuns,
+  runAdminLoopMaintenance,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
+import { useTenant } from "../../components/tenant/TenantProvider";
 
 const emptyForm = {
   id: "",
@@ -43,14 +52,6 @@ const emptyForm = {
   role: "analyst",
   memberUserId: "",
 };
-
-const onboardingSteps = [
-  { id: "client", label: "Client Profile" },
-  { id: "brand", label: "Brand Setup" },
-  { id: "product", label: "Product Catalog" },
-  { id: "intent", label: "Canonical Intent Spec" },
-  { id: "review", label: "Review" },
-] as const;
 
 const canonicalOntology: Record<
   string,
@@ -93,9 +94,31 @@ const canonicalOntology: Record<
   },
 };
 
+const LLM_PROVIDERS = [
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "openai", label: "OpenAI" },
+  { id: "anthropic", label: "Claude (Anthropic)" },
+  { id: "gemini", label: "Gemini" },
+] as const;
+
+const LLM_MODEL_OPTIONS: Record<string, string[]> = {
+  openrouter: ["openai/gpt-oss-120b"],
+  openai: ["gpt-5.2-2025-12-11"],
+  anthropic: ["claude-sonnet-4-5-20250929"],
+  gemini: ["gemini-3-flash-preview"],
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const { user } = useUser();
+  const {
+    clientId: tenantClientId,
+    brandId: tenantBrandId,
+    productId: tenantProductId,
+    setClientId: setTenantClientId,
+    setBrandId: setTenantBrandId,
+    setProductId: setTenantProductId,
+  } = useTenant();
   const userId = user?.id ?? null;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -117,8 +140,6 @@ export default function AdminPage() {
   const [activeClientId, setActiveClientId] = useState<string>("");
   const [activeBrandId, setActiveBrandId] = useState<string>("");
   const [activeProductId, setActiveProductId] = useState<string>("");
-  const [activeOnboardingStep, setActiveOnboardingStep] =
-    useState<(typeof onboardingSteps)[number]["id"] | null>(null);
   const [isIntentDrawerOpen, setIntentDrawerOpen] = useState(false);
   const [intentSpecSaved, setIntentSpecSaved] = useState(false);
   const [intentSpecError, setIntentSpecError] = useState<string | null>(null);
@@ -157,6 +178,29 @@ export default function AdminPage() {
     { id: number; version?: string; changed_at?: string }[]
   >([]);
 
+  const [llmConfig, setLlmConfig] = useState<AdminLLMConfigResponse | null>(null);
+  const [llmConfigError, setLlmConfigError] = useState<string | null>(null);
+  const [loopMaintenanceRunning, setLoopMaintenanceRunning] = useState(false);
+  const [loopMaintenanceError, setLoopMaintenanceError] = useState<string | null>(null);
+  const [loopMaintenanceResult, setLoopMaintenanceResult] =
+    useState<LoopMaintenanceRunResponse | null>(null);
+  const [loopMaintenanceHistory, setLoopMaintenanceHistory] = useState<
+    LoopMaintenanceRunHistoryItem[]
+  >([]);
+  const [loopMaintenanceLookbackDays, setLoopMaintenanceLookbackDays] = useState("30");
+  const [loopMaintenanceMinConfidence, setLoopMaintenanceMinConfidence] = useState("0.7");
+  const [llmInputs, setLlmInputs] = useState<
+    Record<
+      string,
+      {
+        apiKey: string;
+        validationApiKey: string;
+        model: string;
+        validationModel: string;
+      }
+    >
+  >({});
+
   const [clientForm, setClientForm] = useState({ ...emptyForm });
   const [brandForm, setBrandForm] = useState({ ...emptyForm });
   const [productForm, setProductForm] = useState({ ...emptyForm });
@@ -167,11 +211,15 @@ export default function AdminPage() {
     void listAdminClients(userId).then((response) => {
       const items = response.clients ?? [];
       setClients(items);
-      if (!activeClientId && items[0]?.id) {
+      if (items.length === 0) {
+        setActiveClientId("");
+      } else if (tenantClientId && items.some((item) => item.id === tenantClientId)) {
+        setActiveClientId(tenantClientId);
+      } else if (!activeClientId && items[0]?.id) {
         setActiveClientId(items[0].id);
       }
     });
-  }, [activeClientId, userId]);
+  }, [activeClientId, tenantClientId, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -202,6 +250,38 @@ export default function AdminPage() {
   }, [activeSkillName, userId]);
 
   useEffect(() => {
+    if (!userId) return;
+    void getAdminLlmConfig(userId)
+      .then((response) => {
+        setLlmConfig(response);
+        setLlmConfigError(null);
+        setLlmInputs((current) => {
+          const next = { ...current };
+          LLM_PROVIDERS.forEach((provider) => {
+            const summary = response.providers?.[provider.id] ?? {};
+            next[provider.id] = {
+              apiKey: "",
+              validationApiKey: "",
+              model:
+                summary.model ||
+                LLM_MODEL_OPTIONS[provider.id]?.[0] ||
+                "",
+              validationModel:
+                summary.validation_model ||
+                LLM_MODEL_OPTIONS[provider.id]?.[0] ||
+                "",
+            };
+          });
+          return next;
+        });
+      })
+      .catch((err) => {
+        setLlmConfig(null);
+        setLlmConfigError(err instanceof Error ? err.message : "Unable to load");
+      });
+  }, [userId]);
+
+  useEffect(() => {
     if (!activeClientId || !userId) {
       setBrands([]);
       setProducts([]);
@@ -211,14 +291,18 @@ export default function AdminPage() {
     void listAdminBrands(activeClientId, userId).then((response) => {
       const items = response.brands ?? [];
       setBrands(items);
-      if (!activeBrandId && items[0]?.id) {
+      if (items.length === 0) {
+        setActiveBrandId("");
+      } else if (tenantBrandId && items.some((item) => item.id === tenantBrandId)) {
+        setActiveBrandId(tenantBrandId);
+      } else if (!activeBrandId && items[0]?.id) {
         setActiveBrandId(items[0].id);
       }
     });
     void listAdminClientUsers(activeClientId, userId).then((response) => {
       setClientUsers(response.users ?? []);
     });
-  }, [activeBrandId, activeClientId, userId]);
+  }, [activeBrandId, activeClientId, tenantBrandId, userId]);
 
   useEffect(() => {
     if (!activeBrandId || !userId) {
@@ -235,10 +319,38 @@ export default function AdminPage() {
       setActiveProductId("");
       return;
     }
+    if (
+      tenantProductId &&
+      products.some((product) => product.id === tenantProductId) &&
+      activeProductId !== tenantProductId
+    ) {
+      setActiveProductId(tenantProductId);
+      return;
+    }
     if (!products.some((product) => product.id === activeProductId)) {
       setActiveProductId(products[0].id);
     }
-  }, [activeProductId, products]);
+  }, [activeProductId, products, tenantProductId]);
+
+  useEffect(() => {
+    if (!tenantClientId || clients.length === 0) return;
+    if (
+      clients.some((client) => client.id === tenantClientId) &&
+      activeClientId !== tenantClientId
+    ) {
+      setActiveClientId(tenantClientId);
+    }
+  }, [activeClientId, clients, tenantClientId]);
+
+  useEffect(() => {
+    if (!tenantBrandId || brands.length === 0) return;
+    if (
+      brands.some((brand) => brand.id === tenantBrandId) &&
+      activeBrandId !== tenantBrandId
+    ) {
+      setActiveBrandId(tenantBrandId);
+    }
+  }, [activeBrandId, brands, tenantBrandId]);
 
   useEffect(() => {
     const product = products.find((item) => item.id === activeProductId);
@@ -358,6 +470,24 @@ export default function AdminPage() {
     }
   }, [deleteTargetId, userId]);
 
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
+      setDeleteTargetId(null);
+    },
+    [userId],
+  );
+
   const handleCreateClient = useCallback(async () => {
     if (!userId || !clientForm.id.trim() || !clientForm.name.trim()) return;
     const response = await createAdminClient(
@@ -366,8 +496,9 @@ export default function AdminPage() {
     );
     setClients((current) => [...current, response.client]);
     setActiveClientId(response.client.id);
+    setTenantClientId(response.client.id);
     setClientForm({ ...emptyForm });
-  }, [clientForm, userId]);
+  }, [clientForm, setTenantClientId, userId]);
 
   const handleCreateBrand = useCallback(async () => {
     if (!userId || !activeClientId || !brandForm.id.trim() || !brandForm.name.trim())
@@ -379,8 +510,9 @@ export default function AdminPage() {
     );
     setBrands((current) => [...current, response.brand]);
     setActiveBrandId(response.brand.id);
+    setTenantBrandId(response.brand.id);
     setBrandForm({ ...emptyForm });
-  }, [activeClientId, brandForm, userId]);
+  }, [activeClientId, brandForm, setTenantBrandId, userId]);
 
   const handleCreateProduct = useCallback(async () => {
     if (!userId || !activeBrandId || !productForm.id.trim() || !productForm.name.trim())
@@ -400,8 +532,10 @@ export default function AdminPage() {
       userId,
     );
     setProducts((current) => [...current, response.product]);
+    setActiveProductId(response.product.id);
+    setTenantProductId(response.product.id);
     setProductForm({ ...emptyForm });
-  }, [activeBrandId, productForm, userId]);
+  }, [activeBrandId, productForm, setTenantProductId, userId]);
 
   const handleSaveIntentSpec = useCallback(async () => {
     if (!userId || !activeBrandId || !selectedProduct) return;
@@ -567,6 +701,131 @@ export default function AdminPage() {
     }
   }, [activeSkillName, skillContent, skillDescription, skillEnabled, skillVersion, userId]);
 
+  const handleLlmInputChange = useCallback(
+    (
+      provider: string,
+      field: "apiKey" | "validationApiKey" | "model" | "validationModel",
+      value: string,
+    ) => {
+      setLlmInputs((current) => ({
+        ...current,
+        [provider]: {
+          apiKey: current[provider]?.apiKey ?? "",
+          validationApiKey: current[provider]?.validationApiKey ?? "",
+          model: current[provider]?.model ?? "",
+          validationModel: current[provider]?.validationModel ?? "",
+          [field]: value,
+        },
+      }));
+    },
+    [],
+  );
+
+  const handleSaveLlmProvider = useCallback(
+    async (provider: string) => {
+      if (!userId) return;
+      const input = llmInputs[provider];
+      if (!input) return;
+      const payload: {
+        user_id: string;
+        api_key?: string;
+        validation_api_key?: string;
+        model?: string;
+        validation_model?: string;
+        activate?: boolean;
+      } = {
+        user_id: userId,
+        model: input.model || undefined,
+        validation_model: input.validationModel || undefined,
+      };
+      if (input.apiKey) payload.api_key = input.apiKey;
+      if (input.validationApiKey) payload.validation_api_key = input.validationApiKey;
+      try {
+        const summary = await updateAdminLlmConfig(provider, payload);
+        setLlmConfig(summary);
+        setLlmConfigError(null);
+        setLlmInputs((current) => ({
+          ...current,
+          [provider]: {
+            ...current[provider],
+            apiKey: "",
+            validationApiKey: "",
+          },
+        }));
+      } catch (error) {
+        setLlmConfigError("Failed to save model configuration.");
+      }
+    },
+    [llmInputs, userId],
+  );
+
+  const handleActivateLlmProvider = useCallback(
+    async (provider: string) => {
+      if (!userId) return;
+      const input = llmInputs[provider];
+      try {
+        const summary = await activateAdminLlmProvider({
+          user_id: userId,
+          provider,
+          model: input?.model || undefined,
+        });
+        setLlmConfig(summary);
+        setLlmConfigError(null);
+      } catch (error) {
+        setLlmConfigError("Failed to activate provider.");
+      }
+    },
+    [llmInputs, userId],
+  );
+
+  const handleRunLoopMaintenance = useCallback(async () => {
+    if (!userId) return;
+    setLoopMaintenanceRunning(true);
+    try {
+      const response = await runAdminLoopMaintenance(
+        {
+          client_id: activeClientId || undefined,
+          lookback_days: Number(loopMaintenanceLookbackDays) || 30,
+          min_confidence: Number(loopMaintenanceMinConfidence) || 0.7,
+        },
+        userId,
+      );
+      setLoopMaintenanceResult(response);
+      setLoopMaintenanceHistory(response.history ?? []);
+      setLoopMaintenanceError(null);
+    } catch (error) {
+      setLoopMaintenanceResult(null);
+      setLoopMaintenanceError("Failed to run loop maintenance.");
+    } finally {
+      setLoopMaintenanceRunning(false);
+    }
+  }, [
+    activeClientId,
+    loopMaintenanceLookbackDays,
+    loopMaintenanceMinConfidence,
+    userId,
+  ]);
+
+  useEffect(() => {
+    if (!userId || !activeClientId) {
+      setLoopMaintenanceHistory([]);
+      return;
+    }
+    void listAdminLoopMaintenanceRuns(
+      {
+        client_id: activeClientId,
+        limit: 20,
+      },
+      userId,
+    )
+      .then((response) => {
+        setLoopMaintenanceHistory(response.runs ?? []);
+      })
+      .catch(() => {
+        setLoopMaintenanceHistory([]);
+      });
+  }, [activeClientId, userId]);
+
   return (
     <div className="app">
       <Sidebar
@@ -620,11 +879,12 @@ export default function AdminPage() {
         sessions={sessions}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(selectedId) => {
-          router.push(`/?session=${selectedId}`);
+        onSelect={(session) => {
+          router.push(`/?session=${session.id}`);
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
       />
       <main className="main main--detail">
         <div className="detail admin">
@@ -645,20 +905,6 @@ export default function AdminPage() {
                 <span className="panel__meta">
                   {onboardingCompletion.completed}/{onboardingCompletion.total} complete
                 </span>
-              </div>
-              <div className="admin-onboarding__steps" role="tablist" aria-label="Onboarding steps">
-                {onboardingSteps.map((step) => (
-                  <button
-                    key={step.id}
-                    type="button"
-                    className={`admin-onboarding__step ${
-                      activeOnboardingStep === step.id ? "is-active" : ""
-                    }`}
-                    onClick={() => setActiveOnboardingStep(step.id)}
-                  >
-                    {step.label}
-                  </button>
-                ))}
               </div>
               <div className="admin-onboarding__summary">
                 <div className="admin-onboarding__summary-card">
@@ -681,7 +927,7 @@ export default function AdminPage() {
                 </div>
               </div>
               <div className="admin-onboarding__panels">
-                <details open={activeOnboardingStep === "client"}>
+                <details>
                   <summary>Client profile</summary>
                   <div className="admin__selector">
                     <label className="panel__label" htmlFor="admin-client-select">
@@ -691,8 +937,11 @@ export default function AdminPage() {
                       id="admin-client-select"
                       value={activeClientId}
                       onChange={(event) => {
-                        setActiveClientId(event.target.value);
+                        const nextClientId = event.target.value;
+                        setActiveClientId(nextClientId);
+                        setTenantClientId(nextClientId);
                         setActiveBrandId("");
+                        setActiveProductId("");
                       }}
                     >
                       {clients.map((client) => (
@@ -786,7 +1035,7 @@ export default function AdminPage() {
                     </div>
                   ) : null}
                 </details>
-                <details open={activeOnboardingStep === "brand"}>
+                <details>
                   <summary>Brand setup</summary>
                   {activeClientId ? (
                     <>
@@ -797,7 +1046,11 @@ export default function AdminPage() {
                         <select
                           id="admin-brand-select"
                           value={activeBrandId}
-                          onChange={(event) => setActiveBrandId(event.target.value)}
+                          onChange={(event) => {
+                            const nextBrandId = event.target.value;
+                            setActiveBrandId(nextBrandId);
+                            setTenantBrandId(nextBrandId || null);
+                          }}
                         >
                           {brands.map((brand) => (
                             <option key={brand.id} value={brand.id}>
@@ -849,7 +1102,7 @@ export default function AdminPage() {
                     <p className="panel__empty">Select a client first.</p>
                   )}
                 </details>
-                <details open={activeOnboardingStep === "product"}>
+                <details>
                   <summary>Product catalog</summary>
                   {activeBrandId ? (
                     <>
@@ -860,7 +1113,11 @@ export default function AdminPage() {
                         <select
                           id="admin-product-select"
                           value={activeProductId}
-                          onChange={(event) => setActiveProductId(event.target.value)}
+                          onChange={(event) => {
+                            const nextProductId = event.target.value;
+                            setActiveProductId(nextProductId);
+                            setTenantProductId(nextProductId || null);
+                          }}
                         >
                           {products.map((product) => (
                             <option key={product.id} value={product.id}>
@@ -974,7 +1231,7 @@ export default function AdminPage() {
                     <p className="panel__empty">Select a brand first.</p>
                   )}
                 </details>
-                <details open={activeOnboardingStep === "intent"}>
+                <details>
                   <summary>Canonical intent spec</summary>
                   <p className="panel__meta">
                     Capture objective product context used by bottom-up query generation.
@@ -997,7 +1254,7 @@ export default function AdminPage() {
                     <p className="panel__error">{intentSpecError}</p>
                   ) : null}
                 </details>
-                <details open={activeOnboardingStep === "review"}>
+                <details>
                   <summary>Review</summary>
                   <ul className="admin__list">
                     <li>
@@ -1025,6 +1282,165 @@ export default function AdminPage() {
               <div className="panel__header">
                 <h3>Operational controls</h3>
               </div>
+              <details className="admin-ops__details">
+                <summary>Model gateway</summary>
+                {!userId ? (
+                  <p className="panel__empty">Sign in to manage model keys.</p>
+                ) : (
+                  <div className="admin__form">
+                    {llmConfigError ? (
+                      <p className="panel__error">{llmConfigError}</p>
+                    ) : null}
+                    <div className="panel__chips">
+                      {LLM_PROVIDERS.map((provider) => {
+                        const summary = llmConfig?.providers?.[provider.id];
+                        const status = summary?.configured ? "ready" : "missing";
+                        return (
+                          <span
+                            key={provider.id}
+                            className={`panel__chip ${
+                              summary?.is_active ? "is-ready" : summary?.configured ? "is-ready" : "is-missing"
+                            }`}
+                          >
+                            {provider.label}: {summary?.is_active ? "active" : status}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {LLM_PROVIDERS.map((provider) => {
+                      const summary = llmConfig?.providers?.[provider.id];
+                      const input = llmInputs[provider.id] || {
+                        apiKey: "",
+                        validationApiKey: "",
+                        model: summary?.model || LLM_MODEL_OPTIONS[provider.id]?.[0] || "",
+                        validationModel:
+                          summary?.validation_model ||
+                          LLM_MODEL_OPTIONS[provider.id]?.[0] ||
+                          "",
+                      };
+                      const baseOptions = LLM_MODEL_OPTIONS[provider.id] || [];
+                      const modelOptions = input.model && !baseOptions.includes(input.model)
+                        ? [input.model, ...baseOptions]
+                        : baseOptions;
+                      const validationOptions =
+                        input.validationModel &&
+                        !baseOptions.includes(input.validationModel)
+                          ? [input.validationModel, ...baseOptions]
+                          : baseOptions;
+                      return (
+                        <div key={provider.id} className="panel__card panel__card--compact">
+                          <div className="panel__header">
+                            <h4>{provider.label}</h4>
+                            <span className="panel__meta">
+                              Chat: {summary?.chat_configured ? "set" : "missing"} ·
+                              Validation: {summary?.validation_configured ? "set" : "missing"}
+                            </span>
+                          </div>
+                          <div className="panel__grid">
+                            <label className="panel__label">
+                              <span>Chat model</span>
+                              <input
+                                className="panel__input panel__input--neutral"
+                                type="text"
+                                spellCheck={false}
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                                value={input.model}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "model",
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+                            <label className="panel__label">
+                              <span>Validation model</span>
+                              <input
+                                className="panel__input panel__input--neutral"
+                                type="text"
+                                list={`admin-llm-validation-models-${provider.id}`}
+                                spellCheck={false}
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                                value={input.validationModel}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "validationModel",
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                              <datalist
+                                id={`admin-llm-validation-models-${provider.id}`}
+                              >
+                                {validationOptions.map((option) => (
+                                  <option key={option} value={option} />
+                                ))}
+                              </datalist>
+                            </label>
+                            <label className="panel__label">
+                              <span>Chat key (BYOK)</span>
+                              <input
+                                className="panel__input"
+                                type="password"
+                                value={input.apiKey}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "apiKey",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={
+                                  summary?.configured ? "Saved" : "Paste API key"
+                                }
+                              />
+                            </label>
+                            <label className="panel__label">
+                              <span>Validation key (BYOK)</span>
+                              <input
+                                className="panel__input"
+                                type="password"
+                                value={input.validationApiKey}
+                                onChange={(event) =>
+                                  handleLlmInputChange(
+                                    provider.id,
+                                    "validationApiKey",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={
+                                  summary?.configured ? "Saved (optional)" : "Paste API key"
+                                }
+                              />
+                            </label>
+                          </div>
+                          <div className="panel__actions">
+                            <button
+                              type="button"
+                              className="button button--primary-subtle"
+                              onClick={() => void handleSaveLlmProvider(provider.id)}
+                            >
+                              Save provider
+                            </button>
+                            <button
+                              type="button"
+                              className="button button--ghost"
+                              onClick={() => void handleActivateLlmProvider(provider.id)}
+                              disabled={!summary?.chat_configured}
+                            >
+                              Use for chat
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </details>
               <details className="admin-ops__details">
                 <summary>Agent skills</summary>
                 {!userId ? (
@@ -1092,6 +1508,106 @@ export default function AdminPage() {
                     >
                       Save skill
                     </button>
+                  </div>
+                )}
+              </details>
+              <details className="admin-ops__details">
+                <summary>Learning loop maintenance</summary>
+                {!userId ? (
+                  <p className="panel__empty">Sign in to run maintenance.</p>
+                ) : (
+                  <div className="admin__form">
+                    <p className="panel__meta">
+                      Refresh calibration profiles and distill high-confidence belief memory.
+                    </p>
+                    <div className="panel__grid">
+                      <label className="panel__label">
+                        <span>Client scope</span>
+                        <input
+                          className="panel__input panel__input--neutral"
+                          type="text"
+                          readOnly
+                          value={activeClientId || "all clients"}
+                        />
+                      </label>
+                      <label className="panel__label">
+                        <span>Lookback days</span>
+                        <input
+                          className="panel__input panel__input--neutral"
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={loopMaintenanceLookbackDays}
+                          onChange={(event) =>
+                            setLoopMaintenanceLookbackDays(event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="panel__label">
+                        <span>Min confidence</span>
+                        <input
+                          className="panel__input panel__input--neutral"
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={loopMaintenanceMinConfidence}
+                          onChange={(event) =>
+                            setLoopMaintenanceMinConfidence(event.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="button button--primary-subtle"
+                        onClick={() => void handleRunLoopMaintenance()}
+                        disabled={loopMaintenanceRunning}
+                      >
+                        {loopMaintenanceRunning ? "Running..." : "Run maintenance"}
+                      </button>
+                    </div>
+                    {loopMaintenanceError ? (
+                      <p className="panel__error">{loopMaintenanceError}</p>
+                    ) : null}
+                    {loopMaintenanceResult ? (
+                      <div className="admin__history">
+                        <span className="panel__label">Last run summary</span>
+                        <ul className="admin__list">
+                          {loopMaintenanceResult.results.map((item) => (
+                            <li key={item.client_id}>
+                              <span>{item.client_id}</span>
+                              <span className="admin__meta">
+                                calibration {item.calibration_profiles_updated} · distilled{" "}
+                                {item.memory_artifacts_distilled}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div className="admin__history">
+                      <span className="panel__label">Recent runs</span>
+                      {loopMaintenanceHistory.length === 0 ? (
+                        <p className="panel__meta">No maintenance runs logged yet.</p>
+                      ) : (
+                        <ul className="admin__list">
+                          {loopMaintenanceHistory.map((item) => (
+                            <li key={item.id}>
+                              <span>
+                                {item.created_at ?? "n/a"} · lookback {item.lookback_days}d ·
+                                min conf {item.min_confidence}
+                              </span>
+                              <span className="admin__meta">
+                                calibration {item.calibration_profiles_updated} · distilled{" "}
+                                {item.memory_artifacts_distilled}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 )}
               </details>

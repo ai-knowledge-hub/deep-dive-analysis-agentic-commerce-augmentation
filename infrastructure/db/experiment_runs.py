@@ -126,6 +126,36 @@ def list_metrics(
     return [_metric_row(row) for row in rows]
 
 
+def delete_runs_for_experiment(experiment_id: str) -> int:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM experiment_runs WHERE experiment_id = ?",
+        (experiment_id,),
+    )
+    conn.commit()
+    return result.rowcount if result else 0
+
+
+def delete_metrics_for_experiment(experiment_id: str) -> int:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM experiment_metrics WHERE experiment_id = ?",
+        (experiment_id,),
+    )
+    conn.commit()
+    return result.rowcount if result else 0
+
+
+def delete_runs_for_simulation_run(simulation_run_id: str) -> int:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM experiment_runs WHERE simulation_run_id = ?",
+        (simulation_run_id,),
+    )
+    conn.commit()
+    return result.rowcount if result else 0
+
+
 def _run_row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -154,4 +184,7 @@ __all__ = [
     "create_metric",
     "list_metrics",
     "get_metric",
+    "delete_runs_for_experiment",
+    "delete_metrics_for_experiment",
+    "delete_runs_for_simulation_run",
 ]

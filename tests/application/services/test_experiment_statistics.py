@@ -1,7 +1,7 @@
 """Unit tests for experiment statistics module."""
 
 import pytest
-from application.services.experiment_statistics import (
+from application.services.experiment.statistics import (
     compare_variants,
     analyze_trend,
     detect_diminishing_returns,

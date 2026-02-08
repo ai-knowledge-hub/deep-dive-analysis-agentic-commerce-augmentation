@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
 from pydantic import BaseModel, Field
 
 from domain.simulation.types import SimulationProduct
-from application.services.simulation_service import SimulationService
+from application.services.simulation.service import SimulationService
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 
@@ -94,6 +94,17 @@ if APIRouter:
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
         return simulation_service.get_run(
+            run_id=run_id, client_id=client_scope, user_id=user_id
+        )
+
+    @router.delete("/runs/{run_id}")
+    def delete_run(
+        run_id: str,
+        user_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        client_scope = require_client_id(client_id, user_id)
+        return simulation_service.delete_run(
             run_id=run_id, client_id=client_scope, user_id=user_id
         )
 

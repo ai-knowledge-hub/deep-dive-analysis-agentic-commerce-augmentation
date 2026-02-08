@@ -6,6 +6,8 @@ import {
   analyzeEvidence,
   createBattery,
   deleteConversationSession,
+  deleteExperiment,
+  deleteSimulationRun,
   getConversationSnapshot,
   listConversationSessions,
   refreshResearch,
@@ -18,6 +20,8 @@ import {
   startConversationStreamWithEvents,
   verifyRecommendation,
   listExperiments,
+  getLlmConfig,
+  activateAdminLlmProvider,
 } from "../lib/api";
 import type {
   ConversationResponse,
@@ -28,6 +32,8 @@ import type {
   SimulationProduct,
   SimulationRunSummary,
   SimulationLesson,
+  Experiment,
+  LLMConfigSummaryResponse,
 } from "../lib/types";
 import { ChatWindow, type Message } from "../components/chat/ChatWindow";
 import Link from "next/link";
@@ -39,6 +45,21 @@ import { ProductReasoning } from "../components/products/ProductReasoning";
 import { HistoryDrawer } from "../components/layout/HistoryDrawer";
 import { useUser } from "@clerk/nextjs";
 import { useTenant } from "../components/tenant/TenantProvider";
+import { buildTenantStorageKey } from "../lib/storage";
+
+const CHAT_PROVIDER_MODELS: Record<string, string[]> = {
+  openrouter: ["openai/gpt-oss-120b"],
+  openai: ["gpt-5.2-2025-12-11"],
+  anthropic: ["claude-sonnet-4-5-20250929"],
+  gemini: ["gemini-3-flash-preview"],
+};
+
+const CHAT_PROVIDER_LABELS: Record<string, string> = {
+  openrouter: "OpenRouter",
+  openai: "OpenAI",
+  anthropic: "Claude (Anthropic)",
+  gemini: "Gemini",
+};
 
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -65,6 +86,11 @@ export default function HomePage() {
   const [simulationProducts, setSimulationProducts] = useState<SimulationProduct[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [simulationLessons, setSimulationLessons] = useState<SimulationLesson[]>([]);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [llmConfig, setLlmConfig] = useState<LLMConfigSummaryResponse | null>(null);
+  const [llmConfigError, setLlmConfigError] = useState<string | null>(null);
+  const [chatProvider, setChatProvider] = useState<string>("openrouter");
+  const [chatModel, setChatModel] = useState<string>("");
   const [labOperator, setLabOperator] = useState<ConversationResponse["lab_operator"] | null>(
     null,
   );
@@ -81,7 +107,6 @@ export default function HomePage() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
   const [researchStatus, setResearchStatus] = useState<string | null>(null);
-  const [latestExperimentId, setLatestExperimentId] = useState<string | null>(null);
   const [researchRefreshing, setResearchRefreshing] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -110,8 +135,12 @@ export default function HomePage() {
       : `intentionality.last_session.anonymous${clientTag}`;
   }, [storageClientId, userId]);
   const simulationStorageKey = useMemo(
-    () => (userId ? `intentionality.simulation.${userId}` : "intentionality.simulation.anonymous"),
-    [userId],
+    () => buildTenantStorageKey("intentionality.simulation", userId, storageClientId),
+    [storageClientId, userId],
+  );
+  const simulationLatestStorageKey = useMemo(
+    () => buildTenantStorageKey("intentionality.simulation.latest", userId, storageClientId),
+    [storageClientId, userId],
   );
   const evidenceStorageKey = useMemo(() => {
     const clientTag = storageClientId ? `.${storageClientId}` : "";
@@ -120,9 +149,16 @@ export default function HomePage() {
       : `intentionality.evidence.anonymous${clientTag}`;
   }, [storageClientId, userId]);
   const alignmentStorageKey = useMemo(
-    () => (userId ? `intentionality.alignment.${userId}` : "intentionality.alignment.anonymous"),
-    [userId],
+    () => buildTenantStorageKey("intentionality.alignment", userId, storageClientId),
+    [storageClientId, userId],
   );
+  const chatModelOptions = useMemo(() => {
+    const base = CHAT_PROVIDER_MODELS[chatProvider] ?? [];
+    if (chatModel && !base.includes(chatModel)) {
+      return [chatModel, ...base];
+    }
+    return base;
+  }, [chatModel, chatProvider]);
 
   const updateSessions = useCallback(
     (updater: (current: SessionSummary[]) => SessionSummary[]) => {
@@ -139,11 +175,33 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!userId) return;
-    void listExperiments(userId, productId ?? undefined).then((response) => {
-      const first = response.experiments?.[0]?.id ?? null;
-      setLatestExperimentId(first);
-    });
-  }, [productId, userId]);
+    void getLlmConfig(userId)
+      .then((response) => {
+        setLlmConfig(response);
+        setLlmConfigError(null);
+        const activeProvider =
+          response.active_provider === "claude"
+            ? "anthropic"
+            : response.active_provider;
+        const nextProvider =
+          activeProvider ||
+          (response.providers?.openrouter?.configured ? "openrouter" : "openai");
+        const normalizedProvider = CHAT_PROVIDER_MODELS[nextProvider]
+          ? nextProvider
+          : "openrouter";
+        setChatProvider(normalizedProvider);
+        const providerConfig = response.providers?.[normalizedProvider];
+        setChatModel(
+          providerConfig?.model ||
+            CHAT_PROVIDER_MODELS[normalizedProvider]?.[0] ||
+            "",
+        );
+      })
+      .catch((err) => {
+        setLlmConfig(null);
+        setLlmConfigError(err instanceof Error ? err.message : "Unable to load");
+      });
+  }, [userId]);
 
   const handleCloseHistory = useCallback(() => {
     if (isHistoryClosing) return;
@@ -153,6 +211,53 @@ export default function HomePage() {
       setHistoryClosing(false);
     }, 200);
   }, [isHistoryClosing]);
+
+  const handleDeleteSimulationRun = useCallback(
+    async (runId: string) => {
+      if (!userId) return;
+      try {
+        await deleteSimulationRun(runId, userId, clientId ?? undefined);
+        setSimulationRuns((current) => current.filter((run) => run.id !== runId));
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const handleDeleteExperiment = useCallback(
+    async (experimentId: string) => {
+      if (!userId) return;
+      try {
+        await deleteExperiment(experimentId, userId, clientId ?? undefined);
+        setExperiments((current) =>
+          current.filter((experiment) => experiment.id !== experimentId),
+        );
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const applyChatModel = useCallback(
+    async (nextProvider: string, nextModel: string) => {
+      if (!userId) return;
+      try {
+        await activateAdminLlmProvider({
+          user_id: userId,
+          provider: nextProvider,
+          model: nextModel || undefined,
+        });
+        const summary = await getLlmConfig(userId);
+        setLlmConfig(summary);
+        setLlmConfigError(null);
+      } catch (error) {
+        setLlmConfigError("Unable to activate provider.");
+      }
+    },
+    [userId],
+  );
 
   const handleQuickCreateBattery = useCallback(
     async (productId: string, productName?: string) => {
@@ -234,11 +339,7 @@ export default function HomePage() {
   const sendMessage = useCallback(
     async (text: string, opts?: { skipEcho?: boolean }) => {
       if (!text.trim() || isStreaming) return;
-      const isLabCommand =
-        /^\/lab\b/i.test(text) ||
-        /run next test/i.test(text) ||
-        /why did variant/i.test(text) ||
-        /create hypothesis from belief/i.test(text);
+      const isLabCommand = /^\/lab\b/i.test(text);
       if (!opts?.skipEcho) {
         setMessages((prev) => [...prev, { role: "user", content: text }]);
       }
@@ -265,7 +366,6 @@ export default function HomePage() {
         });
       };
       const metadata = {
-        experiment_id: latestExperimentId ?? undefined,
         brand_id: brandId ?? undefined,
         product_id: productId ?? undefined,
         client_id: clientId ?? undefined,
@@ -411,7 +511,6 @@ export default function HomePage() {
       brandId,
       clientId,
       isStreaming,
-      latestExperimentId,
       productId,
       sessionId,
       simulationScenarioDirty,
@@ -535,9 +634,15 @@ export default function HomePage() {
       } catch (error) {
         console.warn("Failed to load simulation lessons", error);
       }
+      try {
+        const response = await listExperiments(userId);
+        setExperiments(response.experiments ?? []);
+      } catch (error) {
+        console.warn("Failed to load experiments", error);
+      }
     };
     void loadSimulationData();
-  }, [userId]);
+  }, [userId, clientId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -549,11 +654,12 @@ export default function HomePage() {
       tone: simulationTone,
     };
     localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
-    localStorage.setItem("intentionality.simulation.latest", JSON.stringify(payload));
+    localStorage.setItem(simulationLatestStorageKey, JSON.stringify(payload));
   }, [
     simulationProducts,
     simulationScenario,
     simulationStorageKey,
+    simulationLatestStorageKey,
     simulationTone,
     selectedSimulationProductId,
     lastQuery,
@@ -641,7 +747,7 @@ export default function HomePage() {
           JSON.stringify(payload),
         );
         localStorage.setItem(
-          "intentionality.simulation.latest",
+          simulationLatestStorageKey,
           JSON.stringify(payload),
         );
       }
@@ -692,7 +798,14 @@ export default function HomePage() {
       }
       setSimulationTone("");
     },
-    [clientId, evidenceStorageKey, setClientId, userId],
+    [
+      clientId,
+      evidenceStorageKey,
+      setClientId,
+      simulationLatestStorageKey,
+      simulationStorageKey,
+      userId,
+    ],
   );
 
   useEffect(() => {
@@ -729,7 +842,7 @@ export default function HomePage() {
     };
     localStorage.setItem(simulationStorageKey, JSON.stringify(payload));
     localStorage.setItem(
-      "intentionality.simulation.latest",
+      simulationLatestStorageKey,
       JSON.stringify(payload),
     );
     const target = sessionId ? `/simulation?session=${sessionId}` : "/simulation";
@@ -741,6 +854,7 @@ export default function HomePage() {
     simulationProducts,
     simulationScenario,
     simulationStorageKey,
+    simulationLatestStorageKey,
     simulationTone,
     sessionId,
   ]);
@@ -769,6 +883,67 @@ export default function HomePage() {
     }
     },
     [deleteTargetId, resetConversation, sessionId, updateSessions, userId],
+  );
+
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      updateSessions((current) =>
+        current.filter((item) => !sessionIds.includes(item.id)),
+      );
+      if (sessionId && sessionIds.includes(sessionId)) {
+        resetConversation();
+      }
+      setDeleteTargetId(null);
+    },
+    [resetConversation, sessionId, updateSessions, userId],
+  );
+
+  const handleBulkDeleteSimulations = useCallback(
+    async (runIds: string[]) => {
+      if (!runIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${runIds.length} simulation run${runIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        runIds.map((id) =>
+          deleteSimulationRun(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setSimulationRuns((current) =>
+        current.filter((run) => !runIds.includes(run.id)),
+      );
+    },
+    [clientId, userId],
+  );
+
+  const handleBulkDeleteExperiments = useCallback(
+    async (experimentIds: string[]) => {
+      if (!experimentIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${experimentIds.length} experiment${experimentIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        experimentIds.map((id) =>
+          deleteExperiment(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setExperiments((current) =>
+        current.filter((experiment) => !experimentIds.includes(experiment.id)),
+      );
+    },
+    [clientId, userId],
   );
 
 
@@ -823,13 +998,28 @@ export default function HomePage() {
         isOpen={isHistoryOpen}
         isClosing={isHistoryClosing}
         sessions={sessions}
+        simulations={simulationRuns}
+        experiments={experiments}
         activeSessionId={sessionId}
         onClose={handleCloseHistory}
         onSelect={(session) => {
           void handleSelectSession(session);
           setHistoryOpen(false);
         }}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          setHistoryOpen(false);
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
+          setHistoryOpen(false);
+        }}
         onRequestDelete={handleDeleteSession}
+        onRequestDeleteSimulation={handleDeleteSimulationRun}
+        onRequestDeleteExperiment={handleDeleteExperiment}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
+        onRequestDeleteSimulationsBulk={handleBulkDeleteSimulations}
+        onRequestDeleteExperimentsBulk={handleBulkDeleteExperiments}
       />
       <main className="main">
         <div className="main__content">
@@ -854,33 +1044,6 @@ export default function HomePage() {
                 isThinking={isStreaming}
                 thinkingMessage={thinkingMessage ?? undefined}
               />
-            </div>
-
-            <div className="chat__quick-actions">
-              <button
-                type="button"
-                className="chat__quick-action"
-                disabled={isStreaming || !latestExperimentId}
-                onClick={() => void sendMessage("/lab next", { skipEcho: true })}
-              >
-                Run next test
-              </button>
-              <button
-                type="button"
-                className="chat__quick-action"
-                disabled={isStreaming || !latestExperimentId}
-                onClick={() => void sendMessage("/lab why", { skipEcho: true })}
-              >
-                Explain last variant
-              </button>
-              <button
-                type="button"
-                className="chat__quick-action"
-                disabled={isStreaming}
-                onClick={() => void sendMessage("/lab belief", { skipEcho: true })}
-              >
-                Create hypothesis from belief
-              </button>
             </div>
             {labOperator?.experiment_id || labOperator?.evidence ? (
               <div className="chat__lab-links">
@@ -925,32 +1088,57 @@ export default function HomePage() {
                 autoComplete="off"
                 rows={1}
               />
-              <button
-                type={isStreaming ? "button" : "submit"}
-                className={`chat__send${isStreaming ? " chat__send--stop" : ""}`}
-                disabled={!inputValue.trim() && !isStreaming}
-                onClick={
-                  isStreaming
-                    ? () => {
-                        abortRef.current?.abort();
-                      }
-                    : undefined
-                }
-              >
-                {isStreaming ? (
-                  <>
-                    Stop
-                    <span className="thinking-dots" aria-hidden="true">
-                      <span>.</span>
-                      <span>.</span>
-                      <span>.</span>
-                    </span>
-                  </>
-                ) : (
-                  "Send"
-                )}
-              </button>
+              <div className="chat__input-row">
+                <div className="chat__input-controls">
+                  <select
+                    value={chatModel}
+                    onChange={(event) => {
+                      const nextModel = event.target.value;
+                      setChatModel(nextModel);
+                      void applyChatModel(chatProvider, nextModel);
+                    }}
+                    aria-label="Model"
+                    title="Model"
+                  >
+                    {(chatModelOptions.length ? chatModelOptions : [chatModel]).map(
+                      (modelName) => (
+                        <option key={modelName} value={modelName}>
+                          {modelName}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+                <button
+                  type={isStreaming ? "button" : "submit"}
+                  className={`chat__send${isStreaming ? " chat__send--stop" : ""}`}
+                  disabled={!inputValue.trim() && !isStreaming}
+                  onClick={
+                    isStreaming
+                      ? () => {
+                          abortRef.current?.abort();
+                        }
+                      : undefined
+                  }
+                >
+                  {isStreaming ? (
+                    <>
+                      Stop
+                      <span className="thinking-dots" aria-hidden="true">
+                        <span>.</span>
+                        <span>.</span>
+                        <span>.</span>
+                      </span>
+                    </>
+                  ) : (
+                    "Send"
+                  )}
+                </button>
+              </div>
             </form>
+            {llmConfigError ? (
+              <span className="chat__model-error">{llmConfigError}</span>
+            ) : null}
           </div>
         </div>
 

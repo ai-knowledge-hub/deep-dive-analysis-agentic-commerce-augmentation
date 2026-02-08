@@ -23,11 +23,15 @@ class DemoRuntime:
 
     def run(self) -> None:
         print(f"Launching {self.surface} demo surface...")
-        from application.services.commerce_plan_builder import CommercePlanBuilder
+        from application.services.conversation.commerce_plan_builder import (
+            CommercePlanBuilder,
+        )
         from api.composition import default_deps
-        from application.services.alignment_service import AlignmentService
-        from application.services.intentionality_profiler import build_profile
-        from application.services.product_search import search_products_for_client
+        from application.services.evidence.alignment_service import AlignmentService
+        from application.services.evidence.intentionality_profiler import build_profile
+        from application.services.conversation.product_search import (
+            search_products_for_client,
+        )
         from domain.commerce.compare import compare as product_compare
         from infrastructure.llm.intent_classifier import classify_intent
         from infrastructure.llm.product_reasoner import reason_about_products_default

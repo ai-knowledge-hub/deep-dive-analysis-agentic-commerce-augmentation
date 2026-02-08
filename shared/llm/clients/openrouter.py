@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import requests
 
-from shared.config.env import settings
+from shared.config.env import get_settings
 from shared.llm.clients.base import LLMClient
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
@@ -15,19 +15,31 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
 
 @dataclass
 class OpenRouterConfig:
-    api_key: str | None = settings.openrouter_api_key
-    model: str = settings.openrouter_model
-    temperature: float = float(settings.__dict__.get("openrouter_temperature", 0.3))
-    max_tokens: int = int(settings.__dict__.get("openrouter_max_tokens", 1024))
-    site_url: str | None = settings.openrouter_site_url
-    app_name: str | None = settings.openrouter_app_name
+    api_key: str | None = None
+    model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    temperature: float = 0.3
+    max_tokens: int = 1024
+    site_url: str | None = None
+    app_name: str | None = None
+
+    @classmethod
+    def from_settings(cls) -> "OpenRouterConfig":
+        settings = get_settings()
+        return cls(
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+            temperature=float(settings.__dict__.get("openrouter_temperature", 0.3)),
+            max_tokens=int(settings.__dict__.get("openrouter_max_tokens", 1024)),
+            site_url=settings.openrouter_site_url,
+            app_name=settings.openrouter_app_name,
+        )
 
 
 class OpenRouterLLMClient(LLMClient):
     """Minimal OpenRouter client that hits the chat completions endpoint."""
 
     def __init__(self, config: OpenRouterConfig | None = None) -> None:
-        self.config = config or OpenRouterConfig()
+        self.config = config or OpenRouterConfig.from_settings()
         if not self.config.api_key:
             raise ValueError(
                 "OPENROUTER_API_KEY must be set when using LLM_PROVIDER=openrouter"
@@ -113,3 +125,11 @@ def get_client() -> OpenRouterLLMClient:
     if _openrouter_client is None:
         _openrouter_client = OpenRouterLLMClient()
     return _openrouter_client
+
+
+def reset_client() -> None:
+    global _openrouter_client
+    _openrouter_client = None
+
+
+__all__ = ["OpenRouterLLMClient", "get_client", "reset_client", "OpenRouterConfig"]

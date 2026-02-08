@@ -15,9 +15,11 @@ import type {
   ValidationSummary,
   QueryBattery,
   QueryBatteryQuery,
+  QueryBatteryCandidate,
   SessionSummary,
   SimulationGapReport,
   SimulationRunDetailResponse,
+  SimulationRunSummary,
 } from "../../lib/types";
 import {
   createBattery,
@@ -25,7 +27,10 @@ import {
   createExperimentVariant,
   deleteBatteryQuery,
   deleteConversationSession,
+  deleteExperiment,
+  deleteSimulationRun,
   generateBatteryQueries,
+  addBatteryQuery,
   getBatteryMetrics,
   listConversationSessions,
   listBatteries,
@@ -45,9 +50,8 @@ import {
   listBrandBeliefs,
   getSimulationRun,
   getExperimentValidationSummary,
-  logExperimentValidation,
-  getBrandPredictionAccuracy,
   listAdminProducts,
+  listSimulationRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -56,6 +60,7 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
 import { MLPrediction } from "../../components/experiments/MLPrediction";
 import { ThompsonSamplingGauge } from "../../components/experiments/ThompsonSamplingGauge";
+import { buildTenantStorageKey } from "../../lib/storage";
 
 export default function ExperimentsPage() {
   const router = useRouter();
@@ -63,8 +68,19 @@ export default function ExperimentsPage() {
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, clientId } = useTenant();
+  const storageClientId =
+    clientId ??
+    (typeof window !== "undefined"
+      ? window.localStorage.getItem("client_id")
+      : null) ??
+    undefined;
+  const experimentsDraftStorageKey = useMemo(
+    () => buildTenantStorageKey("experiments_draft", userId, storageClientId),
+    [storageClientId, userId],
+  );
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
@@ -107,6 +123,10 @@ export default function ExperimentsPage() {
   const [batteryUseLlm, setBatteryUseLlm] = useState(false);
   const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
   const [batterySeedUseCases, setBatterySeedUseCases] = useState("");
+  const [advancedOverridesOpen, setAdvancedOverridesOpen] = useState(false);
+  const [generatedCandidates, setGeneratedCandidates] = useState<
+    (QueryBatteryCandidate & { selected: boolean })[]
+  >([]);
   const [productDetail, setProductDetail] = useState<AdminProduct | null>(null);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
@@ -115,10 +135,13 @@ export default function ExperimentsPage() {
     competitorPolicy: "",
   });
   const [variantForm, setVariantForm] = useState({
-    label: "",
+    label: "Hypothesis (variant)",
+    role: "candidate",
+    description: "",
     type: "copy",
     payload: "",
   });
+  const [variantAdvancedOpen, setVariantAdvancedOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
@@ -150,42 +173,97 @@ export default function ExperimentsPage() {
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
     null,
   );
-  const [validationStatus, setValidationStatus] = useState<string | null>(null);
-  const [brandAccuracy, setBrandAccuracy] = useState<ValidationSummary | null>(null);
-  const [validationForm, setValidationForm] = useState({
-    variantId: "",
-    platform: "chatgpt",
-    queryText: "",
-    observedProducts: "",
-    observedWinnerVariantId: "",
-    observedPosition: "",
-    notes: "",
-  });
   const [jsonErrors, setJsonErrors] = useState({
     hypothesis: null as string | null,
     competitorPolicy: null as string | null,
     variantPayload: null as string | null,
   });
+  const [restoreDraft, setRestoreDraft] = useState<{
+    labMode?: "lab" | "manual";
+    selectedExperimentId?: string | null;
+    experimentForm?: typeof experimentForm;
+    variantForm?: typeof variantForm;
+    variantAdvancedOpen?: boolean;
+    batteryForm?: typeof batteryForm;
+    batteryEdit?: typeof batteryEdit;
+    batterySeedQueries?: string;
+    batterySeedFeatures?: string;
+    batterySeedUseCases?: string;
+    batteryUseLlm?: boolean;
+    advancedOverridesOpen?: boolean;
+  } | null>(null);
+  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
+  const autosaveEnabled = useRef(false);
 
   useEffect(() => {
     if (!userId) return;
     void listConversationSessions(userId).then((response) => {
       setSessions(response.sessions ?? []);
     });
-  }, [userId]);
+    void listSimulationRuns(userId).then((response) => {
+      setSimulationRuns(response.runs ?? []);
+    });
+  }, [userId, clientId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem("experiments_mode");
-    if (saved === "manual" || saved === "lab") {
-      setLabMode(saved);
+    const saved =
+      window.localStorage.getItem(experimentsDraftStorageKey) ??
+      window.localStorage.getItem("experiments_draft");
+    if (!saved) {
+      autosaveEnabled.current = true;
+      return;
     }
-  }, []);
+    try {
+      const parsed = JSON.parse(saved);
+      setRestoreDraft(parsed);
+      setShowRestorePrompt(true);
+    } catch {
+      window.localStorage.removeItem(experimentsDraftStorageKey);
+      window.localStorage.removeItem("experiments_draft");
+      autosaveEnabled.current = true;
+    }
+  }, [experimentsDraftStorageKey]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("experiments_mode", labMode);
-  }, [labMode]);
+  const handleRestoreDraft = useCallback(() => {
+    if (!restoreDraft) return;
+    setLabMode(restoreDraft.labMode ?? "lab");
+    setSelectedExperimentId(restoreDraft.selectedExperimentId ?? null);
+    setExperimentForm((prev) => ({
+      ...prev,
+      ...(restoreDraft.experimentForm ?? {}),
+    }));
+    setVariantForm((prev) => ({
+      ...prev,
+      ...(restoreDraft.variantForm ?? {}),
+    }));
+    setVariantAdvancedOpen(Boolean(restoreDraft.variantAdvancedOpen));
+    setBatteryForm((prev) => ({
+      ...prev,
+      ...(restoreDraft.batteryForm ?? {}),
+    }));
+    setBatteryEdit((prev) => ({
+      ...prev,
+      ...(restoreDraft.batteryEdit ?? {}),
+    }));
+    setBatterySeedQueries(restoreDraft.batterySeedQueries ?? "");
+    setBatterySeedFeatures(restoreDraft.batterySeedFeatures ?? "");
+    setBatterySeedUseCases(restoreDraft.batterySeedUseCases ?? "");
+    setBatteryUseLlm(Boolean(restoreDraft.batteryUseLlm));
+    setAdvancedOverridesOpen(Boolean(restoreDraft.advancedOverridesOpen));
+    setShowRestorePrompt(false);
+    autosaveEnabled.current = true;
+  }, [restoreDraft]);
+
+  const handleDismissDraft = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(experimentsDraftStorageKey);
+      window.localStorage.removeItem("experiments_draft");
+    }
+    setRestoreDraft(null);
+    setShowRestorePrompt(false);
+    autosaveEnabled.current = true;
+  }, [experimentsDraftStorageKey]);
 
   useEffect(() => {
     void listBatteries(userId, productId ?? undefined).then((response) => {
@@ -194,11 +272,42 @@ export default function ExperimentsPage() {
     void listExperiments(userId, productId ?? undefined).then((response) => {
       const items = response.experiments ?? [];
       setExperiments(items);
-      if (!selectedExperimentId && items[0]?.id) {
-        setSelectedExperimentId(items[0].id);
-      }
     });
   }, [productId, selectedExperimentId, userId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!autosaveEnabled.current) return;
+    const payload = {
+      labMode,
+      selectedExperimentId,
+      experimentForm,
+      variantForm,
+      variantAdvancedOpen,
+      batteryForm,
+      batteryEdit,
+      batterySeedQueries,
+      batterySeedFeatures,
+      batterySeedUseCases,
+      batteryUseLlm,
+      advancedOverridesOpen,
+    };
+    window.localStorage.setItem(experimentsDraftStorageKey, JSON.stringify(payload));
+  }, [
+    experimentsDraftStorageKey,
+    labMode,
+    selectedExperimentId,
+    experimentForm,
+    variantForm,
+    variantAdvancedOpen,
+    batteryForm,
+    batteryEdit,
+    batterySeedQueries,
+    batterySeedFeatures,
+    batterySeedUseCases,
+    batteryUseLlm,
+    advancedOverridesOpen,
+  ]);
 
   useEffect(() => {
     if (!brandId || !productId || !userId) {
@@ -303,19 +412,9 @@ export default function ExperimentsPage() {
   }, [runs, simulationDetails, userId]);
 
   useEffect(() => {
-    if (!variants.length) return;
-    if (validationForm.variantId) return;
-    setValidationForm((prev) => ({
-      ...prev,
-      variantId: variants[0]?.id ?? "",
-    }));
-  }, [validationForm.variantId, variants]);
-
-  useEffect(() => {
     if (!brandId) {
       setBeliefCount(0);
       setLatestBelief(null);
-      setBrandAccuracy(null);
       return;
     }
     void listBrandBeliefs(brandId, userId, 25)
@@ -328,11 +427,6 @@ export default function ExperimentsPage() {
         setLatestBelief(response.belief ?? null);
       })
       .catch(() => setLatestBelief(null));
-    void getBrandPredictionAccuracy(brandId, userId)
-      .then((response) => {
-        setBrandAccuracy(response.summary ?? null);
-      })
-      .catch(() => setBrandAccuracy(null));
   }, [brandId, userId]);
 
   useEffect(() => {
@@ -417,6 +511,37 @@ export default function ExperimentsPage() {
     }, 200);
   }, [isHistoryClosing]);
 
+  const handleDeleteSimulationRun = useCallback(
+    async (runId: string) => {
+      if (!userId) return;
+      try {
+        await deleteSimulationRun(runId, userId, clientId ?? undefined);
+        setSimulationRuns((current) => current.filter((run) => run.id !== runId));
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
+  const handleDeleteExperiment = useCallback(
+    async (experimentId: string) => {
+      if (!userId) return;
+      try {
+        await deleteExperiment(experimentId, userId, clientId ?? undefined);
+        setExperiments((current) =>
+          current.filter((experiment) => experiment.id !== experimentId),
+        );
+        setSelectedExperimentId((current) =>
+          current === experimentId ? null : current,
+        );
+      } catch {
+        // ignore delete errors
+      }
+    },
+    [clientId, userId],
+  );
+
   const confirmDeleteSession = useCallback(async () => {
     if (!deleteTargetId) return;
     try {
@@ -426,6 +551,63 @@ export default function ExperimentsPage() {
       setDeleteTargetId(null);
     }
   }, [deleteTargetId, userId]);
+
+  const handleBulkDeleteSessions = useCallback(
+    async (sessionIds: string[]) => {
+      if (!sessionIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${sessionIds.length} chat session${sessionIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        sessionIds.map((id) =>
+          deleteConversationSession(id, userId).catch(() => null),
+        ),
+      );
+      setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
+      setDeleteTargetId(null);
+    },
+    [userId],
+  );
+
+  const handleBulkDeleteSimulations = useCallback(
+    async (runIds: string[]) => {
+      if (!runIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${runIds.length} simulation run${runIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        runIds.map((id) =>
+          deleteSimulationRun(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setSimulationRuns((current) => current.filter((run) => !runIds.includes(run.id)));
+    },
+    [clientId, userId],
+  );
+
+  const handleBulkDeleteExperiments = useCallback(
+    async (experimentIds: string[]) => {
+      if (!experimentIds.length || !userId) return;
+      const ok = window.confirm(
+        `Delete ${experimentIds.length} experiment${experimentIds.length === 1 ? "" : "s"}?`,
+      );
+      if (!ok) return;
+      await Promise.all(
+        experimentIds.map((id) =>
+          deleteExperiment(id, userId, clientId ?? undefined).catch(() => null),
+        ),
+      );
+      setExperiments((current) =>
+        current.filter((experiment) => !experimentIds.includes(experiment.id)),
+      );
+      setSelectedExperimentId((current) =>
+        current && experimentIds.includes(current) ? null : current,
+      );
+    },
+    [clientId, userId],
+  );
 
   const handleRunVariant = useCallback(
     async (variantId: string) => {
@@ -563,6 +745,8 @@ export default function ExperimentsPage() {
 
   const hasBottomUpMetadata = useMemo(() => {
     const metadata = productDetail?.metadata ?? {};
+    const canonicalSpec =
+      (metadata.canonical_intent_spec as Record<string, unknown> | undefined) ?? {};
     const features = metadata.features;
     const useCase = metadata.use_case ?? metadata.scenario;
     const hasFeatures =
@@ -571,10 +755,36 @@ export default function ExperimentsPage() {
     const hasUseCase =
       (Array.isArray(useCase) && useCase.length > 0) ||
       (typeof useCase === "string" && useCase.trim() !== "");
+    const canonicalFeatures = canonicalSpec.feature_concepts;
+    const canonicalUseCases = canonicalSpec.use_cases;
+    const hasCanonicalFeatures =
+      (Array.isArray(canonicalFeatures) && canonicalFeatures.length > 0) ||
+      (typeof canonicalFeatures === "string" && canonicalFeatures.trim() !== "");
+    const hasCanonicalUseCases =
+      (Array.isArray(canonicalUseCases) && canonicalUseCases.length > 0) ||
+      (typeof canonicalUseCases === "string" && canonicalUseCases.trim() !== "");
     const hasIntentLabels = Boolean(metadata.intent_labels || metadata.intent_archetypes);
-    const hasVertical = Boolean(metadata.vertical || metadata.domain || metadata.category);
-    return hasFeatures || hasUseCase || hasIntentLabels || hasVertical;
+    const hasVertical = Boolean(
+      metadata.vertical ||
+        metadata.domain ||
+        metadata.category ||
+        canonicalSpec.category,
+    );
+    return (
+      hasFeatures ||
+      hasUseCase ||
+      hasCanonicalFeatures ||
+      hasCanonicalUseCases ||
+      hasIntentLabels ||
+      hasVertical
+    );
   }, [productDetail]);
+
+  useEffect(() => {
+    if (batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata) {
+      setAdvancedOverridesOpen(true);
+    }
+  }, [batteryForm.generationMode, hasBottomUpMetadata]);
 
   const handleGenerateQueries = useCallback(
     async (batteryId: string) => {
@@ -612,15 +822,20 @@ export default function ExperimentsPage() {
           seed_use_cases: useCaseSeeds.length ? useCaseSeeds : undefined,
           user_id: userId,
           use_llm: batteryUseLlm,
+          persist: false,
         });
         setBatteryGenerationReport(response.report ?? null);
+        const candidates = (response.candidates ?? []).map((candidate) => ({
+          ...candidate,
+          selected: true,
+          weight: typeof candidate.weight === "number" ? candidate.weight : 1,
+        }));
+        setGeneratedCandidates(candidates);
         if (response.report) {
           setBatteryStatus(
             `Accepted ${response.report.accepted_count}, rejected ${response.report.rejected_count}.`,
           );
         }
-        const refreshed = await listBatteryQueries(batteryId, userId);
-        setQueries(refreshed.queries ?? []);
       } finally {
         setSubmitting(false);
       }
@@ -635,6 +850,34 @@ export default function ExperimentsPage() {
       parseSeedList,
       userId,
     ],
+  );
+
+  const handleSaveGeneratedCandidates = useCallback(
+    async (batteryId: string) => {
+      if (!batteryId || generatedCandidates.length === 0) return;
+      setSubmitting(true);
+      try {
+        const selected = generatedCandidates.filter((item) => item.selected);
+        for (const item of selected) {
+          await addBatteryQuery(batteryId, {
+            query_text: item.query_text,
+            query_type: item.query_type ?? undefined,
+            intent_archetype: item.intent_archetype ?? undefined,
+            constraints: item.constraints ?? undefined,
+            weight: typeof item.weight === "number" ? item.weight : 1,
+            enabled: true,
+            user_id: userId,
+          });
+        }
+        setBatteryStatus(`Saved ${selected.length} queries to battery.`);
+        const refreshed = await listBatteryQueries(batteryId, userId);
+        setQueries(refreshed.queries ?? []);
+        setGeneratedCandidates([]);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [generatedCandidates, userId],
   );
 
   const handleQueryToggle = useCallback(
@@ -895,24 +1138,45 @@ export default function ExperimentsPage() {
   ]);
 
   const handleCreateVariant = useCallback(async () => {
-    if (!selectedExperimentId || !variantForm.label.trim()) return;
+    if (!selectedExperimentId) return;
     if (jsonErrors.variantPayload) return;
     setFormError(null);
     setSubmitting(true);
     try {
-      const payload =
+      const basePayload =
         variantForm.payload.trim() !== ""
           ? JSON.parse(variantForm.payload)
           : {};
+      const payload: Record<string, unknown> =
+        basePayload && typeof basePayload === "object"
+          ? { ...(basePayload as Record<string, unknown>) }
+          : {};
+      const description = variantForm.description.trim();
+      if (description) {
+        payload.description = description;
+      }
+      payload.role = variantForm.role;
+      const normalizedLabel = variantForm.label.trim()
+        ? variantForm.label.trim()
+        : variantForm.role === "control"
+          ? "Control (current copy)"
+          : "Hypothesis (variant)";
       await createExperimentVariant(selectedExperimentId, {
-        label: variantForm.label.trim(),
+        label: normalizedLabel,
         type: variantForm.type.trim() || "copy",
         payload,
         user_id: userId,
       });
       const refreshed = await listExperimentVariants(selectedExperimentId, userId);
       setVariants(refreshed.variants ?? []);
-      setVariantForm({ label: "", type: "copy", payload: "" });
+      setVariantForm({
+        label: "Hypothesis (variant)",
+        role: "candidate",
+        description: "",
+        type: "copy",
+        payload: "",
+      });
+      setVariantAdvancedOpen(false);
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : "Invalid JSON payload.",
@@ -953,44 +1217,6 @@ export default function ExperimentsPage() {
       setIsRecommending(false);
     }
   }, [selectedExperimentId, userId]);
-
-  const handleLogValidation = useCallback(async () => {
-    if (!selectedExperimentId) return;
-    setValidationStatus(null);
-    setSubmitting(true);
-    try {
-      const observedProducts = validationForm.observedProducts
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const response = await logExperimentValidation(selectedExperimentId, {
-        variant_id: validationForm.variantId || undefined,
-        platform: validationForm.platform || undefined,
-        query_text: validationForm.queryText || undefined,
-        observed_products: observedProducts,
-        observed_winner_variant_id: validationForm.observedWinnerVariantId || undefined,
-        observed_position: validationForm.observedPosition
-          ? Number(validationForm.observedPosition)
-          : undefined,
-        notes: validationForm.notes || undefined,
-        user_id: userId ?? undefined,
-      });
-      setValidationSummary(response.summary);
-      setValidationStatus("Validation logged.");
-      setValidationForm((prev) => ({
-        ...prev,
-        queryText: "",
-        observedProducts: "",
-        observedWinnerVariantId: "",
-        observedPosition: "",
-        notes: "",
-      }));
-    } catch {
-      setValidationStatus("Unable to log validation.");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [selectedExperimentId, userId, validationForm]);
 
   const handleRunRecommended = useCallback(async () => {
     if (!selectedExperimentId || !nextTest?.variant_id) return;
@@ -1131,7 +1357,6 @@ export default function ExperimentsPage() {
   );
 
   const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
-  const beliefsRef = useRef<HTMLDivElement | null>(null);
   const metricsByVariant = useMemo(() => {
     const map = new Map<string, ExperimentMetric>();
     metrics.forEach((metric) => {
@@ -1143,6 +1368,7 @@ export default function ExperimentsPage() {
     });
     return map;
   }, [metrics]);
+  const beliefsRef = useRef<HTMLDivElement | null>(null);
 
   const labLoopSteps = useMemo(() => {
     const hypothesisReady = Boolean(
@@ -1266,30 +1492,6 @@ export default function ExperimentsPage() {
     };
   }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
 
-  const perVariantGaps = useMemo(() => {
-    const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
-    if (!targetProductId) return new Map<string, SimulationGapReport>();
-    const result = new Map<string, SimulationGapReport>();
-    metricsByVariant.forEach((metric, variantId) => {
-      const runsForVariant = runs.filter(
-        (run) => run.variant_id === variantId && run.simulation_run_id,
-      );
-      for (const run of runsForVariant) {
-        const detail = simulationDetails[run.simulation_run_id as string];
-        if (!detail?.result?.gap_analysis) continue;
-        const gap =
-          detail.result.gap_analysis.find(
-            (item) => item.product_id === targetProductId,
-          ) ?? detail.result.gap_analysis[0];
-        if (gap) {
-          result.set(variantId, gap as SimulationGapReport);
-          break;
-        }
-      }
-    });
-    return result;
-  }, [metricsByVariant, productId, runs, selectedExperiment?.product_id, simulationDetails]);
-
   const runGapDetails = useMemo(() => {
     const targetProductId = selectedExperiment?.product_id ?? productId ?? null;
     if (!targetProductId) return new Map<string, SimulationGapReport>();
@@ -1391,15 +1593,28 @@ export default function ExperimentsPage() {
         onOpenHistory={() => setHistoryOpen(true)}
       />
       <HistoryDrawer
-        open={isHistoryOpen}
-        closing={isHistoryClosing}
+        isOpen={isHistoryOpen}
+        isClosing={isHistoryClosing}
         sessions={sessions}
+        simulations={simulationRuns}
+        experiments={experiments}
         activeSessionId={null}
         onClose={handleCloseHistory}
-        onSelect={(id) => router.push(`/?session=${id}`)}
-        onDelete={(id) => setDeleteTargetId(id)}
-        confirmDeleteId={deleteTargetId}
-        onConfirmDelete={confirmDeleteSession}
+        onSelect={(session) => router.push(`/?session=${session.id}`)}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          handleCloseHistory();
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
+          handleCloseHistory();
+        }}
+        onRequestDelete={(id) => setDeleteTargetId(id)}
+        onRequestDeleteSimulation={handleDeleteSimulationRun}
+        onRequestDeleteExperiment={handleDeleteExperiment}
+        onRequestDeleteSessionsBulk={handleBulkDeleteSessions}
+        onRequestDeleteSimulationsBulk={handleBulkDeleteSimulations}
+        onRequestDeleteExperimentsBulk={handleBulkDeleteExperiments}
       />
       <main className="main main--detail">
         <div className="detail">
@@ -1440,9 +1655,31 @@ export default function ExperimentsPage() {
           <div className="detail__stack">
             <section className="panel__notice panel__notice--info">
               <strong>Lab signals only:</strong> Experiment results are screening
-              signals from simulated judges. Validate winners with live tests
-              before rollout.
+              signals from simulated judges. Use them to prioritize what to test
+              next.
             </section>
+            {showRestorePrompt ? (
+              <section className="panel__notice panel__notice--info">
+                <strong>Restore last session?</strong> Your last experiment draft
+                is available.
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action"
+                    onClick={handleRestoreDraft}
+                  >
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={handleDismissDraft}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </section>
+            ) : null}
             <section className="panel__card lab-loop">
             <div className="panel__header">
               <h3>Lab Loop</h3>
@@ -1619,41 +1856,53 @@ export default function ExperimentsPage() {
                     "Create battery"
                   )}
                 </button>
-                <label className="panel__label">
-                  Seed queries (optional, one per line)
-                  <textarea
-                    className="panel__textarea"
-                    value={batterySeedQueries}
-                    onChange={(event) => setBatterySeedQueries(event.target.value)}
-                    rows={3}
-                  />
-                </label>
-                <label className="panel__label">
-                  Seed features (recommended for bottom-up)
-                  <textarea
-                    className="panel__textarea"
-                    value={batterySeedFeatures}
-                    onChange={(event) => setBatterySeedFeatures(event.target.value)}
-                    rows={2}
-                    placeholder="lightweight cushioning, breathable upper, stable heel support"
-                  />
-                </label>
-                <label className="panel__label">
-                  Seed use-cases (recommended for bottom-up)
-                  <textarea
-                    className="panel__textarea"
-                    value={batterySeedUseCases}
-                    onChange={(event) => setBatterySeedUseCases(event.target.value)}
-                    rows={2}
-                    placeholder="daily training, long-distance running, injury prevention"
-                  />
-                </label>
                 {batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata ? (
                   <div className="panel__notice panel__notice--info">
-                    Bottom-up has weak product metadata. Add seed features/use-cases or we
+                    Bottom-up has weak product metadata. Use Advanced overrides below or we
                     will offer fallback to top-down at generation time.
                   </div>
                 ) : null}
+                <details
+                  open={advancedOverridesOpen}
+                  onToggle={(event) =>
+                    setAdvancedOverridesOpen(event.currentTarget.open)
+                  }
+                >
+                  <summary className="panel__label">
+                    Advanced overrides (optional)
+                  </summary>
+                  <div className="panel__form">
+                    <label className="panel__label">
+                      Seed queries (optional, one per line)
+                      <textarea
+                        className="panel__textarea"
+                        value={batterySeedQueries}
+                        onChange={(event) => setBatterySeedQueries(event.target.value)}
+                        rows={3}
+                      />
+                    </label>
+                    <label className="panel__label">
+                      Seed features (recommended for bottom-up)
+                      <textarea
+                        className="panel__textarea"
+                        value={batterySeedFeatures}
+                        onChange={(event) => setBatterySeedFeatures(event.target.value)}
+                        rows={2}
+                        placeholder="lightweight cushioning, breathable upper, stable heel support"
+                      />
+                    </label>
+                    <label className="panel__label">
+                      Seed use-cases (recommended for bottom-up)
+                      <textarea
+                        className="panel__textarea"
+                        value={batterySeedUseCases}
+                        onChange={(event) => setBatterySeedUseCases(event.target.value)}
+                        rows={2}
+                        placeholder="daily training, long-distance running, injury prevention"
+                      />
+                    </label>
+                  </div>
+                </details>
                 <label className="panel__label">
                   Generate for battery
                   <select
@@ -1717,9 +1966,18 @@ export default function ExperimentsPage() {
                     ) : null}
                     {batteryGenerationReport.clarification_required &&
                     batteryGenerationReport.clarification_prompt ? (
-                      <p className="panel__error">
-                        {batteryGenerationReport.clarification_prompt}
-                      </p>
+                      <>
+                        <p className="panel__error">
+                          {batteryGenerationReport.clarification_prompt}
+                        </p>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => router.push("/admin")}
+                        >
+                          Open Admin to set canonical spec
+                        </button>
+                      </>
                     ) : null}
                     {batteryGenerationReport.rejected &&
                     batteryGenerationReport.rejected.length > 0 ? (
@@ -1732,6 +1990,77 @@ export default function ExperimentsPage() {
                         ))}
                       </ul>
                     ) : null}
+                  </div>
+                ) : null}
+                {generatedCandidates.length > 0 ? (
+                  <div className="panel__card">
+                    <div className="panel__header">
+                      <h4>Preview & approve queries</h4>
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() => setGeneratedCandidates([])}
+                      >
+                        Clear preview
+                      </button>
+                    </div>
+                    <div className="panel__form">
+                      {generatedCandidates.map((candidate, index) => (
+                        <div
+                          className="panel__row panel__row--dense"
+                          key={`${candidate.query_text}-${index}`}
+                        >
+                          <label className="panel__toggle">
+                            <input
+                              type="checkbox"
+                              checked={candidate.selected}
+                              onChange={(event) =>
+                                setGeneratedCandidates((current) =>
+                                  current.map((item, idx) =>
+                                    idx === index
+                                      ? { ...item, selected: event.target.checked }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            <span>{candidate.query_text}</span>
+                          </label>
+                          <input
+                            className="panel__input panel__input--tiny"
+                            type="number"
+                            min={0}
+                            step={0.1}
+                            value={candidate.weight ?? 1}
+                            onChange={(event) =>
+                              setGeneratedCandidates((current) =>
+                                current.map((item, idx) =>
+                                  idx === index
+                                    ? { ...item, weight: Number(event.target.value) }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="panel__action"
+                        onClick={() =>
+                          handleSaveGeneratedCandidates(experimentForm.batteryId)
+                        }
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? (
+                          <>
+                            Saving queries<span className="button__dots" />
+                          </>
+                        ) : (
+                          "Save selected queries"
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1795,7 +2124,7 @@ export default function ExperimentsPage() {
                   onClick={handleUpdateBattery}
                   disabled={isSubmitting}
                 >
-                  Save battery
+                  Save battery details
                 </button>
                 {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
                 {queries.length === 0 ? (
@@ -2070,7 +2399,7 @@ export default function ExperimentsPage() {
           </section>
 
           <div className="detail__grid">
-            <section className="panel__card">
+            <section className="panel__card panel__card--full-row">
               <div className="panel__header">
                 <h3>Variants</h3>
                 <div className="panel__meta">
@@ -2087,7 +2416,44 @@ export default function ExperimentsPage() {
                   </button>
                 </div>
               </div>
+              <p className="panel__muted">
+                Variants are copy candidates tested against the same query battery.
+              </p>
+              <div className="variant-flow">
+                <span className="variant-flow__step is-active">1. Define</span>
+                <span className="variant-flow__step is-active">2. Create</span>
+                <span
+                  className={`variant-flow__step ${
+                    variants.length > 0 ? "is-active" : ""
+                  }`}
+                >
+                  3. Run
+                </span>
+              </div>
               <div className="panel__form">
+                <label className="panel__label">
+                  Role
+                  <select
+                    className="panel__input"
+                    value={variantForm.role}
+                    onChange={(event) => {
+                      const role = event.target.value as "candidate" | "control";
+                      setVariantForm((prev) => ({
+                        ...prev,
+                        role,
+                        label:
+                          role === "control"
+                            ? "Control (current copy)"
+                            : prev.label === "Control (current copy)"
+                              ? "Hypothesis (variant)"
+                              : prev.label,
+                      }));
+                    }}
+                  >
+                    <option value="candidate">Candidate</option>
+                    <option value="control">Control</option>
+                  </select>
+                </label>
                 <label className="panel__label">
                   Label
                   <input
@@ -2103,51 +2469,78 @@ export default function ExperimentsPage() {
                   />
                 </label>
                 <label className="panel__label">
-                  Type
-                  <input
-                    className="panel__input"
-                    value={variantForm.type}
-                    onChange={(event) =>
-                      setVariantForm((prev) => ({
-                        ...prev,
-                        type: event.target.value,
-                      }))
-                    }
-                    placeholder="copy"
-                  />
-                </label>
-                <label className="panel__label">
-                  Payload (JSON)
+                  Candidate description
                   <textarea
                     className="panel__textarea"
-                    value={variantForm.payload}
+                    value={variantForm.description}
                     onChange={(event) =>
                       setVariantForm((prev) => ({
                         ...prev,
-                        payload: event.target.value,
+                        description: event.target.value,
                       }))
                     }
-                    rows={3}
-                    placeholder='{"description":"Updated copy"}'
+                    rows={5}
+                    placeholder="Write the copy variation to test..."
                   />
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() =>
-                        setVariantForm((prev) => ({
-                          ...prev,
-                          payload: '{"description":"Outcome-led copy that emphasizes user goals and capabilities."}',
-                        }))
-                      }
-                    >
-                      Use template
-                    </button>
-                  </div>
-                  {jsonErrors.variantPayload ? (
-                    <span className="panel__error">{jsonErrors.variantPayload}</span>
-                  ) : null}
                 </label>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() =>
+                      setVariantForm((prev) => ({
+                        ...prev,
+                        description:
+                          "Outcome-led copy that emphasizes user goals and capabilities.",
+                      }))
+                    }
+                  >
+                    Use description template
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => setVariantAdvancedOpen((open) => !open)}
+                  >
+                    {variantAdvancedOpen ? "Hide advanced" : "Advanced JSON"}
+                  </button>
+                </div>
+                {variantAdvancedOpen ? (
+                  <>
+                    <label className="panel__label">
+                      Type
+                      <input
+                        className="panel__input"
+                        value={variantForm.type}
+                        onChange={(event) =>
+                          setVariantForm((prev) => ({
+                            ...prev,
+                            type: event.target.value,
+                          }))
+                        }
+                        placeholder="copy"
+                      />
+                    </label>
+                    <label className="panel__label">
+                      Payload overrides (JSON)
+                      <textarea
+                        className="panel__textarea"
+                        value={variantForm.payload}
+                        onChange={(event) =>
+                          setVariantForm((prev) => ({
+                            ...prev,
+                            payload: event.target.value,
+                          }))
+                        }
+                        rows={3}
+                        placeholder='{"metadata":{"channel":"web"}}'
+                      />
+                    </label>
+                    {jsonErrors.variantPayload ? (
+                      <span className="panel__error">{jsonErrors.variantPayload}</span>
+                    ) : null}
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className="panel__action"
@@ -2171,24 +2564,61 @@ export default function ExperimentsPage() {
                 <p className="panel__empty">Add variants to run experiments.</p>
               ) : (
                 <ul className="panel__list">
-                  {variants.map((variant) => (
-                    <li key={variant.id}>
+                {variants.map((variant) => (
+                  <li key={variant.id}>
+                    <div className="panel__meta">
+                      <span>{variant.label}</span>
+                      <span className="panel__badge panel__badge--secondary">
+                        {variant.type}
+                      </span>
+                      <span
+                        className={`panel__badge ${
+                          metricsByVariant.has(variant.id)
+                            ? "panel__badge--success"
+                            : "panel__badge--secondary"
+                        }`}
+                      >
+                        {metricsByVariant.has(variant.id) ? "Tested" : "Draft"}
+                      </span>
+                    </div>
+                    {typeof variant.payload?.description === "string" &&
+                    variant.payload.description.trim() ? (
+                      <div className="panel__muted">
+                        {variant.payload.description}
+                      </div>
+                    ) : null}
+                    {metricsByVariant.has(variant.id) ? (
                       <div className="panel__meta">
-                        <span>{variant.label}</span>
-                        <span className="panel__badge panel__badge--secondary">
-                          {variant.type}
+                        <span className="panel__muted">
+                          Win rate:{" "}
+                          {(
+                            (metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >
+                          ).win_rate ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Runs:{" "}
+                          {(
+                            (metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >
+                          ).total_runs ?? "—"}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className="panel__action"
-                        onClick={() => handleRunVariant(variant.id)}
-                        disabled={runningVariantId === variant.id}
-                      >
-                        {runningVariantId === variant.id ? "Running…" : "Run battery"}
-                      </button>
-                    </li>
-                  ))}
+                    ) : null}
+                    <button
+                      type="button"
+                      className="panel__action"
+                      onClick={() => handleRunVariant(variant.id)}
+                      disabled={runningVariantId === variant.id}
+                    >
+                        {runningVariantId === variant.id ? "Running…" : "Run variant test"}
+                    </button>
+                  </li>
+                ))}
                 </ul>
               )}
               {nextTest ? (
@@ -2344,174 +2774,6 @@ export default function ExperimentsPage() {
               )}
             </section>
 
-            <section className="panel__card">
-              <div className="panel__header">
-                <h3>Validation Progress</h3>
-                {validationSummary?.unlock_ready ? (
-                  <span className="panel__badge panel__badge--success">
-                    Insights unlocked
-                  </span>
-                ) : (
-                  <span className="panel__badge panel__badge--secondary">
-                    Lab-only
-                  </span>
-                )}
-              </div>
-              <div className="panel__form">
-                <div className="panel__meta panel__meta--stack">
-                  <span className="panel__muted">
-                    Logged validations: {validationSummary?.total_logged ?? 0}
-                  </span>
-                  <span className="panel__muted">
-                    Verified runs: {validationSummary?.verified_runs ?? 0} / 10
-                  </span>
-                  <span className="panel__muted">
-                    Accuracy:{" "}
-                    {validationSummary
-                      ? `${Math.round(validationSummary.accuracy * 100)}%`
-                      : "—"}
-                  </span>
-                </div>
-                <div className="progress-bar">
-                  <div
-                    className="progress-bar__fill"
-                    style={{
-                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
-                    }}
-                  />
-                </div>
-                {brandAccuracy ? (
-                  <div className="panel__meta panel__meta--stack">
-                    <span className="panel__muted">
-                      Brand accuracy: {Math.round(brandAccuracy.accuracy * 100)}%
-                    </span>
-                    <span className="panel__muted">
-                      Verified (brand): {brandAccuracy.verified_runs}
-                    </span>
-                  </div>
-                ) : null}
-                <label className="panel__label">
-                  Variant (lab winner)
-                  <select
-                    className="panel__input"
-                    value={validationForm.variantId}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        variantId: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Select variant</option>
-                    {variants.map((variant) => (
-                      <option key={variant.id} value={variant.id}>
-                        {variant.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="panel__label">
-                  Platform
-                  <select
-                    className="panel__input"
-                    value={validationForm.platform}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        platform: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="chatgpt">ChatGPT</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="perplexity">Perplexity</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-                <label className="panel__label">
-                  Query tested
-                  <input
-                    className="panel__input"
-                    value={validationForm.queryText}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        queryText: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g., running shoes for marathon training"
-                  />
-                </label>
-                <label className="panel__label">
-                  Products shown (comma-separated)
-                  <input
-                    className="panel__input"
-                    value={validationForm.observedProducts}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        observedProducts: event.target.value,
-                      }))
-                    }
-                    placeholder="Product A, Product B"
-                  />
-                </label>
-                <label className="panel__label">
-                  Observed winner variant (optional)
-                  <input
-                    className="panel__input"
-                    value={validationForm.observedWinnerVariantId}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        observedWinnerVariantId: event.target.value,
-                      }))
-                    }
-                    placeholder="Variant ID (if known)"
-                  />
-                </label>
-                <label className="panel__label">
-                  Observed position (optional)
-                  <input
-                    className="panel__input"
-                    value={validationForm.observedPosition}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        observedPosition: event.target.value,
-                      }))
-                    }
-                    placeholder="1"
-                  />
-                </label>
-                <label className="panel__label">
-                  Notes
-                  <textarea
-                    className="panel__textarea"
-                    value={validationForm.notes}
-                    onChange={(event) =>
-                      setValidationForm((prev) => ({
-                        ...prev,
-                        notes: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="Any observations..."
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="panel__action"
-                  onClick={handleLogValidation}
-                  disabled={isSubmitting || !selectedExperimentId}
-                >
-                  Log verification result
-                </button>
-                {validationStatus ? (
-                  <p className="panel__success">{validationStatus}</p>
-                ) : null}
-              </div>
-            </section>
           </div>
 
           {brandId ? (
@@ -2532,12 +2794,11 @@ export default function ExperimentsPage() {
                 <div className="panel__header">
                   <h3>Pattern Insights (Locked)</h3>
                   <span className="panel__badge panel__badge--secondary">
-                    Validation required
+                    Locked
                   </span>
                 </div>
                 <p className="panel__muted">
-                  Unlock after 10+ verified experiments and ≥75% prediction
-                  accuracy. Log live validation results to progress.
+                  Insights appear after enough experiment evidence accumulates.
                 </p>
                 <div className="progress-bar">
                   <div
@@ -2548,70 +2809,11 @@ export default function ExperimentsPage() {
                   />
                 </div>
                 <p className="panel__muted">
-                  Progress: {validationSummary?.verified_runs ?? 0}/10 verified
+                  Progress: {Math.round((validationSummary?.progress ?? 0) * 100)}%
                 </p>
               </section>
             )
           ) : null}
-
-          <section className="panel__card">
-            <div className="panel__header">
-              <h3>Variant Comparison</h3>
-            </div>
-            {variants.length === 0 ? (
-              <p className="panel__empty">Add variants to compare results.</p>
-            ) : (
-              <ul className="panel__list">
-                {variants.map((variant) => {
-                  const metric = metricsByVariant.get(variant.id);
-                  const values = (metric?.metrics ?? {}) as Record<string, unknown>;
-                  const gap = perVariantGaps.get(variant.id);
-                  return (
-                    <li key={variant.id}>
-                      <div className="panel__meta">
-                        <span>{variant.label}</span>
-                        <span className="panel__badge panel__badge--secondary">
-                          {variant.type}
-                        </span>
-                        {gap?.severity ? (
-                          <span
-                            className={`panel__badge panel__badge--severity-${gap.severity}`}
-                          >
-                            {gap.severity} gap
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="panel__meta">
-                        <span className="panel__muted">
-                          Win rate: {values.win_rate ?? "—"}
-                        </span>
-                        <span className="panel__muted">
-                          Robust win rate: {values.win_rate_robust ?? "—"}
-                        </span>
-                        <span className="panel__muted">
-                          Avg score: {values.avg_score ?? "—"}
-                        </span>
-                        <span className="panel__muted">
-                          Runs: {values.total_runs ?? "—"}
-                        </span>
-                      </div>
-                      {gap ? (
-                        <div className="panel__muted">
-                          Missing: {(gap.missing_signals ?? []).slice(0, 3).join(", ") || "—"}
-                        </div>
-                      ) : null}
-                      {metric?.created_at ? (
-                        <span className="panel__muted">
-                          Last run:{" "}
-                          {new Date(metric.created_at).toLocaleDateString()}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
 
           <section className="panel__card">
             <div className="panel__header">

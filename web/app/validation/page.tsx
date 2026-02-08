@@ -1,0 +1,1138 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import type {
+  Experiment,
+  ExperimentMetric,
+  ExperimentRun,
+  ExperimentVariant,
+  ValidationSummary,
+  QueryBattery,
+  QueryBatteryQuery,
+  SimulationRunSummary,
+  CopyRevision,
+  ValidationJob,
+  ValidationResult,
+  LLMConfigSummaryResponse,
+} from "../../lib/types";
+import {
+  createValidationJob,
+  runValidationJob,
+  submitValidationExternal,
+  listExperiments,
+  listSimulationRuns,
+  getSimulationRun,
+  listExperimentRuns,
+  listExperimentMetrics,
+  listExperimentVariants,
+  listBatteries,
+  listBatteryQueries,
+  getLlmConfig,
+  listCopyRevisions,
+  getCopyRevision,
+  publishCopyRevision,
+  getExperimentValidationSummary,
+  getBrandPredictionAccuracy,
+  logExperimentValidation,
+} from "../../lib/api";
+import { Sidebar } from "../../components/layout/Sidebar";
+import { DetailHeader } from "../../components/layout/DetailHeader";
+import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
+import { useTenant } from "../../components/tenant/TenantProvider";
+
+type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
+type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
+type ModeType = "in_app" | "external";
+
+const DEFAULT_MODELS: Record<ProviderType, string> = {
+  openai: "gpt-5.2-2025-12-11",
+  gemini: "gemini-3-flash-preview",
+  anthropic: "claude-sonnet-4-5-20250929",
+  openrouter: "openai/gpt-oss-120b",
+};
+
+const MODEL_OPTIONS: Record<ProviderType, string[]> = {
+  openai: ["gpt-5.2-2025-12-11"],
+  gemini: ["gemini-3-flash-preview"],
+  anthropic: ["claude-sonnet-4-5-20250929"],
+  openrouter: ["openai/gpt-oss-120b"],
+};
+
+const OBSERVED_PLATFORM_LABELS: Record<ProviderType, string> = {
+  openai: "ChatGPT (OpenAI)",
+  gemini: "Gemini",
+  anthropic: "Claude (Anthropic)",
+  openrouter: "OpenRouter",
+};
+
+function normalizeProvider(value: string | null | undefined): ProviderType | null {
+  if (!value) return null;
+  if (value === "claude") return "anthropic";
+  if (value === "openai") return "openai";
+  if (value === "gemini") return "gemini";
+  if (value === "anthropic") return "anthropic";
+  if (value === "openrouter") return "openrouter";
+  return null;
+}
+
+function getPreferredProvider(
+  config: LLMConfigSummaryResponse | null,
+): ProviderType | null {
+  if (!config) return null;
+  const active = normalizeProvider(config.active_provider);
+  if (active) return active;
+  const configured = (Object.keys(OBSERVED_PLATFORM_LABELS) as ProviderType[]).find(
+    (name) => {
+      const entry = config.providers?.[name];
+      return Boolean(entry?.validation_configured ?? entry?.configured);
+    },
+  );
+  return configured ?? null;
+}
+
+export default function ValidationPage() {
+  const router = useRouter();
+  const { user } = useUser();
+  const userId = user?.id ?? null;
+  const { clientId } = useTenant();
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isHistoryOpen, setHistoryOpen] = useState(false);
+  const [isHistoryClosing, setHistoryClosing] = useState(false);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
+  const [batteries, setBatteries] = useState<QueryBattery[]>([]);
+  const [copyRevisions, setCopyRevisions] = useState<CopyRevision[]>([]);
+  const [llmConfig, setLlmConfig] = useState<LLMConfigSummaryResponse | null>(null);
+  const [llmConfigError, setLlmConfigError] = useState<string | null>(null);
+  const [entityType, setEntityType] = useState<EntityType>("experiment_run");
+  const [selectedEntityId, setSelectedEntityId] = useState<string>("");
+  const [provider, setProvider] = useState<ProviderType>("openai");
+  const [mode, setMode] = useState<ModeType>("in_app");
+  const [model, setModel] = useState<string>("");
+  const [job, setJob] = useState<ValidationJob | null>(null);
+  const [result, setResult] = useState<ValidationResult | null>(null);
+  const [externalJson, setExternalJson] = useState("");
+  const [externalRaw, setExternalRaw] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setSubmitting] = useState(false);
+  const [manualExperimentId, setManualExperimentId] = useState<string>("");
+  const [manualVariants, setManualVariants] = useState<ExperimentVariant[]>([]);
+  const [manualMetrics, setManualMetrics] = useState<ExperimentMetric[]>([]);
+  const [manualSummary, setManualSummary] = useState<ValidationSummary | null>(null);
+  const [manualBrandSummary, setManualBrandSummary] = useState<ValidationSummary | null>(
+    null,
+  );
+  const [manualStatus, setManualStatus] = useState<string | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualForm, setManualForm] = useState({
+    variantId: "",
+    platform: "openrouter",
+    queryText: "",
+    observedProducts: "",
+    observedWinnerVariantId: "",
+    observedPosition: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    if (!userId) return;
+    void listExperiments(userId).then((response) =>
+      setExperiments(response.experiments ?? []),
+    );
+    void listSimulationRuns(userId).then((response) =>
+      setSimulationRuns(response.runs ?? []),
+    );
+    void listBatteries(userId).then((response) =>
+      setBatteries(response.batteries ?? []),
+    );
+    void listCopyRevisions({ user_id: userId, limit: 200 }).then((response) =>
+      setCopyRevisions(response.revisions ?? []),
+    );
+  }, [userId, clientId]);
+
+  useEffect(() => {
+    if (!experiments.length) {
+      setManualExperimentId("");
+      return;
+    }
+    if (manualExperimentId) return;
+    setManualExperimentId(experiments[0].id);
+  }, [experiments, manualExperimentId]);
+
+  useEffect(() => {
+    if (!manualExperimentId || !userId) {
+      setManualVariants([]);
+      setManualMetrics([]);
+      setManualSummary(null);
+      setManualBrandSummary(null);
+      return;
+    }
+    const selectedExperiment = experiments.find((exp) => exp.id === manualExperimentId);
+    void listExperimentVariants(manualExperimentId, userId).then((response) => {
+      const variants = response.variants ?? [];
+      setManualVariants(variants);
+      setManualForm((prev) => ({
+        ...prev,
+        variantId: prev.variantId || variants[0]?.id || "",
+      }));
+    });
+    void listExperimentMetrics(manualExperimentId, userId).then((response) => {
+      setManualMetrics(response.metrics ?? []);
+    });
+    void getExperimentValidationSummary(manualExperimentId, userId).then((response) =>
+      setManualSummary(response.summary),
+    );
+    if (selectedExperiment?.brand_id) {
+      void getBrandPredictionAccuracy(selectedExperiment.brand_id, userId).then(
+        (response) => setManualBrandSummary(response.summary),
+      );
+    } else {
+      setManualBrandSummary(null);
+    }
+  }, [experiments, manualExperimentId, userId]);
+
+  const manualMetricsByVariant = useMemo(() => {
+    const map = new Map<string, ExperimentMetric>();
+    manualMetrics.forEach((metric) => {
+      if (!metric.variant_id) return;
+      const existing = map.get(metric.variant_id);
+      if (!existing || (metric.created_at || "") > (existing.created_at || "")) {
+        map.set(metric.variant_id, metric);
+      }
+    });
+    return map;
+  }, [manualMetrics]);
+
+  useEffect(() => {
+    void getLlmConfig(userId ?? undefined)
+      .then((response) => {
+        setLlmConfig(response);
+        setLlmConfigError(null);
+        const preferred = getPreferredProvider(response);
+        if (preferred) {
+          setProvider(preferred);
+          setManualForm((prev) => ({ ...prev, platform: preferred }));
+        }
+      })
+      .catch((err) => {
+        setLlmConfig(null);
+        setLlmConfigError(err instanceof Error ? err.message : "Unavailable");
+      });
+  }, [userId]);
+
+  useEffect(() => {
+    const providerConfig = llmConfig?.providers?.[provider];
+    const fallback =
+      providerConfig?.validation_model ||
+      providerConfig?.model ||
+      DEFAULT_MODELS[provider];
+    setModel(fallback);
+  }, [llmConfig, provider]);
+
+  const entityOptions = useMemo(() => {
+    if (entityType === "experiment_run") {
+      return experiments.map((exp) => ({
+        id: exp.id,
+        label: exp.name || "Experiment",
+      }));
+    }
+    if (entityType === "simulation_run") {
+      return simulationRuns.map((run) => ({
+        id: run.id,
+        label: run.query || "Simulation run",
+      }));
+    }
+    if (entityType === "copy_revision") {
+      return copyRevisions.map((revision) => ({
+        id: revision.id,
+        label: `${revision.source_type} · ${revision.status} · ${revision.id.slice(0, 8)}`,
+      }));
+    }
+    return batteries.map((battery) => ({
+      id: battery.id,
+      label: battery.name || "Battery",
+    }));
+  }, [batteries, copyRevisions, entityType, experiments, simulationRuns]);
+
+  const winnerContext = useMemo(() => {
+    if (!result?.winner_id || !job?.input_payload) return null;
+    if (job.entity_type === "copy_revision") {
+      const payload = job.input_payload as Record<string, unknown>;
+      const revision =
+        payload.revision && typeof payload.revision === "object"
+          ? (payload.revision as Record<string, unknown>)
+          : null;
+      const winner = String(result.winner_id || "").toLowerCase();
+      const winnerLabel =
+        winner === "candidate"
+          ? "Candidate copy"
+          : winner === "control"
+            ? "Control copy"
+            : result.winner_id;
+      const simulationRunId =
+        revision && revision.source_type === "simulation"
+          ? String(revision.source_id || "")
+          : null;
+      return {
+        winnerLabel,
+        experimentName: null,
+        queryText: null,
+        simulationRunId: simulationRunId || null,
+      };
+    }
+    if (job.entity_type !== "experiment_run") return null;
+
+    const payload = job.input_payload as Record<string, unknown>;
+    const experiment =
+      payload.experiment && typeof payload.experiment === "object"
+        ? (payload.experiment as Record<string, unknown>)
+        : null;
+    const variants = Array.isArray(payload.variants)
+      ? (payload.variants as Record<string, unknown>[])
+      : [];
+    const runs = Array.isArray(payload.runs)
+      ? (payload.runs as Record<string, unknown>[])
+      : [];
+
+    const winnerId = String(result.winner_id);
+    const winnerVariant = variants.find(
+      (variant) => String(variant.id ?? "") === winnerId,
+    );
+    const winnerRuns = runs.filter(
+      (run) => String(run.variant_id ?? "") === winnerId,
+    );
+    const linkedRun =
+      winnerRuns.find(
+        (run) =>
+          typeof run.simulation_run_id === "string" && run.simulation_run_id.length > 0,
+      ) ?? winnerRuns[0];
+
+    const simulationRunId =
+      linkedRun && typeof linkedRun.simulation_run_id === "string"
+        ? linkedRun.simulation_run_id
+        : null;
+    const queryText =
+      linkedRun && typeof linkedRun.query_text === "string"
+        ? linkedRun.query_text
+        : linkedRun && typeof linkedRun.query_id === "string"
+          ? linkedRun.query_id
+          : null;
+    const experimentName =
+      experiment && typeof experiment.name === "string" ? experiment.name : null;
+    const winnerLabel =
+      winnerVariant && typeof winnerVariant.label === "string"
+        ? winnerVariant.label
+        : winnerId;
+
+    return {
+      winnerLabel,
+      experimentName,
+      queryText,
+      simulationRunId,
+    };
+  }, [job?.entity_type, job?.input_payload, result?.winner_id]);
+
+  const observedPlatformOptions = useMemo(() => {
+    const configured = (Object.keys(OBSERVED_PLATFORM_LABELS) as ProviderType[]).filter(
+      (name) => {
+        const entry = llmConfig?.providers?.[name];
+        return Boolean(entry?.validation_configured ?? entry?.configured);
+      },
+    );
+    if (configured.length > 0) {
+      return configured.map((name) => ({
+        value: name,
+        label: OBSERVED_PLATFORM_LABELS[name],
+      }));
+    }
+    return [
+      { value: "openai", label: OBSERVED_PLATFORM_LABELS.openai },
+      { value: "gemini", label: OBSERVED_PLATFORM_LABELS.gemini },
+      { value: "anthropic", label: OBSERVED_PLATFORM_LABELS.anthropic },
+      { value: "openrouter", label: OBSERVED_PLATFORM_LABELS.openrouter },
+    ];
+  }, [llmConfig]);
+
+  const providerStatusItems = useMemo(
+    () =>
+      (
+        [
+          ["openai", "OPENAI_API_KEY"],
+          ["gemini", "GEMINI_API_KEY"],
+          ["anthropic", "ANTHROPIC_API_KEY"],
+          ["openrouter", "OPENROUTER_API_KEY"],
+        ] as const
+      ).map(([name, envKey]) => {
+        const entry = llmConfig?.providers?.[name];
+        const configured = entry?.configured ?? false;
+        const label = name === "anthropic" ? "claude" : name;
+        const tooltip = configured
+          ? `${label} is configured`
+          : `Missing ${envKey}`;
+        return { name, label, configured, isActive: entry?.is_active ?? false, tooltip };
+      }),
+    [llmConfig],
+  );
+
+  useEffect(() => {
+    if (!observedPlatformOptions.length) return;
+    const current = manualForm.platform;
+    const exists = observedPlatformOptions.some((item) => item.value === current);
+    if (exists) return;
+    setManualForm((prev) => ({
+      ...prev,
+      platform: observedPlatformOptions[0].value,
+    }));
+  }, [manualForm.platform, observedPlatformOptions]);
+
+  const handleCloseHistory = useCallback(() => {
+    if (isHistoryClosing) return;
+    setHistoryClosing(true);
+    window.setTimeout(() => {
+      setHistoryOpen(false);
+      setHistoryClosing(false);
+    }, 200);
+  }, [isHistoryClosing]);
+
+  const buildPayload = useCallback(async () => {
+    if (!userId || !selectedEntityId) return null;
+    if (entityType === "simulation_run") {
+      const detail = await getSimulationRun(selectedEntityId, userId);
+      return {
+        type: "simulation_run",
+        run: detail.run,
+      };
+    }
+    if (entityType === "experiment_run") {
+      const experiment = experiments.find((item) => item.id === selectedEntityId);
+      const [runsResponse, metricsResponse, variantsResponse] = await Promise.all([
+        listExperimentRuns(selectedEntityId, userId),
+        listExperimentMetrics(selectedEntityId, userId),
+        listExperimentVariants(selectedEntityId, userId),
+      ]);
+      return {
+        type: "experiment",
+        experiment,
+        runs: runsResponse.runs as ExperimentRun[],
+        metrics: metricsResponse.metrics as ExperimentMetric[],
+        variants: variantsResponse.variants as ExperimentVariant[],
+      };
+    }
+    if (entityType === "copy_revision") {
+      const revisionResponse = await getCopyRevision(selectedEntityId, userId);
+      const revision = revisionResponse.revision;
+      return {
+        type: "copy_revision",
+        revision,
+        control: { id: "control", text: revision.base_description },
+        candidate: { id: "candidate", text: revision.candidate_description },
+        query_set:
+          (revision.metadata?.query_set as string[] | undefined) ??
+          (revision.metadata?.query ? [String(revision.metadata.query)] : []),
+      };
+    }
+    const battery = batteries.find((item) => item.id === selectedEntityId);
+    const queriesResponse = await listBatteryQueries(selectedEntityId, userId);
+    return {
+      type: "battery",
+      battery,
+      queries: queriesResponse.queries as QueryBatteryQuery[],
+    };
+  }, [batteries, entityType, experiments, selectedEntityId, userId]);
+
+  const handleCreateJob = useCallback(async () => {
+    if (!userId || !selectedEntityId) return;
+    setSubmitting(true);
+    setError(null);
+    setStatus("Preparing validation payload...");
+    try {
+      const inputPayload = await buildPayload();
+      if (!inputPayload) {
+        setError("Missing payload data.");
+        return;
+      }
+      const response = await createValidationJob(
+        {
+          entity_type: entityType,
+          entity_id: selectedEntityId,
+          provider,
+          mode,
+          model: model || null,
+          input_payload: inputPayload,
+        },
+        userId,
+      );
+      setJob(response.job);
+      setResult(response.result ?? null);
+      if (mode === "in_app") {
+        setStatus("Running validation...");
+        const runResponse = await runValidationJob(response.job.id, userId);
+        setJob(runResponse.job);
+        setResult(runResponse.result ?? null);
+        setStatus("Validation complete.");
+      } else {
+        setStatus("Awaiting external validation.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to validate.");
+    } finally {
+      setSubmitting(false);
+      window.setTimeout(() => setStatus(null), 4000);
+    }
+  }, [buildPayload, entityType, mode, model, provider, selectedEntityId, userId]);
+
+  const handleSubmitExternal = useCallback(async () => {
+    if (!userId || !job) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const parsed = JSON.parse(externalJson || "{}");
+      const response = await submitValidationExternal(
+        job.id,
+        {
+          provider,
+          model: model || null,
+          structured_result: parsed,
+          raw_response: externalRaw || null,
+        },
+        userId,
+      );
+      setJob(response.job);
+      setResult(response.result ?? null);
+      setStatus("Validation stored.");
+      setExternalJson("");
+      setExternalRaw("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid JSON.");
+    } finally {
+      setSubmitting(false);
+      window.setTimeout(() => setStatus(null), 4000);
+    }
+  }, [externalJson, externalRaw, job, model, provider, userId]);
+
+  const handlePublishCandidate = useCallback(async () => {
+    if (!job || !result || !userId) return;
+    if (job.entity_type !== "copy_revision") return;
+    if (String(result.winner_id || "").toLowerCase() !== "candidate") return;
+    await publishCopyRevision(job.entity_id, { user_id: userId });
+    setStatus("Candidate copy published to product.");
+    window.setTimeout(() => setStatus(null), 4000);
+  }, [job, result, userId]);
+
+  const handleLogObservedValidation = useCallback(async () => {
+    if (!manualExperimentId || !userId) return;
+    setManualStatus(null);
+    setManualError(null);
+    setSubmitting(true);
+    try {
+      const observedProducts = manualForm.observedProducts
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const response = await logExperimentValidation(manualExperimentId, {
+        variant_id: manualForm.variantId || undefined,
+        platform: manualForm.platform || undefined,
+        query_text: manualForm.queryText || undefined,
+        observed_products: observedProducts,
+        observed_winner_variant_id:
+          manualForm.observedWinnerVariantId || undefined,
+        observed_position: manualForm.observedPosition
+          ? Number(manualForm.observedPosition)
+          : undefined,
+        notes: manualForm.notes || undefined,
+        user_id: userId,
+      });
+      setManualSummary(response.summary);
+      const selectedExperiment = experiments.find(
+        (exp) => exp.id === manualExperimentId,
+      );
+      if (selectedExperiment?.brand_id) {
+        const brandResponse = await getBrandPredictionAccuracy(
+          selectedExperiment.brand_id,
+          userId,
+        );
+        setManualBrandSummary(brandResponse.summary);
+      }
+      setManualStatus("Observed validation logged.");
+      setManualForm((prev) => ({
+        ...prev,
+        queryText: "",
+        observedProducts: "",
+        observedWinnerVariantId: "",
+        observedPosition: "",
+        notes: "",
+      }));
+    } catch (err) {
+      setManualError(
+        err instanceof Error ? err.message : "Unable to log observed validation.",
+      );
+    } finally {
+      setSubmitting(false);
+      window.setTimeout(() => setManualStatus(null), 4000);
+    }
+  }, [experiments, manualExperimentId, manualForm, userId]);
+
+  return (
+    <div className="app">
+      <Sidebar
+        mobileOpen={isSidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
+        onNewConversation={() => router.push("/")}
+        sessions={[]}
+        activeSessionId={null}
+        onSelectSession={() => {}}
+        onDeleteSession={() => {}}
+        onOpenHistory={() => setHistoryOpen(true)}
+      />
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        isClosing={isHistoryClosing}
+        sessions={[]}
+        simulations={simulationRuns}
+        experiments={experiments}
+        activeSessionId={null}
+        onClose={handleCloseHistory}
+        onSelect={() => {}}
+        onSelectSimulation={(run) => {
+          router.push(`/simulation?run_id=${run.id}`);
+          handleCloseHistory();
+        }}
+        onSelectExperiment={(experiment) => {
+          router.push(`/experiments?experiment_id=${experiment.id}`);
+          handleCloseHistory();
+        }}
+        onRequestDelete={() => {}}
+      />
+      <main className="main main--detail">
+        <div className="detail detail--validation">
+          <DetailHeader
+            title="Validation"
+            subtitle="Run in-app validation or collect structured external feedback."
+            onMenu={() => setSidebarOpen(true)}
+            onBack={() => router.push("/experiments")}
+            backLabel="Back to experiments"
+          />
+          <section className="panel__card">
+            <div className="panel__subheading">Provider status (shared)</div>
+            {llmConfigError ? (
+              <div className="panel__notice panel__notice--error">
+                Unable to load provider configuration.
+              </div>
+            ) : (
+              <>
+                <div className="panel__chips">
+                  {providerStatusItems.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      className={`panel__chip panel__chip--button ${
+                        item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
+                      }`}
+                      title={item.tooltip}
+                      onClick={() => {
+                        setProvider(item.name);
+                        setManualForm((prev) => ({ ...prev, platform: item.name }));
+                      }}
+                    >
+                      {item.label}:{" "}
+                      {item.isActive ? "active" : item.configured ? "ready" : "missing"}
+                    </button>
+                  ))}
+                </div>
+                <p className="panel__muted">
+                  Selecting a provider here sets the default for both synthetic and observed validation panels.
+                </p>
+              </>
+            )}
+          </section>
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Synthetic validation signal</h3>
+            </div>
+            <p className="panel__muted">
+              LLM judge validation for fast screening, consistency checks, and copy-vs-copy comparisons.
+            </p>
+            <div className="panel__grid validation__grid">
+              <label className="panel__label">
+                <span>Entity type</span>
+                <select
+                  className="panel__input"
+                  value={entityType}
+                  onChange={(event) => {
+                    setEntityType(event.target.value as EntityType);
+                    setSelectedEntityId("");
+                    setJob(null);
+                    setResult(null);
+                  }}
+                >
+                  <option value="experiment_run">Experiment</option>
+                  <option value="simulation_run">Simulation</option>
+                  <option value="battery">Query battery</option>
+                  <option value="copy_revision">Copy revision</option>
+                </select>
+              </label>
+              <label className="panel__label">
+                <span>Item</span>
+                <select
+                  className="panel__input"
+                  value={selectedEntityId}
+                  onChange={(event) => setSelectedEntityId(event.target.value)}
+                >
+                  <option value="">Select</option>
+                  {entityOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="panel__label">
+                <span>Provider</span>
+                <select
+                  className="panel__input"
+                  value={provider}
+                  onChange={(event) => {
+                    const selected = event.target.value as ProviderType;
+                    setProvider(selected);
+                    setManualForm((prev) => ({ ...prev, platform: selected }));
+                  }}
+                >
+                  <option
+                    value="openai"
+                    disabled={
+                      llmConfig
+                        ? !(
+                            llmConfig.providers?.openai?.validation_configured ??
+                            llmConfig.providers?.openai?.configured
+                          )
+                        : false
+                    }
+                  >
+                    OpenAI (direct)
+                  </option>
+                  <option
+                    value="gemini"
+                    disabled={
+                      llmConfig
+                        ? !(
+                            llmConfig.providers?.gemini?.validation_configured ??
+                            llmConfig.providers?.gemini?.configured
+                          )
+                        : false
+                    }
+                  >
+                    Gemini
+                  </option>
+                  <option
+                    value="anthropic"
+                    disabled={
+                      llmConfig
+                        ? !(
+                            llmConfig.providers?.anthropic?.validation_configured ??
+                            llmConfig.providers?.anthropic?.configured
+                          )
+                        : false
+                    }
+                  >
+                    Claude (Anthropic)
+                  </option>
+                  <option
+                    value="openrouter"
+                    disabled={
+                      llmConfig
+                        ? !(
+                            llmConfig.providers?.openrouter?.validation_configured ??
+                            llmConfig.providers?.openrouter?.configured
+                          )
+                        : false
+                    }
+                  >
+                    OpenRouter
+                  </option>
+                </select>
+              </label>
+              <label className="panel__label">
+                <span>Mode</span>
+                <select
+                  className="panel__input"
+                  value={mode}
+                  onChange={(event) => setMode(event.target.value as ModeType)}
+                >
+                  <option value="in_app">In-app (BYOK)</option>
+                  <option value="external">External paste-back</option>
+                </select>
+              </label>
+              <label className="panel__label">
+                <span>
+                  Model (optional)
+                  {llmConfig?.providers?.[provider]?.is_active ? (
+                    <span className="panel__meta"></span>
+                  ) : null}
+                </span>
+                <input
+                  className="panel__input"
+                  type="text"
+                  list={`validation-models-${provider}`}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  placeholder={`e.g. ${DEFAULT_MODELS[provider]}`}
+                />
+                <datalist id={`validation-models-${provider}`}>
+                  {MODEL_OPTIONS[provider].map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              </label>
+            </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="panel__action"
+                disabled={!selectedEntityId || isSubmitting}
+                onClick={handleCreateJob}
+              >
+                {isSubmitting ? "Working..." : "Create validation"}
+              </button>
+            </div>
+            {status ? (
+              <div className="panel__notice panel__notice--info">{status}</div>
+            ) : null}
+            {error ? (
+              <div className="panel__notice panel__notice--error">{error}</div>
+            ) : null}
+          </section>
+
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Observed reality signal</h3>
+            </div>
+            <p className="panel__muted">
+              Manual validation of what actually surfaced on real platforms for real queries.
+            </p>
+            <div className="panel__form">
+              <div className="panel__meta panel__meta--stack">
+                <span className="panel__muted">
+                  Logged validations: {manualSummary?.total_logged ?? 0}
+                </span>
+                <span className="panel__muted">
+                  Verified runs: {manualSummary?.verified_runs ?? 0} / 10
+                </span>
+                <span className="panel__muted">
+                  Accuracy:{" "}
+                  {manualSummary
+                    ? `${Math.round(manualSummary.accuracy * 100)}%`
+                    : "—"}
+                </span>
+              </div>
+              <div className="progress-bar">
+                <div
+                  className="progress-bar__fill"
+                  style={{
+                    width: `${Math.round((manualSummary?.progress ?? 0) * 100)}%`,
+                  }}
+                />
+              </div>
+              {manualBrandSummary ? (
+                <div className="panel__meta panel__meta--stack">
+                  <span className="panel__muted">
+                    Brand accuracy: {Math.round(manualBrandSummary.accuracy * 100)}%
+                  </span>
+                  <span className="panel__muted">
+                    Verified (brand): {manualBrandSummary.verified_runs}
+                  </span>
+                </div>
+              ) : null}
+              <div className="panel__grid validation__grid">
+                <label className="panel__label">
+                  <span>Experiment</span>
+                  <select
+                    className="panel__input"
+                    value={manualExperimentId}
+                    onChange={(event) => setManualExperimentId(event.target.value)}
+                  >
+                    <option value="">Select experiment</option>
+                    {experiments.map((experiment) => (
+                      <option key={experiment.id} value={experiment.id}>
+                        {experiment.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  <span>Variant (lab winner)</span>
+                  <select
+                    className="panel__input"
+                    value={manualForm.variantId}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, variantId: event.target.value }))
+                    }
+                  >
+                    <option value="">Select variant</option>
+                    {manualVariants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  <span>Platform</span>
+                <select
+                  className="panel__input"
+                  value={manualForm.platform}
+                  onChange={(event) => {
+                    const selected = event.target.value as ProviderType;
+                    setManualForm((prev) => ({ ...prev, platform: selected }));
+                    setProvider(selected);
+                  }}
+                >
+                    {observedPlatformOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="panel__label">
+                  <span>Query tested</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.queryText}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, queryText: event.target.value }))
+                    }
+                    placeholder="e.g., running shoes for marathon training"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Products shown (comma-separated)</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.observedProducts}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        observedProducts: event.target.value,
+                      }))
+                    }
+                    placeholder="Product A, Product B"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Observed winner variant (optional)</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.observedWinnerVariantId}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        observedWinnerVariantId: event.target.value,
+                      }))
+                    }
+                    placeholder="Variant ID (if known)"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Observed position (optional)</span>
+                  <input
+                    className="panel__input"
+                    value={manualForm.observedPosition}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        observedPosition: event.target.value,
+                      }))
+                    }
+                    placeholder="1"
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Notes</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={manualForm.notes}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({ ...prev, notes: event.target.value }))
+                    }
+                    rows={2}
+                    placeholder="Any observations..."
+                  />
+                </label>
+              </div>
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action"
+                  onClick={handleLogObservedValidation}
+                  disabled={isSubmitting || !manualExperimentId}
+                >
+                  {isSubmitting ? "Logging..." : "Log observed validation"}
+                </button>
+              </div>
+              {manualStatus ? (
+                <div className="panel__notice panel__notice--info">{manualStatus}</div>
+              ) : null}
+              {manualError ? (
+                <div className="panel__notice panel__notice--error">{manualError}</div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="panel__card">
+            <div className="panel__header">
+              <h3>Variant comparison</h3>
+            </div>
+            <p className="panel__muted">
+              Latest per-variant lab metrics for the selected experiment.
+            </p>
+            {!manualExperimentId || manualVariants.length === 0 ? (
+              <p className="panel__empty">
+                Select an experiment to compare variants.
+              </p>
+            ) : (
+              <ul className="panel__list">
+                {manualVariants.map((variant) => {
+                  const metric = manualMetricsByVariant.get(variant.id);
+                  const values = (metric?.metrics ?? {}) as Record<string, unknown>;
+                  return (
+                    <li key={variant.id}>
+                      <div className="panel__meta">
+                        <span>{variant.label}</span>
+                        <span className="panel__badge panel__badge--secondary">
+                          {variant.type}
+                        </span>
+                      </div>
+                      <div className="panel__meta">
+                        <span className="panel__muted">
+                          Win rate: {values.win_rate ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Robust win rate: {values.win_rate_robust ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Avg score: {values.avg_score ?? "—"}
+                        </span>
+                        <span className="panel__muted">
+                          Runs: {values.total_runs ?? "—"}
+                        </span>
+                      </div>
+                      {metric?.created_at ? (
+                        <span className="panel__muted">
+                          Last run: {new Date(metric.created_at).toLocaleDateString()}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {job?.mode === "external" && job?.external_instructions ? (
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>External validation instructions</h3>
+              </div>
+              <pre className="panel__pre">{job.external_instructions}</pre>
+              <div className="panel__grid validation__grid">
+                <label className="panel__label">
+                  <span>Paste structured JSON</span>
+                  <textarea
+                    className="panel__textarea"
+                    rows={6}
+                    value={externalJson}
+                    onChange={(event) => setExternalJson(event.target.value)}
+                    placeholder='{"winner_id":"candidate","score":0.72,"confidence":0.8,"evidence_strength":"moderate","rationale_bullets":["..."],"flags":[]}'
+                  />
+                </label>
+                <label className="panel__label">
+                  <span>Raw response (optional)</span>
+                  <textarea
+                    className="panel__textarea"
+                    rows={6}
+                    value={externalRaw}
+                    onChange={(event) => setExternalRaw(event.target.value)}
+                    placeholder="Paste raw provider output"
+                  />
+                </label>
+              </div>
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action"
+                  disabled={!externalJson || isSubmitting}
+                  onClick={handleSubmitExternal}
+                >
+                  {isSubmitting ? "Saving..." : "Submit external result"}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {result ? (
+            <section className="panel__card">
+              <div className="panel__header">
+                <h3>Validation result</h3>
+              </div>
+              <div className="panel__metrics">
+                <div className="panel__label">
+                  <span>Winner</span>
+                  {winnerContext?.simulationRunId ? (
+                    <strong>
+                      <a
+                        className="panel__link"
+                        href={`/simulation?run_id=${winnerContext.simulationRunId}`}
+                      >
+                        {winnerContext.winnerLabel}
+                      </a>
+                    </strong>
+                  ) : (
+                    <strong>{winnerContext?.winnerLabel ?? result.winner_id ?? "—"}</strong>
+                  )}
+                </div>
+                <div className="panel__label">
+                  <span>Score</span>
+                  <strong>{result.score ?? "—"}</strong>
+                </div>
+                <div className="panel__label">
+                  <span>Evidence</span>
+                  <strong>{result.evidence_strength ?? "—"}</strong>
+                </div>
+              </div>
+              {winnerContext?.experimentName || winnerContext?.queryText ? (
+                <div className="panel__meta panel__meta--stack">
+                  {winnerContext.experimentName ? (
+                    <span>Experiment: {winnerContext.experimentName}</span>
+                  ) : null}
+                  {winnerContext.queryText ? (
+                    <span>Query: {winnerContext.queryText}</span>
+                  ) : null}
+                </div>
+              ) : null}
+              {job?.entity_type === "copy_revision" &&
+              String(result.winner_id || "").toLowerCase() === "candidate" ? (
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action"
+                    onClick={handlePublishCandidate}
+                  >
+                    Publish candidate copy
+                  </button>
+                </div>
+              ) : null}
+              {result.structured_result ? (
+                <pre className="panel__pre">
+                  {JSON.stringify(result.structured_result, null, 2)}
+                </pre>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+      </main>
+    </div>
+  );
+}

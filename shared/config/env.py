@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     gemini_model: str = Field(
         default="gemini-3-pro-preview", validation_alias=AliasChoices("GEMINI_MODEL")
     )
+    gemini_validation_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("GEMINI_VALIDATION_API_KEY")
+    )
+    gemini_validation_model: str | None = Field(
+        default=None, validation_alias=AliasChoices("GEMINI_VALIDATION_MODEL")
+    )
     gemini_fallback_model: str = Field(
         default="gemini-2.0-flash",
         validation_alias=AliasChoices("GEMINI_FALLBACK_MODEL"),
@@ -45,6 +51,12 @@ class Settings(BaseSettings):
     openrouter_model: str = Field(
         default="meta-llama/Meta-Llama-3-8B-Instruct",
         validation_alias=AliasChoices("OPENROUTER_MODEL"),
+    )
+    openrouter_validation_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("OPENROUTER_VALIDATION_API_KEY")
+    )
+    openrouter_validation_model: str | None = Field(
+        default=None, validation_alias=AliasChoices("OPENROUTER_VALIDATION_MODEL")
     )
     openrouter_temperature: float = Field(
         default=0.3, validation_alias=AliasChoices("OPENROUTER_TEMPERATURE")
@@ -57,6 +69,43 @@ class Settings(BaseSettings):
     )
     openrouter_app_name: str | None = Field(
         default=None, validation_alias=AliasChoices("OPENROUTER_APP_NAME")
+    )
+    openai_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("OPENAI_API_KEY")
+    )
+    openai_model: str = Field(
+        default="gpt-4o-mini", validation_alias=AliasChoices("OPENAI_MODEL")
+    )
+    openai_validation_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("OPENAI_VALIDATION_API_KEY")
+    )
+    openai_validation_model: str | None = Field(
+        default=None, validation_alias=AliasChoices("OPENAI_VALIDATION_MODEL")
+    )
+    openai_temperature: float = Field(
+        default=0.3, validation_alias=AliasChoices("OPENAI_TEMPERATURE")
+    )
+    openai_max_tokens: int = Field(
+        default=1024, validation_alias=AliasChoices("OPENAI_MAX_TOKENS")
+    )
+    anthropic_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY")
+    )
+    anthropic_model: str = Field(
+        default="claude-3-5-sonnet-20240620",
+        validation_alias=AliasChoices("ANTHROPIC_MODEL"),
+    )
+    anthropic_validation_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("ANTHROPIC_VALIDATION_API_KEY")
+    )
+    anthropic_validation_model: str | None = Field(
+        default=None, validation_alias=AliasChoices("ANTHROPIC_VALIDATION_MODEL")
+    )
+    anthropic_temperature: float = Field(
+        default=0.3, validation_alias=AliasChoices("ANTHROPIC_TEMPERATURE")
+    )
+    anthropic_max_tokens: int = Field(
+        default=1024, validation_alias=AliasChoices("ANTHROPIC_MAX_TOKENS")
     )
     judge_providers: str = Field(
         default="", validation_alias=AliasChoices("JUDGE_PROVIDERS")

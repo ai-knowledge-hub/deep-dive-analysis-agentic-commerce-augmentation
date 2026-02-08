@@ -166,6 +166,16 @@ def accuracy_summary(
     }
 
 
+def delete_validations_for_experiment(experiment_id: str) -> int:
+    conn = get_connection()
+    result = conn.execute(
+        "DELETE FROM experiment_validations WHERE experiment_id = ?",
+        (experiment_id,),
+    )
+    conn.commit()
+    return result.rowcount if result else 0
+
+
 def _row(row) -> Dict[str, Any]:
     is_correct = row["is_correct"]
     if is_correct is not None:
@@ -194,4 +204,5 @@ __all__ = [
     "list_validations",
     "count_validations",
     "accuracy_summary",
+    "delete_validations_for_experiment",
 ]

@@ -1,7 +1,7 @@
 """Unit tests for experiment ML engine."""
 
 import pytest
-from application.services.experiment_ml import ExperimentMLEngine, ExperimentFeatures
+from application.services.experiment.ml import ExperimentMLEngine, ExperimentFeatures
 
 
 def test_ml_engine_fallback_recommendation():

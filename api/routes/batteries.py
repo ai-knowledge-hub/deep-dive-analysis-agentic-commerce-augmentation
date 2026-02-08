@@ -8,9 +8,12 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
-from application.services.query_battery_service import QueryBatteryService
-from application.services.query_battery_builder import QueryBatteryBuilder
-from application.services.canonical_intent_spec_service import TOKEN_SYNONYMS, TYPO_MAP
+from application.services.query_battery.service import QueryBatteryService
+from application.services.query_battery.builder import QueryBatteryBuilder
+from application.services.admin.canonical_intent_spec_service import (
+    TOKEN_SYNONYMS,
+    TYPO_MAP,
+)
 
 router = APIRouter(prefix="/batteries", tags=["batteries"])
 
@@ -24,6 +27,7 @@ BUILDER = QueryBatteryBuilder(
     simulation_runs_repo=DEPS.simulation_runs,
     archetypes_repo=DEPS.audience_archetypes,
     analytics_events_repo=DEPS.analytics_events,
+    memory_artifacts_repo=DEPS.memory_artifacts,
 )
 
 
@@ -78,6 +82,7 @@ class BatteryGenerateRequest(BaseModel):
     seed_use_cases: Optional[list[str]] = None
     limit: int = Field(default=15, ge=1, le=100)
     use_llm: Optional[bool] = False
+    persist: Optional[bool] = True
 
 
 @router.post("")
@@ -208,9 +213,12 @@ def generate_queries(
             seed_use_cases=payload.seed_use_cases,
             limit=payload.limit,
             use_llm=bool(payload.use_llm),
+            persist=bool(payload.persist),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload.persist is False:
+        return {"candidates": created, "report": report}
     return {"queries": created, "report": report}
 
 
