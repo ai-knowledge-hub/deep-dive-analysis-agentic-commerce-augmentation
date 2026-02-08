@@ -571,6 +571,8 @@ export type QueryBatteryQueryListResponse = {
   report?: {
     accepted_count: number;
     rejected_count: number;
+    generated_count?: number;
+    generated_preview?: { query_text: string; query_type?: string | null }[];
     required_category?: string | null;
     category_confidence?: number | null;
     category_candidates?: { category: string; score: number }[];
@@ -783,12 +785,19 @@ export type ExperimentValidation = {
 
 export type ValidationSummary = {
   total_logged: number;
+  observed_signals_logged?: number;
   verified_runs: number;
+  observed_runs_verified?: number;
   correct_runs: number;
+  observed_correct_runs?: number;
   accuracy: number;
+  observed_accuracy?: number;
   unlock_ready: boolean;
+  observed_unlock_ready?: boolean;
   progress: number;
+  observed_progress?: number;
   accuracy_target: number;
+  target_accuracy?: number;
 };
 
 export type ExperimentValidationResponse = {

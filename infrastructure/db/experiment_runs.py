@@ -67,6 +67,13 @@ def get_run(run_id: str) -> Dict[str, Any] | None:
     return _run_row(row) if row else None
 
 
+def delete_run(run_id: str) -> bool:
+    conn = get_connection()
+    result = conn.execute("DELETE FROM experiment_runs WHERE id = ?", (run_id,))
+    conn.commit()
+    return bool(result and result.rowcount)
+
+
 def create_metric(
     *,
     experiment_id: str,
@@ -184,6 +191,7 @@ __all__ = [
     "create_metric",
     "list_metrics",
     "get_metric",
+    "delete_run",
     "delete_runs_for_experiment",
     "delete_metrics_for_experiment",
     "delete_runs_for_simulation_run",

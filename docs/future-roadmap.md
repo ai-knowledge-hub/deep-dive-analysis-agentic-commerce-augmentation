@@ -113,6 +113,11 @@ This document complements:
 1. **Full agent loop orchestration**
 2. **Active learning from “lessons learned”**
 3. **Knowledge graph & ontology‑based reasoning**
+4. **Scheduled experiment execution automation**
+   - Automatic execution of due experiment schedules via `run_due`
+   - Deployment options: cron / GitHub Action / worker service
+   - Integrate with the existing loop maintenance automation template as a companion job
+   - Add execution tracking for scheduled runs (start/end/status/error, run counts, affected experiment IDs)
 
 ---
 
@@ -122,6 +127,9 @@ This document complements:
 2. **Queue + worker system**
 3. **Schema registry with caching**
 4. **Search index integration**
+5. **Unified automation runner**
+   - Single scheduler for loop maintenance + experiment schedule execution
+   - Shared retries, observability, and alerting for both jobs
 
 ---
 

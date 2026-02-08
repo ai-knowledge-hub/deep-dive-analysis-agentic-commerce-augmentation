@@ -23,12 +23,19 @@ class ValidationSummary:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_logged": self.total_logged,
+            "observed_signals_logged": self.total_logged,
             "verified_runs": self.verified_runs,
+            "observed_runs_verified": self.verified_runs,
             "correct_runs": self.correct_runs,
+            "observed_correct_runs": self.correct_runs,
             "accuracy": self.accuracy,
+            "observed_accuracy": self.accuracy,
             "unlock_ready": self.unlock_ready,
+            "observed_unlock_ready": self.unlock_ready,
             "progress": self.progress,
+            "observed_progress": self.progress,
             "accuracy_target": self.accuracy_target,
+            "target_accuracy": self.accuracy_target,
         }
 
 
