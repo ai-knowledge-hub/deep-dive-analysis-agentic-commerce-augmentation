@@ -53,14 +53,6 @@ const emptyForm = {
   memberUserId: "",
 };
 
-const onboardingSteps = [
-  { id: "client", label: "Client Profile" },
-  { id: "brand", label: "Brand Setup" },
-  { id: "product", label: "Product Catalog" },
-  { id: "intent", label: "Canonical Intent Spec" },
-  { id: "review", label: "Review" },
-] as const;
-
 const canonicalOntology: Record<
   string,
   {
@@ -148,8 +140,6 @@ export default function AdminPage() {
   const [activeClientId, setActiveClientId] = useState<string>("");
   const [activeBrandId, setActiveBrandId] = useState<string>("");
   const [activeProductId, setActiveProductId] = useState<string>("");
-  const [activeOnboardingStep, setActiveOnboardingStep] =
-    useState<(typeof onboardingSteps)[number]["id"] | null>(null);
   const [isIntentDrawerOpen, setIntentDrawerOpen] = useState(false);
   const [intentSpecSaved, setIntentSpecSaved] = useState(false);
   const [intentSpecError, setIntentSpecError] = useState<string | null>(null);
@@ -916,20 +906,6 @@ export default function AdminPage() {
                   {onboardingCompletion.completed}/{onboardingCompletion.total} complete
                 </span>
               </div>
-              <div className="admin-onboarding__steps" role="tablist" aria-label="Onboarding steps">
-                {onboardingSteps.map((step) => (
-                  <button
-                    key={step.id}
-                    type="button"
-                    className={`admin-onboarding__step ${
-                      activeOnboardingStep === step.id ? "is-active" : ""
-                    }`}
-                    onClick={() => setActiveOnboardingStep(step.id)}
-                  >
-                    {step.label}
-                  </button>
-                ))}
-              </div>
               <div className="admin-onboarding__summary">
                 <div className="admin-onboarding__summary-card">
                   <span>Client</span>
@@ -951,7 +927,7 @@ export default function AdminPage() {
                 </div>
               </div>
               <div className="admin-onboarding__panels">
-                <details open={activeOnboardingStep === "client"}>
+                <details>
                   <summary>Client profile</summary>
                   <div className="admin__selector">
                     <label className="panel__label" htmlFor="admin-client-select">
@@ -1059,7 +1035,7 @@ export default function AdminPage() {
                     </div>
                   ) : null}
                 </details>
-                <details open={activeOnboardingStep === "brand"}>
+                <details>
                   <summary>Brand setup</summary>
                   {activeClientId ? (
                     <>
@@ -1126,7 +1102,7 @@ export default function AdminPage() {
                     <p className="panel__empty">Select a client first.</p>
                   )}
                 </details>
-                <details open={activeOnboardingStep === "product"}>
+                <details>
                   <summary>Product catalog</summary>
                   {activeBrandId ? (
                     <>
@@ -1255,7 +1231,7 @@ export default function AdminPage() {
                     <p className="panel__empty">Select a brand first.</p>
                   )}
                 </details>
-                <details open={activeOnboardingStep === "intent"}>
+                <details>
                   <summary>Canonical intent spec</summary>
                   <p className="panel__meta">
                     Capture objective product context used by bottom-up query generation.
@@ -1278,7 +1254,7 @@ export default function AdminPage() {
                     <p className="panel__error">{intentSpecError}</p>
                   ) : null}
                 </details>
-                <details open={activeOnboardingStep === "review"}>
+                <details>
                   <summary>Review</summary>
                   <ul className="admin__list">
                     <li>

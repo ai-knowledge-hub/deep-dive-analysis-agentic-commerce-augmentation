@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 
 from application.ports.deps import AppDeps
 from application.services.loop.memory_service import MemoryService
-from infrastructure.db.connection import get_connection
 
 
 def _clamp(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -25,31 +24,11 @@ class LoopMaintenanceService:
         brand_id: Optional[str] = None,
         lookback_days: int = 30,
     ) -> List[Dict[str, Any]]:
-        conn = get_connection()
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(days=max(1, int(lookback_days)))
-        ).strftime("%Y-%m-%d %H:%M:%S")
-        filters = ["vj.client_id = ?", "vr.created_at >= ?"]
-        params: list[Any] = [client_id, cutoff]
-        if brand_id:
-            filters.append("vj.brand_id = ?")
-            params.append(brand_id)
-        where_clause = " AND ".join(filters)
-        rows = conn.execute(
-            f"""
-            SELECT
-                lower(vr.provider) AS provider,
-                vj.brand_id AS brand_id,
-                vj.mode AS mode,
-                AVG(COALESCE(vr.score, 0.0)) AS avg_score,
-                COUNT(1) AS count_rows
-            FROM validation_results vr
-            JOIN validation_jobs vj ON vj.id = vr.job_id
-            WHERE {where_clause}
-            GROUP BY lower(vr.provider), vj.brand_id, vj.mode
-            """,
-            params,
-        ).fetchall()
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(
+            days=max(1, int(lookback_days))
+        )
+        jobs = self._deps.validation_jobs.list_jobs(client_id=client_id, limit=5000)
+
         grouped: dict[tuple[str, Optional[str]], Dict[str, Any]] = defaultdict(
             lambda: {
                 "synthetic_avg": 0.0,
@@ -58,20 +37,38 @@ class LoopMaintenanceService:
                 "observed_count": 0,
             }
         )
-        for row in rows:
-            provider = str(row["provider"] or "").strip().lower()
+        score_sums: dict[tuple[str, Optional[str], str], float] = defaultdict(float)
+        score_counts: dict[tuple[str, Optional[str], str], int] = defaultdict(int)
+        for job in jobs:
+            if brand_id and job.get("brand_id") != brand_id:
+                continue
+            created_at = _parse_created_at(job.get("created_at"))
+            if created_at is None or created_at < cutoff_dt:
+                continue
+            result = self._deps.validation_results.get_latest_for_job(job_id=job["id"])
+            if not result:
+                continue
+            provider = str(result.get("provider") or job.get("provider") or "").strip().lower()
             if not provider:
                 continue
-            key = (provider, row["brand_id"])
-            mode = str(row["mode"] or "").strip().lower()
-            avg_score = float(row["avg_score"] or 0.0)
-            count_rows = int(row["count_rows"] or 0)
-            if mode == "external":
-                grouped[key]["observed_avg"] = avg_score
-                grouped[key]["observed_count"] = count_rows
+            mode = str(job.get("mode") or "").strip().lower()
+            mode_group = "external" if mode == "external" else "internal"
+            key = (provider, job.get("brand_id"), mode_group)
+            score_sums[key] += float(result.get("score") or 0.0)
+            score_counts[key] += 1
+
+        for (provider, row_brand_id, mode_group), total in score_sums.items():
+            count_rows = score_counts[(provider, row_brand_id, mode_group)]
+            if count_rows <= 0:
+                continue
+            avg_score = total / count_rows
+            grouped_key = (provider, row_brand_id)
+            if mode_group == "external":
+                grouped[grouped_key]["observed_avg"] = avg_score
+                grouped[grouped_key]["observed_count"] = count_rows
             else:
-                grouped[key]["synthetic_avg"] = avg_score
-                grouped[key]["synthetic_count"] = count_rows
+                grouped[grouped_key]["synthetic_avg"] = avg_score
+                grouped[grouped_key]["synthetic_count"] = count_rows
 
         updated: list[Dict[str, Any]] = []
         for (provider, row_brand_id), values in grouped.items():
@@ -171,3 +168,19 @@ class LoopMaintenanceService:
 
 
 __all__ = ["LoopMaintenanceService"]
+
+
+def _parse_created_at(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
