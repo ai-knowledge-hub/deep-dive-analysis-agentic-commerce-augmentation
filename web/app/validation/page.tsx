@@ -556,7 +556,7 @@ export default function ValidationPage() {
         );
         setManualBrandSummary(brandResponse.summary);
       }
-      setManualStatus("Observed validation logged.");
+      setManualStatus("Observed reality signal logged.");
       setManualForm((prev) => ({
         ...prev,
         queryText: "",
@@ -567,7 +567,7 @@ export default function ValidationPage() {
       }));
     } catch (err) {
       setManualError(
-        err instanceof Error ? err.message : "Unable to log observed validation.",
+        err instanceof Error ? err.message : "Unable to log observed reality signal.",
       );
     } finally {
       setSubmitting(false);
@@ -810,12 +810,12 @@ export default function ValidationPage() {
               <h3>Observed reality signal</h3>
             </div>
             <p className="panel__muted">
-              Manual validation of what actually surfaced on real platforms for real queries.
+              Observed reality logging of what actually surfaced on real platforms for real queries.
             </p>
             <div className="panel__form">
               <div className="panel__meta panel__meta--stack">
                 <span className="panel__muted">
-                  Logged validations: {manualSummary?.total_logged ?? 0}
+                  Logged observed signals: {manualSummary?.total_logged ?? 0}
                 </span>
                 <span className="panel__muted">
                   Verified runs: {manualSummary?.verified_runs ?? 0} / 10
@@ -969,7 +969,7 @@ export default function ValidationPage() {
                   onClick={handleLogObservedValidation}
                   disabled={isSubmitting || !manualExperimentId}
                 >
-                  {isSubmitting ? "Logging..." : "Log observed validation"}
+                  {isSubmitting ? "Logging..." : "Log observed reality signal"}
                 </button>
               </div>
               {manualStatus ? (

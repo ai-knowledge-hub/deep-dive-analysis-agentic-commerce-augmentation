@@ -103,13 +103,29 @@ Set `LLM_PROVIDER` to choose the language model:
 
 ---
 
-## 5. Attribution Exports
+## 5. Validation Runtime Terminology
+
+The app uses two distinct validation signals in production:
+
+1. **Synthetic validation signal**
+- Provider/model-run validation jobs (BYOK).
+- Purpose: fast screening and consistency checks.
+
+2. **Observed reality signal**
+- Manual/external logs of what actually surfaced on real platforms.
+- Purpose: grounding and calibration of the loop.
+
+Use observed reality signal as higher-trust evidence for rollout decisions.
+
+---
+
+## 6. Attribution Exports
 
 **Planned (not built):** attribution export utilities.
 
 ---
 
-## 6. Health Checks
+## 7. Health Checks
 
 ```bash
 # Verify product search (requires client_id)

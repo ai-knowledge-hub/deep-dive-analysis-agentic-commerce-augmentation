@@ -1,166 +1,177 @@
 # App Architecture (Current State + Planned Extensions)
 
-This document reflects the **current implementation** and marks future work as **Planned (not built)**.
+This document reflects what is currently implemented and marks future items as **Planned (not built)**.
 
 ---
 
 ## 1) System Overview
 
+The app is built as a **Bayesian-style learning loop**:
+
+1. Generate candidate improvements (simulation/experiments).
+2. Validate with synthetic and observed signals.
+3. Update beliefs with weighted evidence.
+4. Distill reusable memory artifacts.
+5. Reuse memory in future query/copy generation.
+6. Recalibrate against synthetic-vs-observed drift.
+
 ```
 Next.js UI
   ├─ Chat / Alignment / Evidence
   ├─ Simulation
-  ├─ Experiments (Lab + Manual modes)
-  └─ Admin (onboarding + skills)
+  ├─ Experiments
+  ├─ Validation
+  └─ Admin (onboarding + operations)
             │
             ▼
 FastAPI Routes
-  ├─ conversation / alignment / evidence
-  ├─ simulation
-  ├─ experiments / batteries / validations
-  ├─ analytics events
-  └─ admin / tenants
+  ├─ conversation / evidence / simulation / experiments / batteries
+  ├─ validation / beliefs / loop / calibration / memory
+  └─ admin / analytics / tenants
             │
             ▼
 Application Services
-  ├─ intent + goal clarification
-  ├─ alignment + evidence analysis
-  ├─ simulation + optimization + retest
-  ├─ query battery generation + validation
-  ├─ experiments + metrics + recommendations
-  └─ validation rollups + calibration summary
+  ├─ conversation/
+  ├─ evidence/
+  ├─ simulation/
+  ├─ experiment/
+  ├─ query_battery/
+  ├─ loop/
+  ├─ admin/
+  └─ validation_service.py
             │
             ▼
 Infrastructure
-  ├─ SQLite
-  ├─ LLM providers (Gemini/OpenRouter)
-  ├─ protocol readiness adapters
-  └─ skill prompt storage + history
+  ├─ SQLite repositories
+  ├─ LLM provider adapters (BYOK)
+  ├─ protocol adapters (UCP/ACP readiness)
+  └─ skill + config persistence
 ```
 
 ---
 
 ## 2) Frontend Structure (Current)
 
-- `web/app/page.tsx`: Chat and manual workflow entry.
-- `web/app/alignment/page.tsx`: Intent-product alignment.
-- `web/app/evidence/page.tsx`: Evidence and signal diagnostics.
-- `web/app/simulation/page.tsx`: Simulation run/optimize/retest.
-- `web/app/experiments/page.tsx`: Battery + variants + experiment execution + validation status.
-- `web/app/admin/page.tsx`: Onboarding workspace and operational controls.
+- `web/app/page.tsx`: chat workflow entry.
+- `web/app/alignment/page.tsx`: intent-product alignment.
+- `web/app/evidence/page.tsx`: evidence diagnostics.
+- `web/app/simulation/page.tsx`: run/optimize/retest workflow.
+- `web/app/experiments/page.tsx`: batteries, variants, runs, metrics.
+- `web/app/validation/page.tsx`: centralized synthetic + observed validation.
+- `web/app/admin/page.tsx`: onboarding workspace + model gateway + operations.
 
-### Admin onboarding workspace (current)
-- Step-oriented collapsible flow:
-  1. Client Profile
-  2. Brand Setup
-  3. Product Catalog
-  4. Canonical Intent Spec
-  5. Review
-- Canonical spec editor now uses controlled ontology fields (category, sub-category, use-cases, archetypes, feature concepts, constraints, must-not-target).
+Admin onboarding is section-based (collapsible panels):
+- Client profile
+- Brand setup
+- Product catalog
+- Canonical intent spec
+- Review
 
 ---
 
 ## 3) Backend Modules (Current)
 
-- `api/routes/experiments.py`: experiment runs, metrics, validation logs, summaries.
-- `api/routes/batteries.py`: create battery + generate queries.
-- `api/routes/admin.py`: clients/brands/products, platform profile, skill management.
-- `api/routes/admin.py`: includes canonical spec autofill preview/apply from UCP/ACP/feed.
-- `application/services/query_battery_builder.py`: top-down/bottom-up/hybrid generation, quality filtering, retry.
-- `application/services/canonical_intent_spec_service.py`: source mapping, normalization, category inference, clarification prompt.
-- `application/services/query_battery_llm_generator.py`: LLM prompt contract for query generation.
-- `application/services/experiment_validation_service.py`: prediction accuracy and unlock thresholds.
+### Route layer
+- `api/routes/experiments.py`
+- `api/routes/batteries.py`
+- `api/routes/simulation.py`
+- `api/routes/validation.py`
+- `api/routes/beliefs.py`
+- `api/routes/loop.py`
+- `api/routes/admin.py`
+
+### Service layer
+- `application/services/conversation/*`
+- `application/services/evidence/*`
+- `application/services/simulation/*`
+- `application/services/experiment/*`
+- `application/services/query_battery/*`
+- `application/services/loop/*`
+- `application/services/admin/*`
+- `application/services/validation_service.py`
+
+### Architecture guardrail
+- `make arch-check` enforces that application services do not import infrastructure directly.
 
 ---
 
 ## 4) Data Model Snapshot (Current)
 
-Core tables/entities in active use:
-- Clients / Brands / Products
-- Conversation Sessions
-- Query Batteries / Battery Queries
-- Experiments / Variants / Runs / Metrics
-- Experiment Validations / Calibration rollups
-- Brand Beliefs
-- Simulation Runs / Lessons
-- Skills / Skills History
-- Analytics Events
+Core entities in active use:
+- tenancy: clients, brands, products, client_users
+- conversation: sessions, turns, goals, episodes
+- simulation: simulation_runs, simulation_lessons
+- experiments: experiments, experiment_variants, experiment_runs, experiment_metrics
+- validation: validation_jobs, validation_results, experiment_validations, experiment_calibrations
+- learning loop: world_states, belief_revisions, decision_events, memory_artifacts, calibration_profiles, loop_maintenance_runs
+- intelligence: brand_beliefs, audience_archetypes, analytics_events
+- operations: skills, skills_history, llm_provider_configs
 
-### Product canonical intent spec (stored in product metadata)
-`products.metadata.canonical_intent_spec` currently stores:
-- `category`
-- `sub_category`
-- `use_cases`
-- `audience_archetypes`
-- `feature_concepts`
-- `core_constraints`
-- `must_not_target`
-- `objective_keywords`
-- `banned_keywords`
-- `source`, `updated_at`
+Canonical spec fields are stored in:
+- `products.metadata.canonical_intent_spec`
 
-Additional metadata saved by autofill flow:
+Autofill traceability metadata:
 - `canonical_intent_spec_raw`
 - `canonical_intent_spec_normalized`
 - `canonical_intent_mapping`
 
 ---
 
-## 5) Query Battery Generation Architecture (Current)
+## 5) Query Battery Architecture (Current)
 
-### Supported modes
+Modes:
 - `top_down`
 - `bottom_up`
 - `hybrid`
 
-### Inputs
-- Battery context
-- Product metadata + canonical intent spec
-- Optional seed queries/features/use-cases
-- Optional LLM generation pass
+Pipeline:
+1. Build context capsule.
+2. Generate deterministic candidates by mode.
+3. Optional LLM expansion.
+4. Deduplicate and validate.
+5. Optional retry with stricter filtering.
+6. Persist accepted queries and expose reject reasons.
 
-### Quality controls in service
-- Brand/product/features/use-cases banned-term filtering
-- Over-specific token rejection (e.g., hard numeric spec tokens)
-- Required category check (for bottom-up/hybrid)
-- Retry pass with stricter bans when accepted volume is too low
-- Structured report: accepted count, rejected count, rejected reasons
+Quality gates:
+- banned term filtering (brand/product/spec leakage controls)
+- category confidence gate for bottom-up/hybrid
+- over-specific and invalid-pattern rejection
+- generation eval instrumentation to `analytics_events`
 
-### Memory/archetype confidence gating
-- Archetypes loaded from store are filtered by confidence threshold.
-- Belief snippets are filtered by confidence threshold.
-- Simulation lessons are currently excluded from prompt memory until confidence metadata exists.
-
-### Eval instrumentation
-- Query generation writes `query_generation_eval` events into `analytics_events`.
-- Battery-level dashboards are available via:
-  - `GET /batteries/{id}/eval-summary`
-  - `GET /batteries/{id}/ontology-updates`
+Current bottom-up rule:
+- If category confidence is low, generation is blocked and user is redirected to set canonical category in Admin.
 
 ---
 
-## 6) Validation & Calibration Architecture (Current)
+## 6) Validation + Belief + Memory Loop (Current)
 
-Validation sources implemented:
-1. Manual observed-reality validation logs from the Validation page (persisted through experiment validation routes).
-2. External analytics event ingestion endpoint (`/analytics/events`).
-3. Validation jobs + results (Validation page, BYOK or external paste-back).
+Validation has two explicit signals:
 
-Calibration outputs available now:
-- Verified runs
-- Prediction accuracy
-- Unlock eligibility for pattern insights
+1. **Synthetic validation signal**
+- provider/model based (BYOK)
+- fast screening consistency checks
 
-Unlock rule (soft gate):
-- `verified_runs >= 10`
-- `accuracy >= 0.75`
+2. **Observed reality signal**
+- manual/external logging of what actually surfaced
+- used for agreement/accuracy and drift tracking
+
+Belief and memory flow:
+- validation evidence can trigger belief revisions
+- policy decisions are logged with uncertainty metadata
+- high-quality/high-support artifacts are distilled into memory
+- memory retrieval is scoped and quality-gated
+
+Loop maintenance:
+- calibration refresh + memory distillation job
+- manual trigger in Admin or scheduled workflow
+- run history persisted
 
 ---
 
-## 7) What Is Planned (Not Built Yet)
+## 7) Planned (Not Built Yet)
 
-- Full normalization pipeline (spell/synonym/unit normalization + ontology confidence scoring).
-- Category inference classifier with confidence-based “block and clarify” step.
-- High-confidence simulation-lesson reuse (after confidence scoring is added).
-- Native GA4 connector (today: generic analytics event ingestion only).
-- Full serverless Vercel deployment of backend.
+- richer normalization pipeline (spell/synonym/unit + ontology confidence scoring)
+- stronger classifier-based category inference
+- native GA4 connector (current analytics ingestion is generic API-based)
+- confidence-scored simulation lesson promotion beyond current safeguards
+- full backend serverless hardening for Vercel Python runtime
