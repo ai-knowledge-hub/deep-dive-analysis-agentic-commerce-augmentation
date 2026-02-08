@@ -92,6 +92,18 @@ function getPreferredProvider(
   return configured ?? null;
 }
 
+function observedSummaryValue(
+  summary: ValidationSummary | null,
+  nextKey: keyof ValidationSummary,
+  legacyKey: keyof ValidationSummary,
+) {
+  if (!summary) return null;
+  return (summary[nextKey] ?? summary[legacyKey] ?? null) as
+    | number
+    | boolean
+    | null;
+}
+
 export default function ValidationPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -205,6 +217,48 @@ export default function ValidationPage() {
     });
     return map;
   }, [manualMetrics]);
+
+  const observedLogged = Number(
+    observedSummaryValue(
+      manualSummary,
+      "observed_signals_logged",
+      "total_logged",
+    ) ?? 0,
+  );
+  const observedVerified = Number(
+    observedSummaryValue(
+      manualSummary,
+      "observed_runs_verified",
+      "verified_runs",
+    ) ?? 0,
+  );
+  const observedAccuracyRaw = observedSummaryValue(
+    manualSummary,
+    "observed_accuracy",
+    "accuracy",
+  );
+  const observedAccuracy = typeof observedAccuracyRaw === "number" ? observedAccuracyRaw : null;
+  const observedProgress = Number(
+    observedSummaryValue(
+      manualSummary,
+      "observed_progress",
+      "progress",
+    ) ?? 0,
+  );
+  const observedBrandAccuracyRaw = observedSummaryValue(
+    manualBrandSummary,
+    "observed_accuracy",
+    "accuracy",
+  );
+  const observedBrandAccuracy =
+    typeof observedBrandAccuracyRaw === "number" ? observedBrandAccuracyRaw : null;
+  const observedBrandVerified = Number(
+    observedSummaryValue(
+      manualBrandSummary,
+      "observed_runs_verified",
+      "verified_runs",
+    ) ?? 0,
+  );
 
   useEffect(() => {
     void getLlmConfig(userId ?? undefined)
@@ -815,33 +869,34 @@ export default function ValidationPage() {
             <div className="panel__form">
               <div className="panel__meta panel__meta--stack">
                 <span className="panel__muted">
-                  Logged observed signals: {manualSummary?.total_logged ?? 0}
+                  Logged observed signals: {observedLogged}
                 </span>
                 <span className="panel__muted">
-                  Verified runs: {manualSummary?.verified_runs ?? 0} / 10
+                  Verified runs: {observedVerified} / 10
                 </span>
                 <span className="panel__muted">
                   Accuracy:{" "}
-                  {manualSummary
-                    ? `${Math.round(manualSummary.accuracy * 100)}%`
-                    : "—"}
+                  {observedAccuracy !== null ? `${Math.round(observedAccuracy * 100)}%` : "—"}
                 </span>
               </div>
               <div className="progress-bar">
                 <div
                   className="progress-bar__fill"
                   style={{
-                    width: `${Math.round((manualSummary?.progress ?? 0) * 100)}%`,
+                    width: `${Math.round(observedProgress * 100)}%`,
                   }}
                 />
               </div>
               {manualBrandSummary ? (
                 <div className="panel__meta panel__meta--stack">
                   <span className="panel__muted">
-                    Brand accuracy: {Math.round(manualBrandSummary.accuracy * 100)}%
+                    Brand accuracy:{" "}
+                    {observedBrandAccuracy !== null
+                      ? `${Math.round(observedBrandAccuracy * 100)}%`
+                      : "—"}
                   </span>
                   <span className="panel__muted">
-                    Verified (brand): {manualBrandSummary.verified_runs}
+                    Verified (brand): {observedBrandVerified}
                   </span>
                 </div>
               ) : null}

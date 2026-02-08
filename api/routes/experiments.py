@@ -308,6 +308,24 @@ def list_runs(
     return {"runs": runs}
 
 
+@router.delete("/{experiment_id}/runs/{run_id}")
+def delete_run(
+    experiment_id: str,
+    run_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    run = DEPS.experiment_runs.get_run(run_id)
+    if not run or run.get("experiment_id") != experiment_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    SERVICE.get_experiment(experiment_id=experiment_id, client_id=scoped_client_id)
+    deleted = DEPS.experiment_runs.delete_run(run_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"deleted": True, "run_id": run_id}
+
+
 @router.get("/{experiment_id}/metrics")
 def list_metrics(
     experiment_id: str,

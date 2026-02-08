@@ -14,6 +14,7 @@ from application.ports.deps import (
 )
 from application.services.admin.canonical_intent_spec_service import (
     CATEGORY_CONFIDENCE_THRESHOLD,
+    TOKEN_SYNONYMS,
     infer_category_from_context,
 )
 from application.services.query_battery.llm_generator import (
@@ -147,7 +148,10 @@ class QueryBatteryBuilder:
                 )
 
         if source in {"bottom_up", "hybrid"}:
-            generated.extend(_bottom_up_queries(bottom_capsule))
+            # In LLM mode, rely on model generation for bottom-up queries.
+            # Deterministic templates tend to overfit to raw capsule phrases.
+            if not (use_llm and self._generate):
+                generated.extend(_bottom_up_queries(bottom_capsule))
             if use_llm and self._generate:
                 banned_terms = _build_banned_terms(product, bottom_capsule)
                 generated.extend(
@@ -186,6 +190,11 @@ class QueryBatteryBuilder:
             report = {
                 "accepted_count": 0,
                 "rejected_count": 0,
+                "generated_count": len(deduped),
+                "generated_preview": [
+                    {"query_text": item.query_text, "query_type": item.query_type}
+                    for item in deduped[:20]
+                ],
                 "required_category": inferred_category,
                 "category_confidence": category_inference.get("confidence"),
                 "category_candidates": category_inference.get("candidates", []),
@@ -262,6 +271,11 @@ class QueryBatteryBuilder:
         report = {
             "accepted_count": len(validated),
             "rejected_count": len(rejected),
+            "generated_count": len(deduped),
+            "generated_preview": [
+                {"query_text": item.query_text, "query_type": item.query_type}
+                for item in deduped[:20]
+            ],
             "required_category": inferred_category,
             "category_confidence": category_inference.get("confidence"),
             "category_candidates": category_inference.get("candidates", []),
@@ -478,14 +492,22 @@ def _build_banned_terms(
     capsule: IntentCapsule,
 ) -> List[str]:
     metadata = product.get("metadata") or {}
-    brand = metadata.get("brand") or metadata.get("merchant_name") or ""
+    brand = (
+        metadata.get("brand")
+        or metadata.get("merchant_name")
+        or metadata.get("manufacturer")
+        or ""
+    )
     product_name = product.get("name") or ""
-    raw_features = capsule.product_features or []
-    raw_use_cases = capsule.use_cases or []
+    model = metadata.get("model") or metadata.get("sku") or metadata.get("mpn") or ""
     banned: List[str] = []
-    for item in [brand, product_name, *raw_features, *raw_use_cases]:
+    for item in [brand, product_name, model]:
         if isinstance(item, str) and item.strip():
             banned.append(item.strip())
+            for token in re.split(r"[\s\-_/,]+", item.strip()):
+                cleaned = token.strip().lower()
+                if len(cleaned) >= 4:
+                    banned.append(cleaned)
     return banned
 
 
@@ -666,7 +688,9 @@ def _validate_queries(
             reason = "contains banned term"
         elif re.search(r"\b\d+(\.\d+)?\s?(mm|g|kg|oz|cm|inch|inches)\b", text_lower):
             reason = "over-specific spec token"
-        elif required_category and required_category.lower() not in text_lower:
+        elif required_category and not _matches_required_category(
+            query_text=text_lower, required_category=required_category
+        ):
             reason = f"missing category '{required_category}'"
         elif len(text.split()) < 4:
             reason = "query too short"
@@ -675,6 +699,31 @@ def _validate_queries(
         else:
             accepted.append(item)
     return accepted, rejected
+
+
+def _normalize_category_phrase(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    return TOKEN_SYNONYMS.get(normalized, normalized)
+
+
+def _matches_required_category(*, query_text: str, required_category: str) -> bool:
+    required = _normalize_category_phrase(required_category)
+    query_norm = _normalize_category_phrase(query_text)
+    if required in query_norm:
+        return True
+    category_aliases = {
+        "running_shoes": {
+            "running_shoe",
+            "running_shoes",
+            "road_running",
+            "trainer",
+            "trainers",
+        },
+        "television": {"tv", "television", "smart_tv"},
+        "sports_apparel": {"sports_apparel", "apparel", "running_vest", "training_top"},
+    }
+    aliases = category_aliases.get(required, {required})
+    return any(alias in query_norm for alias in aliases)
 
 
 def _extract_constraints(metadata: Dict[str, Any]) -> Dict[str, Any]:

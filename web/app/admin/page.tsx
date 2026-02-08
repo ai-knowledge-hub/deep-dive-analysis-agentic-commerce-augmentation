@@ -165,6 +165,14 @@ export default function AdminPage() {
       .filter(Boolean);
   }, []);
 
+  const slugify = useCallback((value: string) => {
+    return value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }, []);
+
   const skillNames = useMemo(() => ["signal_extractor", "copy_generator"], []);
   const [activeSkillName, setActiveSkillName] = useState<string>("signal_extractor");
   const [activeSkill, setActiveSkill] = useState<AdminSkill | null>(null);
@@ -201,10 +209,36 @@ export default function AdminPage() {
     >
   >({});
 
-  const [clientForm, setClientForm] = useState({ ...emptyForm });
   const [brandForm, setBrandForm] = useState({ ...emptyForm });
   const [productForm, setProductForm] = useState({ ...emptyForm });
   const [userForm, setUserForm] = useState({ ...emptyForm });
+  const [showCreateBrand, setShowCreateBrand] = useState(false);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [isCreateClientDrawerOpen, setCreateClientDrawerOpen] = useState(false);
+  const [createClientBusy, setCreateClientBusy] = useState(false);
+  const [createClientError, setCreateClientError] = useState<string | null>(null);
+  const [createClientSuccess, setCreateClientSuccess] = useState<string | null>(null);
+  const [newClientForm, setNewClientForm] = useState({
+    clientId: "",
+    clientName: "",
+    brandId: "",
+    brandName: "",
+    productsText: "",
+    category: "",
+    subCategory: "",
+    useCases: "",
+    archetypes: "",
+    featureConcepts: "",
+    constraints: "",
+    exclusions: "",
+    objectiveKeywords: "",
+    bannedKeywords: "",
+    ucpOfferUrl: "",
+    ucpMerchantName: "",
+    ucpCurrency: "GBP",
+    acpEnableSearch: true,
+    acpEnableCheckout: true,
+  });
 
   useEffect(() => {
     if (!userId) return;
@@ -421,6 +455,68 @@ export default function AdminPage() {
     return key ? canonicalOntology[key] : null;
   }, [intentSpecForm.category]);
 
+  const canCreateBrand = Boolean(
+    userId && activeClientId && brandForm.id.trim() && brandForm.name.trim(),
+  );
+  const canCreateProduct = Boolean(
+    userId &&
+      activeBrandId &&
+      productForm.id.trim() &&
+      productForm.name.trim() &&
+      productForm.description.trim(),
+  );
+  const canSaveIntentSpec = Boolean(
+    selectedProduct &&
+      intentSpecForm.category.trim() &&
+      parseCsv(intentSpecForm.useCases).length > 0,
+  );
+
+  const onboardingOntology = useMemo(() => {
+    const key = newClientForm.category;
+    return key ? canonicalOntology[key] : null;
+  }, [newClientForm.category]);
+
+  const onboardingUseCases = useMemo(() => {
+    const selected = parseCsv(newClientForm.useCases);
+    const base = onboardingOntology?.useCases ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [newClientForm.useCases, parseCsv, onboardingOntology]);
+
+  const onboardingArchetypes = useMemo(() => {
+    const selected = parseCsv(newClientForm.archetypes);
+    const base = onboardingOntology?.archetypes ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [newClientForm.archetypes, parseCsv, onboardingOntology]);
+
+  const onboardingFeatures = useMemo(() => {
+    const selected = parseCsv(newClientForm.featureConcepts);
+    const base = onboardingOntology?.featureConcepts ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [newClientForm.featureConcepts, parseCsv, onboardingOntology]);
+
+  const onboardingConstraints = useMemo(() => {
+    const selected = parseCsv(newClientForm.constraints);
+    const base = onboardingOntology?.constraints ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [newClientForm.constraints, parseCsv, onboardingOntology]);
+
+  const onboardingExclusions = useMemo(() => {
+    const selected = parseCsv(newClientForm.exclusions);
+    const base = onboardingOntology?.exclusions ?? [];
+    return Array.from(new Set([...base, ...selected]));
+  }, [newClientForm.exclusions, parseCsv, onboardingOntology]);
+
+  const canSubmitNewClient = Boolean(
+    userId &&
+      newClientForm.clientId.trim() &&
+      newClientForm.clientName.trim() &&
+      newClientForm.brandId.trim() &&
+      newClientForm.brandName.trim() &&
+      newClientForm.category.trim() &&
+      parseCsv(newClientForm.useCases).length > 0 &&
+      newClientForm.productsText.trim(),
+  );
+
   const ontologyUseCases = useMemo(() => {
     const selected = parseCsv(intentSpecForm.useCases);
     const base = selectedOntology?.useCases ?? [];
@@ -488,17 +584,165 @@ export default function AdminPage() {
     [userId],
   );
 
-  const handleCreateClient = useCallback(async () => {
-    if (!userId || !clientForm.id.trim() || !clientForm.name.trim()) return;
-    const response = await createAdminClient(
-      { id: clientForm.id.trim(), name: clientForm.name.trim() },
-      userId,
-    );
-    setClients((current) => [...current, response.client]);
-    setActiveClientId(response.client.id);
-    setTenantClientId(response.client.id);
-    setClientForm({ ...emptyForm });
-  }, [clientForm, setTenantClientId, userId]);
+  const handleCreateClientOnboarding = useCallback(async () => {
+    if (!userId || !canSubmitNewClient) return;
+    setCreateClientBusy(true);
+    setCreateClientError(null);
+    setCreateClientSuccess(null);
+    try {
+      const client = await createAdminClient(
+        {
+          id: newClientForm.clientId.trim(),
+          name: newClientForm.clientName.trim(),
+        },
+        userId,
+      );
+      const brand = await createAdminBrand(
+        client.client.id,
+        {
+          id: newClientForm.brandId.trim(),
+          name: newClientForm.brandName.trim(),
+        },
+        userId,
+      );
+
+      const canonicalSpec = {
+        category: newClientForm.category.trim(),
+        sub_category: newClientForm.subCategory.trim() || null,
+        use_cases: parseCsv(newClientForm.useCases),
+        audience_archetypes: parseCsv(newClientForm.archetypes),
+        feature_concepts: parseCsv(newClientForm.featureConcepts),
+        core_constraints: parseCsv(newClientForm.constraints),
+        must_not_target: parseCsv(newClientForm.exclusions),
+        objective_keywords: parseCsv(newClientForm.objectiveKeywords),
+        banned_keywords: parseCsv(newClientForm.bannedKeywords),
+        source: ["admin_onboarding"],
+        updated_at: new Date().toISOString(),
+      };
+
+      const productLines = newClientForm.productsText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (productLines.length === 0) {
+        throw new Error("Add at least one product line.");
+      }
+
+      let firstProductId: string | null = null;
+      for (const line of productLines) {
+        const parts = line.split("|").map((item) => item.trim());
+        if (parts.length < 2) {
+          throw new Error(
+            "Each product line must be: product-id|product name|short description",
+          );
+        }
+        const hasExplicitId = parts.length >= 3;
+        const productId = hasExplicitId
+          ? parts[0]
+          : `product-${slugify(parts[0])}`;
+        const productName = hasExplicitId ? parts[1] : parts[0];
+        const productDescription = hasExplicitId ? parts[2] : parts[1];
+        if (!productId || !productName || !productDescription) {
+          throw new Error(
+            "Each product line must include product id/name/description.",
+          );
+        }
+        const productResponse = await createAdminProduct(
+          brand.brand.id,
+          {
+            id: productId,
+            name: productName,
+            description: productDescription,
+            metadata: {
+              canonical_intent_spec: canonicalSpec,
+              ucp: {
+                offer_url: newClientForm.ucpOfferUrl.trim() || undefined,
+                merchant_name: newClientForm.ucpMerchantName.trim() || undefined,
+                currency: newClientForm.ucpCurrency.trim() || "GBP",
+                category: canonicalSpec.category,
+                sub_category: canonicalSpec.sub_category,
+                use_cases: canonicalSpec.use_cases,
+                audience_archetypes: canonicalSpec.audience_archetypes,
+                feature_concepts: canonicalSpec.feature_concepts,
+                constraints: canonicalSpec.core_constraints,
+              },
+              acp: {
+                enable_search: newClientForm.acpEnableSearch,
+                enable_checkout: newClientForm.acpEnableCheckout,
+                category: canonicalSpec.category,
+                sub_category: canonicalSpec.sub_category,
+                use_cases: canonicalSpec.use_cases,
+                audience_archetypes: canonicalSpec.audience_archetypes,
+                feature_concepts: canonicalSpec.feature_concepts,
+                constraints: canonicalSpec.core_constraints,
+              },
+            },
+          },
+          userId,
+        );
+        if (!firstProductId) firstProductId = productResponse.product.id;
+      }
+
+      const nextClientId = client.client.id;
+      const nextBrandId = brand.brand.id;
+      const nextProductId = firstProductId;
+
+      setClients((current) => [...current, client.client]);
+      setActiveClientId(nextClientId);
+      setTenantClientId(nextClientId);
+      setBrands([brand.brand]);
+      setActiveBrandId(nextBrandId);
+      setTenantBrandId(nextBrandId);
+      if (nextProductId) {
+        setActiveProductId(nextProductId);
+        setTenantProductId(nextProductId);
+      }
+
+      setCreateClientSuccess(
+        `Created client ${client.client.name} with brand ${brand.brand.name} and ${productLines.length} product(s).`,
+      );
+      setNewClientForm({
+        clientId: "",
+        clientName: "",
+        brandId: "",
+        brandName: "",
+        productsText: "",
+        category: "",
+        subCategory: "",
+        useCases: "",
+        archetypes: "",
+        featureConcepts: "",
+        constraints: "",
+        exclusions: "",
+        objectiveKeywords: "",
+        bannedKeywords: "",
+        ucpOfferUrl: "",
+        ucpMerchantName: "",
+        ucpCurrency: "GBP",
+        acpEnableSearch: true,
+        acpEnableCheckout: true,
+      });
+      window.setTimeout(() => {
+        setCreateClientSuccess(null);
+        setCreateClientDrawerOpen(false);
+      }, 1600);
+    } catch (error) {
+      setCreateClientError(
+        error instanceof Error ? error.message : "Failed to onboard client.",
+      );
+    } finally {
+      setCreateClientBusy(false);
+    }
+  }, [
+    canSubmitNewClient,
+    newClientForm,
+    parseCsv,
+    setTenantBrandId,
+    setTenantClientId,
+    setTenantProductId,
+    slugify,
+    userId,
+  ]);
 
   const handleCreateBrand = useCallback(async () => {
     if (!userId || !activeClientId || !brandForm.id.trim() || !brandForm.name.trim())
@@ -906,91 +1150,104 @@ export default function AdminPage() {
                   {onboardingCompletion.completed}/{onboardingCompletion.total} complete
                 </span>
               </div>
-              <div className="admin-onboarding__summary">
-                <div className="admin-onboarding__summary-card">
-                  <span>Client</span>
-                  <strong>{selectedClient?.name ?? "Not selected"}</strong>
+              <div className="admin-onboarding__scope">
+                <div className="admin__selector">
+                  <label className="panel__label" htmlFor="admin-client-select">
+                    Scope client
+                  </label>
+                  <select
+                    id="admin-client-select"
+                    value={activeClientId}
+                    onChange={(event) => {
+                      const nextClientId = event.target.value;
+                      setActiveClientId(nextClientId);
+                      setTenantClientId(nextClientId || null);
+                      setActiveBrandId("");
+                      setActiveProductId("");
+                    }}
+                  >
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="admin-onboarding__summary-card">
-                  <span>Brand</span>
-                  <strong>{selectedBrand?.name ?? "Not selected"}</strong>
+                <div className="admin__selector">
+                  <label className="panel__label" htmlFor="admin-brand-select">
+                    Scope brand
+                  </label>
+                  <select
+                    id="admin-brand-select"
+                    value={activeBrandId}
+                    onChange={(event) => {
+                      const nextBrandId = event.target.value;
+                      setActiveBrandId(nextBrandId);
+                      setTenantBrandId(nextBrandId || null);
+                      setActiveProductId("");
+                    }}
+                    disabled={!activeClientId || brands.length === 0}
+                  >
+                    {brands.length === 0 ? (
+                      <option value="">Select brand</option>
+                    ) : null}
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="admin-onboarding__summary-card">
-                  <span>Product</span>
-                  <strong>{selectedProduct?.name ?? "Not selected"}</strong>
+                <div className="admin__selector">
+                  <label className="panel__label" htmlFor="admin-product-select">
+                    Scope product
+                  </label>
+                  <select
+                    id="admin-product-select"
+                    value={activeProductId}
+                    onChange={(event) => {
+                      const nextProductId = event.target.value;
+                      setActiveProductId(nextProductId);
+                      setTenantProductId(nextProductId || null);
+                    }}
+                    disabled={!activeBrandId || products.length === 0}
+                  >
+                    {products.length === 0 ? (
+                      <option value="">Select product</option>
+                    ) : null}
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="admin-onboarding__summary-card">
-                  <span>Canonical spec</span>
-                  <strong>
-                    {onboardingCompletion.doneIntent ? "Configured" : "Missing required fields"}
-                  </strong>
-                </div>
+              </div>
+              <p className="panel__meta">
+                All onboarding changes are saved against the selected scope above.
+              </p>
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="button button--primary-subtle"
+                  onClick={() => {
+                    setCreateClientDrawerOpen(true);
+                    setCreateClientError(null);
+                    setCreateClientSuccess(null);
+                  }}
+                >
+                  Add new client
+                </button>
               </div>
               <div className="admin-onboarding__panels">
                 <details>
-                  <summary>Client profile</summary>
-                  <div className="admin__selector">
-                    <label className="panel__label" htmlFor="admin-client-select">
-                      Active client
-                    </label>
-                    <select
-                      id="admin-client-select"
-                      value={activeClientId}
-                      onChange={(event) => {
-                        const nextClientId = event.target.value;
-                        setActiveClientId(nextClientId);
-                        setTenantClientId(nextClientId);
-                        setActiveBrandId("");
-                        setActiveProductId("");
-                      }}
-                    >
-                      {clients.map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {clients.length === 0 ? (
-                    <p className="panel__empty">No clients yet.</p>
-                  ) : (
-                    <ul className="admin__list">
-                      {clients.map((client) => (
-                        <li key={client.id}>
-                          <span>{client.name}</span>
-                          <span className="admin__meta">{client.id}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="admin__form">
-                    <span className="panel__label">Create client</span>
-                    <input
-                      type="text"
-                      placeholder="client-id"
-                      value={clientForm.id}
-                      onChange={(event) =>
-                        setClientForm((current) => ({ ...current, id: event.target.value }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      placeholder="Client name"
-                      value={clientForm.name}
-                      onChange={(event) =>
-                        setClientForm((current) => ({ ...current, name: event.target.value }))
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="button button--primary-subtle"
-                      onClick={handleCreateClient}
-                    >
-                      Add client
-                    </button>
-                  </div>
+                  <summary>Client access</summary>
                   {activeClientId ? (
                     <div className="admin__form">
+                      <p className="panel__meta">
+                        Users added here get access to:{" "}
+                        <strong>{selectedClient?.name ?? activeClientId}</strong>
+                      </p>
                       <span className="panel__label">Client users</span>
                       {clientUsers.length === 0 ? (
                         <p className="panel__empty">No users yet.</p>
@@ -1029,36 +1286,23 @@ export default function AdminPage() {
                         type="button"
                         className="button button--primary-subtle"
                         onClick={handleAddClientUser}
+                        disabled={!userForm.memberUserId.trim()}
                       >
-                        Add user
+                        Add user to selected client
                       </button>
                     </div>
-                  ) : null}
+                  ) : (
+                    <p className="panel__empty">Select a client first.</p>
+                  )}
                 </details>
                 <details>
                   <summary>Brand setup</summary>
                   {activeClientId ? (
                     <>
-                      <div className="admin__selector">
-                        <label className="panel__label" htmlFor="admin-brand-select">
-                          Active brand
-                        </label>
-                        <select
-                          id="admin-brand-select"
-                          value={activeBrandId}
-                          onChange={(event) => {
-                            const nextBrandId = event.target.value;
-                            setActiveBrandId(nextBrandId);
-                            setTenantBrandId(nextBrandId || null);
-                          }}
-                        >
-                          {brands.map((brand) => (
-                            <option key={brand.id} value={brand.id}>
-                              {brand.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <p className="panel__meta">
+                        Creates and edits brands for client:{" "}
+                        <strong>{selectedClient?.name ?? activeClientId}</strong>
+                      </p>
                       {brands.length === 0 ? (
                         <p className="panel__empty">No brands yet.</p>
                       ) : (
@@ -1071,32 +1315,48 @@ export default function AdminPage() {
                           ))}
                         </ul>
                       )}
-                      <div className="admin__form">
-                        <span className="panel__label">Create brand</span>
-                        <input
-                          type="text"
-                          placeholder="brand-id"
-                          value={brandForm.id}
-                          onChange={(event) =>
-                            setBrandForm((current) => ({ ...current, id: event.target.value }))
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Brand name"
-                          value={brandForm.name}
-                          onChange={(event) =>
-                            setBrandForm((current) => ({ ...current, name: event.target.value }))
-                          }
-                        />
+                      <div className="panel__actions">
                         <button
                           type="button"
-                          className="button button--primary-subtle"
-                          onClick={handleCreateBrand}
+                          className="button button--ghost"
+                          onClick={() => setShowCreateBrand((current) => !current)}
                         >
-                          Add brand
+                          {showCreateBrand ? "Hide create brand form" : "Add new brand"}
                         </button>
                       </div>
+                      {showCreateBrand ? (
+                        <div className="admin__form">
+                          <span className="panel__label">
+                            Create brand for {selectedClient?.name ?? activeClientId}
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="brand-id"
+                            value={brandForm.id}
+                            onChange={(event) =>
+                              setBrandForm((current) => ({ ...current, id: event.target.value }))
+                            }
+                            required
+                          />
+                          <input
+                            type="text"
+                            placeholder="Brand name"
+                            value={brandForm.name}
+                            onChange={(event) =>
+                              setBrandForm((current) => ({ ...current, name: event.target.value }))
+                            }
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="button button--primary-subtle"
+                            onClick={handleCreateBrand}
+                            disabled={!canCreateBrand}
+                          >
+                            Add brand
+                          </button>
+                        </div>
+                      ) : null}
                     </>
                   ) : (
                     <p className="panel__empty">Select a client first.</p>
@@ -1106,26 +1366,10 @@ export default function AdminPage() {
                   <summary>Product catalog</summary>
                   {activeBrandId ? (
                     <>
-                      <div className="admin__selector">
-                        <label className="panel__label" htmlFor="admin-product-select">
-                          Active product
-                        </label>
-                        <select
-                          id="admin-product-select"
-                          value={activeProductId}
-                          onChange={(event) => {
-                            const nextProductId = event.target.value;
-                            setActiveProductId(nextProductId);
-                            setTenantProductId(nextProductId || null);
-                          }}
-                        >
-                          {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <p className="panel__meta">
+                        Creates and edits products for brand:{" "}
+                        <strong>{selectedBrand?.name ?? activeBrandId}</strong>
+                      </p>
                       {products.length === 0 ? (
                         <p className="panel__empty">No products yet.</p>
                       ) : (
@@ -1138,54 +1382,73 @@ export default function AdminPage() {
                           ))}
                         </ul>
                       )}
-                      <div className="admin__form">
-                        <span className="panel__label">Create product</span>
-                        <input
-                          type="text"
-                          placeholder="product-id"
-                          value={productForm.id}
-                          onChange={(event) =>
-                            setProductForm((current) => ({ ...current, id: event.target.value }))
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Product name"
-                          value={productForm.name}
-                          onChange={(event) =>
-                            setProductForm((current) => ({ ...current, name: event.target.value }))
-                          }
-                        />
-                        <textarea
-                          rows={2}
-                          placeholder="Short description"
-                          value={productForm.description}
-                          onChange={(event) =>
-                            setProductForm((current) => ({
-                              ...current,
-                              description: event.target.value,
-                            }))
-                          }
-                        />
-                        <input
-                          type="url"
-                          placeholder="Product URL (optional)"
-                          value={productForm.productUrl}
-                          onChange={(event) =>
-                            setProductForm((current) => ({
-                              ...current,
-                              productUrl: event.target.value,
-                            }))
-                          }
-                        />
+                      <div className="panel__actions">
                         <button
                           type="button"
-                          className="button button--primary-subtle"
-                          onClick={handleCreateProduct}
+                          className="button button--ghost"
+                          onClick={() => setShowCreateProduct((current) => !current)}
                         >
-                          Add product
+                          {showCreateProduct
+                            ? "Hide create product form"
+                            : "Add new product"}
                         </button>
                       </div>
+                      {showCreateProduct ? (
+                        <div className="admin__form">
+                          <span className="panel__label">
+                            Create product for {selectedBrand?.name ?? activeBrandId}
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="product-id"
+                            value={productForm.id}
+                            onChange={(event) =>
+                              setProductForm((current) => ({ ...current, id: event.target.value }))
+                            }
+                            required
+                          />
+                          <input
+                            type="text"
+                            placeholder="Product name"
+                            value={productForm.name}
+                            onChange={(event) =>
+                              setProductForm((current) => ({ ...current, name: event.target.value }))
+                            }
+                            required
+                          />
+                          <textarea
+                            rows={2}
+                            placeholder="Short description (required)"
+                            value={productForm.description}
+                            onChange={(event) =>
+                              setProductForm((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                          <input
+                            type="url"
+                            placeholder="Product URL (optional)"
+                            value={productForm.productUrl}
+                            onChange={(event) =>
+                              setProductForm((current) => ({
+                                ...current,
+                                productUrl: event.target.value,
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="button button--primary-subtle"
+                            onClick={handleCreateProduct}
+                            disabled={!canCreateProduct}
+                          >
+                            Add product
+                          </button>
+                        </div>
+                      ) : null}
                       <details>
                         <summary>Platform profile (UCP)</summary>
                         {!platformProfile ? (
@@ -1235,6 +1498,11 @@ export default function AdminPage() {
                   <summary>Canonical intent spec</summary>
                   <p className="panel__meta">
                     Capture objective product context used by bottom-up query generation.
+                  </p>
+                  <p className="panel__meta">
+                    Saved under selected product metadata path:
+                    {" "}
+                    <code>canonical_intent_spec</code>.
                   </p>
                   <button
                     type="button"
@@ -1612,6 +1880,353 @@ export default function AdminPage() {
                 )}
               </details>
             </section>
+            {isCreateClientDrawerOpen && (
+              <div
+                className="admin-onboarding__drawer-overlay"
+                onClick={() => {
+                  if (createClientBusy) return;
+                  setCreateClientDrawerOpen(false);
+                }}
+              >
+                <aside
+                  className="admin-onboarding__drawer"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="panel__header">
+                    <h3>Add new client</h3>
+                    <button
+                      type="button"
+                      className="button button--ghost"
+                      onClick={() => setCreateClientDrawerOpen(false)}
+                      disabled={createClientBusy}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <p className="panel__meta">
+                    Creates one client, one initial brand, a product list, and canonical/UCP/ACP metadata in one flow.
+                  </p>
+                  <div className="admin__form">
+                    <span className="panel__label">Client</span>
+                    <input
+                      type="text"
+                      placeholder="client-id"
+                      value={newClientForm.clientId}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          clientId: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="text"
+                      placeholder="Client name"
+                      value={newClientForm.clientName}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          clientName: event.target.value,
+                        }))
+                      }
+                    />
+
+                    <span className="panel__label">Initial brand</span>
+                    <input
+                      type="text"
+                      placeholder="brand-id"
+                      value={newClientForm.brandId}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          brandId: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="text"
+                      placeholder="Brand name"
+                      value={newClientForm.brandName}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          brandName: event.target.value,
+                        }))
+                      }
+                    />
+
+                    <span className="panel__label">Products list</span>
+                    <textarea
+                      rows={5}
+                      placeholder={"product-id|Product name|Short description\nproduct-id-2|Product 2|Short description"}
+                      value={newClientForm.productsText}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          productsText: event.target.value,
+                        }))
+                      }
+                    />
+
+                    <span className="panel__label">Canonical intent spec</span>
+                    <p className="panel__meta">
+                      Category and use cases are required. Choose a category first to load ontology options.
+                    </p>
+                    <label className="panel__label">Category</label>
+                    <select
+                      value={newClientForm.category}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          category: event.target.value,
+                          subCategory: "",
+                        }))
+                      }
+                    >
+                      <option value="">Select category</option>
+                      {Object.entries(canonicalOntology).map(([key, value]) => (
+                        <option key={key} value={key}>
+                          {value.label}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Sub category</label>
+                    <select
+                      value={newClientForm.subCategory}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          subCategory: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Select sub category</option>
+                      {(onboardingOntology?.subCategories ?? []).map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="panel__label">Use cases</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, onboardingUseCases.length || 3))}
+                      value={parseCsv(newClientForm.useCases)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setNewClientForm((current) => ({
+                          ...current,
+                          useCases: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {onboardingUseCases.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="panel__meta">
+                      Example: daily_training, long_distance, speed_work
+                    </p>
+                    <label className="panel__label">Audience archetypes</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, onboardingArchetypes.length || 3))}
+                      value={parseCsv(newClientForm.archetypes)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setNewClientForm((current) => ({
+                          ...current,
+                          archetypes: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {onboardingArchetypes.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="panel__meta">
+                      Example: beginner_runner, performance_runner
+                    </p>
+                    <label className="panel__label">Feature concepts</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, onboardingFeatures.length || 3))}
+                      value={parseCsv(newClientForm.featureConcepts)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setNewClientForm((current) => ({
+                          ...current,
+                          featureConcepts: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {onboardingFeatures.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="panel__meta">
+                      Example: cushioning, stability, breathability
+                    </p>
+                    <label className="panel__label">Core constraints</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, onboardingConstraints.length || 3))}
+                      value={parseCsv(newClientForm.constraints)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setNewClientForm((current) => ({
+                          ...current,
+                          constraints: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {onboardingConstraints.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="panel__meta">
+                      Example: budget_sensitive, availability_required
+                    </p>
+                    <label className="panel__label">Must-not-target segments</label>
+                    <select
+                      multiple
+                      size={Math.min(6, Math.max(3, onboardingExclusions.length || 3))}
+                      value={parseCsv(newClientForm.exclusions)}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map(
+                          (option) => option.value,
+                        );
+                        setNewClientForm((current) => ({
+                          ...current,
+                          exclusions: selected.join(", "),
+                        }));
+                      }}
+                    >
+                      {onboardingExclusions.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="panel__meta">
+                      Example: elite_racer_only, non_sport_use
+                    </p>
+                    <textarea
+                      rows={2}
+                      placeholder="Objective keywords (optional, comma separated)"
+                      value={newClientForm.objectiveKeywords}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          objectiveKeywords: event.target.value,
+                        }))
+                      }
+                    />
+                    <textarea
+                      rows={2}
+                      placeholder="Banned keywords (optional, comma separated)"
+                      value={newClientForm.bannedKeywords}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          bannedKeywords: event.target.value,
+                        }))
+                      }
+                    />
+
+                    <span className="panel__label">UCP defaults (optional)</span>
+                    <input
+                      type="url"
+                      placeholder="Offer URL"
+                      value={newClientForm.ucpOfferUrl}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          ucpOfferUrl: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="text"
+                      placeholder="Merchant name"
+                      value={newClientForm.ucpMerchantName}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          ucpMerchantName: event.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="text"
+                      placeholder="Currency"
+                      value={newClientForm.ucpCurrency}
+                      onChange={(event) =>
+                        setNewClientForm((current) => ({
+                          ...current,
+                          ucpCurrency: event.target.value,
+                        }))
+                      }
+                    />
+
+                    <span className="panel__label">ACP defaults</span>
+                    <label className="panel__label panel__label--inline">
+                      <input
+                        type="checkbox"
+                        checked={newClientForm.acpEnableSearch}
+                        onChange={(event) =>
+                          setNewClientForm((current) => ({
+                            ...current,
+                            acpEnableSearch: event.target.checked,
+                          }))
+                        }
+                      />
+                      Enable search
+                    </label>
+                    <label className="panel__label panel__label--inline">
+                      <input
+                        type="checkbox"
+                        checked={newClientForm.acpEnableCheckout}
+                        onChange={(event) =>
+                          setNewClientForm((current) => ({
+                            ...current,
+                            acpEnableCheckout: event.target.checked,
+                          }))
+                        }
+                      />
+                      Enable checkout
+                    </label>
+
+                    {createClientError ? <p className="panel__error">{createClientError}</p> : null}
+                    {createClientSuccess ? <p className="panel__success">{createClientSuccess}</p> : null}
+                    <button
+                      type="button"
+                      className="button button--primary-subtle"
+                      onClick={() => void handleCreateClientOnboarding()}
+                      disabled={!canSubmitNewClient || createClientBusy}
+                    >
+                      {createClientBusy ? "Creating..." : "Create client onboarding"}
+                    </button>
+                  </div>
+                </aside>
+              </div>
+            )}
             {isIntentDrawerOpen && (
               <div
                 className="admin-onboarding__drawer-overlay"
@@ -1631,6 +2246,11 @@ export default function AdminPage() {
                       Close
                     </button>
                   </div>
+                  <p className="panel__meta">
+                    Scope: {selectedClient?.name ?? "No client"} /{" "}
+                    {selectedBrand?.name ?? "No brand"} /{" "}
+                    {selectedProduct?.name ?? "No product"}
+                  </p>
                   <div className="admin__form">
                     <div className="panel__row panel__row--compact">
                       <button
@@ -1651,6 +2271,9 @@ export default function AdminPage() {
                       </button>
                     </div>
                     <label className="panel__label">Category (required)</label>
+                    <p className="panel__meta">
+                      Choose category first. Use cases are required for bottom-up query generation.
+                    </p>
                     <select
                       value={intentSpecForm.category}
                       onChange={(event) =>
@@ -1706,6 +2329,9 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="panel__meta">
+                      Example: daily_training, long_distance, speed_work
+                    </p>
                     <label className="panel__label">Audience archetypes (ontology)</label>
                     <select
                       multiple
@@ -1727,6 +2353,9 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="panel__meta">
+                      Example: beginner_runner, performance_runner
+                    </p>
                     <label className="panel__label">Feature concepts (ontology)</label>
                     <select
                       multiple
@@ -1748,6 +2377,9 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="panel__meta">
+                      Example: cushioning, stability, breathability
+                    </p>
                     <label className="panel__label">Core constraints</label>
                     <select
                       multiple
@@ -1769,6 +2401,9 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="panel__meta">
+                      Example: budget_sensitive, availability_required
+                    </p>
                     <label className="panel__label">Must-not-target segments</label>
                     <select
                       multiple
@@ -1790,6 +2425,9 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="panel__meta">
+                      Example: elite_racer_only, non_sport_use
+                    </p>
                     <textarea
                       rows={2}
                       placeholder="Objective keywords (optional, comma separated)"
@@ -1816,7 +2454,7 @@ export default function AdminPage() {
                       type="button"
                       className="button button--primary-subtle"
                       onClick={handleSaveIntentSpec}
-                      disabled={!selectedProduct || !intentSpecForm.category.trim()}
+                      disabled={!canSaveIntentSpec}
                     >
                       Save intent spec
                     </button>

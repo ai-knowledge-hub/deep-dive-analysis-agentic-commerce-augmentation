@@ -1091,6 +1091,30 @@ export async function createExperiment(payload: {
   });
 }
 
+export async function updateExperiment(
+  experimentId: string,
+  payload: {
+    name?: string | null;
+    status?: string | null;
+    hypothesis?: Record<string, unknown> | null;
+    competitor_policy?: Record<string, unknown> | null;
+    user_id?: string | null;
+  },
+): Promise<{ experiment: Experiment }> {
+  const clientId = getClientId();
+  return request<{ experiment: Experiment }>(`/experiments/${experimentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: payload.user_id ?? undefined,
+      name: payload.name ?? undefined,
+      status: payload.status ?? undefined,
+      hypothesis: payload.hypothesis ?? undefined,
+      competitor_policy: payload.competitor_policy ?? undefined,
+    }),
+  });
+}
+
 export async function listExperimentVariants(
   experimentId: string,
   userId?: string | null,
@@ -1141,6 +1165,21 @@ export async function listExperimentRuns(
   if (variantId) params.set("variant_id", variantId);
   return request<ExperimentRunListResponse>(
     `/experiments/${experimentId}/runs?${params.toString()}`,
+  );
+}
+
+export async function deleteExperimentRun(
+  experimentId: string,
+  runId: string,
+  userId?: string | null,
+): Promise<{ deleted: boolean; run_id: string }> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<{ deleted: boolean; run_id: string }>(
+    `/experiments/${experimentId}/runs/${runId}?${params.toString()}`,
+    { method: "DELETE" },
   );
 }
 
