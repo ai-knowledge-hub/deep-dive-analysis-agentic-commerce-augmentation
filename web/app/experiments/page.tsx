@@ -6,10 +6,12 @@ import { useUser } from "@clerk/nextjs";
 import type {
   AdminProduct,
   BrandBelief,
+  CopyRevision,
   Experiment,
   ExperimentMetric,
   ExperimentRecommendation,
   ExperimentRun,
+  LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
   ValidationSummary,
@@ -25,6 +27,7 @@ import {
   createBattery,
   createExperiment,
   createExperimentVariant,
+  generateExperimentVariants,
   deleteBatteryQuery,
   deleteConversationSession,
   deleteExperiment,
@@ -54,6 +57,7 @@ import {
   getExperimentValidationSummary,
   listAdminProducts,
   listSimulationRuns,
+  listCopyRevisions,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -132,7 +136,12 @@ export default function ExperimentsPage() {
   const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
   const [batterySeedUseCases, setBatterySeedUseCases] = useState("");
   const [advancedOverridesOpen, setAdvancedOverridesOpen] = useState(false);
+  const [batteryDetailsOpen, setBatteryDetailsOpen] = useState(true);
   const [setupFlowCollapsed, setSetupFlowCollapsed] = useState(true);
+  const [historyCollapsed, setHistoryCollapsed] = useState(true);
+  const [setupSecondaryActionsOpen, setSetupSecondaryActionsOpen] = useState(false);
+  const [variantSecondaryActionsOpen, setVariantSecondaryActionsOpen] = useState(false);
+  const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [generatedCandidates, setGeneratedCandidates] = useState<
     (QueryBatteryCandidate & { selected: boolean })[]
   >([]);
@@ -150,6 +159,26 @@ export default function ExperimentsPage() {
     type: "copy",
     payload: "",
   });
+  const [simulationRevisions, setSimulationRevisions] = useState<CopyRevision[]>([]);
+  const [selectedSimulationRevisionId, setSelectedSimulationRevisionId] = useState("");
+  const [simulationRevisionStatus, setSimulationRevisionStatus] = useState<string | null>(
+    null,
+  );
+  const [loopGeneratedVariants, setLoopGeneratedVariants] = useState<
+    LoopGeneratedVariantCandidate[]
+  >([]);
+  const [selectedLoopCandidateIndex, setSelectedLoopCandidateIndex] = useState(0);
+  const [loopGenerationStatus, setLoopGenerationStatus] = useState<string | null>(null);
+  const [isGeneratingLoopVariant, setIsGeneratingLoopVariant] = useState(false);
+  const [variantGenerationRequestType, setVariantGenerationRequestType] = useState<
+    "loop" | "cold_start" | null
+  >(null);
+  const [variantSourceMode, setVariantSourceMode] = useState<
+    "manual" | "simulation" | "loop_evidence" | "cold_start"
+  >("manual");
+  const [coldStartGenerationStrategy, setColdStartGenerationStrategy] = useState<
+    "bottom_up" | "top_down" | "both"
+  >("both");
   const [expandedVariantId, setExpandedVariantId] = useState<string | null>(null);
   const [variantAdvancedOpen, setVariantAdvancedOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
@@ -431,6 +460,9 @@ export default function ExperimentsPage() {
       setMetrics([]);
       setRecommendations([]);
       setValidationSummary(null);
+      setLoopGeneratedVariants([]);
+      setSelectedLoopCandidateIndex(0);
+      setLoopGenerationStatus(null);
       return;
     }
     void listExperimentVariants(selectedExperimentId, userId).then((response) => {
@@ -505,6 +537,38 @@ export default function ExperimentsPage() {
       })
       .catch(() => setLatestBelief(null));
   }, [brandId, userId]);
+
+  useEffect(() => {
+    if (!productId) {
+      setSimulationRevisions([]);
+      setSelectedSimulationRevisionId("");
+      return;
+    }
+    let cancelled = false;
+    void listCopyRevisions({
+      product_id: productId,
+      source_type: "simulation",
+      user_id: userId,
+      limit: 50,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        const revisions = response.revisions ?? [];
+        setSimulationRevisions(revisions);
+        setSelectedSimulationRevisionId((current) => {
+          if (current && revisions.some((item) => item.id === current)) return current;
+          return revisions[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSimulationRevisions([]);
+        setSelectedSimulationRevisionId("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productId, userId]);
 
   useEffect(() => {
     const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
@@ -1293,6 +1357,236 @@ export default function ExperimentsPage() {
     }
   }, [jsonErrors.variantPayload, selectedExperimentId, userId, variantForm]);
 
+  const handleUseSimulationRevision = useCallback(() => {
+    setSimulationRevisionStatus(null);
+    if (!selectedSimulationRevisionId) {
+      setSimulationRevisionStatus("Select a simulation revision first.");
+      return;
+    }
+    const revision = simulationRevisions.find(
+      (item) => item.id === selectedSimulationRevisionId,
+    );
+    if (!revision) {
+      setSimulationRevisionStatus("Selected simulation revision not found.");
+      return;
+    }
+    const nextDescription = String(revision.candidate_description || "").trim();
+    if (!nextDescription) {
+      setSimulationRevisionStatus("Selected revision has no candidate description.");
+      return;
+    }
+
+    setVariantForm((prev) => {
+      let parsedPayload: Record<string, unknown> = {};
+      if (prev.payload.trim()) {
+        try {
+          const parsed = JSON.parse(prev.payload);
+          if (parsed && typeof parsed === "object") {
+            parsedPayload = parsed as Record<string, unknown>;
+          }
+        } catch {
+          // Keep existing payload string untouched if invalid JSON; validation already surfaces this.
+          return { ...prev, description: nextDescription };
+        }
+      }
+      const nextPayload = {
+        ...parsedPayload,
+        source_type: "simulation_revision",
+        source_revision_id: revision.id,
+      };
+      return {
+        ...prev,
+        description: nextDescription,
+        payload: JSON.stringify(nextPayload, null, 2),
+      };
+    });
+    setSimulationRevisionStatus(
+      `Loaded optimized copy from simulation revision ${selectedSimulationRevisionId.slice(
+        0,
+        8,
+      )}.`,
+    );
+  }, [selectedSimulationRevisionId, simulationRevisions]);
+
+  const handleGenerateLoopVariants = useCallback(async () => {
+    if (!selectedExperimentId) {
+      setLoopGenerationStatus("Select an experiment first.");
+      return;
+    }
+    setLoopGenerationStatus(null);
+    setVariantGenerationRequestType("loop");
+    setIsGeneratingLoopVariant(true);
+    try {
+      const response = await generateExperimentVariants(selectedExperimentId, {
+        user_id: userId,
+        max_candidates: 3,
+        mode: "loop_evidence",
+        strategy: "both",
+      });
+      const candidates = response.candidates ?? [];
+      setLoopGeneratedVariants(candidates);
+      setSelectedLoopCandidateIndex(0);
+      if (candidates.length === 0) {
+        setLoopGenerationStatus("No loop-generated candidates available yet.");
+      } else {
+        setLoopGenerationStatus(
+          `Generated ${candidates.length} candidate variant${candidates.length === 1 ? "" : "s"} from experiment, simulation, and validation evidence.`,
+        );
+      }
+    } catch (error) {
+      setLoopGenerationStatus(
+        error instanceof Error ? error.message : "Unable to generate loop candidates.",
+      );
+    } finally {
+      setIsGeneratingLoopVariant(false);
+      setVariantGenerationRequestType(null);
+    }
+  }, [selectedExperimentId, userId]);
+
+  const handleGenerateColdStartVariants = useCallback(async () => {
+    if (!selectedExperimentId) {
+      setLoopGenerationStatus("Select an experiment first.");
+      return;
+    }
+    setLoopGenerationStatus(null);
+    setVariantGenerationRequestType("cold_start");
+    setIsGeneratingLoopVariant(true);
+    try {
+      const response = await generateExperimentVariants(selectedExperimentId, {
+        user_id: userId,
+        max_candidates: 3,
+        mode: "cold_start",
+        strategy: coldStartGenerationStrategy,
+      });
+      const candidates = response.candidates ?? [];
+      setLoopGeneratedVariants(candidates);
+      setSelectedLoopCandidateIndex(0);
+      if (candidates.length === 0) {
+        setLoopGenerationStatus("No cold-start candidates available yet.");
+      } else {
+        setLoopGenerationStatus(
+          `Generated ${candidates.length} cold-start candidate variant${candidates.length === 1 ? "" : "s"} using ${coldStartGenerationStrategy.replace("_", "-")} strategy.`,
+        );
+      }
+    } catch (error) {
+      setLoopGenerationStatus(
+        error instanceof Error ? error.message : "Unable to generate cold-start candidates.",
+      );
+    } finally {
+      setIsGeneratingLoopVariant(false);
+      setVariantGenerationRequestType(null);
+    }
+  }, [coldStartGenerationStrategy, selectedExperimentId, userId]);
+
+  const buildLoopCandidatePayload = useCallback(
+    (
+      candidate: LoopGeneratedVariantCandidate,
+      basePayload: Record<string, unknown> = {},
+    ) => {
+      const candidatePayload =
+        candidate.payload && typeof candidate.payload === "object"
+          ? candidate.payload
+          : {};
+      return {
+        ...basePayload,
+        ...candidatePayload,
+        source_type: "loop_evidence",
+        loop_confidence: candidate.confidence,
+      };
+    },
+    [],
+  );
+
+  const handleUseGeneratedLoopVariant = useCallback(() => {
+    const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
+    if (!candidate) {
+      setLoopGenerationStatus("Generate and select a loop candidate first.");
+      return;
+    }
+    setVariantForm((prev) => {
+      let parsedPayload: Record<string, unknown> = {};
+      if (prev.payload.trim()) {
+        try {
+          const parsed = JSON.parse(prev.payload);
+          if (parsed && typeof parsed === "object") {
+            parsedPayload = parsed as Record<string, unknown>;
+          }
+        } catch {
+          return {
+            ...prev,
+            label: candidate.label || prev.label,
+            description: candidate.description || prev.description,
+          };
+        }
+      }
+      const nextPayload = buildLoopCandidatePayload(candidate, parsedPayload);
+      return {
+        ...prev,
+        role: "candidate",
+        label: candidate.label || prev.label,
+        description: candidate.description || prev.description,
+        payload: JSON.stringify(nextPayload, null, 2),
+      };
+    });
+    setLoopGenerationStatus(
+      `Applied loop candidate ${selectedLoopCandidateIndex + 1} to the variant form.`,
+    );
+  }, [
+    buildLoopCandidatePayload,
+    loopGeneratedVariants,
+    selectedLoopCandidateIndex,
+  ]);
+
+  const handleCreateVariantFromLoopCandidate = useCallback(async () => {
+    if (!selectedExperimentId) {
+      setLoopGenerationStatus("Select an experiment first.");
+      return;
+    }
+    const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
+    if (!candidate) {
+      setLoopGenerationStatus("Generate and select a loop candidate first.");
+      return;
+    }
+
+    setFormError(null);
+    setLoopGenerationStatus(null);
+    setSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = buildLoopCandidatePayload(candidate, {
+        role: "candidate",
+      });
+      const description = String(candidate.description || "").trim();
+      if (description) {
+        payload.description = description;
+      }
+      await createExperimentVariant(selectedExperimentId, {
+        label: candidate.label?.trim() || "Hypothesis (variant)",
+        type: "copy",
+        payload,
+        user_id: userId,
+      });
+      const refreshed = await listExperimentVariants(selectedExperimentId, userId);
+      setVariants(refreshed.variants ?? []);
+      setLoopGenerationStatus(
+        `Created variant from loop candidate ${selectedLoopCandidateIndex + 1}.`,
+      );
+    } catch (error) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create variant from selected loop candidate.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [
+    buildLoopCandidatePayload,
+    loopGeneratedVariants,
+    selectedExperimentId,
+    selectedLoopCandidateIndex,
+    userId,
+  ]);
+
   const handleSaveExperimentDraft = useCallback(
     async (experimentId: string) => {
       setFormError(null);
@@ -1565,6 +1859,132 @@ export default function ExperimentsPage() {
     selectedExperiment?.last_run_at,
   ]);
 
+  const hasValidationSignals =
+    (validationSummary?.total_logged ?? 0) > 0 ||
+    (validationSummary?.verified_runs ?? 0) > 0;
+
+  const experimentFlowSteps = useMemo(() => {
+    const batteryBuilt = Boolean(selectedExperiment?.battery_id || experimentForm.batteryId);
+    const queriesReady = queries.length > 0;
+    const experimentCreated = Boolean(selectedExperimentId);
+    const variantsReady = variants.length > 0;
+    const hasRuns = runs.length > 0 || Boolean(selectedExperiment?.last_run_at);
+    const outcomesReviewed = metrics.length > 0;
+    const validated = hasValidationSignals;
+    const nextVariantsReady =
+      loopGeneratedVariants.length > 0 ||
+      Boolean(nextTest) ||
+      recommendations.length > 0;
+    return [
+      { id: 1, label: "Build query battery", done: batteryBuilt },
+      { id: 2, label: "Generate and review queries", done: queriesReady },
+      { id: 3, label: "Create experiment", done: experimentCreated },
+      { id: 4, label: "Create variants", done: variantsReady },
+      { id: 5, label: "Run experiment", done: hasRuns },
+      { id: 6, label: "Review outcomes and metrics", done: outcomesReviewed },
+      { id: 7, label: "Validate synthetic and observed", done: validated },
+      { id: 8, label: "Generate next variants", done: nextVariantsReady },
+    ];
+  }, [
+    experimentForm.batteryId,
+    hasValidationSignals,
+    loopGeneratedVariants.length,
+    metrics.length,
+    nextTest,
+    queries.length,
+    recommendations.length,
+    runs.length,
+    selectedExperiment?.battery_id,
+    selectedExperiment?.last_run_at,
+    selectedExperimentId,
+    variants.length,
+  ]);
+
+  const currentFlowStep = useMemo(
+    () => experimentFlowSteps.find((step) => !step.done)?.id ?? 8,
+    [experimentFlowSteps],
+  );
+  const queryGenerationDisabledReason = !experimentForm.batteryId
+    ? "Select a battery first."
+    : isSubmitting
+      ? "Please wait for the current action to finish."
+      : null;
+  const createExperimentDisabledReason = isSubmitting
+    ? "Please wait for the current action to finish."
+    : experimentForm.name.trim() === ""
+      ? "Enter an experiment name."
+      : jsonErrors.hypothesis
+        ? "Fix invalid Hypothesis JSON."
+        : jsonErrors.competitorPolicy
+          ? "Fix invalid Competitor policy JSON."
+          : null;
+  const addVariantDisabledReason = isSubmitting
+    ? "Please wait for the current action to finish."
+    : !selectedExperimentId
+      ? "Create or select an experiment first."
+      : jsonErrors.variantPayload
+        ? "Fix invalid payload JSON."
+        : null;
+  const canRunVariantTests = Boolean(
+    selectedExperimentId && (selectedExperiment?.battery_id || experimentForm.batteryId),
+  ) && queries.length > 0;
+  const runVariantDisabledReason = !selectedExperimentId
+    ? "Create or select an experiment first."
+    : !(selectedExperiment?.battery_id || experimentForm.batteryId)
+      ? "Link a battery to this experiment first."
+      : queries.length === 0
+        ? "Generate and save at least one enabled query first."
+        : null;
+  const loopEvidenceAdvisory =
+    runs.length === 0 && variantSourceMode === "loop_evidence"
+      ? "Loop evidence works best after at least one run. Use cold-start to bootstrap."
+      : !hasValidationSignals && variantSourceMode === "loop_evidence"
+        ? "Add validation signals to improve loop-evidence reliability."
+        : null;
+
+  const nextFlowAction = useMemo(() => {
+    if (!selectedExperimentId && setupFlowCollapsed) {
+      return {
+        label: "Expand setup and start Step 1",
+        helper: "Start by creating a battery and generating queries.",
+        action: "expand_setup" as const,
+      };
+    }
+    if (!selectedExperimentId) {
+      return {
+        label: "Create experiment (Step 3)",
+        helper: "Complete battery/query setup, then create the experiment.",
+        action: "scroll_setup" as const,
+      };
+    }
+    if (variants.length === 0) {
+      return {
+        label: "Create first variant (Step 4)",
+        helper: "Use manual, simulation, loop, or cold-start source.",
+        action: "scroll_variants" as const,
+      };
+    }
+    if (runs.length === 0) {
+      return {
+        label: "Run first variant test (Step 5)",
+        helper: "Run a variant across the linked battery queries.",
+        action: "run_first_variant" as const,
+      };
+    }
+    if (!hasValidationSignals) {
+      return {
+        label: "Validate in Validation module (Step 7)",
+        helper: "Add synthetic and/or observed validation before final decisions.",
+        action: "open_validation" as const,
+      };
+    }
+    return {
+      label: "Generate next variants (Step 8)",
+      helper: "Use loop evidence to iterate on the next candidate copy.",
+      action: "generate_next_variant" as const,
+    };
+  }, [hasValidationSignals, runs.length, selectedExperimentId, setupFlowCollapsed, variants]);
+
   const metricsHistory = useMemo(() => {
     return [...metrics]
       .filter((metric) => metric.variant_id)
@@ -1656,6 +2076,57 @@ export default function ExperimentsPage() {
       beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [handleUseBelief, latestBelief, beliefsRef]);
+
+  const handleRunNextFlowAction = useCallback(() => {
+    switch (nextFlowAction.action) {
+      case "expand_setup":
+        setSetupFlowCollapsed(false);
+        return;
+      case "scroll_setup":
+        setSetupFlowCollapsed(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      case "scroll_variants":
+        variantsSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        return;
+      case "run_first_variant":
+        if (variants[0]?.id) {
+          void handleRunVariant(variants[0].id);
+          return;
+        }
+        variantsSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        return;
+      case "open_validation":
+        if (selectedExperimentId) {
+          router.push(`/validation?experiment_id=${selectedExperimentId}`);
+          return;
+        }
+        router.push("/validation");
+        return;
+      case "generate_next_variant":
+        variantsSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        void handleGenerateLoopVariants();
+        return;
+      default:
+        return;
+    }
+  }, [
+    handleGenerateLoopVariants,
+    handleRunVariant,
+    nextFlowAction.action,
+    router,
+    selectedExperimentId,
+    variants,
+  ]);
 
   const metricsTrend = useMemo(() => {
     if (!metrics.length) return [];
@@ -1836,7 +2307,7 @@ export default function ExperimentsPage() {
                 </div>
               </section>
             ) : null}
-            <section className="panel__card lab-loop">
+            <section className="panel__card panel__card--primary lab-loop">
             <div className="panel__header">
               <h3>Lab Loop</h3>
               <div className="lab-loop__badges">
@@ -1853,24 +2324,38 @@ export default function ExperimentsPage() {
                     Battery linked
                   </span>
                 ) : null}
-                <span className="panel__badge panel__badge--secondary">
-                  {variants.length} variants
-                </span>
-                <span className="panel__badge panel__badge--secondary">
-                  {runs.length} runs
-                </span>
-                <span className="panel__badge panel__badge--secondary">
-                  {metrics.length} metrics
-                </span>
-                <span className="panel__badge panel__badge--secondary">
-                  {beliefCount} beliefs
-                </span>
               </div>
             </div>
+            <p className="lab-loop__meta">
+              {variants.length} variants · {runs.length} runs · {metrics.length} metrics ·{" "}
+              {beliefCount} beliefs
+            </p>
             <p className="lab-loop__hint">
               The lab loop turns hypotheses into evidence and updates brand
               beliefs with every run.
             </p>
+            <div className="flow-rail">
+              <div className="flow-rail__header">
+                <h4>Experiment Flow</h4>
+                <span className="panel__muted">Current step: {currentFlowStep} / 8</span>
+              </div>
+              <div className="flow-rail__steps">
+                {experimentFlowSteps.map((step) => (
+                  <div
+                    key={step.id}
+                    className={`flow-rail__step ${
+                      step.done ? "is-done" : step.id === currentFlowStep ? "is-current" : ""
+                    }`}
+                  >
+                    <span className="flow-rail__index">{step.id}</span>
+                    <span className="flow-rail__label">{step.label}</span>
+                    <span className="flow-rail__status">
+                      {step.done ? "Done" : step.id === currentFlowStep ? "Current" : "Pending"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="lab-loop__steps">
               {labLoopSteps.map((step) => (
                 <div key={step.label} className="lab-loop__step">
@@ -1932,11 +2417,37 @@ export default function ExperimentsPage() {
                 </div>
               </div>
             </div>
+            <section className="panel__notice panel__notice--info flow-next-action">
+              <strong>Next recommended action:</strong> {nextFlowAction.label}
+              <p className="panel__muted">{nextFlowAction.helper}</p>
+              <div className="panel__actions panel__actions--priority">
+                <button
+                  type="button"
+                  className="panel__action panel__action--prominent"
+                  onClick={handleRunNextFlowAction}
+                >
+                  {nextFlowAction.label}
+                </button>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() =>
+                    router.push(
+                      selectedExperimentId
+                        ? `/validation?experiment_id=${selectedExperimentId}`
+                        : "/validation",
+                    )
+                  }
+                >
+                  Open Validation
+                </button>
+              </div>
+            </section>
           </section>
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
-          <section className="panel__card">
+          <section className="panel__card panel__card--primary">
             <div className="panel__header">
               <h3>Experiment Setup Flow</h3>
               <div className="panel__meta">
@@ -1949,6 +2460,7 @@ export default function ExperimentsPage() {
                 </button>
               </div>
             </div>
+            <p className="panel__subheading">Setup phase · Steps 1 to 3</p>
             <p className="panel__muted">
               Build battery, generate queries, then create experiment.
             </p>
@@ -2098,12 +2610,12 @@ export default function ExperimentsPage() {
                     ))}
                   </select>
                 </label>
-                <p className="panel__subheading">Step 2 · Generate and approve queries</p>
+                <p className="panel__subheading">Step 2 · Generate queries</p>
                 <button
                   type="button"
                   className="panel__action panel__action--prominent"
                   onClick={() => handleGenerateQueries(experimentForm.batteryId)}
-                  disabled={!experimentForm.batteryId || isSubmitting}
+                  disabled={Boolean(queryGenerationDisabledReason)}
                 >
                   {isSubmitting ? (
                     <>
@@ -2113,6 +2625,167 @@ export default function ExperimentsPage() {
                     "Generate queries"
                   )}
                 </button>
+                {queryGenerationDisabledReason ? (
+                  <p className="panel__muted">{queryGenerationDisabledReason}</p>
+                ) : null}
+                <p className="panel__subheading">
+                  Step 2a · Review and save battery details and queries
+                </p>
+                <details
+                  open={batteryDetailsOpen}
+                  onToggle={(event) =>
+                    setBatteryDetailsOpen(event.currentTarget.open)
+                  }
+                >
+                  <summary className="panel__label">
+                    Battery details and query settings
+                  </summary>
+                  {selectedBattery ? (
+                    <div className="panel__form">
+                      <label className="panel__label">
+                        Battery name
+                        <input
+                          className="panel__input"
+                          value={batteryEdit.name}
+                          onChange={(event) =>
+                            setBatteryEdit((prev) => ({
+                              ...prev,
+                              name: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="panel__label">
+                        Purpose
+                        <input
+                          className="panel__input"
+                          value={batteryEdit.purpose}
+                          onChange={(event) =>
+                            setBatteryEdit((prev) => ({
+                              ...prev,
+                              purpose: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="panel__label">
+                        Status
+                        <select
+                          className="panel__input"
+                          value={batteryEdit.status}
+                          onChange={(event) =>
+                            setBatteryEdit((prev) => ({
+                              ...prev,
+                              status: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="active">Active</option>
+                          <option value="paused">Paused</option>
+                        </select>
+                      </label>
+                      {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
+                      {queries.length === 0 ? (
+                        <p className="panel__empty">No queries yet.</p>
+                      ) : (
+                        <ul className="panel__list">
+                          {queries.map((query) => (
+                            <li key={query.id}>
+                              <div className="panel__meta">
+                                <span>{query.query_text}</span>
+                                <label className="panel__toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={query.enabled}
+                                    onChange={(event) =>
+                                      handleQueryToggle(
+                                        selectedBattery.id,
+                                        query.id,
+                                        event.target.checked,
+                                      )
+                                    }
+                                  />
+                                  <span>Enabled</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  className="panel__action panel__action--ghost"
+                                  onClick={() =>
+                                    handleQueryDelete(selectedBattery.id, query.id)
+                                  }
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                              <div className="panel__meta">
+                                <span className="panel__muted">Weight</span>
+                                <input
+                                  className="panel__input panel__input--inline"
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  defaultValue={query.weight ?? 1}
+                                  onBlur={(event) =>
+                                    handleQueryWeight(
+                                      selectedBattery.id,
+                                      query.id,
+                                      Number(event.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {batteryMetrics ? (
+                        <div className="panel__metrics">
+                          <p className="panel__muted">
+                            Total: {batteryMetrics.total_queries ?? 0} · Enabled:{" "}
+                            {batteryMetrics.enabled_queries ?? 0} · Unique:{" "}
+                            {batteryMetrics.unique_queries ?? 0}
+                          </p>
+                          <p className="panel__muted">
+                            Redundancy:{" "}
+                            {batteryMetrics.redundancy_rate !== undefined
+                              ? `${Number(batteryMetrics.redundancy_rate) * 100}%`
+                              : "—"}
+                          </p>
+                          <p className="panel__muted">
+                            Quality score:{" "}
+                            {batteryMetrics.quality_score !== undefined
+                              ? `${batteryMetrics.quality_score}/100`
+                              : "—"}
+                            {batteryMetrics.avg_words
+                              ? ` · Avg words: ${batteryMetrics.avg_words}`
+                              : ""}
+                          </p>
+                          {Array.isArray(batteryMetrics.quality_issues) &&
+                          batteryMetrics.quality_issues.length > 0 ? (
+                            <ul className="panel__list panel__list--compact">
+                              {batteryMetrics.quality_issues.map((issue, index) => (
+                                <li key={`${issue}-${index}`}>{issue}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="panel__action panel__action--prominent"
+                        onClick={handleUpdateBattery}
+                        disabled={isSubmitting}
+                      >
+                        Save battery details
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="panel__empty">
+                      Select a battery to review details and query settings.
+                    </p>
+                  )}
+                </details>
                 {batteryGenerationReport ? (
                   <div className="panel__notice panel__notice--info">
                     {typeof batteryGenerationReport.generated_count === "number" ? (
@@ -2262,6 +2935,9 @@ export default function ExperimentsPage() {
                 <p className="panel__subheading">
                   Step 3 · Create experiment from the configured battery
                 </p>
+                <p className="panel__step-helper">
+                  Define hypothesis and competitor policy, then create the experiment.
+                </p>
                 {experimentStatus ? (
                   <p className="panel__success">{experimentStatus}</p>
                 ) : null}
@@ -2313,21 +2989,6 @@ export default function ExperimentsPage() {
                     rows={3}
                     placeholder='{"metric":"win_rate","direction":"increase"}'
                   />
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() =>
-                        setExperimentForm((prev) => ({
-                          ...prev,
-                          hypothesis:
-                            '{"metric":"win_rate","direction":"increase","rationale":"Outcome framing improves intent alignment"}',
-                        }))
-                      }
-                    >
-                      Use template
-                    </button>
-                  </div>
                   {hypothesisBeliefId ? (
                     <span className="panel__success">
                       Created from belief: {hypothesisBeliefId}
@@ -2351,7 +3012,32 @@ export default function ExperimentsPage() {
                     rows={3}
                     placeholder='{"competitor_client_ids":["client-nike"]}'
                   />
+                  {jsonErrors.competitorPolicy ? (
+                    <span className="panel__error">{jsonErrors.competitorPolicy}</span>
+                  ) : null}
+                </label>
+                <details
+                  className="panel__details"
+                  open={setupSecondaryActionsOpen}
+                  onToggle={(event) =>
+                    setSetupSecondaryActionsOpen(event.currentTarget.open)
+                  }
+                >
+                  <summary className="panel__details-summary">More setup actions</summary>
                   <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() =>
+                        setExperimentForm((prev) => ({
+                          ...prev,
+                          hypothesis:
+                            '{"metric":"win_rate","direction":"increase","rationale":"Outcome framing improves intent alignment"}',
+                        }))
+                      }
+                    >
+                      Use hypothesis template
+                    </button>
                     <button
                       type="button"
                       className="panel__action panel__action--ghost"
@@ -2363,22 +3049,15 @@ export default function ExperimentsPage() {
                         }))
                       }
                     >
-                      Use template
+                      Use competitor template
                     </button>
                   </div>
-                  {jsonErrors.competitorPolicy ? (
-                    <span className="panel__error">{jsonErrors.competitorPolicy}</span>
-                  ) : null}
-                </label>
+                </details>
                 <button
                   type="button"
                   className="panel__action panel__action--prominent"
                   onClick={handleCreateExperiment}
-                  disabled={
-                    isSubmitting ||
-                    experimentForm.name.trim() === "" ||
-                    Boolean(jsonErrors.hypothesis || jsonErrors.competitorPolicy)
-                  }
+                  disabled={Boolean(createExperimentDisabledReason)}
                 >
                   {isSubmitting ? (
                     <>
@@ -2388,161 +3067,17 @@ export default function ExperimentsPage() {
                     "Create experiment"
                   )}
                 </button>
+                {createExperimentDisabledReason ? (
+                  <p className="panel__muted">{createExperimentDisabledReason}</p>
+                ) : null}
               </div>
             ) : (
               <p className="panel__empty">Select a product to create a battery.</p>
             )}
           </section>
 
-          <section className="panel__card">
-            <div className="panel__header">
-              <h3>Battery Details</h3>
-            </div>
-            {selectedBattery ? (
-              <div className="panel__form">
-                <label className="panel__label">
-                  Battery name
-                  <input
-                    className="panel__input"
-                    value={batteryEdit.name}
-                    onChange={(event) =>
-                      setBatteryEdit((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="panel__label">
-                  Purpose
-                  <input
-                    className="panel__input"
-                    value={batteryEdit.purpose}
-                    onChange={(event) =>
-                      setBatteryEdit((prev) => ({
-                        ...prev,
-                        purpose: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="panel__label">
-                  Status
-                  <select
-                    className="panel__input"
-                    value={batteryEdit.status}
-                    onChange={(event) =>
-                      setBatteryEdit((prev) => ({
-                        ...prev,
-                        status: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleUpdateBattery}
-                  disabled={isSubmitting}
-                >
-                  Save battery details
-                </button>
-                {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
-                {queries.length === 0 ? (
-                  <p className="panel__empty">No queries yet.</p>
-                ) : (
-                  <ul className="panel__list">
-                    {queries.map((query) => (
-                      <li key={query.id}>
-                        <div className="panel__meta">
-                          <span>{query.query_text}</span>
-                          <label className="panel__toggle">
-                            <input
-                              type="checkbox"
-                              checked={query.enabled}
-                              onChange={(event) =>
-                                handleQueryToggle(
-                                  selectedBattery.id,
-                                  query.id,
-                                  event.target.checked,
-                                )
-                              }
-                            />
-                            <span>Enabled</span>
-                          </label>
-                          <button
-                            type="button"
-                            className="panel__action panel__action--ghost"
-                            onClick={() => handleQueryDelete(selectedBattery.id, query.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        <div className="panel__meta">
-                          <span className="panel__muted">Weight</span>
-                          <input
-                            className="panel__input panel__input--inline"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            defaultValue={query.weight ?? 1}
-                            onBlur={(event) =>
-                              handleQueryWeight(
-                                selectedBattery.id,
-                                query.id,
-                                Number(event.target.value),
-                              )
-                            }
-                          />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {batteryMetrics ? (
-                  <div className="panel__metrics">
-                    <p className="panel__muted">
-                      Total: {batteryMetrics.total_queries ?? 0} · Enabled:{" "}
-                      {batteryMetrics.enabled_queries ?? 0} · Unique:{" "}
-                      {batteryMetrics.unique_queries ?? 0}
-                    </p>
-                    <p className="panel__muted">
-                      Redundancy:{" "}
-                      {batteryMetrics.redundancy_rate !== undefined
-                        ? `${Number(batteryMetrics.redundancy_rate) * 100}%`
-                        : "—"}
-                    </p>
-                    <p className="panel__muted">
-                      Quality score:{" "}
-                      {batteryMetrics.quality_score !== undefined
-                        ? `${batteryMetrics.quality_score}/100`
-                        : "—"}
-                      {batteryMetrics.avg_words
-                        ? ` · Avg words: ${batteryMetrics.avg_words}`
-                        : ""}
-                    </p>
-                    {Array.isArray(batteryMetrics.quality_issues) &&
-                    batteryMetrics.quality_issues.length > 0 ? (
-                      <ul className="panel__list panel__list--compact">
-                        {batteryMetrics.quality_issues.map((issue, index) => (
-                          <li key={`${issue}-${index}`}>{issue}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className="panel__empty">Select a battery to edit.</p>
-            )}
-          </section>
-
           <div className="detail__grid">
-            <section className="panel__card panel__card--full-row" ref={variantsSectionRef}>
+            <section className="panel__card panel__card--primary panel__card--full-row" ref={variantsSectionRef}>
               <div className="panel__header">
                 <h3>Variants</h3>
                 <div className="panel__meta">
@@ -2562,6 +3097,10 @@ export default function ExperimentsPage() {
               <p className="panel__muted">
                 Variants are copy candidates tested against the same query battery.
               </p>
+              <p className="panel__subheading">Step 4 · Create variants</p>
+              <p className="panel__step-helper">
+                Choose a source, shape candidate copy, then add the variant.
+              </p>
               <div className="variant-flow">
                 <span className="variant-flow__step is-active">1. Define</span>
                 <span className="variant-flow__step is-active">2. Create</span>
@@ -2573,6 +3112,63 @@ export default function ExperimentsPage() {
                   3. Run
                 </span>
               </div>
+              <div className="variant-source">
+                <div className="variant-source__header">
+                  <h4>Choose variant source</h4>
+                  <span className="panel__muted">Pick one path, then create the variant.</span>
+                </div>
+                <div className="variant-source__tabs">
+                  <button
+                    type="button"
+                    className={`variant-source__tab ${
+                      variantSourceMode === "manual" ? "is-active" : ""
+                    }`}
+                    onClick={() => setVariantSourceMode("manual")}
+                  >
+                    Manual
+                  </button>
+                  <button
+                    type="button"
+                    className={`variant-source__tab ${
+                      variantSourceMode === "simulation" ? "is-active" : ""
+                    }`}
+                    onClick={() => setVariantSourceMode("simulation")}
+                  >
+                    Simulation prefill
+                  </button>
+                  <button
+                    type="button"
+                    className={`variant-source__tab ${
+                      variantSourceMode === "loop_evidence" ? "is-active" : ""
+                    }`}
+                    onClick={() => setVariantSourceMode("loop_evidence")}
+                  >
+                    Loop evidence
+                  </button>
+                  <button
+                    type="button"
+                    className={`variant-source__tab ${
+                      variantSourceMode === "cold_start" ? "is-active" : ""
+                    }`}
+                    onClick={() => setVariantSourceMode("cold_start")}
+                  >
+                    Cold-start
+                  </button>
+                </div>
+                <p className="variant-source__hint">
+                  {variantSourceMode === "manual"
+                    ? "Use when you already have candidate copy and want full control."
+                    : variantSourceMode === "simulation"
+                      ? "Use when simulation already produced a useful revision for this product."
+                      : variantSourceMode === "loop_evidence"
+                        ? "Use when runs/metrics/validation history exists and you want evidence-weighted candidates."
+                        : "Use when history is sparse and you need a first set of aligned variants."}
+                </p>
+              </div>
+              <p className="panel__subheading">Step 8 · Generate next variants from updated evidence</p>
+              <p className="panel__step-helper">
+                Prefer loop evidence once runs and validation signals are available.
+              </p>
               <div className="panel__form">
                 <label className="panel__label">
                   Role
@@ -2626,28 +3222,183 @@ export default function ExperimentsPage() {
                     placeholder="Write the copy variation to test..."
                   />
                 </label>
-                <div className="panel__actions">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={() =>
-                      setVariantForm((prev) => ({
-                        ...prev,
-                        description:
-                          "Outcome-led copy that emphasizes user goals and capabilities.",
-                      }))
-                    }
-                  >
-                    Use description template
-                  </button>
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={() => setVariantAdvancedOpen((open) => !open)}
-                  >
-                    {variantAdvancedOpen ? "Hide advanced" : "Advanced JSON"}
-                  </button>
-                </div>
+                {variantSourceMode === "simulation" ? (
+                  <>
+                    <label className="panel__label">
+                      Prefill from simulation revision (same product)
+                      <select
+                        className="panel__input"
+                        value={selectedSimulationRevisionId}
+                        onChange={(event) => setSelectedSimulationRevisionId(event.target.value)}
+                        disabled={simulationRevisions.length === 0}
+                      >
+                        {simulationRevisions.length === 0 ? (
+                          <option value="">No simulation revisions found</option>
+                        ) : null}
+                        {simulationRevisions.map((revision) => (
+                          <option key={revision.id} value={revision.id}>
+                            {new Date(
+                              revision.updated_at ?? revision.created_at ?? "",
+                            ).toLocaleString()} · {revision.status ?? "draft"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="panel__action panel__action--ghost"
+                        onClick={handleUseSimulationRevision}
+                        disabled={simulationRevisions.length === 0}
+                      >
+                        Use selected simulation revision
+                      </button>
+                    </div>
+                    {simulationRevisionStatus ? (
+                      <p className="panel__success">{simulationRevisionStatus}</p>
+                    ) : null}
+                    <div className="panel__separator" />
+                  </>
+                ) : null}
+                {variantSourceMode === "loop_evidence" ? (
+                  <>
+                    <label className="panel__label">
+                      Prefill from loop evidence (experiment + simulation + validation)
+                      <select
+                        className="panel__input"
+                        value={String(selectedLoopCandidateIndex)}
+                        onChange={(event) =>
+                          setSelectedLoopCandidateIndex(Number(event.target.value))
+                        }
+                        disabled={loopGeneratedVariants.length === 0}
+                      >
+                        {loopGeneratedVariants.length === 0 ? (
+                          <option value="0">No generated candidates yet</option>
+                        ) : null}
+                        {loopGeneratedVariants.map((candidate, index) => (
+                          <option key={`${candidate.label}-${index}`} value={String(index)}>
+                            {index + 1}. {candidate.label} · conf {candidate.confidence.toFixed(2)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="panel__action panel__action--ghost"
+                        onClick={handleGenerateLoopVariants}
+                        disabled={!selectedExperimentId || isGeneratingLoopVariant}
+                      >
+                        {isGeneratingLoopVariant &&
+                        variantGenerationRequestType === "loop"
+                          ? "Generating from loop…"
+                          : "Generate from loop evidence"}
+                      </button>
+                    </div>
+                    {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale ? (
+                      <p className="panel__muted">
+                        {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale}
+                      </p>
+                    ) : null}
+                    {loopGenerationStatus ? (
+                      <p className="panel__success">{loopGenerationStatus}</p>
+                    ) : null}
+                    {loopEvidenceAdvisory ? (
+                      <p className="panel__muted">{loopEvidenceAdvisory}</p>
+                    ) : null}
+                    <div className="panel__separator" />
+                  </>
+                ) : null}
+                {variantSourceMode === "cold_start" ? (
+                  <>
+                    <label className="panel__label">
+                      Generate cold-start copy (no prior loop evidence)
+                      <select
+                        className="panel__input"
+                        value={coldStartGenerationStrategy}
+                        onChange={(event) =>
+                          setColdStartGenerationStrategy(
+                            event.target.value as "bottom_up" | "top_down" | "both",
+                          )
+                        }
+                      >
+                        <option value="both">Both (recommended)</option>
+                        <option value="bottom_up">Bottom-up (features/use-cases)</option>
+                        <option value="top_down">Top-down (goals/positioning)</option>
+                      </select>
+                    </label>
+                    <div className="panel__actions">
+                      <button
+                        type="button"
+                        className="panel__action panel__action--ghost"
+                        onClick={handleGenerateColdStartVariants}
+                        disabled={!selectedExperimentId || isGeneratingLoopVariant}
+                      >
+                        {isGeneratingLoopVariant &&
+                        variantGenerationRequestType === "cold_start"
+                          ? "Generating cold-start copy…"
+                          : "Generate cold-start copy"}
+                      </button>
+                    </div>
+                    {loopGenerationStatus ? (
+                      <p className="panel__success">{loopGenerationStatus}</p>
+                    ) : null}
+                    <div className="panel__separator" />
+                  </>
+                ) : null}
+                <details
+                  className="panel__details"
+                  open={variantSecondaryActionsOpen}
+                  onToggle={(event) =>
+                    setVariantSecondaryActionsOpen(event.currentTarget.open)
+                  }
+                >
+                  <summary className="panel__details-summary">More variant actions</summary>
+                  <div className="panel__actions">
+                    {variantSourceMode === "loop_evidence" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={handleUseGeneratedLoopVariant}
+                          disabled={loopGeneratedVariants.length === 0}
+                        >
+                          Use selected loop candidate
+                        </button>
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={handleCreateVariantFromLoopCandidate}
+                          disabled={loopGeneratedVariants.length === 0 || isSubmitting}
+                        >
+                          {isSubmitting
+                            ? "Creating variant…"
+                            : "Create variant from selected loop candidate"}
+                        </button>
+                      </>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() =>
+                        setVariantForm((prev) => ({
+                          ...prev,
+                          description:
+                            "Outcome-led copy that emphasizes user goals and capabilities.",
+                        }))
+                      }
+                    >
+                      Use description template
+                    </button>
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => setVariantAdvancedOpen((open) => !open)}
+                    >
+                      {variantAdvancedOpen ? "Hide advanced" : "Advanced JSON"}
+                    </button>
+                  </div>
+                </details>
                 {variantAdvancedOpen ? (
                   <>
                     <label className="panel__label">
@@ -2688,11 +3439,7 @@ export default function ExperimentsPage() {
                   type="button"
                   className="panel__action panel__action--prominent"
                   onClick={handleCreateVariant}
-                  disabled={
-                    isSubmitting ||
-                    !selectedExperimentId ||
-                    Boolean(jsonErrors.variantPayload)
-                  }
+                  disabled={Boolean(addVariantDisabledReason)}
                 >
                   {isSubmitting ? (
                     <>
@@ -2702,7 +3449,14 @@ export default function ExperimentsPage() {
                     "Add variant"
                   )}
                 </button>
+                {addVariantDisabledReason ? (
+                  <p className="panel__muted">{addVariantDisabledReason}</p>
+                ) : null}
               </div>
+              <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
+              {runVariantDisabledReason ? (
+                <p className="panel__muted">{runVariantDisabledReason}</p>
+              ) : null}
               {variants.length === 0 ? (
                 <p className="panel__empty">Add variants to run experiments.</p>
               ) : (
@@ -2775,7 +3529,7 @@ export default function ExperimentsPage() {
                       type="button"
                       className="panel__action panel__action--prominent"
                       onClick={() => handleRunVariant(variant.id)}
-                      disabled={runningVariantId === variant.id}
+                      disabled={runningVariantId === variant.id || !canRunVariantTests}
                     >
                         {runningVariantId === variant.id ? "Running…" : "Run variant test"}
                     </button>
@@ -2795,7 +3549,7 @@ export default function ExperimentsPage() {
                         type="button"
                         className="panel__action"
                         onClick={handleRunRecommended}
-                        disabled={runningVariantId === nextTest.variant_id}
+                        disabled={runningVariantId === nextTest.variant_id || !canRunVariantTests}
                       >
                         {runningVariantId === nextTest.variant_id
                           ? "Running…"
@@ -2842,7 +3596,7 @@ export default function ExperimentsPage() {
               ) : null}
               <div className="panel__grid">
                 <div className="panel__column">
-                  <h4 className="panel__subtitle">Latest Metrics</h4>
+                  <h4 className="panel__subtitle">Step 6 · Review outcomes and metrics</h4>
                   {latestMetric ? (
                     <ul className="panel__list panel__list--compact">
                       <li>Total runs: {latestMetric.total_runs ?? "-"}</li>
@@ -2919,14 +3673,26 @@ export default function ExperimentsPage() {
               </div>
             </section>
 
-            <section className="panel__card panel__card--full-row">
+            <section className="panel__card panel__card--secondary panel__card--full-row">
               <div className="panel__header">
                 <h3>Orchestrator Recommendations</h3>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => setRecommendationsOpen((open) => !open)}
+                >
+                  {recommendationsOpen ? "Hide details" : "Show details"}
+                </button>
               </div>
+              <p className="panel__subheading">Optional guidance</p>
               <p className="panel__muted">
                 Suggested next actions based on current variant outcomes and run history.
               </p>
-              {recommendations.length === 0 ? (
+              {!recommendationsOpen ? (
+                <p className="panel__muted">
+                  Recommendations are collapsed to keep focus on execution steps.
+                </p>
+              ) : recommendations.length === 0 ? (
                 <p className="panel__empty">No recommendations yet.</p>
               ) : (
                 <ul className="panel__list panel__list--compact">
@@ -2951,7 +3717,10 @@ export default function ExperimentsPage() {
                             onClick={() =>
                               handleRunRecommendation(rec.recommendation.variant_id)
                             }
-                            disabled={runningVariantId === rec.recommendation.variant_id}
+                            disabled={
+                              runningVariantId === rec.recommendation.variant_id ||
+                              !canRunVariantTests
+                            }
                           >
                             {runningVariantId === rec.recommendation.variant_id
                               ? "Running…"
@@ -2988,7 +3757,7 @@ export default function ExperimentsPage() {
 
           </div>
 
-          <section className="panel__card panel__card--full-row">
+          <section className="panel__card panel__card--secondary panel__card--full-row">
             <div className="panel__header">
               <h3>History</h3>
               <div className="panel__meta">
@@ -2998,9 +3767,25 @@ export default function ExperimentsPage() {
                 <span className="panel__badge panel__badge--secondary">
                   Runs: {runs.length}
                 </span>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => setHistoryCollapsed((open) => !open)}
+                >
+                  {historyCollapsed ? "Expand history" : "Collapse history"}
+                </button>
               </div>
             </div>
-            <div className="panel__grid">
+            <p className="panel__subheading">Reference history</p>
+            <p className="panel__step-helper">
+              Review past experiments, runs, and metrics without interrupting the active flow.
+            </p>
+            {historyCollapsed ? (
+              <p className="panel__muted">
+                History is collapsed to keep focus on the active experiment flow.
+              </p>
+            ) : (
+              <div className="panel__grid">
               <div className="panel__column">
                 <div className="panel__meta">
                   <h4 className="panel__subtitle">Experiments</h4>
@@ -3205,9 +3990,10 @@ export default function ExperimentsPage() {
                 )}
               </div>
             </div>
+            )}
           </section>
 
-          <section className="panel__card" ref={metricsSectionRef}>
+          <section className="panel__card panel__card--secondary" ref={metricsSectionRef}>
             <div className="panel__header">
               <h3>Metrics</h3>
               <div className="panel__meta">
@@ -3294,6 +4080,66 @@ export default function ExperimentsPage() {
             )}
           </section>
 
+          <section className="panel__card panel__card--primary panel__card--full-row">
+            <div className="panel__header">
+              <h3>Step 7 · Validate synthetic and observed results</h3>
+              <span
+                className={`panel__badge ${
+                  hasValidationSignals ? "panel__badge--success" : "panel__badge--secondary"
+                }`}
+              >
+                {hasValidationSignals ? "Validation started" : "Validation pending"}
+              </span>
+            </div>
+            <p className="panel__muted">
+              Validation is required to ground lab signals with observed evidence and build
+              decision trust.
+            </p>
+            <div className="panel__meta panel__meta--stack">
+              <span className="panel__muted">
+                Logged: {validationSummary?.total_logged ?? 0} · Verified:{" "}
+                {validationSummary?.verified_runs ?? 0} · Accuracy:{" "}
+                {typeof validationSummary?.accuracy === "number"
+                  ? `${Math.round(validationSummary.accuracy * 100)}%`
+                  : "—"}
+              </span>
+              <span className="panel__muted">
+                Observed logs: {validationSummary?.observed_signals_logged ?? 0} · Observed
+                accuracy:{" "}
+                {typeof validationSummary?.observed_accuracy === "number"
+                  ? `${Math.round(validationSummary.observed_accuracy * 100)}%`
+                  : "—"}
+              </span>
+            </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="panel__action panel__action--prominent"
+                onClick={() =>
+                  router.push(
+                    selectedExperimentId
+                      ? `/validation?experiment_id=${selectedExperimentId}`
+                      : "/validation",
+                  )
+                }
+              >
+                Open Validation
+              </button>
+              <button
+                type="button"
+                className="panel__action panel__action--ghost"
+                onClick={() =>
+                  variantsSectionRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  })
+                }
+              >
+                Back to variants (Step 8)
+              </button>
+            </div>
+          </section>
+
           {brandId ? (
             validationSummary?.unlock_ready ? (
               <div ref={(node) => (beliefsRef.current = node)}>
@@ -3333,10 +4179,14 @@ export default function ExperimentsPage() {
             )
           ) : null}
 
-          <section className="panel__card panel__card--full-row">
+          <section className="panel__card panel__card--secondary panel__card--full-row">
             <div className="panel__header">
               <h3>Scheduling</h3>
             </div>
+            <p className="panel__subheading">Operational scheduling</p>
+            <p className="panel__step-helper">
+              Configure recurring reruns and backfills after the main experiment cycle is set.
+            </p>
             {selectedExperiment ? (
               <div className="panel__form">
                 {scheduleStatus ? <p className="panel__success">{scheduleStatus}</p> : null}

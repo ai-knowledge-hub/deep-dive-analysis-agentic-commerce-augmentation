@@ -1,8 +1,5 @@
 # User Guide (Current Features Only)
 
-**Version:** 1.2  
-**Date:** 2026-02-05
-
 This guide documents what is implemented now. Any future item is marked **Planned (not built)**.
 
 ---
@@ -52,30 +49,49 @@ Sidebar workflow order:
 - Validation runs before save.
 - Result includes accepted queries and rejected reasons.
 - If category confidence is low for bottom-up, generation is blocked with a clarification prompt.
-
-### Step 3 — Review battery content
 - Inspect generated query list.
 - Enable/disable/edit weights.
 - Save battery.
 
-### Step 4 — Create experiment
+### Step 3 — Create experiment
 - Select battery.
 - Define hypothesis JSON.
 - Create experiment record.
 
-### Step 5 — Add variants
-- Add control + test variants.
-- Keep clear naming for review and downstream validation.
+### Step 4 — Add variants (4 supported paths)
+You can create experiment variants in any of these ways:
+1. Manual authoring:
+- Add control + candidate variants directly in the form.
+2. Prefill from simulation revision:
+- Pull optimized copy from simulation revisions for the same product.
+3. Generate from loop evidence:
+- Generate candidates from experiment + simulation + validation evidence.
+- Reliability weighting is explicit: `validation > experiment > simulation`.
+4. Generate cold-start copy:
+- Use when historical loop evidence is weak or unavailable.
+- Choose strategy:
+  - `bottom_up` (features/use-cases first)
+  - `top_down` (user goals/positioning first)
+  - `both` (blended; recommended)
 
-### Step 6 — Run experiment
+Once a candidate is selected, you can:
+- apply it to the variant form, or
+- create it directly with one click (`Create variant from selected loop candidate`).
+
+### Step 5 — Run experiment
 - Execute runs over battery queries.
 - Metrics displayed include win-rate signals.
 - Robust metrics and consensus fields appear when configured.
 
-### Step 7 — Validate
+### Step 6 — Validate
 - Log observed results (observed reality signal form).
 - Track prediction accuracy.
 - Pattern insights unlock when thresholds are met.
+
+### Step 7 — Iterate in closed loop
+- Review outcomes, recommendations, and validation agreement.
+- Generate next variants from updated evidence.
+- Continue until observed validation confidence is strong enough for decisioning.
 
 ---
 
@@ -188,3 +204,4 @@ See `docs/deployment.md` for commands and environment setup.
 - If generation is blocked, use the clarification prompt to set category in canonical spec.
 - If insights are locked, check validation count/accuracy.
 - If admin changes do not appear, verify active client/brand/product context.
+- If loop generation is weak early, use cold-start copy generation first, then transition to loop evidence generation after runs/validations accumulate.

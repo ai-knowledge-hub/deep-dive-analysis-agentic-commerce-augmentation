@@ -766,6 +766,26 @@ export type ExperimentRunResponse = {
   metrics: Record<string, unknown>;
 };
 
+export type LoopGeneratedVariantCandidate = {
+  label: string;
+  description: string;
+  rationale: string;
+  payload: Record<string, unknown>;
+  confidence: number;
+};
+
+export type LoopGeneratedVariantResponse = {
+  experiment_id: string;
+  product_id?: string | null;
+  generation_mode?: "loop_evidence" | "cold_start";
+  generation_strategy?: "bottom_up" | "top_down" | "both";
+  summary: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  candidates: LoopGeneratedVariantCandidate[];
+  used_fallback?: boolean;
+  requested_by?: string | null;
+};
+
 export type ExperimentValidation = {
   id: string;
   experiment_id: string;
