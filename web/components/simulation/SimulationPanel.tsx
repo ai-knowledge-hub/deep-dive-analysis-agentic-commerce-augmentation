@@ -109,6 +109,7 @@ export function SimulationPanel({
 }: Props) {
   const [bestMatchPending, setBestMatchPending] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
+  const [secondaryInsightsOpen, setSecondaryInsightsOpen] = useState(false);
   const scores = run?.result?.scores ?? [];
   const winnerId = run?.result?.winner_id;
   const selectedScore = selectedProductId
@@ -263,7 +264,7 @@ export function SimulationPanel({
       </div>
 
       <div className="simulation__run">
-        <span className="simulation__diff-label">Step 1: Run simulation</span>
+        <span className="simulation__step-title">Step 1 · Run simulation</span>
         <p className="simulation__intro-text">
           Generate alignment scores across all products for the current intent.
         </p>
@@ -284,9 +285,7 @@ export function SimulationPanel({
       </div>
 
       <div className="simulation__recommendation">
-        <span className="simulation__diff-label">
-          Step 2: Find the best matching product
-        </span>
+        <span className="simulation__step-title">Step 2 · Select target product</span>
         {bestProduct && bestScore ? (
           <div className="simulation__recommendation-body">
             <strong>{bestProduct.name}</strong>
@@ -316,7 +315,9 @@ export function SimulationPanel({
                 Finding match<span className="button__dots" />
               </>
             ) : (
-              "Find best matching product"
+              scores.length === 0
+                ? "Run + find best matching product"
+                : "Find best matching product"
             )}
           </button>
           <button
@@ -328,6 +329,11 @@ export function SimulationPanel({
             See all product scores
           </button>
         </div>
+        {scores.length === 0 ? (
+          <p className="simulation__intro-text">
+            No scores yet. This action will run simulation first, then select the top match.
+          </p>
+        ) : null}
         {products.length > 0 && (
           <div className="simulation__picker">
             <span className="simulation__diff-label">
@@ -368,7 +374,7 @@ export function SimulationPanel({
 
       {(optimizationMode === "copy" || optimizationMode === "both") && (
         <div className="simulation__copy">
-          <span className="simulation__diff-label">Step 3: Optimize web copy</span>
+          <span className="simulation__step-title">Step 3 · Optimize web copy</span>
           {brandToneSummary && (
             <p className="simulation__tone-suggestion">
               Current brand tone: {brandToneSummary}
@@ -379,7 +385,7 @@ export function SimulationPanel({
             value={productCopy ?? ""}
             onChange={(event) => onProductCopyChange?.(event.target.value)}
             placeholder="Edit the web description used for optimization."
-            disabled={optimizationMode === "feed"}
+            disabled={false}
           />
           <p className="simulation__intro-text">
             Updates here are applied to the simulation only (no permanent save).
@@ -389,7 +395,7 @@ export function SimulationPanel({
 
       {(optimizationMode === "feed" || optimizationMode === "both") && (
         <div className="simulation__feeds">
-          <span className="simulation__diff-label">Step 3: Optimize feeds</span>
+          <span className="simulation__step-title">Step 3 · Optimize feeds</span>
           <div className="simulation__feed-grid">
             <div className="simulation__feed-card">
               <div className="simulation__feed-title">ACP feed</div>
@@ -460,144 +466,158 @@ export function SimulationPanel({
         </div>
       )}
 
-      {renderGap(primaryGap)}
+      <details
+        className="panel__details simulation__details"
+        open={secondaryInsightsOpen}
+        onToggle={(event) => setSecondaryInsightsOpen(event.currentTarget.open)}
+      >
+        <summary className="panel__details-summary">
+          Secondary insights (gap/protocol/feed/lessons)
+        </summary>
+        {renderGap(primaryGap)}
 
-      {primaryGap?.competitor_summary && (
-        <div className="simulation__comparison">
-          <span className="simulation__diff-label">Why you lost</span>
-          <p>{primaryGap.competitor_summary}</p>
-        </div>
-      )}
+        {primaryGap?.competitor_summary && (
+          <div className="simulation__comparison">
+            <span className="simulation__diff-label">Why you lost</span>
+            <p>{primaryGap.competitor_summary}</p>
+          </div>
+        )}
 
-      {protocolReadiness.length > 0 && (
-        <div className="simulation__comparison">
-          <span className="simulation__diff-label">Protocol readiness</span>
-          <p className="simulation__intro-text">
-            Readiness checks ACP/UCP compliance, not intent fit.{" "}
-            <strong>Intent fit:</strong>{" "}
-            {selectedScore
-              ? `${Math.round(selectedScore.score * 100)}% alignment`
-              : bestScore
-                ? `${Math.round(bestScore.score * 100)}% (best match)`
-                : "—"}
-          </p>
-          {readinessByProtocol.map((entry) => (
-            <div key={entry.protocol} className="simulation__protocol-block">
-              <div className="simulation__protocol-title">
-                {entry.protocol.toUpperCase()}
-              </div>
-              {entry.score !== null && (
-                <div className="simulation__protocol-score">
-                  Readiness score: {entry.score}/100
+        {protocolReadiness.length > 0 && (
+          <div className="simulation__comparison">
+            <span className="simulation__diff-label">Protocol readiness</span>
+            <p className="simulation__intro-text">
+              Readiness checks ACP/UCP compliance, not intent fit.{" "}
+              <strong>Intent fit:</strong>{" "}
+              {selectedScore
+                ? `${Math.round(selectedScore.score * 100)}% alignment`
+                : bestScore
+                  ? `${Math.round(bestScore.score * 100)}% (best match)`
+                  : "—"}
+            </p>
+            {readinessByProtocol.map((entry) => (
+              <div key={entry.protocol} className="simulation__protocol-block">
+                <div className="simulation__protocol-title">
+                  {entry.protocol.toUpperCase()}
                 </div>
-              )}
-              <ul>
-                {entry.issues
-                  .filter((issue) => issue.severity !== "info")
-                  .slice(0, 4)
-                  .map((issue, index) => (
-                    <li key={`${entry.protocol}-${issue.field}-${index}`}>
-                      <strong>{issue.severity.toUpperCase()}:</strong>{" "}
-                      {issue.message}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+                {entry.score !== null && (
+                  <div className="simulation__protocol-score">
+                    Readiness score: {entry.score}/100
+                  </div>
+                )}
+                <ul>
+                  {entry.issues
+                    .filter((issue) => issue.severity !== "info")
+                    .slice(0, 4)
+                    .map((issue, index) => (
+                      <li key={`${entry.protocol}-${issue.field}-${index}`}>
+                        <strong>{issue.severity.toUpperCase()}:</strong>{" "}
+                        {issue.message}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
 
-      {optimizationMode !== "copy" && (
-        <div className="simulation__comparison">
-          <span className="simulation__diff-label">Feed patch suggestions</span>
-          {feedSuggestions.length === 0 ? (
-            <p>No feed updates suggested yet. Run a simulation to detect gaps.</p>
-          ) : (
+        {optimizationMode !== "copy" && (
+          <div className="simulation__comparison">
+            <span className="simulation__diff-label">Feed patch suggestions</span>
+            {feedSuggestions.length === 0 ? (
+              <p>No feed updates suggested yet. Run a simulation to detect gaps.</p>
+            ) : (
+              <ul>
+                {feedSuggestions.map((item) => (
+                  <li key={item.signal}>
+                    Include mention of <strong>{item.signal}</strong> →{" "}
+                    {item.field}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {(run?.result?.lessons ?? []).length > 0 && (
+          <div className="simulation__lessons">
+            <span className="simulation__diff-label">Lessons learned</span>
             <ul>
-              {feedSuggestions.map((item) => (
-                <li key={item.signal}>
-                  Include mention of <strong>{item.signal}</strong> →{" "}
-                  {item.field}
-                </li>
+              {run?.result?.lessons?.map((lesson) => (
+                <li key={lesson}>{lesson}</li>
               ))}
             </ul>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {(run?.result?.lessons ?? []).length > 0 && (
-        <div className="simulation__lessons">
-          <span className="simulation__diff-label">Lessons learned</span>
-          <ul>
-            {run?.result?.lessons?.map((lesson) => (
-              <li key={lesson}>{lesson}</li>
+        {run?.result?.gap_analysis?.length ? (
+          <div className="simulation__gap-list">
+            <span className="simulation__diff-label">Gap analysis</span>
+            {run.result.gap_analysis.slice(0, 3).map((gap) => (
+              <div key={`${gap.product_id}-${gap.goal}`} className="simulation__gap-row">
+                <span className="simulation__gap-goal">{gap.goal}</span>
+                <span className={`simulation__gap-tag simulation__gap-tag--${gap.severity}`}>
+                  {gap.severity}
+                </span>
+              </div>
             ))}
-          </ul>
+          </div>
+        ) : null}
+      </details>
+
+      {optimizationMode === "feed" ? (
+        <p className="panel__muted">
+          Tone controls are hidden in feed-only mode.
+        </p>
+      ) : (
+        <div className="simulation__tone">
+          <span className="simulation__step-title">Step 4 · Tone and guardrails</span>
+          {toneNotice && <div className="simulation__notice">{toneNotice}</div>}
+          <p className="simulation__tone-suggestion">
+            {toneSuggestion || "No tone suggestion yet."}
+          </p>
+          <textarea
+            rows={2}
+            value={toneValue ?? ""}
+            onChange={(event) => onToneChange?.(event.target.value)}
+            placeholder="Confirm or edit the brand tone."
+          />
+          <div className="simulation__tone-actions">
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={onToneUseSuggestion}
+              disabled={!toneSuggestion}
+            >
+              Use suggestion
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              title="Attach product data to pull tone from live brand copy."
+              onClick={onToneFromBrand}
+            >
+              Use tone from brand site
+            </button>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={onToneSave}
+              disabled={!toneValue}
+            >
+              Save tone
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={onToneClear}
+              disabled={!toneValue}
+            >
+              Clear
+            </button>
+          </div>
         </div>
       )}
-
-      {run?.result?.gap_analysis?.length ? (
-        <div className="simulation__gap-list">
-          <span className="simulation__diff-label">Gap analysis</span>
-          {run.result.gap_analysis.slice(0, 3).map((gap) => (
-            <div key={`${gap.product_id}-${gap.goal}`} className="simulation__gap-row">
-              <span className="simulation__gap-goal">{gap.goal}</span>
-              <span className={`simulation__gap-tag simulation__gap-tag--${gap.severity}`}>
-                {gap.severity}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="simulation__tone">
-        <span className="simulation__diff-label">Tone</span>
-        {toneNotice && <div className="simulation__notice">{toneNotice}</div>}
-        <p className="simulation__tone-suggestion">
-          {toneSuggestion || "No tone suggestion yet."}
-        </p>
-        <textarea
-          rows={2}
-          value={toneValue ?? ""}
-          onChange={(event) => onToneChange?.(event.target.value)}
-          placeholder="Confirm or edit the brand tone."
-          disabled={optimizationMode === "feed"}
-        />
-        <div className="simulation__tone-actions">
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={onToneUseSuggestion}
-            disabled={!toneSuggestion}
-          >
-            Use suggestion
-          </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            title="Attach product data to pull tone from live brand copy."
-            onClick={onToneFromBrand}
-          >
-            Use tone from brand site
-          </button>
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={onToneSave}
-            disabled={!toneValue || optimizationMode === "feed"}
-          >
-            Save tone
-          </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={onToneClear}
-            disabled={!toneValue}
-          >
-            Clear
-          </button>
-        </div>
-      </div>
 
       <div className="simulation__actions">
         <button

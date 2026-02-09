@@ -115,6 +115,7 @@ export default function SimulationPage() {
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [simulationSecondaryOpen, setSimulationSecondaryOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -268,13 +269,22 @@ export default function SimulationPage() {
       if (cancelled) return;
       const items = response.products ?? [];
       if (items.length === 0) return;
+      const toText = (value: unknown, fallback = "") =>
+        typeof value === "string" && value.trim() ? value : fallback;
       const mapped = items.map((product) => ({
         id: product.id,
         name: product.name,
-        description: product.description ?? product.metadata?.description ?? product.name,
+        description: toText(
+          product.description ??
+            toText((product.metadata as Record<string, unknown> | undefined)?.description),
+          product.name,
+        ),
         source: "catalog",
         brand_id: product.brand_id ?? brandId ?? undefined,
-        url: (product.metadata?.product_url as string | undefined) ?? undefined,
+        url:
+          (product.metadata as Record<string, unknown> | undefined)?.product_url as
+            | string
+            | undefined,
         price:
           typeof product.metadata?.price === "number"
             ? product.metadata?.price
@@ -283,18 +293,24 @@ export default function SimulationPage() {
         metadata: {
           ...(product.metadata ?? {}),
           feed_description:
-            (product.metadata?.feed_description as string | undefined) ??
-            product.description ??
-            product.metadata?.description ??
+            toText((product.metadata as Record<string, unknown>)?.feed_description) ||
+            toText(product.description) ||
+            toText((product.metadata as Record<string, unknown>)?.description) ||
             product.name,
           acp: {
             item_id: product.id,
             title: product.name,
             description:
-              (product.metadata?.acp?.description as string | undefined) ??
-              (product.metadata?.feed_description as string | undefined) ??
-              product.description ??
-              product.metadata?.description ??
+              toText(
+                (
+                  ((product.metadata as Record<string, unknown>)?.acp as
+                    | Record<string, unknown>
+                    | undefined)
+                )?.description,
+              ) ||
+              toText((product.metadata as Record<string, unknown>)?.feed_description) ||
+              toText(product.description) ||
+              toText((product.metadata as Record<string, unknown>)?.description) ||
               product.name,
             url:
               (product.metadata?.product_url as string | undefined) ??
@@ -332,10 +348,16 @@ export default function SimulationPage() {
               (product.metadata?.merchant_name as string | undefined) ??
               product.name,
             description:
-              (product.metadata?.ucp?.description as string | undefined) ??
-              (product.metadata?.feed_description as string | undefined) ??
-              product.description ??
-              product.metadata?.description ??
+              toText(
+                (
+                  ((product.metadata as Record<string, unknown>)?.ucp as
+                    | Record<string, unknown>
+                    | undefined)
+                )?.description,
+              ) ||
+              toText((product.metadata as Record<string, unknown>)?.feed_description) ||
+              toText(product.description) ||
+              toText((product.metadata as Record<string, unknown>)?.description) ||
               product.name,
             price:
               typeof product.metadata?.price === "number"
@@ -496,12 +518,13 @@ export default function SimulationPage() {
     if (!sessionParam) return;
     let cancelled = false;
     const hydrateFromSession = async () => {
-      let resolvedClientId = storageClientId ?? clientId ?? null;
+      let resolvedClientId: string | null = storageClientId ?? clientId ?? null;
       if (!resolvedClientId && userId) {
         try {
           const response = await listConversationSessions(userId);
           const match = response.sessions.find((session) => session.id === sessionParam);
-          resolvedClientId = match?.client_id ?? null;
+          resolvedClientId =
+            typeof match?.client_id === "string" ? match.client_id : null;
         } catch {
           // ignore and fall back to current client scope
         }
@@ -885,6 +908,160 @@ export default function SimulationPage() {
     [clientId, userId],
   );
 
+  const simulationBestScore = useMemo(() => {
+    const scores = simulationRun?.result?.scores ?? [];
+    if (!scores.length) return null;
+    return [...scores].sort((a, b) => b.score - a.score)[0] ?? null;
+  }, [simulationRun?.result?.scores]);
+
+  const simulationSelectedScore = useMemo(() => {
+    if (!selectedSimulationProductId) return null;
+    return (
+      simulationRun?.result?.scores?.find(
+        (score) => score.product_id === selectedSimulationProductId,
+      ) ?? null
+    );
+  }, [selectedSimulationProductId, simulationRun?.result?.scores]);
+
+  const simulationSelectedProductLabel = useMemo(() => {
+    if (!selectedSimulationProductId) return "No product selected";
+    return (
+      simulationProducts.find((product) => product.id === selectedSimulationProductId)?.name ??
+      selectedSimulationProductId
+    );
+  }, [selectedSimulationProductId, simulationProducts]);
+
+  const simulationLift = useMemo(() => {
+    const targetId = simulationOptimized?.optimized.id;
+    if (!targetId) return null;
+    const beforeScore =
+      simulationRun?.result?.scores?.find((score) => score.product_id === targetId)?.score ??
+      null;
+    const afterScore =
+      simulationRetest?.result?.scores?.find((score) => score.product_id === targetId)?.score ??
+      null;
+    if (beforeScore === null || afterScore === null) return null;
+    return (afterScore - beforeScore) * 100;
+  }, [simulationOptimized?.optimized.id, simulationRetest?.result?.scores, simulationRun?.result?.scores]);
+
+  const simulationFlowSteps = useMemo(() => {
+    const scenarioReady = Boolean(simulationScenario.trim() && simulationProducts.length > 0);
+    const runReady = Boolean(simulationRun);
+    const targetReady = Boolean(selectedSimulationProductId);
+    const optimizedReady = Boolean(simulationOptimized);
+    const retestReady = Boolean(simulationRetest);
+    const decisionReady = Boolean(simulationRetest || simulationOptimized);
+    return [
+      { id: 1, label: "Define scenario", done: scenarioReady },
+      { id: 2, label: "Run simulation", done: runReady },
+      { id: 3, label: "Select target product", done: targetReady },
+      { id: 4, label: "Generate optimization", done: optimizedReady },
+      { id: 5, label: "Retest outcome", done: retestReady },
+      { id: 6, label: "Decide next move", done: decisionReady },
+    ];
+  }, [
+    selectedSimulationProductId,
+    simulationOptimized,
+    simulationProducts.length,
+    simulationRetest,
+    simulationRun,
+    simulationScenario,
+  ]);
+
+  const simulationCurrentStep = useMemo(
+    () => simulationFlowSteps.find((step) => !step.done)?.id ?? 6,
+    [simulationFlowSteps],
+  );
+
+  const simulationNextAction = useMemo(() => {
+    if (!simulationScenario.trim() || simulationProducts.length === 0) {
+      return {
+        label: "Define scenario and products",
+        helper: "Set buyer intent and ensure at least one product is loaded.",
+        action: "define" as const,
+      };
+    }
+    if (!simulationRun) {
+      return {
+        label: "Run simulation now",
+        helper: "Generate baseline intent-alignment scores before optimization.",
+        action: "run" as const,
+      };
+    }
+    if (!selectedSimulationProductId) {
+      return {
+        label: "Select target product",
+        helper: "Pick the product you want to optimize and retest.",
+        action: "select_target" as const,
+      };
+    }
+    if (!simulationOptimized && optimizationMode !== "feed") {
+      return {
+        label: "Generate optimization",
+        helper: "Create a revised copy/feed candidate for the selected product.",
+        action: "optimize" as const,
+      };
+    }
+    if (
+      !simulationRetest &&
+      simulationOptimized &&
+      optimizationMode !== "feed"
+    ) {
+      return {
+        label: "Retest optimized variant",
+        helper: "Measure lift against the baseline run before deciding next steps.",
+        action: "retest" as const,
+      };
+    }
+    return {
+      label: "Open Experiments for controlled validation",
+      helper: "Move the best candidate into Experiment flow for decision-grade testing.",
+      action: "open_experiments" as const,
+    };
+  }, [
+    optimizationMode,
+    selectedSimulationProductId,
+    simulationOptimized,
+    simulationProducts.length,
+    simulationRetest,
+    simulationRun,
+    simulationScenario,
+  ]);
+
+  const handleRunSimulationNextAction = useCallback(() => {
+    switch (simulationNextAction.action) {
+      case "define":
+        return;
+      case "run":
+        void handleRunSimulation();
+        return;
+      case "select_target":
+        if (simulationBestScore?.product_id) {
+          setSelectedSimulationProductId(simulationBestScore.product_id);
+        }
+        return;
+      case "optimize":
+        void handleOptimizeSimulation(selectedSimulationProductId ?? undefined);
+        return;
+      case "retest":
+        void handleRetestSimulation();
+        return;
+      case "open_experiments":
+        router.push("/experiments");
+        return;
+      default:
+        return;
+    }
+  }, [
+    handleOptimizeSimulation,
+    handleRetestSimulation,
+    handleRunSimulation,
+    router,
+    selectedSimulationProductId,
+    simulationBestScore?.product_id,
+    simulationNextAction.action,
+  ]);
+
   return (
     <div className="app">
       <Sidebar
@@ -970,6 +1147,87 @@ export default function SimulationPage() {
             <strong>Lab signal:</strong> Simulation scores are directional and
             should be validated with live outcomes before rollout.
           </section>
+          <section className="panel__card panel__card--primary simulation-flow">
+            <div className="panel__header">
+              <h3>Simulation Flow</h3>
+              <span className="panel__muted">Current step: {simulationCurrentStep} / 6</span>
+            </div>
+            <div className="flow-rail__steps">
+              {simulationFlowSteps.map((step) => (
+                <div
+                  key={step.id}
+                  className={`flow-rail__step ${
+                    step.done ? "is-done" : step.id === simulationCurrentStep ? "is-current" : ""
+                  }`}
+                >
+                  <span className="flow-rail__index">{step.id}</span>
+                  <span className="flow-rail__label">{step.label}</span>
+                  <span className="flow-rail__status">
+                    {step.done ? "Done" : step.id === simulationCurrentStep ? "Current" : "Pending"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="panel__separator" />
+            <section className="panel__notice panel__notice--info flow-next-action">
+              <strong>Next recommended action:</strong> {simulationNextAction.label}
+              <p className="panel__muted">{simulationNextAction.helper}</p>
+              <div className="panel__actions panel__actions--priority">
+                <button
+                  type="button"
+                  className="panel__action panel__action--prominent"
+                  onClick={handleRunSimulationNextAction}
+                >
+                  {simulationNextAction.label}
+                </button>
+              </div>
+            </section>
+            <div className="panel__separator" />
+            <section className="panel__notice panel__notice--info outcome-snapshot">
+              <div className="panel__meta">
+                <strong>Outcome snapshot</strong>
+                <span className="panel__badge panel__badge--secondary">Unified view</span>
+              </div>
+              <div className="outcome-snapshot__grid">
+                <div className="outcome-snapshot__item">
+                  <span className="outcome-snapshot__label">Winner</span>
+                  <span className="outcome-snapshot__value">
+                    {simulationBestScore?.product_id ?? "No run yet"}
+                  </span>
+                  <span className="panel__muted">
+                    Score:{" "}
+                    {typeof simulationBestScore?.score === "number"
+                      ? `${Math.round(simulationBestScore.score * 100)}%`
+                      : "—"}
+                  </span>
+                </div>
+                <div className="outcome-snapshot__item">
+                  <span className="outcome-snapshot__label">Selected target</span>
+                  <span className="outcome-snapshot__value">
+                    {simulationSelectedProductLabel}
+                  </span>
+                  <span className="panel__muted">
+                    Alignment:{" "}
+                    {typeof simulationSelectedScore?.score === "number"
+                      ? `${Math.round(simulationSelectedScore.score * 100)}%`
+                      : "—"}
+                  </span>
+                </div>
+                <div className="outcome-snapshot__item">
+                  <span className="outcome-snapshot__label">Retest / lift</span>
+                  <span className="outcome-snapshot__value">
+                    {simulationRetest ? "Retested" : simulationOptimized ? "Optimized only" : "Pending"}
+                  </span>
+                  <span className="panel__muted">
+                    Lift:{" "}
+                    {typeof simulationLift === "number"
+                      ? `${simulationLift >= 0 ? "+" : ""}${simulationLift.toFixed(1)} pts`
+                      : "—"}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </section>
           <SimulationPanel
             query={simulationScenario}
             scenarioValue={simulationScenario}
@@ -1014,16 +1272,40 @@ export default function SimulationPage() {
             onRetest={handleRetestSimulation}
             onSelectProduct={setSelectedSimulationProductId}
           />
-          <SimulationLessons lessons={simulationLessons} />
-          <SimulationHistory
-            runs={simulationRuns}
-            activeRunId={simulationRun?.run_id}
-            onSelect={handleSelectSimulationRun}
-            onAttach={handleAttachRun}
-            attachLabel={productName}
-            attachDisabled={!productId}
-            onOpenExperiments={handleOpenExperiments}
-          />
+          <section className="panel__card panel__card--secondary">
+            <div className="panel__header">
+              <h3>Secondary Records</h3>
+              <button
+                type="button"
+                className="panel__action panel__action--ghost"
+                onClick={() => setSimulationSecondaryOpen((open) => !open)}
+              >
+                {simulationSecondaryOpen ? "Hide secondary" : "Show secondary"}
+              </button>
+            </div>
+            <p className="panel__subheading">Reference history</p>
+            <p className="panel__step-helper">
+              Keep focus on the active simulation flow; expand when you need past runs or lessons.
+            </p>
+            {!simulationSecondaryOpen ? (
+              <p className="panel__muted">
+                Secondary records are collapsed to reduce noise during active optimization.
+              </p>
+            ) : (
+              <div className="panel__form">
+                <SimulationLessons lessons={simulationLessons} />
+                <SimulationHistory
+                  runs={simulationRuns}
+                  activeRunId={simulationRun?.run_id}
+                  onSelect={handleSelectSimulationRun}
+                  onAttach={handleAttachRun}
+                  attachLabel={productName}
+                  attachDisabled={!productId}
+                  onOpenExperiments={handleOpenExperiments}
+                />
+              </div>
+            )}
+          </section>
           {simulationScenarioDirty && (
             <div className="detail__note">
               Scenario edited locally. Run to refresh results.

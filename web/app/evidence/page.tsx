@@ -54,6 +54,10 @@ export default function EvidencePage() {
   const [verification, setVerification] = useState<null>(null);
   const [targetCopy, setTargetCopy] = useState<string | null>(null);
   const [targetCopyUrl, setTargetCopyUrl] = useState<string | null>(null);
+  const [evidenceSourceSessionId, setEvidenceSourceSessionId] = useState<string | null>(
+    null,
+  );
+  const [evidenceRefreshedAt, setEvidenceRefreshedAt] = useState<string | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
@@ -67,6 +71,8 @@ export default function EvidencePage() {
       const payload = JSON.parse(raw) as Record<string, unknown>;
       setAnalysis((payload.analysis as EvidenceAnalyzeResponse) ?? null);
       setSignalExtraction((payload.signal_extraction as EvidenceAnalyzeResponse["signal_extraction"]) ?? null);
+      setEvidenceSourceSessionId((payload.source_session_id as string) ?? null);
+      setEvidenceRefreshedAt((payload.refreshed_at as string) ?? null);
       setOptimization(null);
       setVerification(null);
     } catch {
@@ -120,9 +126,17 @@ export default function EvidencePage() {
         };
         setAnalysis(nextAnalysis);
         setSignalExtraction(null);
+        setEvidenceSourceSessionId(latest.id);
+        const refreshedAt = new Date().toISOString();
+        setEvidenceRefreshedAt(refreshedAt);
         localStorage.setItem(
           storageKey,
-          JSON.stringify({ analysis: nextAnalysis, signal_extraction: null }),
+          JSON.stringify({
+            analysis: nextAnalysis,
+            signal_extraction: null,
+            source_session_id: latest.id,
+            refreshed_at: refreshedAt,
+          }),
         );
       } catch (error) {
         console.warn("Failed to hydrate evidence from latest session", error);
@@ -168,11 +182,15 @@ export default function EvidencePage() {
       .then((response) => {
         setSignalExtraction(response.signals ?? null);
         if (typeof window !== "undefined") {
+          const refreshedAt = new Date().toISOString();
+          setEvidenceRefreshedAt(refreshedAt);
           localStorage.setItem(
             storageKey,
             JSON.stringify({
               analysis,
               signal_extraction: response.signals ?? null,
+              source_session_id: evidenceSourceSessionId,
+              refreshed_at: refreshedAt,
             }),
           );
         }
@@ -180,7 +198,15 @@ export default function EvidencePage() {
       .catch((error) => {
         console.warn("Failed to extract evidence signals", error);
       });
-  }, [analysis, productId, productName, storageKey, targetCopy, userId]);
+  }, [
+    analysis,
+    evidenceSourceSessionId,
+    productId,
+    productName,
+    storageKey,
+    targetCopy,
+    userId,
+  ]);
 
   useEffect(() => {
     if (!brandId || !productId || !userId) return;
@@ -189,14 +215,17 @@ export default function EvidencePage() {
         const response = await listProductsByBrand(brandId, userId);
         const product = response.products?.find((item) => item.id === productId);
         if (!product) return;
-        const metadata = product.metadata ?? {};
-        const creative = metadata.creative ?? {};
+        const metadata = (product.metadata ?? {}) as Record<string, unknown>;
+        const creative = (metadata.creative ?? {}) as Record<string, unknown>;
         const copy =
-          creative.manual_copy ??
-          creative.imported_copy ??
+          (creative.manual_copy as string | undefined) ??
+          (creative.imported_copy as string | undefined) ??
           product.description ??
           null;
-        const url = creative.source_url ?? metadata.source_url ?? null;
+        const url =
+          (creative.source_url as string | undefined) ??
+          (metadata.source_url as string | undefined) ??
+          null;
         setTargetCopy(copy);
         setTargetCopyUrl(url);
       } catch (error) {
@@ -409,7 +438,10 @@ export default function EvidencePage() {
             targetProductName={productName ?? undefined}
             targetProductCopy={targetCopy ?? undefined}
             targetProductUrl={targetCopyUrl ?? undefined}
+            sourceSessionId={evidenceSourceSessionId ?? undefined}
+            refreshedAt={evidenceRefreshedAt ?? undefined}
             onOpenSimulation={() => router.push("/simulation")}
+            onOpenExperiments={() => router.push("/experiments")}
             usePageScroll
           />
           <div className="detail__note">

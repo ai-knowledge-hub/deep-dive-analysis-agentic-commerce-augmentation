@@ -32,6 +32,10 @@ export function IntentionalityProfileCard({
       ) : null}
       {baseline !== undefined && current !== undefined ? (
         <div className="profile-card__delta">
+          {(() => {
+            const safeDelta = current - baseline;
+            return (
+              <>
           <span className="profile-card__label">Discoverability Delta</span>
           <div className="profile-card__legend">
             <span>Baseline</span>
@@ -46,9 +50,12 @@ export function IntentionalityProfileCard({
             </div>
           </div>
           <span className="profile-card__value profile-card__delta-value">
-            {delta >= 0 ? "+" : ""}
-            {(delta * 100).toFixed(0)}%
+            {safeDelta >= 0 ? "+" : ""}
+            {(safeDelta * 100).toFixed(0)}%
           </span>
+              </>
+            );
+          })()}
         </div>
       ) : null}
       <div className="profile-card__section">

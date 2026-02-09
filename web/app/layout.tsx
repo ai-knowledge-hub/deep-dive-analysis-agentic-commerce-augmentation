@@ -14,8 +14,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           colorTextSecondary: "#999999",
           colorInputBackground: "#171717",
           colorInputText: "#fafafa",
-          colorAlphaShade: "#111111",
-          colorAlpha: "rgba(16, 185, 129, 0.12)",
           colorDanger: "#ef4444",
           borderRadius: "8px",
           fontFamily: "var(--font-sans)",
