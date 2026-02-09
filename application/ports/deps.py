@@ -229,6 +229,10 @@ class ValidationResultsStore(Protocol):
     def get_latest_for_job(self, **kwargs: Any) -> dict | None: ...
 
 
+class ValidationCallbackTokensStore(Protocol):
+    def consume_token(self, **kwargs: Any) -> bool: ...
+
+
 class CopyRevisionsStore(Protocol):
     def create_revision(self, **kwargs: Any) -> dict: ...
 
@@ -253,6 +257,8 @@ class AudienceArchetypesStore(Protocol):
     def get_archetype(self, **kwargs: Any) -> dict | None: ...
 
     def list_archetypes(self, **kwargs: Any) -> list[dict]: ...
+
+    def update_archetype(self, **kwargs: Any) -> dict | None: ...
 
 
 class WorldStatesStore(Protocol):
@@ -357,6 +363,7 @@ class AppDeps:
     analytics_events: AnalyticsEventsStore
     validation_jobs: ValidationJobsStore
     validation_results: ValidationResultsStore
+    validation_callback_tokens: ValidationCallbackTokensStore
     copy_revisions: CopyRevisionsStore
     brand_beliefs: BrandBeliefsStore
     audience_archetypes: AudienceArchetypesStore

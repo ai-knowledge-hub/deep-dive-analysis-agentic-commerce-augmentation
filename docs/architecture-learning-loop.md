@@ -68,7 +68,7 @@ Reality-grounding and provider checks.
 - Existing/extended service: `validation_service`
 - Inputs:
   - Synthetic LLM judge signal.
-  - Observed reality signal (manual/external).
+  - Observed reality signal (manual observed logging).
 
 ### 6) Belief Update Layer
 Applies weighted posterior updates.
@@ -324,4 +324,3 @@ Returns: active correction weights and drift score.
 
 4. Calibration check:
 - Verify provider drift modifies decision weighting without overriding observed truth.
-

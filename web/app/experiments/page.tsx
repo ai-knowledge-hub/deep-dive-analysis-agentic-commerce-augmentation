@@ -18,6 +18,7 @@ import type {
   QueryBattery,
   QueryBatteryQuery,
   QueryBatteryCandidate,
+  AudienceSegment,
   QueryBatteryMetrics,
   SessionSummary,
   SimulationGapReport,
@@ -46,6 +47,8 @@ import {
   listExperimentVariants,
   listExperiments,
   listBatteryQueries,
+  listBatteryAudienceSegments,
+  updateBatteryAudienceSegment,
   runExperiment,
   updateExperiment,
   updateExperimentSchedule,
@@ -130,6 +133,9 @@ export default function ExperimentsPage() {
     status: "draft",
   });
   const [batteryMetrics, setBatteryMetrics] = useState<QueryBatteryMetrics | null>(null);
+  const [audienceSegments, setAudienceSegments] = useState<AudienceSegment[]>([]);
+  const [audienceSegmentsStatus, setAudienceSegmentsStatus] = useState<string | null>(null);
+  const [audienceSegmentsOpen, setAudienceSegmentsOpen] = useState(false);
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
   const [batteryUseLlm, setBatteryUseLlm] = useState(false);
   const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
@@ -200,6 +206,10 @@ export default function ExperimentsPage() {
     regeneration_count?: number;
     acceptance_rate?: number;
     rejected?: { query_text: string; reason: string }[];
+    audience_segments_generated?: number;
+    audience_segment_labels?: string[];
+    audience_segments_source?: "behavioral" | "canonical_fallback";
+    audience_segments_fallback_reason?: string | null;
   } | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
   const [queryStatus, setQueryStatus] = useState<string | null>(null);
@@ -634,6 +644,27 @@ export default function ExperimentsPage() {
       });
     }
   }, [selectedBattery]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedBattery) {
+      setAudienceSegments([]);
+      setAudienceSegmentsStatus(null);
+      return;
+    }
+    void listBatteryAudienceSegments(selectedBattery.id, userId)
+      .then((response) => {
+        if (cancelled) return;
+        setAudienceSegments(response.segments ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAudienceSegments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBattery, userId]);
 
   useEffect(() => {
     if (selectedExperiment) {
@@ -1076,6 +1107,38 @@ export default function ExperimentsPage() {
       }
     },
     [userId],
+  );
+
+  const handleSegmentToggle = useCallback(
+    async (segmentId: string, active: boolean) => {
+      if (!selectedBattery) return;
+      setAudienceSegmentsStatus(null);
+      try {
+        const response = await updateBatteryAudienceSegment(
+          selectedBattery.id,
+          segmentId,
+          {
+            active,
+            user_id: userId,
+          },
+        );
+        setAudienceSegments((current) =>
+          current.map((segment) =>
+            segment.id === segmentId ? response.segment : segment,
+          ),
+        );
+        setAudienceSegmentsStatus(
+          active
+            ? "Segment enabled for query generation."
+            : "Segment disabled for query generation.",
+        );
+      } catch (error) {
+        setAudienceSegmentsStatus(
+          error instanceof Error ? error.message : "Unable to update segment.",
+        );
+      }
+    },
+    [selectedBattery, userId],
   );
 
   const handleQueryWeight = useCallback(
@@ -3103,6 +3166,14 @@ export default function ExperimentsPage() {
                     {typeof batteryGenerationReport.regeneration_count === "number" ? (
                       <> · Regenerations: {batteryGenerationReport.regeneration_count}</>
                     ) : null}
+                    {typeof batteryGenerationReport.audience_segments_generated ===
+                    "number" ? (
+                      <>
+                        {" "}
+                        · Audience segments:{" "}
+                        {batteryGenerationReport.audience_segments_generated}
+                      </>
+                    ) : null}
                     {batteryGenerationReport.required_category ? (
                       <>
                         {" "}
@@ -3131,6 +3202,27 @@ export default function ExperimentsPage() {
                         </button>
                       </>
                     ) : null}
+                    {batteryGenerationReport.audience_segment_labels &&
+                    batteryGenerationReport.audience_segment_labels.length > 0 ? (
+                      <>
+                        <p className="panel__muted">Behavioral segments applied</p>
+                        <ul className="panel__list">
+                          {batteryGenerationReport.audience_segment_labels
+                            .slice(0, 4)
+                            .map((label) => (
+                              <li key={label}>{label}</li>
+                            ))}
+                        </ul>
+                      </>
+                    ) : null}
+                    {batteryGenerationReport.audience_segments_source ===
+                      "canonical_fallback" &&
+                    batteryGenerationReport.audience_segments_fallback_reason ? (
+                      <p className="panel__muted">
+                        Fallback:{" "}
+                        {batteryGenerationReport.audience_segments_fallback_reason}
+                      </p>
+                    ) : null}
                     {batteryGenerationReport.rejected &&
                     batteryGenerationReport.rejected.length > 0 ? (
                       <ul className="panel__list">
@@ -3158,6 +3250,72 @@ export default function ExperimentsPage() {
                       </>
                     ) : null}
                   </div>
+                ) : null}
+                {selectedBattery ? (
+                  <details
+                    open={audienceSegmentsOpen}
+                    onToggle={(event) =>
+                      setAudienceSegmentsOpen(event.currentTarget.open)
+                    }
+                    className="panel__card"
+                  >
+                    <summary className="panel__label">
+                      Audience segments for top-down generation
+                    </summary>
+                    <p className="panel__muted">
+                      These are session-derived behavioral segments used to condition
+                      top-down/hybrid query generation. Disable any segment to exclude it.
+                    </p>
+                    {audienceSegmentsStatus ? (
+                      <p className="panel__status">{audienceSegmentsStatus}</p>
+                    ) : null}
+                    {audienceSegments.length === 0 ? (
+                      <div className="panel__notice panel__notice--info">
+                        No session-derived segments yet. Fallback stays active: canonical
+                        intent spec + product metadata + stored archetypes.
+                      </div>
+                    ) : (
+                      <ul className="panel__list">
+                        {audienceSegments.map((segment) => (
+                          <li key={segment.id}>
+                            <div
+                              className="panel__row"
+                              style={{ justifyContent: "space-between" }}
+                            >
+                              <div>
+                                <strong>{segment.label}</strong>
+                                {typeof segment.support === "number" ? (
+                                  <span className="panel__muted">
+                                    {" "}
+                                    · support {segment.support}
+                                  </span>
+                                ) : null}
+                                {typeof segment.confidence === "number" ? (
+                                  <span className="panel__muted">
+                                    {" "}
+                                    · confidence{" "}
+                                    {Math.round(segment.confidence * 100)}%
+                                  </span>
+                                ) : null}
+                                {segment.description ? (
+                                  <p className="panel__muted">{segment.description}</p>
+                                ) : null}
+                              </div>
+                              <button
+                                type="button"
+                                className="button button--ghost"
+                                onClick={() =>
+                                  handleSegmentToggle(segment.id, !segment.active)
+                                }
+                              >
+                                {segment.active ? "Disable" : "Enable"}
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </details>
                 ) : null}
                 {generatedCandidates.length > 0 ? (
                   <div className="panel__card">

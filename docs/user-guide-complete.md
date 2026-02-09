@@ -48,6 +48,12 @@ Sidebar workflow order:
 - System generates candidate queries.
 - Validation runs before save.
 - Result includes accepted queries and rejected reasons.
+- For `top_down` and `hybrid`, the generator now also derives in-context behavioral audience segments
+  from recent analytics/session events and uses them to condition candidate queries.
+- Step 1 now includes an **Audience segments for top-down generation** panel where you can
+  enable/disable session-derived segments before generation.
+- If no session-derived segments exist yet, generation falls back to canonical intent spec,
+  product metadata, and stored archetypes.
 - If category confidence is low for bottom-up, generation is blocked with a clarification prompt.
 - Inspect generated query list.
 - Enable/disable/edit weights.
@@ -83,12 +89,17 @@ Once a candidate is selected, you can:
 - Metrics displayed include win-rate signals.
 - Robust metrics and consensus fields appear when configured.
 
-### Step 6 — Validate
-- Log observed results (observed reality signal form).
-- Track prediction accuracy.
-- Pattern insights unlock when thresholds are met.
+### Step 6 — Review outcomes and aggregate metrics
+- Review the latest run winner, key metrics, and current validation state in the outcome snapshot.
+- Compare variant-level win-rate and score trends before deciding next action.
 
-### Step 7 — Iterate in closed loop
+### Step 7 — Validate synthetic and observed results
+- Open Validation from Experiments when runs exist.
+- Run synthetic validation (in-app BYOK, provider run, or manual fallback) for fast screening.
+- Log observed reality signals for grounding and calibration.
+- Track readiness using verified count and observed accuracy thresholds.
+
+### Step 8 — Iterate in closed loop
 - Review outcomes, recommendations, and validation agreement.
 - Generate next variants from updated evidence.
 - Continue until observed validation confidence is strong enough for decisioning.
@@ -165,15 +176,65 @@ Canonical intent spec editor also supports:
 ## 8) Validation Signals (Current)
 
 Currently implemented:
-1. **Synthetic validation signal** via Validation Jobs (in-app BYOK or external paste-back).
+1. **Synthetic validation signal** via Validation Jobs:
+   - `in_app_byok` (run directly in app),
+   - `provider_openai_mcp` (launch and complete in ChatGPT with callback),
+   - `manual_fallback` (structured paste-back).
 2. **Observed reality signal** via manual observed validation logging.
 3. External analytics events via API ingestion.
 
 Validation page (current):
-- Select entity (experiment, simulation, or battery).
-- Choose provider (OpenAI, Gemini, Claude, OpenRouter) and mode (in-app/external).
-- In-app runs immediately via BYOK; external requires structured JSON paste-back.
-- Results stored with raw output + structured result.
+- Shows a step-based Validation flow with:
+  - provider defaults,
+  - synthetic validation,
+  - observed reality logging,
+  - variant comparison,
+  - decision/result summary.
+- Includes a "Next recommended action" CTA and an outcome snapshot (synthetic + observed + readiness).
+
+### Synthetic validation signal (how to use)
+1. Select entity type:
+   - experiment,
+   - simulation,
+   - query battery,
+   - copy revision.
+2. Select item, provider, mode, and optional model.
+3. Run in one of the available modes:
+   - `In-app (BYOK)`: executes immediately with configured provider/model.
+   - `Provider run (ChatGPT MCP)`: starts provider run, opens provider URL, and expects signed callback completion.
+   - `Manual fallback`: use structured instructions and paste back result JSON.
+4. Review winner, score, evidence strength, and structured result payload.
+
+Provider mode notes:
+- `Provider run (Gemini function)` is visible in mode selection but currently backend-gated as not yet implemented.
+- Provider callbacks are one-time verified tokens with TTL and replay protection.
+
+### Observed reality signal (how to use)
+Log one observed record per real-world check:
+- experiment,
+- variant (usually predicted winner),
+- platform,
+- query tested,
+- observed products shown,
+- observed winner variant (optional but required for accuracy scoring),
+- observed position (optional),
+- notes.
+
+### Readiness and trust metrics (current logic)
+- **Logged observed signals**: total observed entries.
+- **Verified runs**: entries where correctness can be computed (`is_correct` known).
+- **Accuracy**: `correct_runs / verified_runs`.
+- **Progress**: `verified_runs / 10` (capped at 100%).
+- **Unlock ready**: `verified_runs >= 10` and `accuracy >= 0.75`.
+
+Important behavior:
+- If `observed winner` is not provided, the record is logged but does not contribute to verified accuracy.
+- If `observed winner` is provided and does not match the selected variant, it counts as incorrect.
+
+### How Validation feeds the loop
+- Validation summaries are used by Experiment flow to decide whether to continue testing or move to next-variant generation.
+- Loop-evidence variant generation prioritizes evidence reliability as:
+  - `validation > experiment > simulation`.
 
 Interpretation rule:
 - Synthetic validation signal is a fast screening signal.

@@ -561,6 +561,20 @@ export type QueryBatteryCandidate = {
   weight?: number | null;
 };
 
+export type AudienceSegment = {
+  id: string;
+  label: string;
+  description?: string | null;
+  active: boolean;
+  confidence?: number | null;
+  support?: number | null;
+  support_ratio?: number | null;
+  signals?: string[];
+  sample_queries?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type QueryBatteryListResponse = {
   batteries: QueryBattery[];
 };
@@ -581,7 +595,15 @@ export type QueryBatteryQueryListResponse = {
     regeneration_count?: number;
     acceptance_rate?: number;
     rejected?: { query_text: string; reason: string }[];
+    audience_segments_generated?: number;
+    audience_segment_labels?: string[];
+    audience_segments_source?: "behavioral" | "canonical_fallback";
+    audience_segments_fallback_reason?: string | null;
   };
+};
+
+export type AudienceSegmentListResponse = {
+  segments: AudienceSegment[];
 };
 
 export type QueryBatteryMetrics = {
@@ -841,10 +863,19 @@ export type ValidationJob = {
   entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
   entity_id: string;
   provider: string;
-  mode: "in_app" | "external";
+  mode:
+    | "in_app"
+    | "external"
+    | "in_app_byok"
+    | "provider_openai_mcp"
+    | "provider_gemini_function"
+    | "manual_fallback";
   model?: string | null;
   prompt_version?: string | null;
   status: string;
+  integration_type?: string | null;
+  provider_run_id?: string | null;
+  callback_verified?: boolean | null;
   input_payload?: Record<string, unknown>;
   requested_by?: string | null;
   created_at?: string | null;
@@ -865,12 +896,26 @@ export type ValidationResult = {
   evidence_strength?: string | null;
   latency_ms?: number | null;
   cost_usd?: number | null;
+  source?: string | null;
+  callback_verified?: boolean | null;
   created_at?: string | null;
 };
 
 export type ValidationJobResponse = {
   job: ValidationJob;
   result?: ValidationResult | null;
+};
+
+export type ValidationProviderRunResponse = {
+  job: ValidationJob;
+  provider_run_id?: string | null;
+  launch_url?: string | null;
+  setup_url?: string | null;
+  setup_required?: boolean | null;
+  instructions?: string | null;
+  callback_url?: string | null;
+  callback_token?: string | null;
+  status?: string | null;
 };
 
 export type ValidationJobListResponse = {

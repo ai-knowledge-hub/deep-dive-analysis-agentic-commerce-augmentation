@@ -1,98 +1,62 @@
-# From Assumptions to Signal
+# Inspiration
 
-## Building an Agentic Commerce Lab in 3 Weeks
+LLM shopping changed how people ask for products. Queries are now goal- and context-rich, not just keyword strings.
+We wanted to build a practical system for teams to test discoverability improvements without pretending lab scores are guaranteed production outcomes.
 
-## The Problem
+That led to **Intent Loop Commerce: LLM Discoverability Lab**: a validation-first loop for simulation, experimentation, and evidence-grounded iteration.
 
-AI-mediated shopping changed how people ask for products. Queries now include goals, constraints, and context, not only keywords. Product teams need a way to test whether copy can better match those intent narratives.
+## What it does
 
-Our initial hypothesis was simple:
+Intent Loop Commerce helps teams optimize product copy for LLM-driven discovery by running a structured closed loop:
 
-> Better intent alignment in the lab should improve product discoverability in AI shopping surfaces.
+1. Build query batteries (`bottom_up`, `top_down`, `hybrid`).
+2. Create and test copy variants in controlled experiments.
+3. Review run outcomes and aggregate metrics.
+4. Validate with two signals:
+   - synthetic validation (in-app BYOK, provider run, manual fallback),
+   - observed reality validation (manual observed checks).
+5. Generate next variants from weighted loop evidence (`validation > experiment > simulation`).
 
-The hard part was turning that into a system that is useful without pretending we can directly predict closed ranking models.
+The lab also supports cold-start variant generation and derives behavioral audience segments from recent session/analytics events to condition top-down/hybrid query generation.
 
-## What We Built
+## How we built it
 
-A validation-first lab with two connected workflows:
+- **Backend:** FastAPI service architecture with scoped repositories and loop orchestration.
+- **Frontend:** Next.js + TypeScript with step-based UX for simulation, experiments, and validation.
+- **Validation integration:** Provider-run orchestration (OpenAI MCP path implemented), callback verification, TTL, and replay protection.
+- **Learning loop:** Beliefs, memory artifacts, calibration signals, and explicit evidence weighting.
+- **Operational controls:** Multi-tenant admin setup, canonical intent spec, model gateway (BYOK), and history/audit surfaces.
 
-- **Manual workflow:** Chat → Alignment → Evidence → Simulation.
-- **Lab workflow:** Hypothesis → Query battery → Variants → Runs → Metrics → Recommendations.
+## Challenges we ran into
 
-Core capabilities:
+- Avoiding overconfidence from synthetic metrics and keeping observed validation central.
+- Making a complex, multi-step lab intuitive without requiring extensive onboarding.
+- Balancing automation with user control in lab mode.
+- Evolving quickly while keeping type and architecture consistency.
+- Designing provider integration flows that are secure now and extensible later.
 
-- Intent-aware simulation for product-copy testing.
-- Query battery generation (top-down, bottom-up, hybrid).
-- Variant testing and run history.
-- Synthetic validation signal (LLM judge screening).
-- Observed reality signal (manual validation logs).
-- Canonical intent spec + normalization to stabilize bottom-up generation.
-- Multi-tenant scope and history controls.
-- Loop maintenance jobs for memory/belief maintenance.
+## Accomplishments that we're proud of
 
-## What We Changed During Build
+- Delivered an end-to-end experiment flow with explicit validation checkpoint.
+- Implemented closed-loop variant generation and cold-start generation in the same UX.
+- Added provider-run validation contracts with callback security controls.
+- Improved UX hierarchy across core modules for clearer next actions.
+- Added session-derived audience segment conditioning for query generation, plus fallback behavior when session data is sparse.
+- Produced complete docs for workflows, user guidance, external integrations, and experiment deep dive.
 
-We shipped iteratively and pivoted multiple times as assumptions failed.
+## What we learned
 
-### Pivot 1: From ranking claims to validation-first claims
+1. Signal tiers matter: synthetic is screening, observed is grounding.
+2. Workflow clarity materially affects experimentation quality.
+3. Reliability controls (fallbacks, gating, provenance) build trust faster than aggressive claims.
+4. Strong context contracts (canonical intent + audience data) are critical for better generation.
+5. Iteration quality depends as much on UX and data plumbing as on model quality.
 
-We stopped framing outputs as ranking prediction and reframed the product as a lab for controlled discoverability testing plus validation.
+## What's next for Intent Loop Commerce: LLM Discoverability Lab
 
-### Pivot 2: From score certainty to robust signals
-
-We reduced reliance on absolute synthetic scores and moved to more robust comparative signals and explicit validation status.
-
-### Pivot 3: From free-form inputs to canonical context
-
-Bottom-up generation quality improved only after we introduced canonical intent specs, gating, and rejection diagnostics.
-
-### Pivot 4: From feature sprawl to workflow clarity
-
-We reorganized UX around execution order and history utility so users can understand what happened and what to do next.
-
-## Demo Flow (What Judges Can Evaluate Quickly)
-
-1. Select tenant/product scope.
-2. Generate query battery.
-3. Create experiment and variants.
-4. Run tests and inspect run history.
-5. Review metrics and orchestrator recommendation.
-6. Log synthetic and/or observed validation.
-7. Show loop updates via history + maintenance controls.
-
-This demonstrates end-to-end loop behavior, not isolated screens.
-
-## Technical Moat
-
-The moat is not one prompt. It is loop discipline:
-
-- Structured intent context contract.
-- Rejection-aware generation and acceptance metrics.
-- Distinct synthetic vs observed validation channels.
-- Tenant-scoped memory + history.
-- Repeatable maintenance pipeline for belief/memory refresh.
-
-## What We Learned
-
-1. **Signal tiers matter:** synthetic and observed signals must be separated.
-2. **Input quality dominates output quality:** canonical spec quality is foundational.
-3. **UX order affects model outcomes:** bad flow causes bad experiments.
-4. **Scope correctness is non-negotiable:** tenant isolation and state hygiene are core quality gates.
-5. **Honesty improves product quality:** explicit uncertainty beats false precision.
-
-## Current Limits
-
-- We do not claim direct ranking control in external shopping systems.
-- Observed validation is still partially manual.
-- Full cross-platform attribution remains an open measurement problem.
-
-## Why This Is a Good Hackathon Build
-
-This project demonstrates more than model wiring:
-
-- It operationalizes an emerging commerce problem.
-- It includes real product decisions under uncertainty.
-- It shows technical iteration with architecture and UX pivots.
-- It balances ambition with defensible claims.
-
-In short: we built a realistic agentic-commerce lab that learns in a loop and makes better decisions over time.
+- Native session-data connectors (e.g., GA4/warehouse ingestion) for richer behavioral segmentation.
+- Segment quality/drift analytics and automatic refresh policies.
+- Complete Gemini provider-run execution path.
+- Further automation in lab mode with explicit approval checkpoints.
+- Unified outcome snapshoting across runs, metrics, and validation.
+- Production hardening: scalability, observability, and governance/security controls.

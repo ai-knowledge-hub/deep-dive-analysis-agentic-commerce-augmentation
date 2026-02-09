@@ -48,6 +48,7 @@ import {
   BrandPredictionAccuracyResponse,
   AnalyticsEventResponse,
   ValidationJobResponse,
+  ValidationProviderRunResponse,
   ValidationJobListResponse,
   CopyRevisionListResponse,
   CopyRevisionResponse,
@@ -60,6 +61,8 @@ import {
   Experiment,
   ExperimentVariant,
   QueryBatteryQuery,
+  AudienceSegment,
+  AudienceSegmentListResponse,
   BrandBeliefListResponse,
   BrandBeliefResponse,
   SessionSummary,
@@ -529,7 +532,13 @@ export async function createValidationJob(
     entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
     entity_id: string;
     provider: string;
-    mode: "in_app" | "external";
+    mode:
+      | "in_app"
+      | "external"
+      | "in_app_byok"
+      | "provider_openai_mcp"
+      | "provider_gemini_function"
+      | "manual_fallback";
     model?: string | null;
     prompt_version?: string | null;
     input_payload: Record<string, unknown>;
@@ -583,6 +592,62 @@ export async function submitValidationExternal(
       client_id: clientId ?? undefined,
     }),
   });
+}
+
+export async function startValidationProviderRun(
+  jobId: string,
+  payload: {
+    callback_url?: string | null;
+    return_url?: string | null;
+  } = {},
+  userId?: string | null,
+): Promise<ValidationProviderRunResponse> {
+  const clientId = getClientId();
+  return request<ValidationProviderRunResponse>(
+    `/validation/jobs/${jobId}/start-provider-run`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        callback_url: payload.callback_url ?? undefined,
+        return_url: payload.return_url ?? undefined,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function submitValidationProviderCallback(
+  jobId: string,
+  payload: {
+    provider?: string | null;
+    model?: string | null;
+    provider_run_id?: string | null;
+    callback_verified?: boolean;
+    callback_signature?: string | null;
+    structured_result: Record<string, unknown>;
+    raw_response?: string | null;
+  },
+  userId?: string | null,
+): Promise<ValidationJobResponse> {
+  const clientId = getClientId();
+  return request<ValidationJobResponse>(
+    `/validation/jobs/${jobId}/provider-callback`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        provider: payload.provider ?? undefined,
+        model: payload.model ?? undefined,
+        provider_run_id: payload.provider_run_id ?? undefined,
+        callback_verified: payload.callback_verified ?? false,
+        callback_signature: payload.callback_signature ?? undefined,
+        structured_result: payload.structured_result,
+        raw_response: payload.raw_response ?? undefined,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
 }
 
 export async function getValidationJob(
@@ -998,6 +1063,41 @@ export async function generateBatteryQueries(
       persist: payload.persist ?? true,
     }),
   });
+}
+
+export async function listBatteryAudienceSegments(
+  batteryId: string,
+  userId?: string | null,
+): Promise<AudienceSegmentListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<AudienceSegmentListResponse>(
+    `/batteries/${batteryId}/audience-segments?${params.toString()}`,
+  );
+}
+
+export async function updateBatteryAudienceSegment(
+  batteryId: string,
+  segmentId: string,
+  payload: {
+    active: boolean;
+    user_id?: string | null;
+  },
+): Promise<{ segment: AudienceSegment }> {
+  const clientId = getClientId();
+  return request<{ segment: AudienceSegment }>(
+    `/batteries/${batteryId}/audience-segments/${segmentId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: payload.user_id ?? undefined,
+        active: payload.active,
+      }),
+    },
+  );
 }
 
 export async function addBatteryQuery(

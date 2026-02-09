@@ -22,7 +22,7 @@ The core moat is not a single score. It is the **feedback loop** that continuous
 This app is a **screening + validation + learning** platform.
 
 - **Screening:** synthetic LLM judge signals (fast iteration).
-- **Validation:** observed reality signals (manual/external evidence).
+- **Validation:** observed reality signals plus provider-integrated synthetic checks.
 - **Learning:** belief revision + memory distillation + calibration profiles.
 
 It does **not** claim guaranteed production ranking outcomes from lab scores alone.
@@ -88,8 +88,8 @@ Layer rule enforced by architecture checks:
   - closed-loop evidence generation (experiment + simulation + validation),
   - cold-start copy generation (bottom-up / top-down / both).
 - Validation system with two signals:
-  - Synthetic validation (LLM judge signal).
-  - Observed reality validation (manual/external outcomes).
+  - Synthetic validation (LLM judge signal: in-app BYOK, provider run, manual fallback).
+  - Observed reality validation (manual observed outcomes).
 - Belief revisions, decision events, calibration profiles.
 - Memory artifacts with quality/support gating and provenance tracking.
 
@@ -102,9 +102,14 @@ Validation now lives in the dedicated Validation flow/page and splits into:
 1. **Synthetic validation signal**
 - Uses configured provider/model (BYOK).
 - Fast consistency and copy-vs-copy checks.
+- Supports execution modes:
+  - `in_app_byok` (fully implemented)
+  - `provider_openai_mcp` (fully implemented)
+  - `provider_gemini_function` (UI/API contract present, backend execution pending)
+  - `manual_fallback` (structured paste-back)
 
 2. **Observed reality signal**
-- Manual/external capture of what actually surfaced.
+- Manual observed capture of what actually surfaced.
 - Tracks validation progress and agreement with lab winners.
 
 This separation keeps experiment UX focused on design/run/analyze while validation remains centralized.
@@ -179,6 +184,26 @@ Health endpoint:
 
 ---
 
+## Provider Validation Integrations
+
+Provider-run synthetic validation is feature-flagged.
+
+Required env vars:
+- `ENABLE_PROVIDER_VALIDATION_INTEGRATIONS=true`
+- `BACKEND_PUBLIC_URL` (public backend base used to build callback URL)
+- `VALIDATION_CALLBACK_SIGNING_SECRET` (HMAC signing key for callback verification)
+
+Optional env vars:
+- `VALIDATION_CALLBACK_TTL_SECONDS` (default `900`)
+- `OPENAI_MCP_LAUNCH_URL` (default `https://chatgpt.com/`)
+- `GEMINI_FUNCTION_LAUNCH_URL` (default `https://gemini.google.com/`)
+
+Current status:
+- OpenAI ChatGPT MCP launch/callback flow: implemented.
+- Gemini function-call launch mode: API contract is present, execution currently returns `501 Not Implemented`.
+
+---
+
 ## Operations and Scheduling
 
 Loop maintenance can run:
@@ -209,6 +234,7 @@ Architecture checks are part of CI and enforce layer boundaries.
 - `docs/experiment-flow-detailed.md`
 - `docs/architecture-learning-loop.md`
 - `docs/user-guide-complete.md`
+- `docs/external-integrations.md`
 - `docs/deployment.md`
 - `docs/debug/incidents-fixed.md`
 - `docs/debug/open-risks.md`

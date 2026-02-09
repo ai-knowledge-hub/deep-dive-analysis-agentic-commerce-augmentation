@@ -19,6 +19,8 @@ def create_result(
     evidence_strength: Optional[str],
     latency_ms: Optional[int],
     cost_usd: Optional[float],
+    source: Optional[str] = None,
+    callback_verified: Optional[bool] = None,
 ) -> Dict[str, Any]:
     result_id = str(uuid.uuid4())
     conn = get_connection()
@@ -35,9 +37,11 @@ def create_result(
             winner_id,
             evidence_strength,
             latency_ms,
-            cost_usd
+            cost_usd,
+            source,
+            callback_verified
         )
-        VALUES (?, ?, ?, ?, json(?), ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, json(?), ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             result_id,
@@ -51,6 +55,8 @@ def create_result(
             evidence_strength,
             latency_ms,
             cost_usd,
+            source or "synthetic",
+            1 if callback_verified else 0,
         ),
     )
     conn.commit()
@@ -96,6 +102,8 @@ def _row(row) -> Dict[str, Any]:
         "evidence_strength": row["evidence_strength"],
         "latency_ms": row["latency_ms"],
         "cost_usd": row["cost_usd"],
+        "source": row["source"] if "source" in row.keys() else None,
+        "callback_verified": bool(row["callback_verified"]) if "callback_verified" in row.keys() and row["callback_verified"] is not None else None,
         "created_at": row["created_at"],
     }
 

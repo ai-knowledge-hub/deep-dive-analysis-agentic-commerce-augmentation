@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any, Dict, Iterable, List, Optional
 
 from application.ports.deps import (
@@ -22,6 +23,10 @@ from application.services.query_battery.llm_generator import (
     generate_llm_queries,
 )
 from application.services.query_battery.types import GeneratedQuery
+from application.services.query_battery.audience_segmentation import (
+    BehavioralSegment,
+    derive_segments_from_events,
+)
 
 MIN_BELIEF_CONFIDENCE = 0.65
 MIN_ARCHETYPE_CONFIDENCE = 0.6
@@ -126,12 +131,45 @@ class QueryBatteryBuilder:
             seed_features=seed_features,
             seed_use_cases=seed_use_cases,
         )
+        behavioral_segments = self._derive_behavioral_segments(
+            client_id=client_id,
+            battery=battery,
+            use_llm=use_llm,
+        )
+        segment_fallback_reason = None
+        if not behavioral_segments:
+            segment_fallback_reason = "No recent session analytics available; using canonical/profile context."
+        if behavioral_segments:
+            segment_labels = [item.label for item in behavioral_segments if item.label]
+            segment_snippets = [
+                f"{item.label}: {item.description}" for item in behavioral_segments
+            ]
+            capsule = replace(
+                capsule,
+                audience_archetypes=list(
+                    dict.fromkeys([*capsule.audience_archetypes, *segment_labels])
+                ),
+                memory_snippets=list(
+                    dict.fromkeys([*capsule.memory_snippets, *segment_snippets])
+                ),
+            )
+            bottom_capsule = replace(
+                bottom_capsule,
+                audience_archetypes=list(
+                    dict.fromkeys(
+                        [*bottom_capsule.audience_archetypes, *segment_labels]
+                    )
+                ),
+                memory_snippets=list(
+                    dict.fromkeys([*bottom_capsule.memory_snippets, *segment_snippets])
+                ),
+            )
 
         if seed_queries:
             generated.extend(_seed_queries(seed_queries))
 
         if source in {"top_down", "hybrid"}:
-            generated.extend(_top_down_queries(product))
+            generated.extend(_top_down_queries(product, capsule))
             if use_llm and self._generate:
                 banned_terms = _build_banned_terms(product, capsule)
                 generated.extend(
@@ -208,6 +246,14 @@ class QueryBatteryBuilder:
                     )
                 ),
                 "rejected": [],
+                "audience_segments_generated": len(behavioral_segments),
+                "audience_segment_labels": [
+                    item.label for item in behavioral_segments if item.label
+                ],
+                "audience_segments_source": (
+                    "behavioral" if behavioral_segments else "canonical_fallback"
+                ),
+                "audience_segments_fallback_reason": segment_fallback_reason,
             }
             self._record_eval_event(
                 client_id=client_id,
@@ -287,6 +333,14 @@ class QueryBatteryBuilder:
                 set(capsule.memory_artifact_ids + bottom_capsule.memory_artifact_ids)
             ),
             "rejected": rejected[:20],
+            "audience_segments_generated": len(behavioral_segments),
+            "audience_segment_labels": [
+                item.label for item in behavioral_segments if item.label
+            ],
+            "audience_segments_source": (
+                "behavioral" if behavioral_segments else "canonical_fallback"
+            ),
+            "audience_segments_fallback_reason": segment_fallback_reason,
         }
         self._record_eval_event(
             client_id=client_id,
@@ -296,6 +350,93 @@ class QueryBatteryBuilder:
             report=report,
         )
         return created, report
+
+    def _derive_behavioral_segments(
+        self,
+        *,
+        client_id: str,
+        battery: Dict[str, Any],
+        use_llm: bool,
+    ) -> List[BehavioralSegment]:
+        if not self._analytics_events:
+            return []
+        product_id = battery.get("product_id")
+        if not product_id:
+            return []
+        try:
+            events = self._analytics_events.list_events(
+                client_id=client_id,
+                product_id=product_id,
+                limit=400,
+            )
+        except Exception:
+            return []
+        if not events:
+            return []
+        segments = derive_segments_from_events(
+            events,
+            llm_generate=self._generate if (use_llm and self._generate) else None,
+            max_segments=4,
+        )
+        if not segments:
+            return []
+        self._persist_segments(
+            client_id=client_id,
+            battery=battery,
+            segments=segments,
+        )
+        return segments
+
+    def _persist_segments(
+        self,
+        *,
+        client_id: str,
+        battery: Dict[str, Any],
+        segments: List[BehavioralSegment],
+    ) -> None:
+        if not self._archetypes or not segments:
+            return
+        try:
+            existing = self._archetypes.list_archetypes(
+                client_id=client_id,
+                brand_id=battery.get("brand_id"),
+                limit=80,
+            )
+        except Exception:
+            return
+        existing_labels = {
+            str(item.get("label")).strip().lower()
+            for item in existing
+            if isinstance(item.get("label"), str)
+            and (item.get("source") == "session_behavior_segments")
+        }
+        for segment in segments:
+            normalized = segment.label.strip().lower()
+            if not normalized or normalized in existing_labels:
+                continue
+            metadata = {
+                "confidence": segment.confidence,
+                "support": segment.support,
+                "support_ratio": segment.support_ratio,
+                "signals": segment.signals,
+                "sample_queries": segment.sample_queries,
+                "generated_for_product_id": battery.get("product_id"),
+                "active": True,
+            }
+            try:
+                self._archetypes.create_archetype(
+                    client_id=client_id,
+                    brand_id=battery.get("brand_id"),
+                    domain_vertical=None,
+                    label=segment.label,
+                    description=segment.description,
+                    archetype={"signals": segment.signals},
+                    source="session_behavior_segments",
+                    metadata=metadata,
+                )
+                existing_labels.add(normalized)
+            except Exception:
+                continue
 
     def _record_eval_event(
         self,
@@ -354,7 +495,9 @@ def _seed_queries(seed_queries: Iterable[str]) -> List[GeneratedQuery]:
     return output
 
 
-def _top_down_queries(product: Dict[str, Any]) -> List[GeneratedQuery]:
+def _top_down_queries(
+    product: Dict[str, Any], capsule: IntentCapsule
+) -> List[GeneratedQuery]:
     name = product.get("name") or "product"
     description = product.get("description") or ""
     metadata = product.get("metadata") or {}
@@ -363,6 +506,9 @@ def _top_down_queries(product: Dict[str, Any]) -> List[GeneratedQuery]:
 
     intent = scenario if scenario else "everyday use"
     brand_prefix = f"{brand} " if brand else ""
+    audience = (capsule.audience_archetypes or [])[:3]
+    intent_labels = (capsule.intent_labels or [])[:3]
+    use_cases = (capsule.use_cases or [])[:2]
 
     queries = [
         GeneratedQuery(
@@ -398,6 +544,30 @@ def _top_down_queries(product: Dict[str, Any]) -> List[GeneratedQuery]:
             GeneratedQuery(
                 query_text=f"{brand_prefix}{name} features: {description[:80]}",
                 query_type="coverage",
+            )
+        )
+    for archetype in audience:
+        queries.append(
+            GeneratedQuery(
+                query_text=f"best options for {archetype.lower()} shoppers needing {intent}",
+                query_type="market",
+                intent_archetype=archetype,
+            )
+        )
+    for label in intent_labels:
+        phrase = label.replace("_", " ")
+        queries.append(
+            GeneratedQuery(
+                query_text=f"products for {phrase} with clear outcomes and trust signals",
+                query_type="coverage",
+                intent_archetype=phrase,
+            )
+        )
+    for use_case_item in use_cases:
+        queries.append(
+            GeneratedQuery(
+                query_text=f"best product choices for {use_case_item.lower()}",
+                query_type="market",
             )
         )
 
@@ -767,6 +937,8 @@ def _extract_archetypes_from_store(
     labels: List[str] = []
     for row in rows:
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        if metadata.get("active") is False:
+            continue
         confidence = metadata.get("confidence")
         if confidence is None and isinstance(row.get("archetype"), dict):
             confidence = row.get("archetype", {}).get("confidence")

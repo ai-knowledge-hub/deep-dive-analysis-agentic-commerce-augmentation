@@ -37,6 +37,25 @@ class ValidationExternalResultRequest(BaseModel):
     raw_response: Optional[str] = None
 
 
+class ValidationProviderRunRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    callback_url: Optional[str] = None
+    return_url: Optional[str] = None
+
+
+class ValidationProviderCallbackRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    provider_run_id: Optional[str] = None
+    callback_verified: bool = False
+    callback_signature: Optional[str] = None
+    structured_result: Dict[str, Any] = Field(default_factory=dict)
+    raw_response: Optional[str] = None
+
+
 @router.post("/jobs")
 def create_job(payload: ValidationJobRequest) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
@@ -81,6 +100,36 @@ def submit_external(
         model=payload.model,
     )
     return result
+
+
+@router.post("/jobs/{job_id}/start-provider-run")
+def start_provider_run(
+    job_id: str, payload: ValidationProviderRunRequest
+) -> Dict[str, Any]:
+    require_client_id(payload.client_id, payload.user_id)
+    return SERVICE.start_provider_run(
+        job_id=job_id,
+        callback_url=payload.callback_url,
+        return_url=payload.return_url,
+    )
+
+
+@router.post("/jobs/{job_id}/provider-callback")
+def submit_provider_callback(
+    job_id: str, payload: ValidationProviderCallbackRequest
+) -> Dict[str, Any]:
+    if payload.client_id or payload.user_id:
+        require_client_id(payload.client_id, payload.user_id)
+    return SERVICE.submit_provider_result(
+        job_id=job_id,
+        structured_result=payload.structured_result,
+        raw_response=payload.raw_response,
+        provider=payload.provider,
+        model=payload.model,
+        provider_run_id=payload.provider_run_id,
+        callback_verified=payload.callback_verified,
+        callback_signature=payload.callback_signature,
+    )
 
 
 @router.get("/jobs/{job_id}")
