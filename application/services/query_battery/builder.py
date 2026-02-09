@@ -206,6 +206,9 @@ class QueryBatteryBuilder:
                         include_description=False,
                     )
                 )
+            # Safety net: if LLM output is empty, keep bottom-up flow usable.
+            if source == "bottom_up" and not generated:
+                generated.extend(_bottom_up_queries(bottom_capsule))
 
         deduped = _dedupe_queries(generated)
         if limit > 0:
@@ -671,13 +674,22 @@ def _build_banned_terms(
     product_name = product.get("name") or ""
     model = metadata.get("model") or metadata.get("sku") or metadata.get("mpn") or ""
     banned: List[str] = []
-    for item in [brand, product_name, model]:
-        if isinstance(item, str) and item.strip():
-            banned.append(item.strip())
-            for token in re.split(r"[\s\-_/,]+", item.strip()):
-                cleaned = token.strip().lower()
-                if len(cleaned) >= 4:
-                    banned.append(cleaned)
+    if isinstance(brand, str) and brand.strip():
+        banned.append(brand.strip())
+        for token in re.split(r"[\s\-_/,]+", brand.strip()):
+            cleaned = token.strip().lower()
+            if len(cleaned) >= 4:
+                banned.append(cleaned)
+    if isinstance(product_name, str) and product_name.strip():
+        # Keep the full product name blocked, but avoid banning generic tokens
+        # like "running" / "shoes" that are needed for intent-level queries.
+        banned.append(product_name.strip())
+    if isinstance(model, str) and model.strip():
+        banned.append(model.strip())
+        for token in re.split(r"[\s\-_/,]+", model.strip()):
+            cleaned = token.strip().lower()
+            if len(cleaned) >= 4:
+                banned.append(cleaned)
     return banned
 
 

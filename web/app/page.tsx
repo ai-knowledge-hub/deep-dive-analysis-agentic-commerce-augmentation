@@ -1116,7 +1116,7 @@ export default function HomePage() {
                 placeholder="What are you looking for?"
                 disabled={isStreaming}
                 autoComplete="off"
-                rows={1}
+                rows={3}
               />
               <div className="chat__input-row">
                 <div className="chat__input-controls">

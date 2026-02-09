@@ -42,6 +42,19 @@ import { SimulationLessons } from "../../components/simulation/SimulationLessons
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { buildTenantStorageKey } from "../../lib/storage";
 
+function filterProductsForBrand(
+  products: SimulationProduct[],
+  activeBrandId: string | null,
+): SimulationProduct[] {
+  if (!activeBrandId) return products;
+  return products.filter((product) => {
+    if (typeof product.brand_id === "string" && product.brand_id === activeBrandId) {
+      return true;
+    }
+    return product.source === "catalog";
+  });
+}
+
 export default function SimulationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -371,15 +384,20 @@ export default function SimulationPage() {
         },
       }));
       setSimulationProducts((current) => {
-        if (current.length === 0) {
-          return mapped;
-        }
-        const ids = new Set(current.map((item) => item.id));
-        const merged = [...current];
-        mapped.forEach((item) => {
-          if (!ids.has(item.id)) merged.push(item);
+        const currentById = new Map(current.map((item) => [item.id, item]));
+        return mapped.map((item) => {
+          const existing = currentById.get(item.id);
+          if (!existing) return item;
+          return {
+            ...item,
+            description: existing.description || item.description,
+            confidence: existing.confidence ?? item.confidence,
+            metadata: {
+              ...item.metadata,
+              ...(existing.metadata ?? {}),
+            },
+          };
         });
-        return merged;
       });
       const initial =
         productId && mapped.some((p) => p.id === productId)
@@ -496,8 +514,16 @@ export default function SimulationPage() {
       setSimulationOptimized(null);
       setSimulationScenario(response.run.query ?? "");
       setSimulationScenarioDirty(false);
-      setSimulationProducts(response.run.products ?? []);
-      if (response.run.product_id) {
+      const scopedProducts = filterProductsForBrand(response.run.products ?? [], brandId);
+      if (scopedProducts.length > 0) {
+        setSimulationProducts(scopedProducts);
+      } else if (!brandId) {
+        setSimulationProducts(response.run.products ?? []);
+      }
+      if (
+        response.run.product_id &&
+        (!brandId || scopedProducts.some((item) => item.id === response.run.product_id))
+      ) {
         setSelectedSimulationProductId(response.run.product_id);
         setProductId(response.run.product_id);
       }
@@ -509,7 +535,7 @@ export default function SimulationPage() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams, setProductId, simulationRun?.run_id, simulationTone, userId]);
+  }, [brandId, searchParams, setProductId, simulationRun?.run_id, simulationTone, userId]);
 
   useEffect(() => {
     const runIdParam = searchParams.get("run_id");
@@ -560,17 +586,22 @@ export default function SimulationPage() {
         },
       })) as SimulationProduct[];
       const products = stateProducts.length > 0 ? stateProducts : researchProducts;
+      const scopedProducts = filterProductsForBrand(products, brandId);
       if (scenario) {
         setSimulationScenario(scenario);
         setSimulationScenarioDirty(false);
       }
-      if (products.length > 0) {
-        setSimulationProducts(products);
+      if (!brandId && scopedProducts.length > 0) {
+        setSimulationProducts(scopedProducts);
+      }
+      if (scopedProducts.length > 0) {
         const selected =
-          (state?.last_product_id as string | undefined) ?? products[0]?.id ?? null;
-        setSelectedSimulationProductId(selected);
-        if (selected) {
-          setProductId(selected);
+          (state?.last_product_id as string | undefined) ?? scopedProducts[0]?.id ?? null;
+        if (!brandId || scopedProducts.some((item) => item.id === selected)) {
+          setSelectedSimulationProductId(selected);
+          if (selected) {
+            setProductId(selected);
+          }
         }
       }
       setSimulationSourceSession(sessionParam);
@@ -579,7 +610,7 @@ export default function SimulationPage() {
     return () => {
       cancelled = true;
     };
-  }, [clientId, searchParams, setClientId, setProductId, storageClientId, userId]);
+  }, [brandId, clientId, searchParams, setClientId, setProductId, storageClientId, userId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -618,16 +649,27 @@ export default function SimulationPage() {
             alignment_reasoning: item.alignment_reasoning,
           },
         })) as SimulationProduct[];
-        setSimulationProducts(products);
-        const selected = products[0]?.id ?? null;
-        setSelectedSimulationProductId(selected);
+        const scopedProducts = filterProductsForBrand(products, brandId);
+        if (!brandId && scopedProducts.length > 0) {
+          setSimulationProducts(scopedProducts);
+          const selected = scopedProducts[0]?.id ?? null;
+          setSelectedSimulationProductId(selected);
+        }
       }
       setSimulationSourceSession(lastSessionId);
     });
     return () => {
       cancelled = true;
     };
-  }, [clientId, lastSessionKey, searchParams, simulationScenario, storageClientId, userId]);
+  }, [
+    brandId,
+    clientId,
+    lastSessionKey,
+    searchParams,
+    simulationScenario,
+    storageClientId,
+    userId,
+  ]);
 
   const handleRunSimulation = useCallback(async () => {
     if (!simulationScenario.trim()) return;
@@ -713,7 +755,12 @@ export default function SimulationPage() {
       setSimulationRun({ run_id: run.id, result: run.result });
       setSimulationOptimized(null);
       setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
-      setSimulationProducts(run.products ?? []);
+      const scopedProducts = filterProductsForBrand(run.products ?? [], brandId);
+      if (scopedProducts.length > 0) {
+        setSimulationProducts(scopedProducts);
+      } else if (!brandId) {
+        setSimulationProducts(run.products ?? []);
+      }
       setSimulationScenario(run.query ?? "");
       setSimulationScenarioDirty(false);
       const scenario = (run.scenario as Record<string, unknown> | undefined) || {};
@@ -721,11 +768,11 @@ export default function SimulationPage() {
       const suggestedTone = (scenario.tone_suggestion as string | undefined) ?? null;
       setSimulationToneSuggestion(run.result?.tone?.summary ?? suggestedTone ?? null);
       setSimulationTone(confirmedTone || run.result?.tone?.summary || "");
-      if (run.products?.length) {
-        setSelectedSimulationProductId(run.products[0].id);
+      if (scopedProducts.length) {
+        setSelectedSimulationProductId(scopedProducts[0].id);
       }
     },
-    [userId],
+    [brandId, userId],
   );
 
   const handleOpenExperiments = useCallback(

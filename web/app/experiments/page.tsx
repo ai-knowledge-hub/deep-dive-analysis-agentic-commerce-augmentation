@@ -4130,7 +4130,7 @@ export default function ExperimentsPage() {
                 </ul>
               )}
               {nextTest ? (
-                <div className="panel__notice">
+                <div className="panel__notice panel__notice--info experiments-next-test">
                   <strong>Next test:</strong> {nextTest.reason}
                   {nextTest.action === "run_variant" && nextTest.variant_id ? (
                     <div className="panel__actions">
