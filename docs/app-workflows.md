@@ -128,6 +128,58 @@ Validation is intentionally decoupled from Experiment page and lives in Validati
 
 ---
 
+## 5.1) Validation Flow Schema (Developer View)
+
+```mermaid
+flowchart TD
+  A["Select Experiment + Variant + Platform + Query + Observed Winner"] --> B["POST /experiments/{experiment_id}/validations"]
+  B --> C["ExperimentValidationService.log_validation(...)"]
+  C --> D["Persist row in experiment_validations"]
+  D --> E["Compute is_correct (variant_id == observed_winner_variant_id)"]
+  E --> F["Recompute experiment summary"]
+  E --> G["Recompute brand summary (if brand_id)"]
+  F --> H["Return summary: logged, verified, accuracy, progress, unlock_ready"]
+  G --> I["Upsert experiment_calibrations"]
+  H --> J["Validation UI updates progress + readiness"]
+```
+
+### Observed reality: input-to-metric mapping
+
+| Input field | Stored | Used in summary math | Used in loop evidence |
+|---|---|---|---|
+| `experiment_id` | yes | yes (scope) | yes |
+| `variant_id` | yes | yes (`is_correct` comparison) | yes |
+| `observed_winner_variant_id` | yes | yes (`is_correct`) | yes |
+| `query_text` | yes | no | yes (`recent` evidence context) |
+| `observed_products` | yes | no | not currently |
+| `platform` | yes | no | not currently |
+| `observed_position` | yes | no | not currently |
+| `notes` | yes | no | yes (`recent` evidence context) |
+| `created_at` | yes (`now` default) | no | indirectly (ordering/time context) |
+
+### Readiness logic (current)
+
+- `verified_runs`: rows where `is_correct IS NOT NULL`
+- `accuracy`: `correct_runs / verified_runs`
+- `unlock_ready`: `verified_runs >= 10` and `accuracy >= 0.75`
+- `progress`: `min(verified_runs / 10, 1.0)`
+
+---
+
+## 5.2) Validation + Experiment Handoff Schema
+
+```mermaid
+flowchart LR
+  A["Step 5: Run experiment battery"] --> B["Step 6: Review outcomes/metrics"]
+  B --> C["Step 7: Validation (synthetic + observed)"]
+  C --> D{"unlock_ready?"}
+  D -- "no" --> E["Log more observed validations"]
+  E --> C
+  D -- "yes" --> F["Step 8: Generate next variants from loop evidence"]
+```
+
+---
+
 ## 6) Learning Loop Workflow (Current)
 
 Loop control endpoints:
@@ -149,6 +201,37 @@ Current loop behavior:
 3. Memory service distills high-confidence/high-support artifacts.
 4. Retrieval injects only quality-gated artifacts into generation.
 5. Calibration profiles update from synthetic-vs-observed drift.
+
+---
+
+## 6.1) Evidence Weighting Schema (Loop Variant Generation)
+
+```mermaid
+flowchart TD
+  A["Collect experiment metrics/runs"] --> D["Assemble evidence packet"]
+  B["Collect linked simulation gap signals"] --> D
+  C["Collect validation logs (is_correct, query, notes)"] --> D
+  D --> E["Apply reliability hierarchy"]
+  E --> F["validation_observed: 1.0"]
+  E --> G["experiment_simulated: 0.7"]
+  E --> H["simulation_revisions: 0.45"]
+  F --> I["Generate ranked next-variant candidates"]
+  G --> I
+  H --> I
+```
+
+---
+
+## 6.2) Simulation-to-Experiment Handoff Schema
+
+```mermaid
+flowchart LR
+  A["Simulation run"] --> B["Optimize candidate copy/feed"]
+  B --> C["Retest for directional lift"]
+  C --> D["Promote candidate into Experiment variant"]
+  D --> E["Run controlled battery experiment"]
+  E --> F["Validate (synthetic + observed)"]
+```
 
 ---
 
