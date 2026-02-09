@@ -48,6 +48,12 @@ Sidebar workflow order:
 - System generates candidate queries.
 - Validation runs before save.
 - Result includes accepted queries and rejected reasons.
+- For `top_down` and `hybrid`, the generator now also derives in-context behavioral audience segments
+  from recent analytics/session events and uses them to condition candidate queries.
+- Step 1 now includes an **Audience segments for top-down generation** panel where you can
+  enable/disable session-derived segments before generation.
+- If no session-derived segments exist yet, generation falls back to canonical intent spec,
+  product metadata, and stored archetypes.
 - If category confidence is low for bottom-up, generation is blocked with a clarification prompt.
 - Inspect generated query list.
 - Enable/disable/edit weights.

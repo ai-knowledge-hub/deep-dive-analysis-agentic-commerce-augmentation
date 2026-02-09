@@ -85,6 +85,12 @@ class BatteryGenerateRequest(BaseModel):
     persist: Optional[bool] = True
 
 
+class BatteryAudienceSegmentUpdateRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    active: bool
+
+
 @router.post("")
 def create_battery(payload: BatteryCreateRequest) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
@@ -377,6 +383,111 @@ def get_ontology_updates(
             "typo_updates": typo_updates[:20],
             "synonym_updates": synonym_updates[:20],
             "recommended_review_cadence": "weekly",
+        }
+    }
+
+
+@router.get("/{battery_id}/audience-segments")
+def list_battery_audience_segments(
+    battery_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    active_only: bool = False,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    if not battery:
+        raise HTTPException(status_code=404, detail="battery not found")
+    rows = DEPS.audience_archetypes.list_archetypes(
+        client_id=scoped_client_id,
+        brand_id=battery.get("brand_id"),
+        limit=200,
+    )
+    product_id = battery.get("product_id")
+    segments = []
+    for row in rows:
+        if row.get("source") != "session_behavior_segments":
+            continue
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        if metadata.get("generated_for_product_id") != product_id:
+            continue
+        active = metadata.get("active") is not False
+        if active_only and not active:
+            continue
+        segments.append(
+            {
+                "id": row.get("id"),
+                "label": row.get("label"),
+                "description": row.get("description"),
+                "active": active,
+                "confidence": metadata.get("confidence"),
+                "support": metadata.get("support"),
+                "support_ratio": metadata.get("support_ratio"),
+                "signals": metadata.get("signals")
+                if isinstance(metadata.get("signals"), list)
+                else [],
+                "sample_queries": metadata.get("sample_queries")
+                if isinstance(metadata.get("sample_queries"), list)
+                else [],
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        )
+    return {"segments": segments}
+
+
+@router.patch("/{battery_id}/audience-segments/{segment_id}")
+def update_battery_audience_segment(
+    battery_id: str,
+    segment_id: str,
+    payload: BatteryAudienceSegmentUpdateRequest,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    if not battery:
+        raise HTTPException(status_code=404, detail="battery not found")
+    current = DEPS.audience_archetypes.get_archetype(
+        segment_id,
+        client_id=scoped_client_id,
+    )
+    if not current:
+        raise HTTPException(status_code=404, detail="segment not found")
+    metadata = (
+        current.get("metadata") if isinstance(current.get("metadata"), dict) else {}
+    )
+    if current.get("source") != "session_behavior_segments":
+        raise HTTPException(status_code=400, detail="segment is not session-derived")
+    if metadata.get("generated_for_product_id") != battery.get("product_id"):
+        raise HTTPException(
+            status_code=400, detail="segment does not belong to this battery"
+        )
+    updated = DEPS.audience_archetypes.update_archetype(
+        archetype_id=segment_id,
+        client_id=scoped_client_id,
+        metadata={"active": bool(payload.active)},
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="segment not found")
+    updated_meta = (
+        updated.get("metadata") if isinstance(updated.get("metadata"), dict) else {}
+    )
+    return {
+        "segment": {
+            "id": updated.get("id"),
+            "label": updated.get("label"),
+            "description": updated.get("description"),
+            "active": updated_meta.get("active") is not False,
+            "confidence": updated_meta.get("confidence"),
+            "support": updated_meta.get("support"),
+            "support_ratio": updated_meta.get("support_ratio"),
+            "signals": updated_meta.get("signals")
+            if isinstance(updated_meta.get("signals"), list)
+            else [],
+            "sample_queries": updated_meta.get("sample_queries")
+            if isinstance(updated_meta.get("sample_queries"), list)
+            else [],
+            "created_at": updated.get("created_at"),
+            "updated_at": updated.get("updated_at"),
         }
     }
 

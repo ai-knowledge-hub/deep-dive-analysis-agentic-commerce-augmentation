@@ -91,6 +91,46 @@ def list_archetypes(
     return [_row_to_dict(row) for row in rows]
 
 
+def update_archetype(
+    *,
+    archetype_id: str,
+    client_id: str,
+    label: Optional[str] = None,
+    description: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any] | None:
+    current = get_archetype(archetype_id, client_id=client_id)
+    if not current:
+        return None
+    next_label = label if label is not None else current.get("label")
+    next_description = (
+        description if description is not None else current.get("description")
+    )
+    next_metadata = dict(current.get("metadata") or {})
+    if isinstance(metadata, dict):
+        next_metadata.update(metadata)
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE audience_archetypes
+        SET label = ?,
+            description = ?,
+            metadata_json = json(?),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND client_id = ?
+        """,
+        (
+            next_label,
+            next_description,
+            to_json(next_metadata) or to_json({}),
+            archetype_id,
+            client_id,
+        ),
+    )
+    conn.commit()
+    return get_archetype(archetype_id, client_id=client_id)
+
+
 def _row_to_dict(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -107,4 +147,4 @@ def _row_to_dict(row) -> Dict[str, Any]:
     }
 
 
-__all__ = ["create_archetype", "get_archetype", "list_archetypes"]
+__all__ = ["create_archetype", "get_archetype", "list_archetypes", "update_archetype"]

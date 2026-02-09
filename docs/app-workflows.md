@@ -91,10 +91,11 @@ Current guardrails:
 
 ### Execution
 1. Build context capsule.
-2. Generate deterministic baseline by mode.
-3. Add optional LLM candidates.
-4. Deduplicate and validate.
-5. Retry once with stricter constraints if acceptance is low.
+2. Derive behavioral audience segments from recent session/analytics events (top-down/hybrid).
+3. Generate deterministic baseline by mode.
+4. Add optional LLM candidates.
+5. Deduplicate and validate.
+6. Retry once with stricter constraints if acceptance is low.
 
 ### Outputs
 - accepted queries saved

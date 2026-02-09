@@ -61,6 +61,8 @@ import {
   Experiment,
   ExperimentVariant,
   QueryBatteryQuery,
+  AudienceSegment,
+  AudienceSegmentListResponse,
   BrandBeliefListResponse,
   BrandBeliefResponse,
   SessionSummary,
@@ -1061,6 +1063,41 @@ export async function generateBatteryQueries(
       persist: payload.persist ?? true,
     }),
   });
+}
+
+export async function listBatteryAudienceSegments(
+  batteryId: string,
+  userId?: string | null,
+): Promise<AudienceSegmentListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<AudienceSegmentListResponse>(
+    `/batteries/${batteryId}/audience-segments?${params.toString()}`,
+  );
+}
+
+export async function updateBatteryAudienceSegment(
+  batteryId: string,
+  segmentId: string,
+  payload: {
+    active: boolean;
+    user_id?: string | null;
+  },
+): Promise<{ segment: AudienceSegment }> {
+  const clientId = getClientId();
+  return request<{ segment: AudienceSegment }>(
+    `/batteries/${batteryId}/audience-segments/${segmentId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: payload.user_id ?? undefined,
+        active: payload.active,
+      }),
+    },
+  );
 }
 
 export async function addBatteryQuery(

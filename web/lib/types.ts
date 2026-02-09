@@ -561,6 +561,20 @@ export type QueryBatteryCandidate = {
   weight?: number | null;
 };
 
+export type AudienceSegment = {
+  id: string;
+  label: string;
+  description?: string | null;
+  active: boolean;
+  confidence?: number | null;
+  support?: number | null;
+  support_ratio?: number | null;
+  signals?: string[];
+  sample_queries?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type QueryBatteryListResponse = {
   batteries: QueryBattery[];
 };
@@ -581,7 +595,15 @@ export type QueryBatteryQueryListResponse = {
     regeneration_count?: number;
     acceptance_rate?: number;
     rejected?: { query_text: string; reason: string }[];
+    audience_segments_generated?: number;
+    audience_segment_labels?: string[];
+    audience_segments_source?: "behavioral" | "canonical_fallback";
+    audience_segments_fallback_reason?: string | null;
   };
+};
+
+export type AudienceSegmentListResponse = {
+  segments: AudienceSegment[];
 };
 
 export type QueryBatteryMetrics = {
