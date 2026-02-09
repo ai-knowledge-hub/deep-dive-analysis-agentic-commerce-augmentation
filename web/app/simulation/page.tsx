@@ -1168,6 +1168,7 @@ export default function SimulationPage() {
                 </div>
               ))}
             </div>
+            <div className="panel__separator" />
             <section className="panel__notice panel__notice--info flow-next-action">
               <strong>Next recommended action:</strong> {simulationNextAction.label}
               <p className="panel__muted">{simulationNextAction.helper}</p>
@@ -1181,6 +1182,7 @@ export default function SimulationPage() {
                 </button>
               </div>
             </section>
+            <div className="panel__separator" />
             <section className="panel__notice panel__notice--info outcome-snapshot">
               <div className="panel__meta">
                 <strong>Outcome snapshot</strong>

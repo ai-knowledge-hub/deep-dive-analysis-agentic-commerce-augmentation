@@ -17,6 +17,8 @@ type Props = {
   targetProductName?: string;
   targetProductCopy?: string;
   targetProductUrl?: string;
+  sourceSessionId?: string;
+  refreshedAt?: string;
   onOpenSimulation?: () => void;
   onOpenExperiments?: () => void;
   usePageScroll?: boolean;
@@ -29,6 +31,8 @@ export function EvidencePanel({
   targetProductName,
   targetProductCopy,
   targetProductUrl,
+  sourceSessionId,
+  refreshedAt,
   onOpenSimulation,
   onOpenExperiments,
   usePageScroll = false,
@@ -362,6 +366,7 @@ export function EvidencePanel({
             </div>
           ))}
         </div>
+        <div className="panel__separator" />
         <section className="panel__notice panel__notice--info flow-next-action">
           <strong>Next recommended action:</strong> {nextEvidenceAction.label}
           <p className="panel__muted">{nextEvidenceAction.helper}</p>
@@ -386,6 +391,7 @@ export function EvidencePanel({
             </button>
           </div>
         </section>
+        <div className="panel__separator" />
         <section className="panel__notice panel__notice--info outcome-snapshot">
           <div className="panel__meta">
             <strong>Outcome snapshot</strong>
@@ -423,6 +429,18 @@ export function EvidencePanel({
             </div>
           </div>
         </section>
+        <div className="evidence-meta-strip">
+          <span className="panel__badge panel__badge--secondary">
+            Source session: {sourceSessionId ? sourceSessionId.slice(0, 8) : "unknown"}
+          </span>
+          <span className="panel__badge panel__badge--secondary">
+            Refreshed:{" "}
+            {refreshedAt ? new Date(refreshedAt).toLocaleString() : "unknown"}
+          </span>
+          <span className="panel__badge panel__badge--secondary">
+            Copy source: {targetProductUrl ? "linked URL" : "not linked"}
+          </span>
+        </div>
       </section>
       <div className="evidence-summary">
         <div className="summary-card">
@@ -574,51 +592,43 @@ export function EvidencePanel({
 
         <div className="evidence-panel__content">
           {activeTab === "evidence" && (
-            <div className="evidence-grid">
-              {normalizedEvidenceProducts.map((product, index) => {
-                const productScore = scoreMap.get(product.id);
-                const whySummary =
-                  productScore?.alignment_reasoning ??
-                  "Aligned with core intent signals.";
-                const highlights = productScore?.matched_capabilities ?? [];
-                return (
-                  <EvidenceCard
-                    key={product.id}
-                    product={product}
-                    optimizedDescription={undefined}
-                    showOptimization={false}
-                    index={index}
-                    whySummary={whySummary}
-                    highlightSignals={highlights}
-                  />
-                );
-              })}
-            </div>
+            <>
+              <p className="panel__subheading">Step 1 · Review evidence candidates</p>
+              <p className="panel__step-helper">
+                Confirm which products are currently discovered for this intent before
+                diagnosing why rank changes.
+              </p>
+              <div className="evidence-grid">
+                {normalizedEvidenceProducts.map((product, index) => {
+                  const productScore = scoreMap.get(product.id);
+                  const whySummary =
+                    productScore?.alignment_reasoning ??
+                    "Aligned with core intent signals.";
+                  const highlights = productScore?.matched_capabilities ?? [];
+                  return (
+                    <EvidenceCard
+                      key={product.id}
+                      product={product}
+                      optimizedDescription={undefined}
+                      showOptimization={false}
+                      index={index}
+                      whySummary={whySummary}
+                      highlightSignals={highlights}
+                    />
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {activeTab === "explanation" && (
             <div className="explanation-content">
+              <p className="panel__subheading">Step 2 · Diagnose signal gaps</p>
+              <p className="panel__step-helper">
+                Focus on winner rationale, missing signals, and copy deltas first. Expand
+                diagnostics only when needed.
+              </p>
               <div className="explain-grid">
-                <div className="explain-card">
-                  <div className="explain-card__title">Alignment Score distribution</div>
-                  <div className="histogram">
-                    {histogram.map((bucket) => (
-                      <div key={bucket.label} className="histogram__row">
-                        <span className="histogram__label">{bucket.label}</span>
-                        <div className="histogram__bar">
-                          <span
-                            className="histogram__fill"
-                            style={{
-                              width: `${(bucket.count / maxBucket) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="histogram__count">{bucket.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="explain-card">
                   <div className="explain-card__title">Why they win</div>
                   <div className="winner-list">
@@ -725,6 +735,33 @@ export function EvidencePanel({
                   </div>
                 </div>
               </div>
+
+              <details className="panel__details evidence-advanced">
+                <summary className="panel__details-summary">
+                  Scoring diagnostics (distribution and confidence detail)
+                </summary>
+                <div className="explain-grid">
+                  <div className="explain-card">
+                    <div className="explain-card__title">Alignment Score distribution</div>
+                    <div className="histogram">
+                      {histogram.map((bucket) => (
+                        <div key={bucket.label} className="histogram__row">
+                          <span className="histogram__label">{bucket.label}</span>
+                          <div className="histogram__bar">
+                            <span
+                              className="histogram__fill"
+                              style={{
+                                width: `${(bucket.count / maxBucket) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="histogram__count">{bucket.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </details>
 
               <details
                 className="panel__details evidence-advanced"
@@ -846,6 +883,11 @@ export function EvidencePanel({
 
           {activeTab === "actions" && (
             <div className="actions-content">
+              <p className="panel__subheading">Step 3 · Run next validation test</p>
+              <p className="panel__step-helper">
+                Use the top missing signals as hypothesis inputs and validate in simulation
+                or experiments.
+              </p>
               <div className="action-card">
                 <div className="action-card__title">Recommended next test</div>
                 <p className="action-card__text">
@@ -898,6 +940,13 @@ export function EvidencePanel({
 
         .evidence-flow {
           margin-bottom: 16px;
+        }
+
+        .evidence-meta-strip {
+          margin-top: 10px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
         }
 
         .evidence-panel {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
   Experiment,
@@ -45,6 +45,13 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
 type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
 type ModeType = "in_app" | "external";
+type ValidationNextAction =
+  | "configure_provider"
+  | "select_synthetic_item"
+  | "create_synthetic"
+  | "submit_external_result"
+  | "log_observed"
+  | "open_experiments";
 
 const DEFAULT_MODELS: Record<ProviderType, string> = {
   openai: "gpt-5.2-2025-12-11",
@@ -106,6 +113,7 @@ function observedSummaryValue(
 
 export default function ValidationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
   const { clientId } = useTenant();
@@ -139,6 +147,8 @@ export default function ValidationPage() {
   );
   const [manualStatus, setManualStatus] = useState<string | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
+  const [queryPrefillApplied, setQueryPrefillApplied] = useState(false);
+  const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
 
   const renderMetricValue = useCallback((value: unknown, fallback = "—") => {
     if (value === null || value === undefined) return fallback;
@@ -181,6 +191,20 @@ export default function ValidationPage() {
     if (manualExperimentId) return;
     setManualExperimentId(experiments[0].id);
   }, [experiments, manualExperimentId]);
+
+  useEffect(() => {
+    if (queryPrefillApplied) return;
+    if (!experimentIdParam || !experiments.length) return;
+    const exists = experiments.some((exp) => exp.id === experimentIdParam);
+    if (!exists) {
+      setQueryPrefillApplied(true);
+      return;
+    }
+    setManualExperimentId(experimentIdParam);
+    setEntityType("experiment_run");
+    setSelectedEntityId(experimentIdParam);
+    setQueryPrefillApplied(true);
+  }, [experimentIdParam, experiments, queryPrefillApplied]);
 
   useEffect(() => {
     if (!manualExperimentId || !userId) {
@@ -267,6 +291,89 @@ export default function ValidationPage() {
       "verified_runs",
     ) ?? 0,
   );
+  const observedUnlockReadyRaw = observedSummaryValue(
+    manualSummary,
+    "observed_unlock_ready",
+    "unlock_ready",
+  );
+  const observedUnlockReady =
+    typeof observedUnlockReadyRaw === "boolean" ? observedUnlockReadyRaw : false;
+
+  const validationFlowSteps = useMemo(() => {
+    const providerReady = !llmConfigError;
+    const syntheticReady = Boolean(result);
+    const observedReady = observedLogged > 0;
+    const comparisonReady = Boolean(manualExperimentId && manualVariants.length > 0);
+    const decisionReady = syntheticReady && (observedReady || observedVerified > 0);
+    return [
+      { id: 1, label: "Configure provider defaults", done: providerReady },
+      { id: 2, label: "Run synthetic validation", done: syntheticReady },
+      { id: 3, label: "Log observed reality", done: observedReady },
+      { id: 4, label: "Compare variant outcomes", done: comparisonReady },
+      { id: 5, label: "Decide next experiment step", done: decisionReady },
+    ];
+  }, [
+    llmConfigError,
+    manualExperimentId,
+    manualVariants.length,
+    observedLogged,
+    observedVerified,
+    result,
+  ]);
+
+  const validationCurrentStep = useMemo(
+    () => validationFlowSteps.find((step) => !step.done)?.id ?? 5,
+    [validationFlowSteps],
+  );
+
+  const validationNextAction = useMemo(() => {
+    if (llmConfigError) {
+      return {
+        action: "configure_provider" as ValidationNextAction,
+        label: "Configure provider keys",
+        helper:
+          "Validation cannot run without a configured provider. Set API keys in Admin first.",
+      };
+    }
+    if (!selectedEntityId) {
+      return {
+        action: "select_synthetic_item" as ValidationNextAction,
+        label: "Select a validation item",
+        helper:
+          "Pick experiment, simulation, battery, or copy revision in Step 2 before creating a validation job.",
+      };
+    }
+    if (!job && !result) {
+      return {
+        action: "create_synthetic" as ValidationNextAction,
+        label: "Create synthetic validation",
+        helper:
+          "Run in-app judge validation to get a fast winner/score signal for this item.",
+      };
+    }
+    if (mode === "external" && job && !result) {
+      return {
+        action: "submit_external_result" as ValidationNextAction,
+        label: "Submit external result",
+        helper:
+          "Paste structured external JSON so the job can be finalized and tracked in the loop.",
+      };
+    }
+    if (observedLogged === 0) {
+      return {
+        action: "log_observed" as ValidationNextAction,
+        label: "Log observed reality signal",
+        helper:
+          "Add at least one real platform observation to ground synthetic validation with live evidence.",
+      };
+    }
+    return {
+      action: "open_experiments" as ValidationNextAction,
+      label: "Return to Experiments (Step 8)",
+      helper:
+        "Use combined synthetic + observed validation evidence to generate the next variant.",
+    };
+  }, [job, llmConfigError, mode, observedLogged, result, selectedEntityId]);
 
   useEffect(() => {
     void getLlmConfig(userId ?? undefined)
@@ -637,6 +744,49 @@ export default function ValidationPage() {
     }
   }, [experiments, manualExperimentId, manualForm, userId]);
 
+  const handleRunValidationNextAction = useCallback(() => {
+    switch (validationNextAction.action) {
+      case "configure_provider":
+        router.push("/admin");
+        return;
+      case "select_synthetic_item":
+        setStatus("Select an item in Step 2 to create a synthetic validation job.");
+        window.setTimeout(() => setStatus(null), 3000);
+        return;
+      case "create_synthetic":
+        void handleCreateJob();
+        return;
+      case "submit_external_result":
+        if (!externalJson.trim()) {
+          setStatus("Paste structured JSON in Step 2 before submitting external results.");
+          window.setTimeout(() => setStatus(null), 3000);
+          return;
+        }
+        void handleSubmitExternal();
+        return;
+      case "log_observed":
+        void handleLogObservedValidation();
+        return;
+      case "open_experiments":
+        router.push(
+          manualExperimentId
+            ? `/experiments?experiment_id=${manualExperimentId}`
+            : "/experiments",
+        );
+        return;
+      default:
+        return;
+    }
+  }, [
+    externalJson,
+    handleCreateJob,
+    handleLogObservedValidation,
+    handleSubmitExternal,
+    manualExperimentId,
+    router,
+    validationNextAction.action,
+  ]);
+
   return (
     <div className="app">
       <Sidebar
@@ -677,8 +827,106 @@ export default function ValidationPage() {
             onBack={() => router.push("/experiments")}
             backLabel="Back to experiments"
           />
-          <section className="panel__card">
-            <div className="panel__subheading">Provider status (shared)</div>
+          <section className="panel__card panel__card--primary">
+            <div className="flow-rail">
+              <div className="flow-rail__header">
+                <h4>Validation Flow</h4>
+                <span className="panel__muted">Current step: {validationCurrentStep} / 5</span>
+              </div>
+              <div className="flow-rail__steps">
+                {validationFlowSteps.map((step) => (
+                  <div
+                    key={step.id}
+                    className={`flow-rail__step ${
+                      step.done ? "is-done" : step.id === validationCurrentStep ? "is-current" : ""
+                    }`}
+                  >
+                    <span className="flow-rail__index">{step.id}</span>
+                    <span className="flow-rail__label">{step.label}</span>
+                    <span className="flow-rail__status">
+                      {step.done
+                        ? "Done"
+                        : step.id === validationCurrentStep
+                          ? "Current"
+                          : "Pending"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="panel__separator" />
+            <section className="panel__notice panel__notice--info flow-next-action">
+              <strong>Next recommended action:</strong> {validationNextAction.label}
+              <p className="panel__muted">{validationNextAction.helper}</p>
+              <div className="panel__actions panel__actions--priority">
+                <button
+                  type="button"
+                  className="panel__action panel__action--prominent"
+                  onClick={handleRunValidationNextAction}
+                >
+                  {validationNextAction.label}
+                </button>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() =>
+                    router.push(
+                      manualExperimentId
+                        ? `/experiments?experiment_id=${manualExperimentId}`
+                        : "/experiments",
+                    )
+                  }
+                >
+                  Open Experiments
+                </button>
+              </div>
+            </section>
+            <div className="panel__separator" />
+            <section className="panel__notice panel__notice--info outcome-snapshot">
+              <div className="panel__meta">
+                <strong>Validation outcome snapshot</strong>
+                <span className="panel__badge panel__badge--secondary">Unified view</span>
+              </div>
+              <div className="outcome-snapshot__grid">
+                <div className="outcome-snapshot__item">
+                  <span className="outcome-snapshot__label">Synthetic winner</span>
+                  <span className="outcome-snapshot__value">
+                    {winnerContext?.winnerLabel ?? result?.winner_id ?? "No result yet"}
+                  </span>
+                  <span className="panel__muted">
+                    Score: {renderMetricValue(result?.score)} · Evidence:{" "}
+                    {renderMetricValue(result?.evidence_strength)}
+                  </span>
+                </div>
+                <div className="outcome-snapshot__item">
+                  <span className="outcome-snapshot__label">Observed signals</span>
+                  <span className="outcome-snapshot__value">
+                    {observedLogged} logged · {observedVerified} verified
+                  </span>
+                  <span className="panel__muted">
+                    Accuracy:{" "}
+                    {observedAccuracy !== null ? `${Math.round(observedAccuracy * 100)}%` : "—"}
+                  </span>
+                </div>
+                <div className="outcome-snapshot__item">
+                  <span className="outcome-snapshot__label">Readiness</span>
+                  <span className="outcome-snapshot__value">
+                    {observedUnlockReady ? "Ready for next variant" : "Needs more validation"}
+                  </span>
+                  <span className="panel__muted">
+                    Synthetic: {result ? "available" : "pending"} · Observed:{" "}
+                    {observedLogged > 0 ? "available" : "pending"}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </section>
+          <section className="panel__card panel__card--secondary panel__card--compact">
+            <div className="panel__subheading">Step 1 · Configure provider defaults</div>
+            <p className="panel__step-helper">
+              Set the default validation provider once. This applies to both synthetic and observed
+              validation panels.
+            </p>
             {llmConfigError ? (
               <div className="panel__notice panel__notice--error">
                 Unable to load provider configuration.
@@ -710,13 +958,19 @@ export default function ValidationPage() {
               </>
             )}
           </section>
-          <section className="panel__card">
+          <section className="panel__card panel__card--primary">
             <div className="panel__header">
               <h3>Synthetic validation signal</h3>
             </div>
+            <div className="panel__subheading">Step 2 · Run synthetic validation</div>
+            <p className="panel__step-helper">
+              Create one validation job for the selected item. In-app mode executes immediately;
+              external mode waits for paste-back JSON.
+            </p>
             <p className="panel__muted">
               LLM judge validation for fast screening, consistency checks, and copy-vs-copy comparisons.
             </p>
+            <div className="panel__separator" />
             <div className="panel__grid validation__grid">
               <label className="panel__label">
                 <span>Entity type</span>
@@ -849,10 +1103,10 @@ export default function ValidationPage() {
                 </datalist>
               </label>
             </div>
-            <div className="panel__actions">
+            <div className="panel__actions panel__actions--priority">
               <button
                 type="button"
-                className="panel__action"
+                className="panel__action panel__action--prominent"
                 disabled={!selectedEntityId || isSubmitting}
                 onClick={handleCreateJob}
               >
@@ -867,13 +1121,19 @@ export default function ValidationPage() {
             ) : null}
           </section>
 
-          <section className="panel__card">
+          <section className="panel__card panel__card--primary">
             <div className="panel__header">
               <h3>Observed reality signal</h3>
             </div>
+            <div className="panel__subheading">Step 3 · Log observed reality</div>
+            <p className="panel__step-helper">
+              Record what surfaced on real platforms for real queries to validate synthetic winners
+              against external behavior.
+            </p>
             <p className="panel__muted">
               Observed reality logging of what actually surfaced on real platforms for real queries.
             </p>
+            <div className="panel__separator" />
             <div className="panel__form">
               <div className="panel__meta panel__meta--stack">
                 <span className="panel__muted">
@@ -1025,10 +1285,10 @@ export default function ValidationPage() {
                   />
                 </label>
               </div>
-              <div className="panel__actions">
+              <div className="panel__actions panel__actions--priority">
                 <button
                   type="button"
-                  className="panel__action"
+                  className="panel__action panel__action--prominent"
                   onClick={handleLogObservedValidation}
                   disabled={isSubmitting || !manualExperimentId}
                 >
@@ -1044,102 +1304,123 @@ export default function ValidationPage() {
             </div>
           </section>
 
-          <section className="panel__card">
+          <section className="panel__card panel__card--secondary">
             <div className="panel__header">
               <h3>Variant comparison</h3>
             </div>
-            <p className="panel__muted">
-              Latest per-variant lab metrics for the selected experiment.
+            <div className="panel__subheading">Step 4 · Compare outcomes</div>
+            <p className="panel__step-helper">
+              Keep this collapsed by default. Expand when you need side-by-side variant metrics to
+              support the next experiment decision.
             </p>
-            {!manualExperimentId || manualVariants.length === 0 ? (
-              <p className="panel__empty">
-                Select an experiment to compare variants.
+            <details className="panel__details">
+              <summary className="panel__details-summary">Open variant comparison</summary>
+              <p className="panel__muted">
+                Latest per-variant lab metrics for the selected experiment.
               </p>
-            ) : (
-              <ul className="panel__list">
-                {manualVariants.map((variant) => {
-                  const metric = manualMetricsByVariant.get(variant.id);
-                  const values = (metric?.metrics ?? {}) as Record<string, unknown>;
-                  return (
-                    <li key={variant.id}>
-                      <div className="panel__meta">
-                        <span>{variant.label}</span>
-                        <span className="panel__badge panel__badge--secondary">
-                          {variant.type}
-                        </span>
-                      </div>
-                      <div className="panel__meta">
-                        <span className="panel__muted">
-                          Win rate: {renderMetricValue(values.win_rate)}
-                        </span>
-                        <span className="panel__muted">
-                          Robust win rate: {renderMetricValue(values.win_rate_robust)}
-                        </span>
-                        <span className="panel__muted">
-                          Avg score: {renderMetricValue(values.avg_score)}
-                        </span>
-                        <span className="panel__muted">
-                          Runs: {renderMetricValue(values.total_runs)}
-                        </span>
-                      </div>
-                      {metric?.created_at ? (
-                        <span className="panel__muted">
-                          Last run: {new Date(metric.created_at).toLocaleDateString()}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+              {!manualExperimentId || manualVariants.length === 0 ? (
+                <p className="panel__empty">
+                  Select an experiment to compare variants.
+                </p>
+              ) : (
+                <ul className="panel__list">
+                  {manualVariants.map((variant) => {
+                    const metric = manualMetricsByVariant.get(variant.id);
+                    const values = (metric?.metrics ?? {}) as Record<string, unknown>;
+                    return (
+                      <li key={variant.id}>
+                        <div className="panel__meta">
+                          <span>{variant.label}</span>
+                          <span className="panel__badge panel__badge--secondary">
+                            {variant.type}
+                          </span>
+                        </div>
+                        <div className="panel__meta">
+                          <span className="panel__muted">
+                            Win rate: {renderMetricValue(values.win_rate)}
+                          </span>
+                          <span className="panel__muted">
+                            Robust win rate: {renderMetricValue(values.win_rate_robust)}
+                          </span>
+                          <span className="panel__muted">
+                            Avg score: {renderMetricValue(values.avg_score)}
+                          </span>
+                          <span className="panel__muted">
+                            Runs: {renderMetricValue(values.total_runs)}
+                          </span>
+                        </div>
+                        {metric?.created_at ? (
+                          <span className="panel__muted">
+                            Last run: {new Date(metric.created_at).toLocaleDateString()}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </details>
           </section>
 
           {job?.mode === "external" && job?.external_instructions ? (
-            <section className="panel__card">
+            <section className="panel__card panel__card--secondary">
               <div className="panel__header">
                 <h3>External validation instructions</h3>
               </div>
-              <pre className="panel__pre">{job.external_instructions}</pre>
-              <div className="panel__grid validation__grid">
-                <label className="panel__label">
-                  <span>Paste structured JSON</span>
-                  <textarea
-                    className="panel__textarea"
-                    rows={6}
-                    value={externalJson}
-                    onChange={(event) => setExternalJson(event.target.value)}
-                    placeholder='{"winner_id":"candidate","score":0.72,"confidence":0.8,"evidence_strength":"moderate","rationale_bullets":["..."],"flags":[]}'
-                  />
-                </label>
-                <label className="panel__label">
-                  <span>Raw response (optional)</span>
-                  <textarea
-                    className="panel__textarea"
-                    rows={6}
-                    value={externalRaw}
-                    onChange={(event) => setExternalRaw(event.target.value)}
-                    placeholder="Paste raw provider output"
-                  />
-                </label>
-              </div>
-              <div className="panel__actions">
-                <button
-                  type="button"
-                  className="panel__action"
-                  disabled={!externalJson || isSubmitting}
-                  onClick={handleSubmitExternal}
-                >
-                  {isSubmitting ? "Saving..." : "Submit external result"}
-                </button>
-              </div>
+              <div className="panel__subheading">Supplement · Paste external result</div>
+              <p className="panel__step-helper">
+                Expand this only when external mode is used. Submit structured JSON to complete the
+                synthetic validation result.
+              </p>
+              <details className="panel__details">
+                <summary className="panel__details-summary">Open external instructions</summary>
+                <pre className="panel__pre">{job.external_instructions}</pre>
+                <div className="panel__grid validation__grid">
+                  <label className="panel__label">
+                    <span>Paste structured JSON</span>
+                    <textarea
+                      className="panel__textarea"
+                      rows={6}
+                      value={externalJson}
+                      onChange={(event) => setExternalJson(event.target.value)}
+                      placeholder='{"winner_id":"candidate","score":0.72,"confidence":0.8,"evidence_strength":"moderate","rationale_bullets":["..."],"flags":[]}'
+                    />
+                  </label>
+                  <label className="panel__label">
+                    <span>Raw response (optional)</span>
+                    <textarea
+                      className="panel__textarea"
+                      rows={6}
+                      value={externalRaw}
+                      onChange={(event) => setExternalRaw(event.target.value)}
+                      placeholder="Paste raw provider output"
+                    />
+                  </label>
+                </div>
+                <div className="panel__actions panel__actions--priority">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--prominent"
+                    disabled={!externalJson || isSubmitting}
+                    onClick={handleSubmitExternal}
+                  >
+                    {isSubmitting ? "Saving..." : "Submit external result"}
+                  </button>
+                </div>
+              </details>
             </section>
           ) : null}
 
           {result ? (
-            <section className="panel__card">
+            <section className="panel__card panel__card--primary">
               <div className="panel__header">
                 <h3>Validation result</h3>
               </div>
+              <div className="panel__subheading">Step 5 · Decide next move</div>
+              <p className="panel__step-helper">
+                Use the winner signal, confidence, and observed evidence readiness before generating
+                the next experiment variant.
+              </p>
               <div className="panel__metrics">
                 <div className="panel__label">
                   <span>Winner</span>
@@ -1177,10 +1458,10 @@ export default function ValidationPage() {
               ) : null}
               {job?.entity_type === "copy_revision" &&
               String(result.winner_id || "").toLowerCase() === "candidate" ? (
-                <div className="panel__actions">
+                <div className="panel__actions panel__actions--priority">
                   <button
                     type="button"
-                    className="panel__action"
+                    className="panel__action panel__action--prominent"
                     onClick={handlePublishCandidate}
                   >
                     Publish candidate copy
@@ -1188,9 +1469,14 @@ export default function ValidationPage() {
                 </div>
               ) : null}
               {result.structured_result ? (
-                <pre className="panel__pre">
-                  {JSON.stringify(result.structured_result, null, 2)}
-                </pre>
+                <details className="panel__details">
+                  <summary className="panel__details-summary">
+                    Open structured validation JSON
+                  </summary>
+                  <pre className="panel__pre">
+                    {JSON.stringify(result.structured_result, null, 2)}
+                  </pre>
+                </details>
               ) : null}
             </section>
           ) : null}
