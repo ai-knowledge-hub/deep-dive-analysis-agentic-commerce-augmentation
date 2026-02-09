@@ -24,7 +24,7 @@ Core capabilities:
 - Intent-aware simulation for product-copy testing.
 - Query battery generation (top-down, bottom-up, hybrid).
 - Variant testing and run history.
-- Synthetic validation signal (LLM judge screening).
+- Synthetic validation signal (LLM judge screening via in-app BYOK, provider run, or manual fallback).
 - Observed reality signal (manual validation logs).
 - Canonical intent spec + normalization to stabilize bottom-up generation.
 - Multi-tenant scope and history controls.
@@ -57,7 +57,7 @@ We reorganized UX around execution order and history utility so users can unders
 3. Create experiment and variants.
 4. Run tests and inspect run history.
 5. Review metrics and orchestrator recommendation.
-6. Log synthetic and/or observed validation.
+6. Run synthetic validation (prefer provider run), then log observed reality validation.
 7. Show loop updates via history + maintenance controls.
 
 This demonstrates end-to-end loop behavior, not isolated screens.
@@ -69,6 +69,7 @@ The moat is not one prompt. It is loop discipline:
 - Structured intent context contract.
 - Rejection-aware generation and acceptance metrics.
 - Distinct synthetic vs observed validation channels.
+- Provider-run validation contract with signed callback verification and replay protection.
 - Tenant-scoped memory + history.
 - Repeatable maintenance pipeline for belief/memory refresh.
 
@@ -84,6 +85,7 @@ The moat is not one prompt. It is loop discipline:
 
 - We do not claim direct ranking control in external shopping systems.
 - Observed validation is still partially manual.
+- Gemini provider-run mode is scaffolded but not fully enabled yet.
 - Full cross-platform attribution remains an open measurement problem.
 
 ## Why This Is a Good Hackathon Build

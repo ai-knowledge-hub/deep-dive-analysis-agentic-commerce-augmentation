@@ -152,7 +152,7 @@ Validation has two explicit signals:
 - fast screening consistency checks
 
 2. **Observed reality signal**
-- manual/external logging of what actually surfaced
+- manual observed logging of what actually surfaced
 - used for agreement/accuracy and drift tracking
 
 Belief and memory flow:

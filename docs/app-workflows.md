@@ -114,17 +114,36 @@ Validation is intentionally decoupled from Experiment page and lives in Validati
 ### A) Synthetic validation signal
 - LLM judge mode (BYOK provider/model)
 - fast screening and copy-vs-copy consistency checks
+- execution modes:
+  - `in_app_byok` (in-app immediate run),
+  - `provider_openai_mcp` (launch to ChatGPT + signed callback),
+  - `manual_fallback` (structured paste-back),
+  - `provider_gemini_function` (contract present, not yet executable).
 
 ### B) Observed reality signal
-- manual/external logging of what actually surfaced
+- manual observed logging of what actually surfaced
 - used for true agreement and calibration
 
 ### Current data flow
 1. Choose entity (experiment/simulation/battery).
 2. Choose provider + mode.
-3. Run job (in-app) or submit structured external result.
+3. Run job with `in_app_byok`, start `provider run`, or use `manual fallback`.
 4. Persist validation job/result.
 5. Update validation summaries and accuracy.
+
+### Provider-run callback flow (OpenAI MCP)
+
+```mermaid
+flowchart TD
+  A["Create validation job (mode=provider_openai_mcp)"] --> B["POST /validation/jobs/{job_id}/start-provider-run"]
+  B --> C["Issue callback URL + signed token + provider_run_id"]
+  C --> D["Open provider launch URL (ChatGPT)"]
+  D --> E["Provider executes validation and posts callback"]
+  E --> F["POST /validation/jobs/{job_id}/provider-callback"]
+  F --> G["Verify signature, mode/provider/run match, token TTL, replay guard"]
+  G --> H["Persist validation_result + loop evidence source"]
+  H --> I["Validation UI refreshes outcome + status"]
+```
 
 ---
 
@@ -261,5 +280,6 @@ Operational controls:
 - richer normalization/ontology confidence pipeline
 - stronger category classifier
 - native GA4 connector (current analytics ingestion is generic)
+- Gemini function-call provider run execution (mode is scaffolded, backend runtime not yet enabled)
 - deeper automatic promotion logic for simulation lessons
 - full backend serverless hardening for Vercel Python runtime

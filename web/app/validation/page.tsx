@@ -21,6 +21,7 @@ import {
   createValidationJob,
   runValidationJob,
   submitValidationExternal,
+  startValidationProviderRun,
   listExperiments,
   listSimulationRuns,
   getSimulationRun,
@@ -44,11 +45,38 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 
 type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
 type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
-type ModeType = "in_app" | "external";
+type ModeType =
+  | "in_app"
+  | "external"
+  | "in_app_byok"
+  | "provider_openai_mcp"
+  | "provider_gemini_function"
+  | "manual_fallback";
+
+type ProviderRunLaunchInfo = {
+  launch_url?: string | null;
+  setup_url?: string | null;
+  setup_required?: boolean | null;
+  instructions?: string | null;
+  provider_run_id?: string | null;
+};
+
+function isManualFallbackMode(mode: ModeType | string | null | undefined): boolean {
+  return mode === "external" || mode === "manual_fallback";
+}
+
+function isInAppByokMode(mode: ModeType | string | null | undefined): boolean {
+  return mode === "in_app" || mode === "in_app_byok";
+}
+
+function isProviderIntegrationMode(mode: ModeType | string | null | undefined): boolean {
+  return mode === "provider_openai_mcp" || mode === "provider_gemini_function";
+}
 type ValidationNextAction =
   | "configure_provider"
   | "select_synthetic_item"
   | "create_synthetic"
+  | "complete_provider_run"
   | "submit_external_result"
   | "log_observed"
   | "open_experiments";
@@ -129,7 +157,7 @@ export default function ValidationPage() {
   const [entityType, setEntityType] = useState<EntityType>("experiment_run");
   const [selectedEntityId, setSelectedEntityId] = useState<string>("");
   const [provider, setProvider] = useState<ProviderType>("openai");
-  const [mode, setMode] = useState<ModeType>("in_app");
+  const [mode, setMode] = useState<ModeType>("in_app_byok");
   const [model, setModel] = useState<string>("");
   const [job, setJob] = useState<ValidationJob | null>(null);
   const [result, setResult] = useState<ValidationResult | null>(null);
@@ -147,6 +175,8 @@ export default function ValidationPage() {
   );
   const [manualStatus, setManualStatus] = useState<string | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
+  const [providerLaunchInfo, setProviderLaunchInfo] =
+    useState<ProviderRunLaunchInfo | null>(null);
   const [queryPrefillApplied, setQueryPrefillApplied] = useState(false);
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
 
@@ -351,7 +381,15 @@ export default function ValidationPage() {
           "Run in-app judge validation to get a fast winner/score signal for this item.",
       };
     }
-    if (mode === "external" && job && !result) {
+    if (isProviderIntegrationMode(mode) && job && !result) {
+      return {
+        action: "complete_provider_run" as ValidationNextAction,
+        label: "Complete provider run",
+        helper:
+          "Finish validation in the provider UI. Result will be saved when callback is received.",
+      };
+    }
+    if (isManualFallbackMode(mode) && job && !result) {
       return {
         action: "submit_external_result" as ValidationNextAction,
         label: "Submit external result",
@@ -636,14 +674,39 @@ export default function ValidationPage() {
       );
       setJob(response.job);
       setResult(response.result ?? null);
-      if (mode === "in_app") {
+      if (isInAppByokMode(mode)) {
+        setProviderLaunchInfo(null);
         setStatus("Running validation...");
         const runResponse = await runValidationJob(response.job.id, userId);
         setJob(runResponse.job);
         setResult(runResponse.result ?? null);
         setStatus("Validation complete.");
+      } else if (isProviderIntegrationMode(mode)) {
+        setStatus("Starting provider run...");
+        const providerRun = await startValidationProviderRun(
+          response.job.id,
+          {},
+          userId,
+        );
+        setJob(providerRun.job ?? response.job);
+        setProviderLaunchInfo({
+          launch_url: providerRun.launch_url ?? null,
+          setup_url: providerRun.setup_url ?? null,
+          setup_required: providerRun.setup_required ?? null,
+          instructions: providerRun.instructions ?? null,
+          provider_run_id: providerRun.provider_run_id ?? null,
+        });
+        if (providerRun.launch_url) {
+          window.open(providerRun.launch_url, "_blank", "noopener,noreferrer");
+          setStatus(
+            providerRun.instructions ||
+              "Provider run launched. Complete it in provider UI; callback will store result.",
+          );
+        } else {
+          setStatus("Provider run initialized. Waiting for callback completion.");
+        }
       } else {
-        setStatus("Awaiting external validation.");
+        setStatus("Awaiting validation completion.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to validate.");
@@ -652,6 +715,24 @@ export default function ValidationPage() {
       window.setTimeout(() => setStatus(null), 4000);
     }
   }, [buildPayload, entityType, mode, model, provider, selectedEntityId, userId]);
+
+  useEffect(() => {
+    if (mode === "provider_openai_mcp" && provider !== "openai") {
+      setProvider("openai");
+      setManualForm((prev) => ({ ...prev, platform: "openai" }));
+      return;
+    }
+    if (mode === "provider_gemini_function" && provider !== "gemini") {
+      setProvider("gemini");
+      setManualForm((prev) => ({ ...prev, platform: "gemini" }));
+    }
+  }, [mode, provider]);
+
+  useEffect(() => {
+    if (!isProviderIntegrationMode(mode)) {
+      setProviderLaunchInfo(null);
+    }
+  }, [mode]);
 
   const handleSubmitExternal = useCallback(async () => {
     if (!userId || !job) return;
@@ -764,6 +845,35 @@ export default function ValidationPage() {
         }
         void handleSubmitExternal();
         return;
+      case "complete_provider_run":
+        if (job?.id) {
+          void (async () => {
+            try {
+              const providerRun = await startValidationProviderRun(job.id, {}, userId);
+              setProviderLaunchInfo({
+                launch_url: providerRun.launch_url ?? null,
+                setup_url: providerRun.setup_url ?? null,
+                setup_required: providerRun.setup_required ?? null,
+                instructions: providerRun.instructions ?? null,
+                provider_run_id: providerRun.provider_run_id ?? null,
+              });
+              if (providerRun.launch_url) {
+                window.open(providerRun.launch_url, "_blank", "noopener,noreferrer");
+                setStatus(
+                  providerRun.instructions ||
+                    "Provider run opened. Complete it to return scored validation.",
+                );
+              } else {
+                setStatus("Provider run is pending callback completion.");
+              }
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Unable to start provider run.");
+            } finally {
+              window.setTimeout(() => setStatus(null), 4000);
+            }
+          })();
+        }
+        return;
       case "log_observed":
         void handleLogObservedValidation();
         return;
@@ -782,8 +892,10 @@ export default function ValidationPage() {
     handleCreateJob,
     handleLogObservedValidation,
     handleSubmitExternal,
+    job?.id,
     manualExperimentId,
     router,
+    userId,
     validationNextAction.action,
   ]);
 
@@ -1019,12 +1131,13 @@ export default function ValidationPage() {
                   <option
                     value="openai"
                     disabled={
-                      llmConfig
+                      mode === "provider_gemini_function" ||
+                      (llmConfig
                         ? !(
                             llmConfig.providers?.openai?.validation_configured ??
                             llmConfig.providers?.openai?.configured
                           )
-                        : false
+                        : false)
                     }
                   >
                     OpenAI (direct)
@@ -1032,12 +1145,13 @@ export default function ValidationPage() {
                   <option
                     value="gemini"
                     disabled={
-                      llmConfig
+                      mode === "provider_openai_mcp" ||
+                      (llmConfig
                         ? !(
                             llmConfig.providers?.gemini?.validation_configured ??
                             llmConfig.providers?.gemini?.configured
                           )
-                        : false
+                        : false)
                     }
                   >
                     Gemini
@@ -1077,8 +1191,10 @@ export default function ValidationPage() {
                   value={mode}
                   onChange={(event) => setMode(event.target.value as ModeType)}
                 >
-                  <option value="in_app">In-app (BYOK)</option>
-                  <option value="external">External paste-back</option>
+                  <option value="in_app_byok">In-app (BYOK)</option>
+                  <option value="provider_openai_mcp">Provider run (ChatGPT MCP)</option>
+                  <option value="provider_gemini_function">Provider run (Gemini function)</option>
+                  <option value="manual_fallback">Manual fallback (paste-back)</option>
                 </select>
               </label>
               <label className="panel__label">
@@ -1113,6 +1229,67 @@ export default function ValidationPage() {
                 {isSubmitting ? "Working..." : "Create validation"}
               </button>
             </div>
+            {isProviderIntegrationMode(mode) ? (
+              <section className="panel__notice panel__notice--info">
+                <strong>Provider automation contract</strong>
+                <p className="panel__muted">
+                  {providerLaunchInfo?.instructions ??
+                    "Complete one-time provider setup, then run validation in provider UI with callback return."}
+                </p>
+                <div className="panel__meta panel__meta--stack">
+                  <span className="panel__muted">
+                    Provider run id:{" "}
+                    {providerLaunchInfo?.provider_run_id ??
+                      job?.provider_run_id ??
+                      "Not started"}
+                  </span>
+                  <span className="panel__muted">
+                    Setup required:{" "}
+                    {providerLaunchInfo?.setup_required === null ||
+                    providerLaunchInfo?.setup_required === undefined
+                      ? "unknown"
+                      : providerLaunchInfo.setup_required
+                        ? "yes"
+                        : "no"}
+                  </span>
+                  <span className="panel__muted">
+                    Callback verified: {job?.callback_verified ? "yes" : "pending"}
+                  </span>
+                </div>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => {
+                      if (!providerLaunchInfo?.setup_url) return;
+                      window.open(
+                        providerLaunchInfo.setup_url,
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }}
+                    disabled={!providerLaunchInfo?.setup_url}
+                  >
+                    Open one-time setup
+                  </button>
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => {
+                      if (!providerLaunchInfo?.launch_url) return;
+                      window.open(
+                        providerLaunchInfo.launch_url,
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }}
+                    disabled={!providerLaunchInfo?.launch_url}
+                  >
+                    Open provider run
+                  </button>
+                </div>
+              </section>
+            ) : null}
             {status ? (
               <div className="panel__notice panel__notice--info">{status}</div>
             ) : null}
@@ -1362,7 +1539,7 @@ export default function ValidationPage() {
             </details>
           </section>
 
-          {job?.mode === "external" && job?.external_instructions ? (
+          {isManualFallbackMode(job?.mode) && job?.external_instructions ? (
             <section className="panel__card panel__card--secondary">
               <div className="panel__header">
                 <h3>External validation instructions</h3>

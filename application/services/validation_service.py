@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import time
+import uuid
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
+from application.services.validation.providers import OpenAIMcpAdapter
 from application.services.loop.belief_update_service import BeliefUpdateService
 from application.services.loop.policy_service import PolicyService
 from application.services.loop.state_service import StateService
@@ -24,6 +29,7 @@ class ValidationService:
         self._belief_updates = BeliefUpdateService(deps=deps)
         self._policy = PolicyService(deps=deps)
         self._state = StateService(deps=deps)
+        self._openai_mcp = OpenAIMcpAdapter(settings=get_settings())
 
     def create_job(
         self,
@@ -40,23 +46,42 @@ class ValidationService:
         prompt_version: Optional[str] = "v1",
         requested_by: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if mode not in {"in_app", "external"}:
+        normalized_mode = _normalize_validation_mode(mode)
+        if normalized_mode is None:
             raise HTTPException(status_code=400, detail="Unsupported validation mode")
+        normalized_provider = _normalize_provider(provider)
+        if normalized_mode == "provider_openai_mcp" and normalized_provider != "openai":
+            raise HTTPException(
+                status_code=400,
+                detail="provider_openai_mcp mode requires provider=openai",
+            )
+        if (
+            normalized_mode == "provider_gemini_function"
+            and normalized_provider != "gemini"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="provider_gemini_function mode requires provider=gemini",
+            )
+        initial_status = _initial_job_status(normalized_mode)
         job = self._deps.validation_jobs.create_job(
             client_id=client_id,
             brand_id=brand_id,
             product_id=product_id,
             entity_type=entity_type,
             entity_id=entity_id,
-            provider=provider,
-            mode=mode,
+            provider=normalized_provider,
+            mode=normalized_mode,
             model=model,
             prompt_version=prompt_version,
-            status="awaiting_external" if mode == "external" else "created",
+            status=initial_status,
+            integration_type=_integration_type_for_mode(normalized_mode),
+            provider_run_id=None,
+            callback_verified=False,
             input_payload=input_payload,
             requested_by=requested_by,
         )
-        if mode == "external":
+        if normalized_mode == "manual_fallback":
             prompt = build_validation_prompt(
                 input_payload=input_payload, schema=VALIDATION_OUTPUT_SCHEMA
             )
@@ -64,11 +89,179 @@ class ValidationService:
             job["external_payload_template"] = VALIDATION_OUTPUT_SCHEMA
         return job
 
+    def start_provider_run(
+        self,
+        *,
+        job_id: str,
+        callback_url: Optional[str] = None,
+        return_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        job = self._deps.validation_jobs.get_job(job_id=job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Validation job not found")
+        mode = _normalize_validation_mode(job.get("mode"))
+        if mode not in {"provider_openai_mcp", "provider_gemini_function"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Job mode does not support provider run orchestration",
+            )
+        if mode == "provider_gemini_function":
+            raise HTTPException(
+                status_code=501,
+                detail="Gemini provider-run adapter is not implemented yet",
+            )
+        if str(job.get("status") or "").lower() in {"completed", "failed"}:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot start provider run for terminal validation job status",
+            )
+        _ensure_provider_integrations_enabled(mode=mode)
+        provider_run_id = str(uuid.uuid4())
+        callback_url_resolved = callback_url or _default_provider_callback_url(
+            job_id=job_id
+        )
+        callback_token = _build_provider_callback_token(
+            job_id=job_id,
+            client_id=str(job.get("client_id") or ""),
+            mode=mode,
+            provider_run_id=provider_run_id,
+        )
+        updated = self._deps.validation_jobs.update_job_status(
+            job_id=job_id,
+            status="awaiting_provider_run",
+            provider_run_id=provider_run_id,
+            callback_verified=False,
+        )
+        updated_job = updated or job
+        launch = self._build_provider_launch(
+            mode=mode,
+            job=updated_job,
+            job_id=job_id,
+            provider_run_id=provider_run_id,
+            callback_url=callback_url_resolved,
+            callback_token=callback_token,
+            return_url=return_url,
+        )
+        return {
+            "job": updated_job,
+            "provider_run_id": provider_run_id,
+            "launch_url": launch["launch_url"],
+            "setup_url": launch.get("setup_url"),
+            "setup_required": launch.get("setup_required"),
+            "instructions": launch.get("instructions"),
+            "callback_url": callback_url_resolved,
+            "callback_token": callback_token,
+            "status": "awaiting_provider_run",
+        }
+
+    def submit_provider_result(
+        self,
+        *,
+        job_id: str,
+        structured_result: Dict[str, Any],
+        raw_response: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        provider_run_id: Optional[str] = None,
+        callback_verified: bool = False,
+        callback_signature: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        job = self._deps.validation_jobs.get_job(job_id=job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Validation job not found")
+        mode = _normalize_validation_mode(job.get("mode"))
+        if mode not in {"provider_openai_mcp", "provider_gemini_function"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Job mode does not support provider callback ingestion",
+            )
+        if mode == "provider_gemini_function":
+            raise HTTPException(
+                status_code=501,
+                detail="Gemini provider-run adapter is not implemented yet",
+            )
+        if str(job.get("status") or "").lower() == "completed":
+            raise HTTPException(
+                status_code=409,
+                detail="Validation job already completed (possible replay)",
+            )
+        _ensure_provider_integrations_enabled(mode=mode)
+        expected_provider_run_id = str(job.get("provider_run_id") or "")
+        if expected_provider_run_id and provider_run_id:
+            if provider_run_id != expected_provider_run_id:
+                raise HTTPException(status_code=400, detail="provider_run_id mismatch")
+        token_to_verify = callback_signature
+        if not token_to_verify:
+            raise HTTPException(
+                status_code=401,
+                detail="Missing callback signature/token for provider callback",
+            )
+        callback_verified = _verify_provider_callback_token(
+            token=token_to_verify,
+            job_id=job_id,
+            client_id=str(job.get("client_id") or ""),
+            mode=mode,
+            provider_run_id=provider_run_id or expected_provider_run_id,
+        )
+        if not callback_verified:
+            raise HTTPException(
+                status_code=401, detail="Invalid callback signature/token"
+            )
+        token_hash = hashlib.sha256(token_to_verify.encode("utf-8")).hexdigest()
+        consumed = self._deps.validation_callback_tokens.consume_token(
+            token_hash=token_hash,
+            client_id=str(job.get("client_id") or ""),
+            job_id=job_id,
+            provider_run_id=provider_run_id or expected_provider_run_id,
+        )
+        if not consumed:
+            raise HTTPException(
+                status_code=409,
+                detail="Callback token has already been used (replay rejected)",
+            )
+        _validate_structured_result(
+            structured_result,
+            entity_type=job.get("entity_type"),
+            input_payload=job.get("input_payload") or {},
+        )
+        source = _source_for_provider_mode(mode)
+        self._deps.validation_jobs.update_job_status(
+            job_id=job_id,
+            status="provider_result_received",
+            provider_run_id=provider_run_id or expected_provider_run_id or None,
+            callback_verified=callback_verified,
+        )
+        result = self._deps.validation_results.create_result(
+            job_id=job_id,
+            provider=provider or job.get("provider"),
+            model=model or job.get("model"),
+            structured_result=structured_result,
+            raw_response=raw_response,
+            score=_safe_float(structured_result.get("score")),
+            winner_id=_safe_str(structured_result.get("winner_id")),
+            evidence_strength=_safe_str(structured_result.get("evidence_strength")),
+            latency_ms=None,
+            cost_usd=None,
+            source=source,
+            callback_verified=callback_verified,
+        )
+        updated = self._deps.validation_jobs.update_job_status(
+            job_id=job_id,
+            status="completed",
+            model=model or job.get("model"),
+            provider_run_id=provider_run_id or job.get("provider_run_id"),
+            callback_verified=callback_verified,
+        )
+        updated_job = updated or job
+        self._record_learning_loop(job=updated_job, result=result, source=source)
+        return {"job": updated_job, "result": result}
+
     def run_job(self, *, job_id: str) -> Dict[str, Any]:
         job = self._deps.validation_jobs.get_job(job_id=job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Validation job not found")
-        if job.get("mode") != "in_app":
+        mode = _normalize_validation_mode(job.get("mode"))
+        if mode != "in_app_byok":
             raise HTTPException(status_code=400, detail="Job is external-only")
         self._deps.validation_jobs.update_job_status(job_id=job_id, status="running")
         provider = _normalize_provider(job.get("provider"))
@@ -102,6 +295,8 @@ class ValidationService:
             evidence_strength=_safe_str(structured.get("evidence_strength")),
             latency_ms=latency_ms,
             cost_usd=None,
+            source="synthetic",
+            callback_verified=False,
         )
         self._deps.validation_jobs.update_job_status(job_id=job_id, status="completed")
         self._record_learning_loop(job=job, result=result, source="synthetic")
@@ -119,7 +314,8 @@ class ValidationService:
         job = self._deps.validation_jobs.get_job(job_id=job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Validation job not found")
-        if job.get("mode") != "external":
+        mode = _normalize_validation_mode(job.get("mode"))
+        if mode != "manual_fallback":
             raise HTTPException(status_code=400, detail="Job is in-app only")
         _validate_structured_result(
             structured_result,
@@ -137,11 +333,13 @@ class ValidationService:
             evidence_strength=_safe_str(structured_result.get("evidence_strength")),
             latency_ms=None,
             cost_usd=None,
+            source="external_synthetic",
+            callback_verified=False,
         )
         self._deps.validation_jobs.update_job_status(
             job_id=job_id, status="completed", model=model or job.get("model")
         )
-        self._record_learning_loop(job=job, result=result, source="observed")
+        self._record_learning_loop(job=job, result=result, source="external_synthetic")
         return {"job": job, "result": result}
 
     def get_job(self, *, job_id: str) -> Dict[str, Any]:
@@ -166,6 +364,36 @@ class ValidationService:
             limit=limit,
         )
         return {"jobs": jobs}
+
+    def _build_provider_launch(
+        self,
+        *,
+        mode: str,
+        job: Dict[str, Any],
+        job_id: str,
+        provider_run_id: str,
+        callback_url: Optional[str] = None,
+        callback_token: Optional[str] = None,
+        return_url: Optional[str] = None,
+    ) -> Dict[str, object]:
+        if mode == "provider_openai_mcp":
+            if not callback_url or not callback_token:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Missing callback contract for OpenAI MCP launch",
+                )
+            return self._openai_mcp.build_launch_contract(
+                job_id=job_id,
+                provider_run_id=provider_run_id,
+                callback_url=callback_url,
+                callback_token=callback_token,
+                return_url=return_url,
+                entity_type=job.get("entity_type"),
+                provider=job.get("provider"),
+            )
+        raise HTTPException(
+            status_code=501, detail=f"Unsupported provider mode: {mode}"
+        )
 
     def _record_learning_loop(
         self,
@@ -235,6 +463,148 @@ def _normalize_provider(provider: Optional[str]) -> str:
     if value == "claude":
         return "anthropic"
     return value
+
+
+def _normalize_validation_mode(mode: Optional[str]) -> Optional[str]:
+    if not mode:
+        return None
+    normalized = str(mode).strip().lower()
+    legacy_map = {
+        "in_app": "in_app_byok",
+        "external": "manual_fallback",
+    }
+    normalized = legacy_map.get(normalized, normalized)
+    allowed = {
+        "in_app_byok",
+        "provider_openai_mcp",
+        "provider_gemini_function",
+        "manual_fallback",
+    }
+    return normalized if normalized in allowed else None
+
+
+def _initial_job_status(mode: str) -> str:
+    if mode == "manual_fallback":
+        return "awaiting_external"
+    if mode in {"provider_openai_mcp", "provider_gemini_function"}:
+        return "awaiting_provider_run"
+    return "created"
+
+
+def _integration_type_for_mode(mode: str) -> str:
+    if mode == "provider_openai_mcp":
+        return "openai_mcp"
+    if mode == "provider_gemini_function":
+        return "gemini_function"
+    if mode == "manual_fallback":
+        return "manual_external"
+    return "in_app_byok"
+
+
+def _source_for_provider_mode(mode: str) -> str:
+    if mode == "provider_openai_mcp":
+        return "provider_openai_mcp"
+    if mode == "provider_gemini_function":
+        return "provider_gemini_function"
+    return "synthetic"
+
+
+def _ensure_provider_integrations_enabled(*, mode: str) -> None:
+    settings = get_settings()
+    enabled = bool(settings.enable_provider_validation_integrations)
+    if enabled:
+        return
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            f"Provider-integrated validation mode ({mode}) is not enabled. "
+            "Set ENABLE_PROVIDER_VALIDATION_INTEGRATIONS=true to activate."
+        ),
+    )
+
+
+def _default_provider_callback_url(*, job_id: str) -> str:
+    settings = get_settings()
+    base = settings.backend_public_url.rstrip("/")
+    return f"{base}/validation/jobs/{job_id}/provider-callback"
+
+
+def _build_provider_callback_token(
+    *,
+    job_id: str,
+    client_id: str,
+    mode: str,
+    provider_run_id: str,
+) -> str:
+    settings = get_settings()
+    secret = settings.validation_callback_signing_secret or settings.openai_api_key
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Missing validation callback signing secret. "
+                "Set VALIDATION_CALLBACK_SIGNING_SECRET."
+            ),
+        )
+    payload = {
+        "job_id": job_id,
+        "client_id": client_id,
+        "mode": mode,
+        "provider_run_id": provider_run_id,
+        "exp": int(time.time()) + max(1, int(settings.validation_callback_ttl_seconds)),
+    }
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("utf-8").rstrip("=")
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+
+def _verify_provider_callback_token(
+    *,
+    token: str,
+    job_id: str,
+    client_id: str,
+    mode: str,
+    provider_run_id: str,
+) -> bool:
+    try:
+        payload_b64, signature = token.rsplit(".", 1)
+    except ValueError:
+        return False
+    settings = get_settings()
+    secret = settings.validation_callback_signing_secret or settings.openai_api_key
+    if not secret:
+        return False
+    expected_sig = hmac.new(
+        secret.encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected_sig, signature):
+        return False
+    try:
+        padding = "=" * (-len(payload_b64) % 4)
+        payload_raw = base64.urlsafe_b64decode(payload_b64 + padding)
+        payload = json.loads(payload_raw.decode("utf-8"))
+    except Exception:
+        return False
+    if int(payload.get("exp") or 0) < int(time.time()):
+        return False
+    if payload.get("job_id") != job_id:
+        return False
+    if payload.get("client_id") != client_id:
+        return False
+    if payload.get("mode") != mode:
+        return False
+    if payload.get("provider_run_id") != provider_run_id:
+        return False
+    return True
 
 
 def _parse_json_response(text: str) -> Dict[str, Any]:

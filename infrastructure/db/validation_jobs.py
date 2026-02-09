@@ -20,6 +20,9 @@ def create_job(
     model: Optional[str],
     prompt_version: Optional[str],
     status: str,
+    integration_type: Optional[str],
+    provider_run_id: Optional[str],
+    callback_verified: Optional[bool],
     input_payload: Dict[str, Any],
     requested_by: Optional[str],
 ) -> Dict[str, Any]:
@@ -40,10 +43,13 @@ def create_job(
             model,
             prompt_version,
             status,
+            integration_type,
+            provider_run_id,
+            callback_verified,
             input_payload_json,
             requested_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?)
         """,
         (
             job_id,
@@ -57,6 +63,9 @@ def create_job(
             model,
             prompt_version,
             status,
+            integration_type,
+            provider_run_id,
+            1 if callback_verified else 0,
             to_json(input_payload) or to_json({}),
             requested_by,
         ),
@@ -70,6 +79,8 @@ def update_job_status(
     job_id: str,
     status: str,
     model: Optional[str] = None,
+    provider_run_id: Optional[str] = None,
+    callback_verified: Optional[bool] = None,
 ) -> Dict[str, Any] | None:
     conn = get_connection()
     updates: list[str] = ["status = ?"]
@@ -77,6 +88,12 @@ def update_job_status(
     if model is not None:
         updates.append("model = ?")
         params.append(model)
+    if provider_run_id is not None:
+        updates.append("provider_run_id = ?")
+        params.append(provider_run_id)
+    if callback_verified is not None:
+        updates.append("callback_verified = ?")
+        params.append(1 if callback_verified else 0)
     updates.append("updated_at = datetime('now')")
     params.append(job_id)
     conn.execute(
@@ -143,6 +160,9 @@ def _row(row) -> Dict[str, Any]:
         "model": row["model"],
         "prompt_version": row["prompt_version"],
         "status": row["status"],
+        "integration_type": row["integration_type"],
+        "provider_run_id": row["provider_run_id"],
+        "callback_verified": bool(row["callback_verified"]) if row["callback_verified"] is not None else None,
         "input_payload": from_json(row["input_payload_json"], default={}),
         "requested_by": row["requested_by"],
         "created_at": row["created_at"],

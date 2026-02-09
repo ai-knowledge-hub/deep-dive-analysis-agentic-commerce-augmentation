@@ -48,6 +48,7 @@ import {
   BrandPredictionAccuracyResponse,
   AnalyticsEventResponse,
   ValidationJobResponse,
+  ValidationProviderRunResponse,
   ValidationJobListResponse,
   CopyRevisionListResponse,
   CopyRevisionResponse,
@@ -529,7 +530,13 @@ export async function createValidationJob(
     entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
     entity_id: string;
     provider: string;
-    mode: "in_app" | "external";
+    mode:
+      | "in_app"
+      | "external"
+      | "in_app_byok"
+      | "provider_openai_mcp"
+      | "provider_gemini_function"
+      | "manual_fallback";
     model?: string | null;
     prompt_version?: string | null;
     input_payload: Record<string, unknown>;
@@ -583,6 +590,62 @@ export async function submitValidationExternal(
       client_id: clientId ?? undefined,
     }),
   });
+}
+
+export async function startValidationProviderRun(
+  jobId: string,
+  payload: {
+    callback_url?: string | null;
+    return_url?: string | null;
+  } = {},
+  userId?: string | null,
+): Promise<ValidationProviderRunResponse> {
+  const clientId = getClientId();
+  return request<ValidationProviderRunResponse>(
+    `/validation/jobs/${jobId}/start-provider-run`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        callback_url: payload.callback_url ?? undefined,
+        return_url: payload.return_url ?? undefined,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function submitValidationProviderCallback(
+  jobId: string,
+  payload: {
+    provider?: string | null;
+    model?: string | null;
+    provider_run_id?: string | null;
+    callback_verified?: boolean;
+    callback_signature?: string | null;
+    structured_result: Record<string, unknown>;
+    raw_response?: string | null;
+  },
+  userId?: string | null,
+): Promise<ValidationJobResponse> {
+  const clientId = getClientId();
+  return request<ValidationJobResponse>(
+    `/validation/jobs/${jobId}/provider-callback`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        provider: payload.provider ?? undefined,
+        model: payload.model ?? undefined,
+        provider_run_id: payload.provider_run_id ?? undefined,
+        callback_verified: payload.callback_verified ?? false,
+        callback_signature: payload.callback_signature ?? undefined,
+        structured_result: payload.structured_result,
+        raw_response: payload.raw_response ?? undefined,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
 }
 
 export async function getValidationJob(

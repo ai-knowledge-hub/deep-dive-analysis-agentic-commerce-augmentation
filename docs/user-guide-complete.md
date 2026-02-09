@@ -89,7 +89,7 @@ Once a candidate is selected, you can:
 
 ### Step 7 — Validate synthetic and observed results
 - Open Validation from Experiments when runs exist.
-- Run synthetic validation (in-app or external paste-back) for fast screening.
+- Run synthetic validation (in-app BYOK, provider run, or manual fallback) for fast screening.
 - Log observed reality signals for grounding and calibration.
 - Track readiness using verified count and observed accuracy thresholds.
 
@@ -170,7 +170,10 @@ Canonical intent spec editor also supports:
 ## 8) Validation Signals (Current)
 
 Currently implemented:
-1. **Synthetic validation signal** via Validation Jobs (in-app BYOK or external paste-back).
+1. **Synthetic validation signal** via Validation Jobs:
+   - `in_app_byok` (run directly in app),
+   - `provider_openai_mcp` (launch and complete in ChatGPT with callback),
+   - `manual_fallback` (structured paste-back).
 2. **Observed reality signal** via manual observed validation logging.
 3. External analytics events via API ingestion.
 
@@ -190,10 +193,15 @@ Validation page (current):
    - query battery,
    - copy revision.
 2. Select item, provider, mode, and optional model.
-3. Run:
-   - `In-app`: executes immediately with configured BYOK provider.
-   - `External`: copies instructions, then requires structured JSON paste-back.
+3. Run in one of the available modes:
+   - `In-app (BYOK)`: executes immediately with configured provider/model.
+   - `Provider run (ChatGPT MCP)`: starts provider run, opens provider URL, and expects signed callback completion.
+   - `Manual fallback`: use structured instructions and paste back result JSON.
 4. Review winner, score, evidence strength, and structured result payload.
+
+Provider mode notes:
+- `Provider run (Gemini function)` is visible in mode selection but currently backend-gated as not yet implemented.
+- Provider callbacks are one-time verified tokens with TTL and replay protection.
 
 ### Observed reality signal (how to use)
 Log one observed record per real-world check:

@@ -114,6 +114,30 @@ class Settings(BaseSettings):
     frontend_url: str = Field(
         default="http://localhost:3000", validation_alias=AliasChoices("FRONTEND_URL")
     )
+    backend_public_url: str = Field(
+        default="http://localhost:8000",
+        validation_alias=AliasChoices("BACKEND_PUBLIC_URL"),
+    )
+    enable_provider_validation_integrations: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ENABLE_PROVIDER_VALIDATION_INTEGRATIONS"),
+    )
+    validation_callback_signing_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VALIDATION_CALLBACK_SIGNING_SECRET"),
+    )
+    validation_callback_ttl_seconds: int = Field(
+        default=900,
+        validation_alias=AliasChoices("VALIDATION_CALLBACK_TTL_SECONDS"),
+    )
+    openai_mcp_launch_url: str = Field(
+        default="https://chatgpt.com/",
+        validation_alias=AliasChoices("OPENAI_MCP_LAUNCH_URL"),
+    )
+    gemini_function_launch_url: str = Field(
+        default="https://gemini.google.com/",
+        validation_alias=AliasChoices("GEMINI_FUNCTION_LAUNCH_URL"),
+    )
     clerk_webhook_secret: str | None = Field(
         default=None, validation_alias=AliasChoices("CLERK_WEBHOOK_SECRET")
     )

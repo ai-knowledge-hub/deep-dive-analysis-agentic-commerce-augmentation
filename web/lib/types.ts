@@ -841,10 +841,19 @@ export type ValidationJob = {
   entity_type: "experiment_run" | "simulation_run" | "battery" | "copy_revision";
   entity_id: string;
   provider: string;
-  mode: "in_app" | "external";
+  mode:
+    | "in_app"
+    | "external"
+    | "in_app_byok"
+    | "provider_openai_mcp"
+    | "provider_gemini_function"
+    | "manual_fallback";
   model?: string | null;
   prompt_version?: string | null;
   status: string;
+  integration_type?: string | null;
+  provider_run_id?: string | null;
+  callback_verified?: boolean | null;
   input_payload?: Record<string, unknown>;
   requested_by?: string | null;
   created_at?: string | null;
@@ -865,12 +874,26 @@ export type ValidationResult = {
   evidence_strength?: string | null;
   latency_ms?: number | null;
   cost_usd?: number | null;
+  source?: string | null;
+  callback_verified?: boolean | null;
   created_at?: string | null;
 };
 
 export type ValidationJobResponse = {
   job: ValidationJob;
   result?: ValidationResult | null;
+};
+
+export type ValidationProviderRunResponse = {
+  job: ValidationJob;
+  provider_run_id?: string | null;
+  launch_url?: string | null;
+  setup_url?: string | null;
+  setup_required?: boolean | null;
+  instructions?: string | null;
+  callback_url?: string | null;
+  callback_token?: string | null;
+  status?: string | null;
 };
 
 export type ValidationJobListResponse = {

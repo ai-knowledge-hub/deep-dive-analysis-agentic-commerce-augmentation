@@ -292,13 +292,58 @@
       background: var(--bg-secondary);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 10px;
-      padding: 32px;
+      padding: 28px;
       margin: 32px 0;
-      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-      font-size: 13px;
-      line-height: 1.8;
       color: var(--text-secondary);
-      overflow-x: auto;
+    }
+
+    .flow-diagram {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .flow-node {
+      width: min(860px, 100%);
+      background: var(--bg-tertiary);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+
+    .flow-node--primary {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .flow-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      letter-spacing: 0.02em;
+    }
+
+    .flow-copy {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .flow-list {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .flow-arrow {
+      font-size: 16px;
+      color: var(--text-muted);
+      line-height: 1;
     }
 
     .highlight {
@@ -385,6 +430,7 @@
       .grid--2, .grid--3, .grid--4 { grid-template-columns: 1fr; }
       .stats { grid-template-columns: 1fr; }
       .moat-grid { grid-template-columns: 1fr; }
+      .flow-node { width: 100%; }
     }
 
     @media (max-width: 768px) {
@@ -402,35 +448,35 @@
     <div class="slide active" data-slide="1">
       <div class="slide__header">
         <div class="slide__logo">Performics Labs</div>
-        <h1 class="slide__title">Discovery Commerce</h1>
-        <p class="slide__subtitle">Making products legible to reasoning agents. The discovery layer for AI-driven commerce.</p>
+        <h1 class="slide__title">Agentic Commerce Research Lab</h1>
+        <p class="slide__subtitle">An evidence-first experiment environment for improving product discoverability in reasoning-agent journeys.</p>
       </div>
-      <button class="btn btn--lg" onclick="nextSlide()">See the Opportunity</button>
+      <button class="btn btn--lg" onclick="nextSlide()">See Current State</button>
     </div>
 
     <!-- 2: The Problem -->
     <div class="slide" data-slide="2">
       <div class="slide__header">
         <h2 class="slide__title">The Problem</h2>
-        <p class="slide__subtitle">AI shopping agents are reshaping commerce, but brands have no way to optimize for discovery</p>
+        <p class="slide__subtitle">AI shopping interactions are changing quickly, while measurement and optimization methods are still immature</p>
       </div>
       <div class="slide__content">
         <div class="grid grid--2">
           <div class="card">
             <h3 class="card__title">Invisible to AI</h3>
-            <p class="card__text">Products optimized for keyword search are invisible to LLM reasoning. Traditional SEO doesn't work when agents understand <em>intent</em>, not keywords.</p>
+            <p class="card__text">Keyword optimization misses intent-rich agent queries. Teams need intent-fit evaluation, not lexical matching alone.</p>
           </div>
           <div class="card">
             <h3 class="card__title">No Visibility</h3>
-            <p class="card__text">Brands have no insight into how AI agents perceive their products. Why does a product rank #5 instead of #1? What's missing?</p>
+            <p class="card__text">Teams have limited visibility into why one product is selected over another in agent-mediated responses.</p>
           </div>
           <div class="card">
             <h3 class="card__title">No Validation</h3>
-            <p class="card__text">Lab metrics don't predict production outcomes. Optimizations that test well may fail in real traffic, wasting resources.</p>
+            <p class="card__text">Lab outcomes can drift from observed outcomes. Without validation loops, synthetic signals can mislead decisions.</p>
           </div>
           <div class="card">
             <h3 class="card__title">Protocol Gap</h3>
-            <p class="card__text">Commerce protocols (UCP, ACP) define transactions, but not discovery. The layer between agent reasoning and checkout is undefined.</p>
+            <p class="card__text">Transaction protocols (UCP/ACP) are evolving, but discovery behavior and measurement practices are still emerging.</p>
           </div>
         </div>
       </div>
@@ -439,30 +485,35 @@
     <!-- 3: The Solution -->
     <div class="slide" data-slide="3">
       <div class="slide__header">
-        <h2 class="slide__title">The Solution</h2>
-        <p class="slide__subtitle">A brand-side intentionality optimization + validation layer</p>
+        <h2 class="slide__title">Current Approach</h2>
+        <p class="slide__subtitle">A research workflow for intent modeling, copy testing, and validation</p>
       </div>
       <div class="slide__content">
         <div class="diagram">
-&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
-&#x2502;         AI Agents (Gemini, ChatGPT, Claude)             &#x2502;
-&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
-                          &#x25BC;
-&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
-&#x2502;    DISCOVERY COMMERCE: Optimization + Verification      &#x2502;
-&#x2502;                                                         &#x2502;
-&#x2502;  What is the user trying to achieve?                    &#x2502;
-&#x2502;  Which products enable that goal?                       &#x2502;
-&#x2502;  Why does this product align with intent?               &#x2502;
-&#x2502;  Did optimization improve discoverability?              &#x2502;
-&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
-                          &#x25BC;
-&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
-&#x2502;       Commerce Protocols (UCP, ACP, etc.)               &#x2502;
-&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+          <div class="flow-diagram">
+            <div class="flow-node">
+              <div class="flow-title">AI Agents</div>
+              <div class="flow-copy">Gemini, ChatGPT, Claude, and other reasoning assistants.</div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-node flow-node--primary">
+              <div class="flow-title">Research Loop</div>
+              <div class="flow-copy">Simulation → Experiments → Validation</div>
+              <div class="flow-list">
+                <div>What user goal is being expressed?</div>
+                <div>Which product attributes satisfy that goal?</div>
+                <div>Did copy changes improve discoverability signal?</div>
+              </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-node">
+              <div class="flow-title">Commerce Interfaces</div>
+              <div class="flow-copy">UCP, ACP, and emerging provider-specific experiences.</div>
+            </div>
+          </div>
         </div>
         <p style="text-align: center; font-size: 14px; color: var(--text-secondary); margin-top: 16px;">
-          <span class="highlight">Protocol-agnostic.</span> The discovery layer works with any commerce protocol.
+          <span class="highlight">Protocol-aware.</span> The lab can test hypotheses against evolving commerce interfaces.
         </p>
       </div>
     </div>
@@ -471,7 +522,7 @@
     <div class="slide" data-slide="4">
       <div class="slide__header">
         <h2 class="slide__title">Core Capabilities</h2>
-        <p class="slide__subtitle">A complete platform for AI commerce optimization</p>
+        <p class="slide__subtitle">Implemented modules in the current lab build</p>
       </div>
       <div class="slide__content">
         <div class="grid grid--3">
@@ -489,59 +540,59 @@
           </div>
           <div class="card">
             <h3 class="card__title">Simulation Sandbox</h3>
-            <p class="card__text">Run competitive scenarios. See exactly why you lost to competitors and get actionable optimization suggestions.</p>
+            <p class="card__text">Run controlled scenarios and inspect where copy aligns or fails against inferred intent and constraints.</p>
           </div>
           <div class="card">
             <h3 class="card__title">Experiment Framework</h3>
-            <p class="card__text">Create variants, run batteries of test queries, track predictions vs. reality. Unlock insights after validation.</p>
+            <p class="card__text">Create variants, run query batteries, and track metrics with explicit handoff to validation before decisions.</p>
           </div>
           <div class="card">
             <h3 class="card__title">Validation Logging</h3>
-            <p class="card__text">Track lab predictions against real-world outcomes. Soft-gate insights until prediction accuracy thresholds are met.</p>
+            <p class="card__text">Compare synthetic and observed outcomes. Use readiness gates to avoid treating lab signals as production truth.</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 5: Competitive Moat -->
+    <!-- 5: Research Principles -->
     <div class="slide" data-slide="5">
       <div class="slide__header">
-        <h2 class="slide__title">Competitive Moat</h2>
-        <p class="slide__subtitle">Hamilton's 7 Powers + unique technical advantages</p>
+        <h2 class="slide__title">Research Principles</h2>
+        <p class="slide__subtitle">How we keep findings credible while the system is still evolving</p>
       </div>
       <div class="slide__content">
         <div class="moat-grid">
           <div class="moat-item">
-            <h3 class="moat-item__title">Learning Economies</h3>
-            <p class="moat-item__text">Every simulation run, experiment, and validation creates proprietary lessons. The system learns what makes products discoverable across categories, brands, and intent patterns.</p>
+            <h3 class="moat-item__title">Evidence Tiers</h3>
+            <p class="moat-item__text">Synthetic and observed signals are separated. Observed reality is treated as higher-trust decision evidence.</p>
           </div>
           <div class="moat-item">
-            <h3 class="moat-item__title">Switching Costs</h3>
-            <p class="moat-item__text">Once brands optimize products through the platform, moving to competitors means losing intentionality profiles, experiment history, and validated insights.</p>
+            <h3 class="moat-item__title">Explicit Uncertainty</h3>
+            <p class="moat-item__text">The interface distinguishes screening signals from grounded outcomes and avoids deterministic ranking claims.</p>
           </div>
           <div class="moat-item">
-            <h3 class="moat-item__title">Network Effects</h3>
-            <p class="moat-item__text">More brands, more intent patterns, better classification, more accurate optimization. Cross-brand pattern learning improves outcomes for everyone.</p>
+            <h3 class="moat-item__title">Reproducible Flow</h3>
+            <p class="moat-item__text">Step-based workflows (battery -> variants -> runs -> validation -> iteration) keep experiments comparable across cycles.</p>
           </div>
           <div class="moat-item">
-            <h3 class="moat-item__title">Brand Positioning</h3>
-            <p class="moat-item__text">First mover in the "intent legibility" category. Performics Labs signals R&D credibility. Early adopters become reference customers.</p>
+            <h3 class="moat-item__title">Auditability</h3>
+            <p class="moat-item__text">Validation jobs, observed checks, and loop maintenance are persisted so teams can review why conclusions were made.</p>
           </div>
           <div class="moat-item">
             <h3 class="moat-item__title">Hard Category Gating</h3>
-            <p class="moat-item__text">Hybrid scoring (semantic + keyword with category enforcement) prevents false positives that pure-semantic systems suffer from. Explainability builds trust.</p>
+            <p class="moat-item__text">Hybrid scoring with category enforcement reduces false positives and improves consistency of bottom-up query generation.</p>
           </div>
           <div class="moat-item">
             <h3 class="moat-item__title">Validation-First</h3>
-            <p class="moat-item__text">Built-in skepticism: lab metrics require real-world validation before insights unlock. This prevents overfitting and builds credibility with enterprise buyers.</p>
+            <p class="moat-item__text">Insights are gated by observed validation thresholds to reduce overfitting to synthetic judges.</p>
           </div>
           <div class="moat-item">
-            <h3 class="moat-item__title">Protocol Agnostic</h3>
-            <p class="moat-item__text">Works with UCP, ACP, or any future commerce protocol. Not locked to a single transaction layer, preserving optionality as the market evolves.</p>
+            <h3 class="moat-item__title">Provider Integrations</h3>
+            <p class="moat-item__text">Synthetic validation supports in-app BYOK and provider-run contracts (OpenAI MCP implemented, Gemini flow scaffolded).</p>
           </div>
           <div class="moat-item">
             <h3 class="moat-item__title">Bottom-Up + Top-Down</h3>
-            <p class="moat-item__text">Hybrid query generation (from product specs + brand beliefs) prevents bias and captures both discovered and hypothesized intent patterns.</p>
+            <p class="moat-item__text">Cold-start generation combines product-first and goal-first strategies when loop evidence is sparse.</p>
           </div>
         </div>
       </div>
@@ -551,7 +602,7 @@
     <div class="slide" data-slide="6">
       <div class="slide__header">
         <h2 class="slide__title">Technology & Architecture</h2>
-        <p class="slide__subtitle">Built for scale, designed for flexibility</p>
+        <p class="slide__subtitle">Current implementation status and technical foundations</p>
       </div>
       <div class="slide__content">
         <div class="grid grid--2">
@@ -583,7 +634,7 @@
             </ul>
           </div>
           <div class="card">
-            <h3 class="card__title">Production Ready</h3>
+            <h3 class="card__title">Current Maturity</h3>
             <ul class="list">
               <li class="list__item">Comprehensive test coverage</li>
               <li class="list__item">Analytics event tracking and replay</li>
@@ -598,15 +649,15 @@
     <!-- 7: Roadmap -->
     <div class="slide" data-slide="7">
       <div class="slide__header">
-        <h2 class="slide__title">Product Roadmap</h2>
-        <p class="slide__subtitle">From proof of concept to platform</p>
+        <h2 class="slide__title">Roadmap</h2>
+        <p class="slide__subtitle">From research lab to operational platform</p>
       </div>
       <div class="slide__content">
         <div class="timeline">
           <div class="timeline__item">
             <div class="timeline__phase">Now: Validation</div>
-            <h3 class="timeline__title">Prove the Concept</h3>
-            <p class="timeline__text">Simulation sandbox, experiment framework, validation logging. Onboard pilot brands, run experiments, measure discoverability lift and competitive win rate.</p>
+            <h3 class="timeline__title">Stabilize the Lab</h3>
+            <p class="timeline__text">Consolidate experiment flow, improve validation reliability, and tighten evidence capture across synthetic and observed signals.</p>
           </div>
           <div class="timeline__item">
             <div class="timeline__phase">Next: Scale</div>
@@ -620,8 +671,8 @@
           </div>
           <div class="timeline__item">
             <div class="timeline__phase">Future: Ecosystem</div>
-            <h3 class="timeline__title">Platform Play</h3>
-            <p class="timeline__text">API marketplace for third-party integrations. Shared intent ontology as an industry standard. Attribution tracking from recommendation to purchase. SOC-2 and ISO-27001 compliance.</p>
+            <h3 class="timeline__title">Platform Expansion</h3>
+            <p class="timeline__text">Broader integrations, stronger attribution paths, and enterprise governance/security hardening after workflow reliability targets are met.</p>
           </div>
         </div>
       </div>
@@ -630,8 +681,8 @@
     <!-- 8: Market Opportunity -->
     <div class="slide" data-slide="8">
       <div class="slide__header">
-        <h2 class="slide__title">Market Opportunity</h2>
-        <p class="slide__subtitle">New category in a rapidly growing space</p>
+        <h2 class="slide__title">Research Focus</h2>
+        <p class="slide__subtitle">Where this lab can generate the clearest learning signal first</p>
       </div>
       <div class="slide__content">
         <div class="grid grid--3">
@@ -652,7 +703,7 @@
           </div>
         </div>
         <p style="margin-top: 32px; font-size: 14px; color: var(--text-secondary); text-align: center; line-height: 1.6;">
-          As AI agents take a growing share of commerce discovery, every brand with an online presence<br>becomes a potential customer for intent legibility optimization.
+          Near-term value comes from repeatable measurement and defensible validation,<br>not from broad market claims while the system is still under active development.
         </p>
       </div>
     </div>
@@ -660,8 +711,8 @@
     <!-- 9: Competitive Landscape -->
     <div class="slide" data-slide="9">
       <div class="slide__header">
-        <h2 class="slide__title">Competitive Landscape</h2>
-        <p class="slide__subtitle">New category, no direct competitors</p>
+        <h2 class="slide__title">Landscape Positioning</h2>
+        <p class="slide__subtitle">How this lab complements existing tool categories</p>
       </div>
       <div class="slide__content">
         <div class="grid grid--2">
@@ -683,8 +734,8 @@
           </div>
         </div>
         <div class="card" style="margin-top: 24px;">
-          <h3 class="card__title" style="color: var(--accent);">Our Differentiation</h3>
-          <p class="card__text">The only platform that combines intent inference, intentionality profiling, competitive simulation, and validation-first experimentation. We define the "discovery layer" category.</p>
+          <h3 class="card__title" style="color: var(--accent);">Current Differentiation</h3>
+          <p class="card__text">The current lab combines intent inference, simulation, experiments, and validation-first workflows in one environment for iterative learning.</p>
         </div>
       </div>
     </div>
@@ -702,14 +753,14 @@
           <div class="card">
             <h3 class="card__title">Why Performics Labs?</h3>
             <p class="card__text">
-              Like Google Labs explores emerging tech for Google, Performics Labs explores next-generation commerce optimization. Direct access to real brand challenges, a built-in testing pipeline, and enterprise credibility.
+              Performics Labs provides a practical R&D context: direct access to brand-side questions, iterative testing cycles, and feedback from real practitioners.
             </p>
           </div>
         </div>
         <div class="card" style="margin-top: 24px;">
-          <h3 class="card__title">The Opportunity</h3>
+          <h3 class="card__title">Working Thesis</h3>
           <p class="card__text" style="font-size: 14px;">
-            AI shopping agents are crossing the chasm from early adopters to mainstream. Brands are beginning to ask how they show up in AI recommendations. The window to establish category leadership in intent legibility is open now.
+            AI shopping behaviors are changing quickly. A disciplined lab helps teams test what is stable, what drifts, and which copy changes hold up under observed validation.
           </p>
         </div>
       </div>
@@ -719,17 +770,17 @@
     <div class="slide" data-slide="11">
       <div class="slide__header">
         <div class="slide__logo">Performics Labs</div>
-        <h1 class="slide__title">Discovery Commerce</h1>
+        <h1 class="slide__title">Agentic Commerce Research Lab</h1>
         <p class="slide__subtitle">
-          Making products legible to reasoning agents.<br>
-          The discovery layer that transaction protocols don't define.
+          Structured experiments for intent, copy, and validation.<br>
+          A lab in progress, evolving toward a robust optimization platform.
         </p>
       </div>
       <div style="text-align: center; margin-top: 48px;">
         <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px;">
-          <em>"Discovery without intent legibility is noise. We make it signal."</em>
+          <em>"Treat lab signals as hypotheses until observed reality confirms them."</em>
         </p>
-        <a href="mailto:dessi.georgieva8@gmail.com" class="btn btn--lg">Get in Touch</a>
+        <a href="mailto:dessi.georgieva@publicismedia.com" class="btn btn--lg">Get in Touch</a>
       </div>
     </div>
 

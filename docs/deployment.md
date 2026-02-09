@@ -22,6 +22,9 @@ cp .env.example .env.local
 # Edit .env.local: set OPENROUTER_API_KEY, OPENROUTER_MODEL
 # Optional: ADMIN_USER_IDS=user_123,user_456 (bypass client_id requirement)
 # Optional: CLERK_WEBHOOK_SECRET=whsec_... (for Clerk user sync)
+# Optional: ENABLE_PROVIDER_VALIDATION_INTEGRATIONS=true
+# Optional: BACKEND_PUBLIC_URL=http://localhost:8000
+# Optional: VALIDATION_CALLBACK_SIGNING_SECRET=change-me
 
 # 2. Install dependencies
 uv sync
@@ -109,6 +112,11 @@ The app uses two distinct validation signals in production:
 
 1. **Synthetic validation signal**
 - Provider/model-run validation jobs (BYOK).
+- Modes:
+  - `in_app_byok` (immediate)
+  - `provider_openai_mcp` (provider-run via ChatGPT + callback)
+  - `manual_fallback` (structured paste-back)
+  - `provider_gemini_function` (contracted, currently not implemented at runtime)
 - Purpose: fast screening and consistency checks.
 
 2. **Observed reality signal**
@@ -116,6 +124,18 @@ The app uses two distinct validation signals in production:
 - Purpose: grounding and calibration of the loop.
 
 Use observed reality signal as higher-trust evidence for rollout decisions.
+
+### Provider-run synthetic validation env vars
+
+Required to enable provider-run flow:
+- `ENABLE_PROVIDER_VALIDATION_INTEGRATIONS=true`
+- `BACKEND_PUBLIC_URL` (public backend URL used to build callback endpoint)
+- `VALIDATION_CALLBACK_SIGNING_SECRET` (HMAC secret for callback signing/verification)
+
+Optional:
+- `VALIDATION_CALLBACK_TTL_SECONDS` (default: `900`)
+- `OPENAI_MCP_LAUNCH_URL` (default: `https://chatgpt.com/`)
+- `GEMINI_FUNCTION_LAUNCH_URL` (default: `https://gemini.google.com/`)
 
 ---
 
