@@ -108,6 +108,8 @@ export function EvidencePanel({
       ...product,
       name,
       description,
+      confidence:
+        typeof product.confidence === "number" ? product.confidence : 0.5,
       metadata,
     };
   });

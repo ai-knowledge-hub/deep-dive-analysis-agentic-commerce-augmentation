@@ -189,14 +189,17 @@ export default function EvidencePage() {
         const response = await listProductsByBrand(brandId, userId);
         const product = response.products?.find((item) => item.id === productId);
         if (!product) return;
-        const metadata = product.metadata ?? {};
-        const creative = metadata.creative ?? {};
+        const metadata = (product.metadata ?? {}) as Record<string, unknown>;
+        const creative = (metadata.creative ?? {}) as Record<string, unknown>;
         const copy =
-          creative.manual_copy ??
-          creative.imported_copy ??
+          (creative.manual_copy as string | undefined) ??
+          (creative.imported_copy as string | undefined) ??
           product.description ??
           null;
-        const url = creative.source_url ?? metadata.source_url ?? null;
+        const url =
+          (creative.source_url as string | undefined) ??
+          (metadata.source_url as string | undefined) ??
+          null;
         setTargetCopy(copy);
         setTargetCopyUrl(url);
       } catch (error) {

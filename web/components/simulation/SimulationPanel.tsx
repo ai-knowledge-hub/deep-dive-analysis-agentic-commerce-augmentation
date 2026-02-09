@@ -379,7 +379,7 @@ export function SimulationPanel({
             value={productCopy ?? ""}
             onChange={(event) => onProductCopyChange?.(event.target.value)}
             placeholder="Edit the web description used for optimization."
-            disabled={optimizationMode === "feed"}
+            disabled={false}
           />
           <p className="simulation__intro-text">
             Updates here are applied to the simulation only (no permanent save).

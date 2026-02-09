@@ -1764,6 +1764,11 @@ input[type="checkbox"]:focus-visible {
   color: #fca5a5;
 }
 
+.panel__notice--warning {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fde68a;
+}
+
 .panel__pre {
   margin-top: 10px;
   padding: 12px;
@@ -3174,6 +3179,14 @@ input[type="checkbox"]:focus-visible {
   margin-bottom: 8px;
 }
 
+.lab-contract {
+  margin-bottom: 12px;
+}
+
+.lab-checkpoint {
+  margin-top: 12px;
+}
+
 .lab-loop__steps {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -3352,6 +3365,40 @@ input[type="checkbox"]:focus-visible {
 
 .flow-next-action {
   margin-top: 14px;
+}
+
+.outcome-snapshot {
+  margin-top: 10px;
+}
+
+.outcome-snapshot__grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.outcome-snapshot__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.outcome-snapshot__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.outcome-snapshot__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .variant-source {

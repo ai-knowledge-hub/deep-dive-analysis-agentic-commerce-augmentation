@@ -139,6 +139,14 @@ export default function ValidationPage() {
   );
   const [manualStatus, setManualStatus] = useState<string | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
+
+  const renderMetricValue = useCallback((value: unknown, fallback = "—") => {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : fallback;
+    if (typeof value === "string") return value;
+    if (typeof value === "boolean") return value ? "true" : "false";
+    return fallback;
+  }, []);
   const [manualForm, setManualForm] = useState({
     variantId: "",
     platform: "openrouter",
@@ -1062,16 +1070,16 @@ export default function ValidationPage() {
                       </div>
                       <div className="panel__meta">
                         <span className="panel__muted">
-                          Win rate: {values.win_rate ?? "—"}
+                          Win rate: {renderMetricValue(values.win_rate)}
                         </span>
                         <span className="panel__muted">
-                          Robust win rate: {values.win_rate_robust ?? "—"}
+                          Robust win rate: {renderMetricValue(values.win_rate_robust)}
                         </span>
                         <span className="panel__muted">
-                          Avg score: {values.avg_score ?? "—"}
+                          Avg score: {renderMetricValue(values.avg_score)}
                         </span>
                         <span className="panel__muted">
-                          Runs: {values.total_runs ?? "—"}
+                          Runs: {renderMetricValue(values.total_runs)}
                         </span>
                       </div>
                       {metric?.created_at ? (

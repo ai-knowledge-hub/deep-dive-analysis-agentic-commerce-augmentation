@@ -34,7 +34,7 @@ type AlignmentSnapshot = {
   plan?: ConversationResponse["plan"];
   clarifications?: string[];
   product_reasoning?: ConversationResponse["product_explanations"];
-  research_results?: ConversationResponse["plan"]["research_results"];
+  research_results?: NonNullable<ConversationResponse["plan"]>["research_results"];
   last_query?: string | null;
 };
 

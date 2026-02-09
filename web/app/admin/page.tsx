@@ -1161,7 +1161,7 @@ export default function AdminPage() {
                     onChange={(event) => {
                       const nextClientId = event.target.value;
                       setActiveClientId(nextClientId);
-                      setTenantClientId(nextClientId || null);
+                      setTenantClientId(nextClientId || "");
                       setActiveBrandId("");
                       setActiveProductId("");
                     }}

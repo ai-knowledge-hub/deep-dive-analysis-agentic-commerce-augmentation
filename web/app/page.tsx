@@ -61,6 +61,31 @@ const CHAT_PROVIDER_LABELS: Record<string, string> = {
   gemini: "Gemini",
 };
 
+type SessionResearchState = {
+  items?: ConversationResponse["plan"] extends infer P
+    ? P extends { research_results?: infer R }
+      ? R
+      : never
+    : never;
+  alignment?: {
+    per_item?: {
+      product_id?: string;
+      score?: number;
+      alignment_reasoning?: string;
+    }[];
+  };
+};
+
+type SessionState = {
+  clarification_state?: ConversationResponse["goal_state"];
+  last_intent?: ConversationResponse["intent"];
+  last_research?: SessionResearchState;
+  last_query?: string | null;
+  last_products?: SimulationProduct[];
+  last_product_id?: string | null;
+  last_profiles?: EvidenceAnalyzeResponse["profiles"];
+};
+
 export default function HomePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -71,7 +96,7 @@ export default function HomePage() {
     ConversationResponse["product_explanations"]
   >([]);
   const [researchResults, setResearchResults] = useState<
-    ConversationResponse["plan"]["research_results"]
+    NonNullable<ConversationResponse["plan"]>["research_results"]
   >([]);
   const [goalState, setGoalState] = useState<ConversationResponse["goal_state"]>();
   const [intent, setIntent] = useState<ConversationResponse["intent"]>();
@@ -436,10 +461,11 @@ export default function HomePage() {
         setMessages((prev) => [...prev, { role: "agent", content: clarification }]);
       }
 
-      if (response.lab_operator?.message) {
+      const operatorMessage = response.lab_operator?.message;
+      if (typeof operatorMessage === "string" && operatorMessage) {
         setMessages((prev) => [
           ...prev,
-          { role: "agent", content: response.lab_operator.message as string },
+          { role: "agent", content: operatorMessage },
         ]);
         setLabOperator(response.lab_operator ?? null);
       }
@@ -721,7 +747,8 @@ export default function HomePage() {
           content: turn.content,
         })),
       );
-      const state = snapshot.snapshot?.session?.state ?? {};
+      const state =
+        (snapshot.snapshot?.session?.state as SessionState | undefined) ?? {};
       setGoalState(state.clarification_state as ConversationResponse["goal_state"]);
       setIntent(state.last_intent as ConversationResponse["intent"]);
       setResearchResults(state.last_research?.items ?? []);
@@ -770,7 +797,7 @@ export default function HomePage() {
           },
         }));
         const alignmentScores =
-          state.last_research?.alignment?.per_item?.map((score: any) => ({
+          state.last_research?.alignment?.per_item?.map((score) => ({
             product_id: score.product_id ?? "",
             score: score.score ?? 0,
             alignment_reasoning: score.alignment_reasoning,
@@ -1067,7 +1094,10 @@ export default function HomePage() {
                     className="chat__quick-action"
                     onClick={() =>
                       router.push(
-                        `/simulation?run_id=${labOperator?.evidence?.runs?.[0]?.run_id}`,
+                        `/simulation?run_id=${String(
+                          (labOperator?.evidence as { runs?: { run_id?: unknown }[] } | null)
+                            ?.runs?.[0]?.run_id ?? "",
+                        )}`,
                       )
                     }
                   >

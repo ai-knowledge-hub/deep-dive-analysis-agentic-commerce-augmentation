@@ -606,8 +606,9 @@ export default function OverviewPage() {
                 <div>
                   <p className="panel__subtitle">Next test</p>
                   <p className="panel__text">
-                    {changes?.next_test?.reason ??
-                      "No recommendation yet."}
+                    {typeof changes?.next_test?.reason === "string"
+                      ? changes.next_test.reason
+                      : "No recommendation yet."}
                   </p>
                 </div>
               </div>

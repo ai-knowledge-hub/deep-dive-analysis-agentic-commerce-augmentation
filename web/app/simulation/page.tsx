@@ -268,13 +268,22 @@ export default function SimulationPage() {
       if (cancelled) return;
       const items = response.products ?? [];
       if (items.length === 0) return;
+      const toText = (value: unknown, fallback = "") =>
+        typeof value === "string" && value.trim() ? value : fallback;
       const mapped = items.map((product) => ({
         id: product.id,
         name: product.name,
-        description: product.description ?? product.metadata?.description ?? product.name,
+        description: toText(
+          product.description ??
+            toText((product.metadata as Record<string, unknown> | undefined)?.description),
+          product.name,
+        ),
         source: "catalog",
         brand_id: product.brand_id ?? brandId ?? undefined,
-        url: (product.metadata?.product_url as string | undefined) ?? undefined,
+        url:
+          (product.metadata as Record<string, unknown> | undefined)?.product_url as
+            | string
+            | undefined,
         price:
           typeof product.metadata?.price === "number"
             ? product.metadata?.price
@@ -283,18 +292,24 @@ export default function SimulationPage() {
         metadata: {
           ...(product.metadata ?? {}),
           feed_description:
-            (product.metadata?.feed_description as string | undefined) ??
-            product.description ??
-            product.metadata?.description ??
+            toText((product.metadata as Record<string, unknown>)?.feed_description) ||
+            toText(product.description) ||
+            toText((product.metadata as Record<string, unknown>)?.description) ||
             product.name,
           acp: {
             item_id: product.id,
             title: product.name,
             description:
-              (product.metadata?.acp?.description as string | undefined) ??
-              (product.metadata?.feed_description as string | undefined) ??
-              product.description ??
-              product.metadata?.description ??
+              toText(
+                (
+                  ((product.metadata as Record<string, unknown>)?.acp as
+                    | Record<string, unknown>
+                    | undefined)
+                )?.description,
+              ) ||
+              toText((product.metadata as Record<string, unknown>)?.feed_description) ||
+              toText(product.description) ||
+              toText((product.metadata as Record<string, unknown>)?.description) ||
               product.name,
             url:
               (product.metadata?.product_url as string | undefined) ??
@@ -332,10 +347,16 @@ export default function SimulationPage() {
               (product.metadata?.merchant_name as string | undefined) ??
               product.name,
             description:
-              (product.metadata?.ucp?.description as string | undefined) ??
-              (product.metadata?.feed_description as string | undefined) ??
-              product.description ??
-              product.metadata?.description ??
+              toText(
+                (
+                  ((product.metadata as Record<string, unknown>)?.ucp as
+                    | Record<string, unknown>
+                    | undefined)
+                )?.description,
+              ) ||
+              toText((product.metadata as Record<string, unknown>)?.feed_description) ||
+              toText(product.description) ||
+              toText((product.metadata as Record<string, unknown>)?.description) ||
               product.name,
             price:
               typeof product.metadata?.price === "number"
@@ -496,12 +517,13 @@ export default function SimulationPage() {
     if (!sessionParam) return;
     let cancelled = false;
     const hydrateFromSession = async () => {
-      let resolvedClientId = storageClientId ?? clientId ?? null;
+      let resolvedClientId: string | null = storageClientId ?? clientId ?? null;
       if (!resolvedClientId && userId) {
         try {
           const response = await listConversationSessions(userId);
           const match = response.sessions.find((session) => session.id === sessionParam);
-          resolvedClientId = match?.client_id ?? null;
+          resolvedClientId =
+            typeof match?.client_id === "string" ? match.client_id : null;
         } catch {
           // ignore and fall back to current client scope
         }

@@ -18,6 +18,7 @@ import type {
   QueryBattery,
   QueryBatteryQuery,
   QueryBatteryCandidate,
+  QueryBatteryMetrics,
   SessionSummary,
   SimulationGapReport,
   SimulationRunDetailResponse,
@@ -128,9 +129,7 @@ export default function ExperimentsPage() {
     purpose: "",
     status: "draft",
   });
-  const [batteryMetrics, setBatteryMetrics] = useState<Record<string, unknown> | null>(
-    null,
-  );
+  const [batteryMetrics, setBatteryMetrics] = useState<QueryBatteryMetrics | null>(null);
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
   const [batteryUseLlm, setBatteryUseLlm] = useState(false);
   const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
@@ -142,6 +141,8 @@ export default function ExperimentsPage() {
   const [setupSecondaryActionsOpen, setSetupSecondaryActionsOpen] = useState(false);
   const [variantSecondaryActionsOpen, setVariantSecondaryActionsOpen] = useState(false);
   const [recommendationsOpen, setRecommendationsOpen] = useState(false);
+  const [labShowManualControls, setLabShowManualControls] = useState(false);
+  const [labAutoRunEnabled, setLabAutoRunEnabled] = useState(true);
   const [generatedCandidates, setGeneratedCandidates] = useState<
     (QueryBatteryCandidate & { selected: boolean })[]
   >([]);
@@ -176,6 +177,7 @@ export default function ExperimentsPage() {
   const [variantSourceMode, setVariantSourceMode] = useState<
     "manual" | "simulation" | "loop_evidence" | "cold_start"
   >("manual");
+  const [variantSourceManualOverride, setVariantSourceManualOverride] = useState(false);
   const [coldStartGenerationStrategy, setColdStartGenerationStrategy] = useState<
     "bottom_up" | "top_down" | "both"
   >("both");
@@ -238,8 +240,10 @@ export default function ExperimentsPage() {
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
   const autosaveEnabled = useRef(false);
   const variantsSectionRef = useRef<HTMLElement | null>(null);
-  const runsSectionRef = useRef<HTMLElement | null>(null);
+  const runsSectionRef = useRef<HTMLDivElement | null>(null);
   const metricsSectionRef = useRef<HTMLElement | null>(null);
+
+  const showManualControls = labMode === "manual" || labShowManualControls;
 
   useEffect(() => {
     if (!userId) return;
@@ -783,7 +787,7 @@ export default function ExperimentsPage() {
   const handleRunVariant = useCallback(
     async (variantId: string) => {
       if (!selectedExperimentId) return;
-      if (labMode === "lab") {
+      if (labMode === "lab" && labAutoRunEnabled) {
         const ok = window.confirm(
           "Run this variant now? We'll execute the query battery and record results.",
         );
@@ -1237,7 +1241,7 @@ export default function ExperimentsPage() {
       const refreshed = await listExperiments(userId, productId ?? undefined);
       setExperiments(refreshed.experiments ?? []);
       setSelectedExperimentId(response.experiment.id);
-      if (labMode === "lab") {
+      if (labMode === "lab" && labAutoRunEnabled) {
         const hypothesisPayload =
           (hypothesis as Record<string, unknown>)?.variant_payload ??
           (hypothesis as Record<string, unknown>)?.payload ??
@@ -1275,6 +1279,10 @@ export default function ExperimentsPage() {
         setRuns(runsResponse.runs ?? []);
         setMetrics(metricsResponse.metrics ?? []);
         setExperimentStatus("Lab mode: control + hypothesis runs completed.");
+      } else if (labMode === "lab") {
+        setExperimentStatus(
+          "Lab mode: experiment created. Auto-run is off, so run variants when ready.",
+        );
       }
       setExperimentForm({
         name: "",
@@ -1301,6 +1309,7 @@ export default function ExperimentsPage() {
     experimentForm,
     jsonErrors,
     labMode,
+    labAutoRunEnabled,
     hasBottomUpMetadata,
     parseSeedList,
     productId,
@@ -1587,6 +1596,63 @@ export default function ExperimentsPage() {
     userId,
   ]);
 
+  const handleCreateAndRunVariantFromLoopCandidate = useCallback(async () => {
+    if (!selectedExperimentId) {
+      setLoopGenerationStatus("Select an experiment first.");
+      return;
+    }
+    const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
+    if (!candidate) {
+      setLoopGenerationStatus("Generate and select a loop candidate first.");
+      return;
+    }
+
+    setFormError(null);
+    setLoopGenerationStatus(null);
+    setSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = buildLoopCandidatePayload(candidate, {
+        role: "candidate",
+      });
+      const description = String(candidate.description || "").trim();
+      if (description) {
+        payload.description = description;
+      }
+      const created = await createExperimentVariant(selectedExperimentId, {
+        label: candidate.label?.trim() || "Hypothesis (variant)",
+        type: "copy",
+        payload,
+        user_id: userId,
+      });
+      await runExperiment(selectedExperimentId, created.variant.id, userId);
+      const [variantsResponse, runsResponse, metricsResponse] = await Promise.all([
+        listExperimentVariants(selectedExperimentId, userId),
+        listExperimentRuns(selectedExperimentId, userId),
+        listExperimentMetrics(selectedExperimentId, userId),
+      ]);
+      setVariants(variantsResponse.variants ?? []);
+      setRuns(runsResponse.runs ?? []);
+      setMetrics(metricsResponse.metrics ?? []);
+      setLoopGenerationStatus(
+        `Created and ran candidate ${selectedLoopCandidateIndex + 1}.`,
+      );
+    } catch (error) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create and run variant from selected loop candidate.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [
+    buildLoopCandidatePayload,
+    loopGeneratedVariants,
+    selectedExperimentId,
+    selectedLoopCandidateIndex,
+    userId,
+  ]);
+
   const handleSaveExperimentDraft = useCallback(
     async (experimentId: string) => {
       setFormError(null);
@@ -1780,7 +1846,9 @@ export default function ExperimentsPage() {
     [labMode, selectedExperimentId, userId],
   );
 
-  const latestMetric = metrics[0]?.metrics as Record<string, unknown> | undefined;
+  const latestMetricEntry = metrics[0] ?? null;
+  const latestMetric =
+    (latestMetricEntry?.metrics as Record<string, unknown> | undefined) ?? null;
   const metricsByVariant = useMemo(() => {
     const map = new Map<string, ExperimentMetric>();
     metrics.forEach((metric) => {
@@ -1863,6 +1931,42 @@ export default function ExperimentsPage() {
     (validationSummary?.total_logged ?? 0) > 0 ||
     (validationSummary?.verified_runs ?? 0) > 0;
 
+  const outcomeSnapshot = useMemo(() => {
+    const latestRunEntry = runs
+      .slice()
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+    const latestMetricEntry = metrics
+      .slice()
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+    const metricValues = (latestMetricEntry?.metrics ?? {}) as Record<string, unknown>;
+    const runVariantLabel = latestRunEntry?.variant_id
+      ? variants.find((variant) => variant.id === latestRunEntry.variant_id)?.label ??
+        latestRunEntry.variant_id
+      : "No runs yet";
+    const runQueryLabel = latestRunEntry?.query_id
+      ? queryMap.get(latestRunEntry.query_id) ?? latestRunEntry.query_id
+      : "—";
+    const winRate =
+      typeof metricValues.win_rate === "number"
+        ? `${Math.round(metricValues.win_rate * 100)}%`
+        : "—";
+    const avgScore =
+      typeof metricValues.avg_score === "number"
+        ? metricValues.avg_score.toFixed(3)
+        : "—";
+    const validationState = hasValidationSignals
+      ? `Started · ${validationSummary?.verified_runs ?? 0} verified`
+      : "Pending";
+    return {
+      runVariantLabel,
+      runQueryLabel,
+      runCreatedAt: latestRunEntry?.created_at ?? null,
+      winRate,
+      avgScore,
+      validationState,
+    };
+  }, [hasValidationSignals, metrics, queryMap, runs, validationSummary?.verified_runs, variants]);
+
   const experimentFlowSteps = useMemo(() => {
     const batteryBuilt = Boolean(selectedExperiment?.battery_id || experimentForm.batteryId);
     const queriesReady = queries.length > 0;
@@ -1900,10 +2004,50 @@ export default function ExperimentsPage() {
     variants.length,
   ]);
 
+  const labFlowSteps = useMemo(() => {
+    const batteryBuilt = Boolean(selectedExperiment?.battery_id || experimentForm.batteryId);
+    const queriesReady = queries.length > 0;
+    const experimentCreated = Boolean(selectedExperimentId);
+    const variantsReady = variants.length >= 2;
+    const hasRuns = runs.length > 0 || Boolean(selectedExperiment?.last_run_at);
+    const outcomesReviewed = metrics.length > 0;
+    const validated = hasValidationSignals;
+    const nextVariantsReady =
+      loopGeneratedVariants.length > 0 ||
+      Boolean(nextTest) ||
+      recommendations.length > 0;
+    return [
+      { id: 1, label: "Build query battery", done: batteryBuilt },
+      { id: 2, label: "Generate and review queries", done: queriesReady },
+      { id: 3, label: "Create experiment", done: experimentCreated },
+      { id: 4, label: "Create baseline + hypothesis variants", done: variantsReady },
+      { id: 5, label: "Run baseline + hypothesis", done: hasRuns },
+      { id: 6, label: "Review outcomes and metrics", done: outcomesReviewed },
+      { id: 7, label: "Validation checkpoint", done: validated },
+      { id: 8, label: "Generate next variants", done: nextVariantsReady },
+    ];
+  }, [
+    experimentForm.batteryId,
+    hasValidationSignals,
+    loopGeneratedVariants.length,
+    metrics.length,
+    nextTest,
+    queries.length,
+    recommendations.length,
+    runs.length,
+    selectedExperiment?.battery_id,
+    selectedExperiment?.last_run_at,
+    selectedExperimentId,
+    variants.length,
+  ]);
+
+  const activeFlowSteps = labMode === "lab" ? labFlowSteps : experimentFlowSteps;
+
   const currentFlowStep = useMemo(
-    () => experimentFlowSteps.find((step) => !step.done)?.id ?? 8,
-    [experimentFlowSteps],
+    () => activeFlowSteps.find((step) => !step.done)?.id ?? 8,
+    [activeFlowSteps],
   );
+
   const queryGenerationDisabledReason = !experimentForm.batteryId
     ? "Select a battery first."
     : isSubmitting
@@ -1941,6 +2085,45 @@ export default function ExperimentsPage() {
       : !hasValidationSignals && variantSourceMode === "loop_evidence"
         ? "Add validation signals to improve loop-evidence reliability."
         : null;
+
+  const recommendedVariantSource = useMemo<
+    "manual" | "simulation" | "loop_evidence" | "cold_start"
+  >(() => {
+    if (runs.length === 0) return "cold_start";
+    if (!hasValidationSignals) {
+      return simulationRevisions.length > 0 ? "simulation" : "cold_start";
+    }
+    return "loop_evidence";
+  }, [hasValidationSignals, runs.length, simulationRevisions.length]);
+
+  const recommendedVariantSourceReason = useMemo(() => {
+    if (runs.length === 0) {
+      return "No run history yet, so cold-start is the fastest bootstrap path.";
+    }
+    if (!hasValidationSignals && simulationRevisions.length > 0) {
+      return "Runs exist but validation is still pending; simulation prefill gives a stable interim source.";
+    }
+    if (!hasValidationSignals) {
+      return "Runs exist but validation is still pending; use cold-start until stronger loop evidence is available.";
+    }
+    return "Validation signals are available; loop evidence is now the highest-confidence source.";
+  }, [hasValidationSignals, runs.length, simulationRevisions.length]);
+
+  useEffect(() => {
+    setVariantSourceManualOverride(false);
+  }, [selectedExperimentId]);
+
+  useEffect(() => {
+    if (currentFlowStep !== 4) return;
+    if (variantSourceManualOverride) return;
+    if (variantSourceMode === recommendedVariantSource) return;
+    setVariantSourceMode(recommendedVariantSource);
+  }, [
+    currentFlowStep,
+    recommendedVariantSource,
+    variantSourceManualOverride,
+    variantSourceMode,
+  ]);
 
   const nextFlowAction = useMemo(() => {
     if (!selectedExperimentId && setupFlowCollapsed) {
@@ -2188,6 +2371,23 @@ export default function ExperimentsPage() {
     return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
   }, []);
 
+  const renderMetricValue = useCallback((value: unknown, fallback = "—") => {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : fallback;
+    if (typeof value === "string") return value;
+    if (typeof value === "boolean") return value ? "true" : "false";
+    return fallback;
+  }, []);
+
+  const latestBeliefSummary = useMemo(() => {
+    const summary = latestBelief?.metadata?.summary;
+    if (typeof summary === "string" && summary.trim()) return summary;
+    if (typeof latestBelief?.recommendation === "string" && latestBelief.recommendation.trim()) {
+      return latestBelief.recommendation;
+    }
+    return "Beliefs appear after results are analyzed.";
+  }, [latestBelief]);
+
   const resolveVariantDescription = useCallback(
     (variant: ExperimentVariant): string | null => {
       const payload = variant.payload ?? {};
@@ -2261,8 +2461,11 @@ export default function ExperimentsPage() {
                   className={`summary-card__toggle-btn product__tooltip tooltip--below ${
                     labMode === "lab" ? "is-active" : ""
                   }`}
-                  onClick={() => setLabMode("lab")}
-                  data-tooltip="Lab mode auto-creates batteries, variants, and runs."
+                  onClick={() => {
+                    setLabMode("lab");
+                    setLabShowManualControls(false);
+                  }}
+                  data-tooltip="Lab mode follows the automation-first path with optional auto-run."
                 >
                   Lab mode
                 </button>
@@ -2271,7 +2474,10 @@ export default function ExperimentsPage() {
                   className={`summary-card__toggle-btn product__tooltip tooltip--below ${
                     labMode === "manual" ? "is-active" : ""
                   }`}
-                  onClick={() => setLabMode("manual")}
+                  onClick={() => {
+                    setLabMode("manual");
+                    setLabShowManualControls(true);
+                  }}
                   data-tooltip="Manual mode is controlled: you create and run each step."
                 >
                   Manual
@@ -2334,13 +2540,59 @@ export default function ExperimentsPage() {
               The lab loop turns hypotheses into evidence and updates brand
               beliefs with every run.
             </p>
+            {labMode === "lab" ? (
+              <section className="panel__notice panel__notice--info lab-contract">
+                <strong>Lab mode contract:</strong> Automation handles the default path
+                (battery, queries, baseline/hypothesis variants, and optional auto-run).
+                <div className="panel__actions">
+                  <label className="panel__toggle">
+                    <input
+                      type="checkbox"
+                      checked={labAutoRunEnabled}
+                      onChange={(event) => setLabAutoRunEnabled(event.target.checked)}
+                    />
+                    <span>Auto-run baseline + hypothesis after experiment creation</span>
+                  </label>
+                  {!showManualControls ? (
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => setLabShowManualControls(true)}
+                    >
+                      Show manual controls
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => setLabShowManualControls(false)}
+                    >
+                      Hide manual controls
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => {
+                      setLabMode("manual");
+                      setLabShowManualControls(true);
+                      setExperimentStatus(
+                        "Switched to Manual mode for explicit control over each step.",
+                      );
+                    }}
+                  >
+                    Switch to Manual for this experiment
+                  </button>
+                </div>
+              </section>
+            ) : null}
             <div className="flow-rail">
               <div className="flow-rail__header">
-                <h4>Experiment Flow</h4>
+                <h4>{labMode === "lab" ? "Lab Flow" : "Experiment Flow"}</h4>
                 <span className="panel__muted">Current step: {currentFlowStep} / 8</span>
               </div>
               <div className="flow-rail__steps">
-                {experimentFlowSteps.map((step) => (
+                {activeFlowSteps.map((step) => (
                   <div
                     key={step.id}
                     className={`flow-rail__step ${
@@ -2393,9 +2645,7 @@ export default function ExperimentsPage() {
                   onClick={handleOpenBeliefsTimeline}
                   disabled={!latestBelief}
                 >
-                  {latestBelief?.metadata?.summary ??
-                    latestBelief?.recommendation ??
-                    "Beliefs appear after results are analyzed."}
+                  {latestBeliefSummary}
                 </button>
                 <div className="lab-loop__summary-actions">
                   <button
@@ -2443,13 +2693,42 @@ export default function ExperimentsPage() {
                 </button>
               </div>
             </section>
+            {labMode === "lab" && runs.length > 0 && !hasValidationSignals ? (
+              <section className="panel__notice panel__notice--warning lab-checkpoint">
+                <strong>Validation checkpoint (Step 7):</strong> Runs exist, but no
+                validation evidence is logged yet.
+                <p className="panel__muted">
+                  Complete synthetic and/or observed validation before trusting automated
+                  iteration decisions.
+                </p>
+                <div className="panel__actions panel__actions--priority">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--prominent"
+                    onClick={() =>
+                      router.push(
+                        selectedExperimentId
+                          ? `/validation?experiment_id=${selectedExperimentId}`
+                          : "/validation",
+                      )
+                    }
+                  >
+                    Go to Validation (Step 7)
+                  </button>
+                </div>
+              </section>
+            ) : null}
           </section>
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
           <section className="panel__card panel__card--primary">
             <div className="panel__header">
-              <h3>Experiment Setup Flow</h3>
+              <h3>
+                {labMode === "lab"
+                  ? "Lab Setup Flow"
+                  : "Experiment Setup Flow"}
+              </h3>
               <div className="panel__meta">
                 <button
                   type="button"
@@ -2462,7 +2741,9 @@ export default function ExperimentsPage() {
             </div>
             <p className="panel__subheading">Setup phase · Steps 1 to 3</p>
             <p className="panel__muted">
-              Build battery, generate queries, then create experiment.
+              {labMode === "lab"
+                ? "Automation-first: create experiment and let Lab mode handle the default setup path."
+                : "Build battery, generate queries, then create experiment."}
             </p>
             {setupFlowCollapsed ? (
               <p className="panel__empty">
@@ -2470,6 +2751,23 @@ export default function ExperimentsPage() {
               </p>
             ) : productId ? (
               <div className="panel__form">
+                {labMode === "lab" && !showManualControls ? (
+                  <section className="panel__notice panel__notice--info">
+                    <strong>Lab automation path:</strong> Steps 1 and 2 are handled during
+                    experiment creation when no battery is selected.
+                    <div className="panel__actions panel__actions--priority">
+                      <button
+                        type="button"
+                        className="panel__action panel__action--prominent"
+                        onClick={() => setLabShowManualControls(true)}
+                      >
+                        Show manual setup controls
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+                {showManualControls ? (
+                  <>
                 {batteryStatus ? (
                   <p className="panel__success">{batteryStatus}</p>
                 ) : null}
@@ -2932,11 +3230,15 @@ export default function ExperimentsPage() {
                     </div>
                   </div>
                 ) : null}
+                  </>
+                ) : null}
                 <p className="panel__subheading">
                   Step 3 · Create experiment from the configured battery
                 </p>
                 <p className="panel__step-helper">
-                  Define hypothesis and competitor policy, then create the experiment.
+                  {labMode === "lab"
+                    ? "Define hypothesis/policy, then create experiment. Lab mode can auto-create and auto-run the baseline path."
+                    : "Define hypothesis and competitor policy, then create the experiment."}
                 </p>
                 {experimentStatus ? (
                   <p className="panel__success">{experimentStatus}</p>
@@ -3053,6 +3355,17 @@ export default function ExperimentsPage() {
                     </button>
                   </div>
                 </details>
+                {labMode === "lab" && showManualControls ? (
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => setLabShowManualControls(false)}
+                    >
+                      Hide manual setup controls
+                    </button>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="panel__action panel__action--prominent"
@@ -3079,7 +3392,7 @@ export default function ExperimentsPage() {
           <div className="detail__grid">
             <section className="panel__card panel__card--primary panel__card--full-row" ref={variantsSectionRef}>
               <div className="panel__header">
-                <h3>Variants</h3>
+                <h3>{labMode === "lab" ? "Variants and Iteration" : "Variants"}</h3>
                 <div className="panel__meta">
                   {variants.length > 0 && (
                     <span className="panel__badge">{variants.length}</span>
@@ -3099,7 +3412,9 @@ export default function ExperimentsPage() {
               </p>
               <p className="panel__subheading">Step 4 · Create variants</p>
               <p className="panel__step-helper">
-                Choose a source, shape candidate copy, then add the variant.
+                {labMode === "lab"
+                  ? "Automation-first: generate candidate copy, then create and run quickly."
+                  : "Choose a source, shape candidate copy, then add the variant."}
               </p>
               <div className="variant-flow">
                 <span className="variant-flow__step is-active">1. Define</span>
@@ -3112,10 +3427,81 @@ export default function ExperimentsPage() {
                   3. Run
                 </span>
               </div>
+              {labMode === "lab" && !showManualControls ? (
+                <section className="panel__notice panel__notice--info">
+                  <strong>Lab iteration path:</strong> generate candidates, create the selected
+                  one, then run it.
+                  <div className="panel__actions panel__actions--priority">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--prominent"
+                      onClick={() =>
+                        hasValidationSignals
+                          ? void handleGenerateLoopVariants()
+                          : void handleGenerateColdStartVariants()
+                      }
+                      disabled={!selectedExperimentId || isGeneratingLoopVariant}
+                    >
+                      {isGeneratingLoopVariant
+                        ? "Generating candidates…"
+                        : hasValidationSignals
+                          ? "Generate candidate from loop evidence"
+                          : "Generate cold-start candidate"}
+                    </button>
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={handleCreateAndRunVariantFromLoopCandidate}
+                      disabled={loopGeneratedVariants.length === 0 || isSubmitting}
+                    >
+                      {isSubmitting
+                        ? "Creating + running candidate…"
+                        : "Create + run selected candidate"}
+                    </button>
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => setLabShowManualControls(true)}
+                    >
+                      Show manual variant controls
+                    </button>
+                  </div>
+                  {loopGeneratedVariants.length > 0 ? (
+                    <label className="panel__label">
+                      Selected candidate
+                      <select
+                        className="panel__input"
+                        value={String(selectedLoopCandidateIndex)}
+                        onChange={(event) =>
+                          setSelectedLoopCandidateIndex(Number(event.target.value))
+                        }
+                      >
+                        {loopGeneratedVariants.map((candidate, index) => (
+                          <option key={`${candidate.label}-${index}`} value={String(index)}>
+                            {index + 1}. {candidate.label} · conf {candidate.confidence.toFixed(2)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale ? (
+                    <p className="panel__muted">
+                      {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale}
+                    </p>
+                  ) : null}
+                  {loopGenerationStatus ? (
+                    <p className="panel__success">{loopGenerationStatus}</p>
+                  ) : null}
+                </section>
+              ) : (
+                <>
               <div className="variant-source">
                 <div className="variant-source__header">
                   <h4>Choose variant source</h4>
-                  <span className="panel__muted">Pick one path, then create the variant.</span>
+                  <span className="panel__muted">
+                    Recommended now:{" "}
+                    <strong>{recommendedVariantSource.replace("_", " ")}</strong>
+                  </span>
                 </div>
                 <div className="variant-source__tabs">
                   <button
@@ -3123,7 +3509,10 @@ export default function ExperimentsPage() {
                     className={`variant-source__tab ${
                       variantSourceMode === "manual" ? "is-active" : ""
                     }`}
-                    onClick={() => setVariantSourceMode("manual")}
+                    onClick={() => {
+                      setVariantSourceMode("manual");
+                      setVariantSourceManualOverride(true);
+                    }}
                   >
                     Manual
                   </button>
@@ -3132,7 +3521,10 @@ export default function ExperimentsPage() {
                     className={`variant-source__tab ${
                       variantSourceMode === "simulation" ? "is-active" : ""
                     }`}
-                    onClick={() => setVariantSourceMode("simulation")}
+                    onClick={() => {
+                      setVariantSourceMode("simulation");
+                      setVariantSourceManualOverride(true);
+                    }}
                   >
                     Simulation prefill
                   </button>
@@ -3141,7 +3533,10 @@ export default function ExperimentsPage() {
                     className={`variant-source__tab ${
                       variantSourceMode === "loop_evidence" ? "is-active" : ""
                     }`}
-                    onClick={() => setVariantSourceMode("loop_evidence")}
+                    onClick={() => {
+                      setVariantSourceMode("loop_evidence");
+                      setVariantSourceManualOverride(true);
+                    }}
                   >
                     Loop evidence
                   </button>
@@ -3150,11 +3545,15 @@ export default function ExperimentsPage() {
                     className={`variant-source__tab ${
                       variantSourceMode === "cold_start" ? "is-active" : ""
                     }`}
-                    onClick={() => setVariantSourceMode("cold_start")}
+                    onClick={() => {
+                      setVariantSourceMode("cold_start");
+                      setVariantSourceManualOverride(true);
+                    }}
                   >
                     Cold-start
                   </button>
                 </div>
+                <p className="panel__step-helper">{recommendedVariantSourceReason}</p>
                 <p className="variant-source__hint">
                   {variantSourceMode === "manual"
                     ? "Use when you already have candidate copy and want full control."
@@ -3164,6 +3563,21 @@ export default function ExperimentsPage() {
                         ? "Use when runs/metrics/validation history exists and you want evidence-weighted candidates."
                         : "Use when history is sparse and you need a first set of aligned variants."}
                 </p>
+                {variantSourceManualOverride &&
+                variantSourceMode !== recommendedVariantSource ? (
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => {
+                        setVariantSourceMode(recommendedVariantSource);
+                        setVariantSourceManualOverride(false);
+                      }}
+                    >
+                      Use recommended source
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <p className="panel__subheading">Step 8 · Generate next variants from updated evidence</p>
               <p className="panel__step-helper">
@@ -3453,6 +3867,19 @@ export default function ExperimentsPage() {
                   <p className="panel__muted">{addVariantDisabledReason}</p>
                 ) : null}
               </div>
+                {labMode === "lab" ? (
+                  <div className="panel__actions">
+                    <button
+                      type="button"
+                      className="panel__action panel__action--ghost"
+                      onClick={() => setLabShowManualControls(false)}
+                    >
+                      Hide manual variant controls
+                    </button>
+                  </div>
+                ) : null}
+                </>
+              )}
               <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
               {runVariantDisabledReason ? (
                 <p className="panel__muted">{runVariantDisabledReason}</p>
@@ -3507,27 +3934,31 @@ export default function ExperimentsPage() {
                       <div className="panel__meta">
                         <span className="panel__muted">
                           Win rate:{" "}
-                          {(
-                            (metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                          {renderMetricValue(
+                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
                               string,
                               unknown
-                            >
-                          ).win_rate ?? "—"}
+                            >).win_rate,
+                          )}
                         </span>
                         <span className="panel__muted">
                           Runs:{" "}
-                          {(
-                            (metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                          {renderMetricValue(
+                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
                               string,
                               unknown
-                            >
-                          ).total_runs ?? "—"}
+                            >).total_runs,
+                          )}
                         </span>
                       </div>
                     ) : null}
                     <button
                       type="button"
-                      className="panel__action panel__action--prominent"
+                      className={`panel__action ${
+                        labMode === "lab" && !showManualControls
+                          ? "panel__action--ghost"
+                          : "panel__action--prominent"
+                      }`}
                       onClick={() => handleRunVariant(variant.id)}
                       disabled={runningVariantId === variant.id || !canRunVariantTests}
                     >
@@ -3594,20 +4025,76 @@ export default function ExperimentsPage() {
               {nextTestStatus ? (
                 <p className="panel__success">{nextTestStatus}</p>
               ) : null}
+              <section className="panel__notice panel__notice--info outcome-snapshot">
+                <div className="panel__meta">
+                  <strong>Outcome snapshot</strong>
+                  <span className="panel__badge panel__badge--secondary">Unified view</span>
+                </div>
+                <div className="outcome-snapshot__grid">
+                  <div className="outcome-snapshot__item">
+                    <span className="outcome-snapshot__label">Latest run</span>
+                    <span className="outcome-snapshot__value">
+                      {outcomeSnapshot.runVariantLabel}
+                    </span>
+                    <span className="panel__muted">
+                      Query: {outcomeSnapshot.runQueryLabel}
+                      {outcomeSnapshot.runCreatedAt
+                        ? ` · ${new Date(outcomeSnapshot.runCreatedAt).toLocaleString()}`
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="outcome-snapshot__item">
+                    <span className="outcome-snapshot__label">Key metrics</span>
+                    <span className="outcome-snapshot__value">
+                      Win rate: {outcomeSnapshot.winRate}
+                    </span>
+                    <span className="panel__muted">Avg score: {outcomeSnapshot.avgScore}</span>
+                  </div>
+                  <div className="outcome-snapshot__item">
+                    <span className="outcome-snapshot__label">Validation state</span>
+                    <span className="outcome-snapshot__value">
+                      {outcomeSnapshot.validationState}
+                    </span>
+                    {!hasValidationSignals ? (
+                      <button
+                        type="button"
+                        className="panel__action panel__action--ghost"
+                        onClick={() =>
+                          router.push(
+                            selectedExperimentId
+                              ? `/validation?experiment_id=${selectedExperimentId}`
+                              : "/validation",
+                          )
+                        }
+                      >
+                        Go to Validation
+                      </button>
+                    ) : (
+                      <span className="panel__muted">Signals are being tracked.</span>
+                    )}
+                  </div>
+                </div>
+              </section>
               <div className="panel__grid">
                 <div className="panel__column">
                   <h4 className="panel__subtitle">Step 6 · Review outcomes and metrics</h4>
                   {latestMetric ? (
                     <ul className="panel__list panel__list--compact">
-                      <li>Total runs: {latestMetric.total_runs ?? "-"}</li>
-                      <li>Wins: {latestMetric.wins ?? "-"}</li>
-                      <li>Win rate: {latestMetric.win_rate ?? "-"}</li>
-                      <li>Win rate (keyword): {latestMetric.win_rate_keyword ?? "-"}</li>
-                      <li>Win rate (robust): {latestMetric.win_rate_robust ?? "-"}</li>
-                      <li>Avg score: {latestMetric.avg_score ?? "-"}</li>
+                      <li>Total runs: {renderMetricValue(latestMetric.total_runs, "-")}</li>
+                      <li>Wins: {renderMetricValue(latestMetric.wins, "-")}</li>
+                      <li>Win rate: {renderMetricValue(latestMetric.win_rate, "-")}</li>
+                      <li>
+                        Win rate (keyword):{" "}
+                        {renderMetricValue(latestMetric.win_rate_keyword, "-")}
+                      </li>
+                      <li>
+                        Win rate (robust):{" "}
+                        {renderMetricValue(latestMetric.win_rate_robust, "-")}
+                      </li>
+                      <li>Avg score: {renderMetricValue(latestMetric.avg_score, "-")}</li>
                       <li>
                         Judge consensus win rate:{" "}
-                        {latestMetric.judge_consensus_win_rate ?? "-"}
+                        {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
                       </li>
                     </ul>
                   ) : (
@@ -4003,8 +4490,8 @@ export default function ExperimentsPage() {
             <div className="panel__meta panel__meta--stack">
               <span className="panel__muted">
                 Entries: {metricsHistory.length}
-                {latestMetric?.created_at
-                  ? ` · Last update: ${new Date(latestMetric.created_at).toLocaleString()}`
+                {latestMetricEntry?.created_at
+                  ? ` · Last update: ${new Date(latestMetricEntry.created_at).toLocaleString()}`
                   : ""}
               </span>
               {renderSparkline(metricsTrend) ?? (
@@ -4070,8 +4557,8 @@ export default function ExperimentsPage() {
                         </span>
                       </div>
                       <span className="panel__muted">
-                        Win rate: {values.win_rate ?? "—"} · Avg score:{" "}
-                        {values.avg_score ?? "—"}
+                        Win rate: {renderMetricValue(values.win_rate)} · Avg score:{" "}
+                        {renderMetricValue(values.avg_score)}
                       </span>
                     </li>
                   );
@@ -4148,7 +4635,7 @@ export default function ExperimentsPage() {
                   clientId={clientId ?? undefined}
                   userId={userId ?? undefined}
                   limit={50}
-                  onUseBelief={handleUseBelief}
+                  onUseBelief={(belief) => handleUseBelief(belief as BrandBelief)}
                   viewMode={beliefsViewMode}
                   onViewModeChange={setBeliefsViewMode}
                 />
