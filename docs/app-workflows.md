@@ -62,14 +62,22 @@ Outputs currently available:
 2. Generate queries (`top_down`, `bottom_up`, `hybrid`).
 3. Review accepted/rejected generation output.
 4. Create experiment and variants.
-5. Run experiment battery.
-6. Review metrics and winners.
-7. Send winner candidates to Validation flow.
+5. Choose variant creation path:
+   - manual authoring,
+   - simulation revision prefill,
+   - generate from loop evidence (experiment + simulation + validation),
+   - generate cold-start copy (`bottom_up`, `top_down`, `both`) when history is sparse.
+6. Optionally create selected generated candidate in one click.
+7. Run experiment battery.
+8. Review metrics and winners.
+9. Send winner candidates to Validation flow.
 
 Current guardrails:
 - query quality gating before persistence
 - bottom-up category confidence gate
 - lab-only messaging separated from observed validation
+- loop evidence reliability hierarchy: `validation > experiment > simulation`
+- cold-start mode allows brand/metadata mentions if grounded in product/audience context
 
 ---
 

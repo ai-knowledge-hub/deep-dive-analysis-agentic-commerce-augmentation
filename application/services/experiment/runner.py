@@ -70,16 +70,36 @@ class ExperimentRunner:
         )
 
         runs_payload: List[Dict[str, Any]] = []
-        scores: List[float] = []
-        scores_keyword: List[float] = []
-        protocol_readiness_scores: List[int] = []
         wins = 0
         wins_keyword = 0
         wins_robust = 0
-        judge_consensus_wins = 0
-        judge_runs = 0
+        positive_weight_total = sum(
+            _coerce_non_negative_weight(query.get("weight"))
+            for query in enabled_queries
+        )
+        use_weighted_metrics = positive_weight_total > 0
+        fallback_weight_total = float(len(enabled_queries)) if enabled_queries else 0.0
+        effective_weight_total = (
+            positive_weight_total if use_weighted_metrics else fallback_weight_total
+        )
+
+        weighted_wins = 0.0
+        weighted_wins_keyword = 0.0
+        weighted_wins_robust = 0.0
+        weighted_score_sum = 0.0
+        weighted_score_weight = 0.0
+        weighted_score_keyword_sum = 0.0
+        weighted_score_keyword_weight = 0.0
+        weighted_protocol_readiness_sum = 0.0
+        weighted_protocol_readiness_weight = 0.0
+        weighted_judge_consensus_wins = 0.0
+        weighted_judge_total = 0.0
 
         for query in enabled_queries:
+            query_weight = _resolve_query_weight(
+                raw_weight=query.get("weight"),
+                use_weighted_metrics=use_weighted_metrics,
+            )
             sim_product, raw_product = _build_variant_product(
                 product=product, variant=variant
             )
@@ -104,21 +124,27 @@ class ExperimentRunner:
                 result.get("scores_keyword", []), product["id"]
             )
             if score is not None:
-                scores.append(score)
+                weighted_score_sum += score * query_weight
+                weighted_score_weight += query_weight
             if score_kw is not None:
-                scores_keyword.append(score_kw)
+                weighted_score_keyword_sum += score_kw * query_weight
+                weighted_score_keyword_weight += query_weight
             if winner_id == product["id"]:
                 wins += 1
+                weighted_wins += query_weight
             if winner_id_keyword == product["id"]:
                 wins_keyword += 1
+                weighted_wins_keyword += query_weight
             if winner_id == product["id"] and winner_id_keyword == product["id"]:
                 wins_robust += 1
+                weighted_wins_robust += query_weight
 
             readiness_score = _extract_protocol_readiness_score_for_product(
                 result, product_id=product["id"]
             )
             if readiness_score is not None:
-                protocol_readiness_scores.append(readiness_score)
+                weighted_protocol_readiness_sum += readiness_score * query_weight
+                weighted_protocol_readiness_weight += query_weight
 
             judge_results, consensus_winner = _run_pairwise_judges(
                 deps=self._deps,
@@ -129,9 +155,9 @@ class ExperimentRunner:
                 scores=result.get("scores") or [],
             )
             if judge_results:
-                judge_runs += 1
+                weighted_judge_total += query_weight
                 if consensus_winner == product["id"]:
-                    judge_consensus_wins += 1
+                    weighted_judge_consensus_wins += query_weight
 
             self._deps.experiment_runs.create_run(
                 experiment_id=experiment_id,
@@ -144,6 +170,7 @@ class ExperimentRunner:
                 {
                     "query_id": query["id"],
                     "query_text": query["query_text"],
+                    "query_weight": query_weight,
                     "run_id": run_id,
                     "winner_id": winner_id,
                     "winner_id_keyword": winner_id_keyword,
@@ -156,29 +183,52 @@ class ExperimentRunner:
             )
 
         total = len(enabled_queries)
-        win_rate = (wins / total) if total else 0.0
-        win_rate_keyword = (wins_keyword / total) if total else 0.0
-        win_rate_robust = (wins_robust / total) if total else 0.0
-        judge_consensus_win_rate = (
-            (judge_consensus_wins / judge_runs) if judge_runs else None
+        win_rate = (
+            weighted_wins / effective_weight_total if effective_weight_total else 0.0
         )
-        avg_score = (sum(scores) / len(scores)) if scores else None
+        win_rate_keyword = (
+            weighted_wins_keyword / effective_weight_total
+            if effective_weight_total
+            else 0.0
+        )
+        win_rate_robust = (
+            weighted_wins_robust / effective_weight_total
+            if effective_weight_total
+            else 0.0
+        )
+        judge_consensus_win_rate = (
+            (weighted_judge_consensus_wins / weighted_judge_total)
+            if weighted_judge_total > 0
+            else None
+        )
+        avg_score = (
+            weighted_score_sum / weighted_score_weight
+            if weighted_score_weight > 0
+            else None
+        )
         avg_score_keyword = (
-            (sum(scores_keyword) / len(scores_keyword)) if scores_keyword else None
+            (weighted_score_keyword_sum / weighted_score_keyword_weight)
+            if weighted_score_keyword_weight > 0
+            else None
         )
         avg_protocol_readiness = (
-            (sum(protocol_readiness_scores) / len(protocol_readiness_scores))
-            if protocol_readiness_scores
+            (weighted_protocol_readiness_sum / weighted_protocol_readiness_weight)
+            if weighted_protocol_readiness_weight > 0
             else None
         )
         metrics = {
             "total_runs": total,
+            "total_weight": round(effective_weight_total, 4),
+            "weights_applied": use_weighted_metrics,
             "wins": wins,
+            "weighted_wins": round(weighted_wins, 4),
             "win_rate": round(win_rate, 4),
             "avg_score": avg_score,
             "wins_keyword": wins_keyword,
+            "weighted_wins_keyword": round(weighted_wins_keyword, 4),
             "win_rate_keyword": round(win_rate_keyword, 4),
             "wins_robust": wins_robust,
+            "weighted_wins_robust": round(weighted_wins_robust, 4),
             "win_rate_robust": round(win_rate_robust, 4),
             "avg_score_keyword": avg_score_keyword,
             "avg_protocol_readiness_score": avg_protocol_readiness,
@@ -471,3 +521,17 @@ def _consensus_winner(results: List[Dict[str, Any]]) -> Optional[str]:
 
 
 __all__ = ["ExperimentRunner", "ExperimentRunResult"]
+
+
+def _coerce_non_negative_weight(raw_weight: Any) -> float:
+    try:
+        weight = float(raw_weight)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(weight, 0.0)
+
+
+def _resolve_query_weight(*, raw_weight: Any, use_weighted_metrics: bool) -> float:
+    if not use_weighted_metrics:
+        return 1.0
+    return _coerce_non_negative_weight(raw_weight)

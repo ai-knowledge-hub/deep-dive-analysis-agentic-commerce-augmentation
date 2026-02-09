@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -11,6 +11,7 @@ from application.services.experiment.service import ExperimentService
 from application.services.experiment.runner import ExperimentRunner
 from application.services.experiment.scheduler import ExperimentScheduler
 from application.services.experiment.orchestrator import ExperimentOrchestrator
+from application.services.experiment.variant_generator import ExperimentVariantGenerator
 from application.services.experiment.validation_service import (
     ExperimentValidationService,
 )
@@ -23,6 +24,7 @@ RUNNER = ExperimentRunner(deps=DEPS)
 SCHEDULER = ExperimentScheduler(deps=DEPS)
 ORCHESTRATOR = ExperimentOrchestrator(deps=DEPS)
 VALIDATIONS = ExperimentValidationService(deps=DEPS)
+VARIANT_GENERATOR = ExperimentVariantGenerator(deps=DEPS)
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -83,6 +85,14 @@ class ExperimentValidationRequest(BaseModel):
     observed_position: Optional[int] = None
     notes: Optional[str] = None
     created_at: Optional[str] = None
+
+
+class LoopVariantGenerateRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    max_candidates: int = Field(default=3, ge=1, le=5)
+    mode: Literal["loop_evidence", "cold_start"] = "loop_evidence"
+    strategy: Literal["bottom_up", "top_down", "both"] = "both"
 
 
 @router.post("")
@@ -390,6 +400,26 @@ def list_recommendations(
         experiment_id=experiment_id, limit=limit
     )
     return {"recommendations": recommendations}
+
+
+@router.post("/{experiment_id}/variants/generate")
+def generate_variant_from_loop_evidence(
+    experiment_id: str,
+    payload: LoopVariantGenerateRequest,
+) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    try:
+        result = VARIANT_GENERATOR.generate_variants(
+            experiment_id=experiment_id,
+            client_id=client_id,
+            max_candidates=payload.max_candidates,
+            user_id=payload.user_id,
+            mode=payload.mode,
+            strategy=payload.strategy,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
 
 
 __all__ = ["router"]

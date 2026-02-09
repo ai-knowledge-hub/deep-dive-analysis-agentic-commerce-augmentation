@@ -82,6 +82,11 @@ Layer rule enforced by architecture checks:
 - Query battery generation (top-down / bottom-up / hybrid).
 - Canonical intent spec and controlled onboarding.
 - Experiment orchestration with variants/runs/metrics.
+- Variant generation paths for experiments:
+  - manual variant authoring,
+  - simulation revision prefill,
+  - closed-loop evidence generation (experiment + simulation + validation),
+  - cold-start copy generation (bottom-up / top-down / both).
 - Validation system with two signals:
   - Synthetic validation (LLM judge signal).
   - Observed reality validation (manual/external outcomes).
@@ -201,8 +206,8 @@ Architecture checks are part of CI and enforce layer boundaries.
 
 - `docs/app-architecture.md`
 - `docs/app-workflows.md`
+- `docs/experiment-flow-detailed.md`
 - `docs/architecture-learning-loop.md`
-- `docs/implementation-learning-loop-checklist.md`
 - `docs/user-guide-complete.md`
 - `docs/deployment.md`
 - `docs/debug/incidents-fixed.md`

@@ -37,6 +37,7 @@ import {
   ExperimentRunListResponse,
   ExperimentMetricListResponse,
   ExperimentRunResponse,
+  LoopGeneratedVariantResponse,
   NextTestRecommendationResponse,
   OverviewSummaryResponse,
   OverviewTimeseriesResponse,
@@ -1148,6 +1149,31 @@ export async function createExperimentVariant(
         label: payload.label,
         type: payload.type,
         payload: payload.payload ?? {},
+      }),
+    },
+  );
+}
+
+export async function generateExperimentVariants(
+  experimentId: string,
+  payload: {
+    max_candidates?: number;
+    user_id?: string | null;
+    mode?: "loop_evidence" | "cold_start";
+    strategy?: "bottom_up" | "top_down" | "both";
+  } = {},
+): Promise<LoopGeneratedVariantResponse> {
+  const clientId = getClientId();
+  return request<LoopGeneratedVariantResponse>(
+    `/experiments/${experimentId}/variants/generate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: payload.user_id ?? undefined,
+        max_candidates: payload.max_candidates ?? 3,
+        mode: payload.mode ?? "loop_evidence",
+        strategy: payload.strategy ?? "both",
       }),
     },
   );
