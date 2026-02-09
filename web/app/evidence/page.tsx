@@ -413,6 +413,7 @@ export default function EvidencePage() {
             targetProductCopy={targetCopy ?? undefined}
             targetProductUrl={targetCopyUrl ?? undefined}
             onOpenSimulation={() => router.push("/simulation")}
+            onOpenExperiments={() => router.push("/experiments")}
             usePageScroll
           />
           <div className="detail__note">

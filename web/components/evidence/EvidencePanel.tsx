@@ -18,6 +18,7 @@ type Props = {
   targetProductCopy?: string;
   targetProductUrl?: string;
   onOpenSimulation?: () => void;
+  onOpenExperiments?: () => void;
   usePageScroll?: boolean;
 };
 
@@ -29,11 +30,13 @@ export function EvidencePanel({
   targetProductCopy,
   targetProductUrl,
   onOpenSimulation,
+  onOpenExperiments,
   usePageScroll = false,
 }: Props) {
   const [activeTab, setActiveTab] = useState<
     "evidence" | "explanation" | "actions"
   >("evidence");
+  const [explanationAdvancedOpen, setExplanationAdvancedOpen] = useState(false);
 
   const hasData = Boolean(analysis);
   if (!hasData) {
@@ -290,8 +293,137 @@ export function EvidencePanel({
     };
   });
 
+  const evidenceFlowSteps = [
+    { id: 1, label: "Load evidence", done: evidenceProducts.length > 0 },
+    {
+      id: 2,
+      label: "Diagnose rank gap",
+      done: sortedScores.length > 0 && (matchedProduct !== null || topScore !== undefined),
+    },
+    {
+      id: 3,
+      label: "Inspect signal deltas",
+      done: activeTab === "explanation" || activeTab === "actions",
+    },
+    { id: 4, label: "Run next test", done: activeTab === "actions" },
+  ];
+  const currentEvidenceStep =
+    evidenceFlowSteps.find((step) => !step.done)?.id ?? 4;
+
+  const nextEvidenceAction = (() => {
+    if (evidenceProducts.length === 0) {
+      return {
+        label: "Load latest evidence from chat",
+        helper: "Run a fresh chat query so evidence products can be analyzed.",
+        action: "refresh" as const,
+      };
+    }
+    if (!matchedProduct) {
+      return {
+        label: "Open simulation for discovery entry",
+        helper: "Your product is not discovered yet. Use simulation to improve intent fit.",
+        action: "open_simulation" as const,
+      };
+    }
+    if (missingSignals.length > 0) {
+      return {
+        label: "Test top missing signals in simulation",
+        helper: "Validate uplift from the highest-impact missing signals first.",
+        action: "open_simulation" as const,
+      };
+    }
+    return {
+      label: "Open experiments for controlled validation",
+      helper: "You have enough signal alignment to move to experiment-grade testing.",
+      action: "open_experiments" as const,
+    };
+  })();
+
   return (
     <>
+      <section className="panel__card panel__card--primary evidence-flow">
+        <div className="panel__header">
+          <h3>Evidence Flow</h3>
+          <span className="panel__muted">Current step: {currentEvidenceStep} / 4</span>
+        </div>
+        <div className="flow-rail__steps">
+          {evidenceFlowSteps.map((step) => (
+            <div
+              key={step.id}
+              className={`flow-rail__step ${
+                step.done ? "is-done" : step.id === currentEvidenceStep ? "is-current" : ""
+              }`}
+            >
+              <span className="flow-rail__index">{step.id}</span>
+              <span className="flow-rail__label">{step.label}</span>
+              <span className="flow-rail__status">
+                {step.done ? "Done" : step.id === currentEvidenceStep ? "Current" : "Pending"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <section className="panel__notice panel__notice--info flow-next-action">
+          <strong>Next recommended action:</strong> {nextEvidenceAction.label}
+          <p className="panel__muted">{nextEvidenceAction.helper}</p>
+          <div className="panel__actions panel__actions--priority">
+            <button
+              type="button"
+              className="panel__action panel__action--prominent"
+              onClick={() => {
+                if (nextEvidenceAction.action === "open_experiments") {
+                  onOpenExperiments?.();
+                  return;
+                }
+                onOpenSimulation?.();
+              }}
+              disabled={
+                nextEvidenceAction.action === "open_experiments"
+                  ? !onOpenExperiments
+                  : !onOpenSimulation
+              }
+            >
+              {nextEvidenceAction.label}
+            </button>
+          </div>
+        </section>
+        <section className="panel__notice panel__notice--info outcome-snapshot">
+          <div className="panel__meta">
+            <strong>Outcome snapshot</strong>
+            <span className="panel__badge panel__badge--secondary">Unified view</span>
+          </div>
+          <div className="outcome-snapshot__grid">
+            <div className="outcome-snapshot__item">
+              <span className="outcome-snapshot__label">Discovery status</span>
+              <span className="outcome-snapshot__value">
+                {matchedProduct ? "Discovered" : "Not discovered"}
+              </span>
+              <span className="panel__muted">Evidence set: {evidenceProducts.length} products</span>
+            </div>
+            <div className="outcome-snapshot__item">
+              <span className="outcome-snapshot__label">Rank and alignment</span>
+              <span className="outcome-snapshot__value">
+                {matchedProduct ? `#${rank ?? "—"}` : "—"}
+              </span>
+              <span className="panel__muted">
+                Alignment:{" "}
+                {matchedScore !== null ? `${Math.round(matchedScore * 100)}%` : "—"}
+              </span>
+            </div>
+            <div className="outcome-snapshot__item">
+              <span className="outcome-snapshot__label">Top missing signals</span>
+              <span className="outcome-snapshot__value">
+                {missingSignals.length > 0 ? missingSignals.slice(0, 2).join(", ") : "None detected"}
+              </span>
+              <span className="panel__muted">
+                Estimated lift:{" "}
+                {counterfactualLift !== null
+                  ? `+${Math.round(counterfactualLift * 100)}%`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+        </section>
+      </section>
       <div className="evidence-summary">
         <div className="summary-card">
           <div className="summary-card__title">Evidence Set</div>
@@ -418,7 +550,7 @@ export function EvidencePanel({
               className={`tab ${activeTab === "evidence" ? "tab--active" : ""}`}
               onClick={() => setActiveTab("evidence")}
             >
-              Evidence
+              Step 1 · Evidence
               {evidenceProducts.length > 0 && (
                 <span className="tab-badge">{evidenceProducts.length}</span>
               )}
@@ -428,14 +560,14 @@ export function EvidencePanel({
               className={`tab ${activeTab === "explanation" ? "tab--active" : ""}`}
               onClick={() => setActiveTab("explanation")}
             >
-              Explanation
+              Step 2 · Explanation
             </button>
             <button
               type="button"
               className={`tab ${activeTab === "actions" ? "tab--active" : ""}`}
               onClick={() => setActiveTab("actions")}
             >
-              Next actions
+              Step 3 · Next actions
             </button>
           </div>
         </div>
@@ -594,112 +726,121 @@ export function EvidencePanel({
                 </div>
               </div>
 
-              <div className="explain-grid explain-grid--signals">
-                <div className="explain-card">
-                  <div className="explain-card__title">Intent/Goal signals</div>
-                  <p className="explain-card__note">
-                    Derived from the clarified intent. Higher weight = more explicit in
-                    the query.
-                  </p>
-                  <div className="signal-list">
-                    {(intentSignalsWeighted.length
-                      ? intentSignalsWeighted
-                      : [{ signal: "No intent signals", weight: 0 }]
-                    ).map((item) => (
-                      <span
-                        key={item.signal}
-                        className="signal-chip"
-                        title={item.signal}
-                      >
-                        {item.signal} · {Math.round(item.weight * 100)}%
+              <details
+                className="panel__details evidence-advanced"
+                open={explanationAdvancedOpen}
+                onToggle={(event) => setExplanationAdvancedOpen(event.currentTarget.open)}
+              >
+                <summary className="panel__details-summary">
+                  Advanced signal weighting and diagnostics
+                </summary>
+                <div className="explain-grid explain-grid--signals">
+                  <div className="explain-card">
+                    <div className="explain-card__title">Intent/Goal signals</div>
+                    <p className="explain-card__note">
+                      Derived from the clarified intent. Higher weight = more explicit in
+                      the query.
+                    </p>
+                    <div className="signal-list">
+                      {(intentSignalsWeighted.length
+                        ? intentSignalsWeighted
+                        : [{ signal: "No intent signals", weight: 0 }]
+                      ).map((item) => (
+                        <span
+                          key={item.signal}
+                          className="signal-chip"
+                          title={item.signal}
+                        >
+                          {item.signal} · {Math.round(item.weight * 100)}%
+                        </span>
+                      ))}
+                    </div>
+                    <div className="signal-legend">
+                      <span className="signal-legend__label">Weight</span>
+                      <span className="signal-legend__detail">
+                        Confidence × explicitness in the query
                       </span>
-                    ))}
+                    </div>
                   </div>
-                  <div className="signal-legend">
-                    <span className="signal-legend__label">Weight</span>
-                    <span className="signal-legend__detail">
-                      Confidence × explicitness in the query
-                    </span>
-                  </div>
-                </div>
-                <div className="explain-card">
-                  <div className="explain-card__title">Evidence signals</div>
-                  <p className="explain-card__note">
-                    Extracted from top-ranked products. Higher weight = more frequent
-                    among winners.
-                  </p>
-                  <div className="signal-list">
-                    {(evidenceSignalsWeighted.length
-                      ? evidenceSignalsWeighted
-                      : [{ signal: "No evidence signals", weight: 0 }]
-                    ).map((item) => (
-                      <span
-                        key={item.signal}
-                        className="signal-chip neutral"
-                        title={item.signal}
-                      >
-                        {item.signal} · {Math.round(item.weight * 100)}%
+                  <div className="explain-card">
+                    <div className="explain-card__title">Evidence signals</div>
+                    <p className="explain-card__note">
+                      Extracted from top-ranked products. Higher weight = more frequent
+                      among winners.
+                    </p>
+                    <div className="signal-list">
+                      {(evidenceSignalsWeighted.length
+                        ? evidenceSignalsWeighted
+                        : [{ signal: "No evidence signals", weight: 0 }]
+                      ).map((item) => (
+                        <span
+                          key={item.signal}
+                          className="signal-chip neutral"
+                          title={item.signal}
+                        >
+                          {item.signal} · {Math.round(item.weight * 100)}%
+                        </span>
+                      ))}
+                    </div>
+                    <div className="signal-legend">
+                      <span className="signal-legend__label">Weight</span>
+                      <span className="signal-legend__detail">
+                        Frequency among winners × alignment score
                       </span>
-                    ))}
+                    </div>
                   </div>
-                  <div className="signal-legend">
-                    <span className="signal-legend__label">Weight</span>
-                    <span className="signal-legend__detail">
-                      Frequency among winners × alignment score
-                    </span>
-                  </div>
-                </div>
-                <div className="explain-card">
-                  <div className="explain-card__title">Copy presence</div>
-                  <p className="explain-card__note">
-                    Whether our current copy already contains each signal.
-                  </p>
-                  <div className="signal-list">
-                    {(copyPresenceWeighted.length
-                      ? copyPresenceWeighted
-                      : [{ signal: "No copy signals", present: false }]
-                    ).map((item) => (
-                      <span
-                        key={item.signal}
-                        className={`signal-chip ${item.present ? "" : "muted"}`}
-                        title={item.signal}
-                      >
-                        {item.signal} · {item.present ? "Yes" : "No"}
+                  <div className="explain-card">
+                    <div className="explain-card__title">Copy presence</div>
+                    <p className="explain-card__note">
+                      Whether our current copy already contains each signal.
+                    </p>
+                    <div className="signal-list">
+                      {(copyPresenceWeighted.length
+                        ? copyPresenceWeighted
+                        : [{ signal: "No copy signals", present: false }]
+                      ).map((item) => (
+                        <span
+                          key={item.signal}
+                          className={`signal-chip ${item.present ? "" : "muted"}`}
+                          title={item.signal}
+                        >
+                          {item.signal} · {item.present ? "Yes" : "No"}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="signal-legend">
+                      <span className="signal-legend__label">Signal check</span>
+                      <span className="signal-legend__detail">
+                        Phrase-level coverage in current copy
                       </span>
-                    ))}
+                    </div>
                   </div>
-                  <div className="signal-legend">
-                    <span className="signal-legend__label">Signal check</span>
-                    <span className="signal-legend__detail">
-                      Phrase-level coverage in current copy
-                    </span>
-                  </div>
-                </div>
-                <div className="explain-card">
-                  <div className="explain-card__title">Specificity vs breadth</div>
-                  <p className="explain-card__note">
-                    Specificity helps you win the exact intent; breadth expands adjacent
-                    discovery.
-                  </p>
-                  <div className="signal-list">
-                    <span className="signal-chip">
-                      Specificity · {Math.round(specificityRatio * 100)}%
-                    </span>
-                    <span className="signal-chip neutral">
-                      Breadth · {Math.round((1 - specificityRatio) * 100)}%
-                    </span>
-                  </div>
-                  <p className="summary-card__note">
-                    Intent signals drive specificity; evidence signals drive breadth.
-                  </p>
-                  <div className="signal-legend">
-                    <span className="signal-legend__label">Interpretation</span>
-                    <span className="signal-legend__detail">
-                      High specificity = tight intent fit; high breadth = wider reach
-                    </span>
+                  <div className="explain-card">
+                    <div className="explain-card__title">Specificity vs breadth</div>
+                    <p className="explain-card__note">
+                      Specificity helps you win the exact intent; breadth expands adjacent
+                      discovery.
+                    </p>
+                    <div className="signal-list">
+                      <span className="signal-chip">
+                        Specificity · {Math.round(specificityRatio * 100)}%
+                      </span>
+                      <span className="signal-chip neutral">
+                        Breadth · {Math.round((1 - specificityRatio) * 100)}%
+                      </span>
+                    </div>
+                    <p className="summary-card__note">
+                      Intent signals drive specificity; evidence signals drive breadth.
+                    </p>
+                    <div className="signal-legend">
+                      <span className="signal-legend__label">Interpretation</span>
+                      <span className="signal-legend__detail">
+                        High specificity = tight intent fit; high breadth = wider reach
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </details>
             </div>
           )}
 
@@ -732,6 +873,15 @@ export function EvidencePanel({
                     Open simulation
                   </button>
                 )}
+                {onOpenExperiments && (
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    onClick={onOpenExperiments}
+                  >
+                    Open experiments
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -743,6 +893,10 @@ export function EvidencePanel({
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
           gap: 16px;
+          margin-bottom: 16px;
+        }
+
+        .evidence-flow {
           margin-bottom: 16px;
         }
 
@@ -775,6 +929,10 @@ export function EvidencePanel({
         }
 
         .explain-grid--signals {
+          margin-top: 16px;
+        }
+
+        .evidence-advanced {
           margin-top: 16px;
         }
 
