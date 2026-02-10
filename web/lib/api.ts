@@ -36,6 +36,7 @@ import {
   ExperimentVariantListResponse,
   ExperimentRunListResponse,
   ExperimentMetricListResponse,
+  ExperimentExecutionStateResponse,
   ExperimentRunResponse,
   LoopGeneratedVariantResponse,
   NextTestRecommendationResponse,
@@ -1439,6 +1440,19 @@ export async function listExperimentRecommendations(
   if (limit) params.set("limit", String(limit));
   return request<ExperimentRecommendationListResponse>(
     `/experiments/${experimentId}/recommendations?${params.toString()}`,
+  );
+}
+
+export async function getExperimentExecutionState(
+  experimentId: string,
+  userId?: string | null,
+): Promise<ExperimentExecutionStateResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<ExperimentExecutionStateResponse>(
+    `/experiments/${experimentId}/execution-state?${params.toString()}`,
   );
 }
 

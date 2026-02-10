@@ -15,6 +15,9 @@ from application.services.experiment.variant_generator import ExperimentVariantG
 from application.services.experiment.validation_service import (
     ExperimentValidationService,
 )
+from application.services.experiment.execution_state_service import (
+    ExperimentExecutionStateService,
+)
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -25,6 +28,7 @@ SCHEDULER = ExperimentScheduler(deps=DEPS)
 ORCHESTRATOR = ExperimentOrchestrator(deps=DEPS)
 VALIDATIONS = ExperimentValidationService(deps=DEPS)
 VARIANT_GENERATOR = ExperimentVariantGenerator(deps=DEPS)
+EXECUTION_STATE = ExperimentExecutionStateService(deps=DEPS)
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -390,6 +394,21 @@ def validation_summary(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     return {"summary": summary.to_dict()}
+
+
+@router.get("/{experiment_id}/execution-state")
+def execution_state(
+    experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    try:
+        state = EXECUTION_STATE.get_state(
+            experiment_id=experiment_id,
+            client_id=scoped_client_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"state": state}
 
 
 @router.get("/{experiment_id}/recommendations")

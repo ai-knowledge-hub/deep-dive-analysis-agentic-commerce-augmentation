@@ -792,6 +792,19 @@ export type ExperimentRunResponse = {
   metrics: Record<string, unknown>;
 };
 
+export type ExperimentExecutionState = {
+  experiment_id: string;
+  client_id: string;
+  phase_order: string[];
+  phases: Record<string, { done: boolean; detail?: string }>;
+  next_action: string;
+  complete: boolean;
+};
+
+export type ExperimentExecutionStateResponse = {
+  state: ExperimentExecutionState;
+};
+
 export type LoopGeneratedVariantCandidate = {
   label: string;
   description: string;

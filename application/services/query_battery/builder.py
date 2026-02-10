@@ -213,6 +213,7 @@ class QueryBatteryBuilder:
         deduped = _dedupe_queries(generated)
         if limit > 0:
             deduped = deduped[:limit]
+        generated_count = len(deduped)
         category_inference = (
             _infer_category(product.get("metadata") or {}, bottom_capsule)
             if source in {"bottom_up", "hybrid"}
@@ -293,12 +294,15 @@ class QueryBatteryBuilder:
                 include_description=False,
             )
             retry_deduped = _dedupe_queries([*validated, *retry])
+            if limit > 0:
+                retry_deduped = retry_deduped[:limit]
             validated, rejected_retry = _validate_queries(
                 retry_deduped,
                 banned_terms=_build_banned_terms(product, bottom_capsule),
                 required_category=inferred_category,
             )
             rejected.extend(rejected_retry)
+            generated_count = len(retry_deduped)
 
         created: List[Dict[str, Any]] = []
         if persist:
@@ -316,11 +320,13 @@ class QueryBatteryBuilder:
                 )
         else:
             created = [_candidate_to_dict(item) for item in validated]
-        acceptance_rate = round((len(validated) / len(deduped)), 4) if deduped else 0.0
+        acceptance_rate = (
+            round((len(validated) / generated_count), 4) if generated_count else 0.0
+        )
         report = {
             "accepted_count": len(validated),
             "rejected_count": len(rejected),
-            "generated_count": len(deduped),
+            "generated_count": generated_count,
             "generated_preview": [
                 {"query_text": item.query_text, "query_type": item.query_type}
                 for item in deduped[:20]

@@ -546,6 +546,10 @@ def _build_cold_start_packet(
         "audience_segment_count": len(audience_segments),
         "goal_count": len(user_goals),
         "inferred_intents": inferred_intents,
+        "top_features": features[:6],
+        "top_use_cases": use_cases[:6],
+        "top_audience_segments": audience_segments[:4],
+        "top_user_goals": user_goals[:4],
     }
     return evidence, summary
 
@@ -593,7 +597,9 @@ def _build_cold_start_prompt(
         "Goal: propose copy variants aligned to inferred user intent, needs, and goals.\n"
         "Brand and metadata mentions are allowed when grounded in provided product context.\n"
         f"Strategy: {strategy_rule}\n"
-        "Never invent product facts. Keep copy concise, specific, and user-outcome oriented.\n"
+        "Never invent product facts. Write concrete retail-ready copy, not abstract strategy language.\n"
+        "Avoid phrases like 'is built to support', 'users seeking', 'decision framing', or 'outcome confidence'.\n"
+        "Each description should read like concise PDP/ad copy with tangible product details and benefit framing.\n"
         "Return ONLY JSON with shape:\n"
         '{"candidates":[{"label":"string","description":"string","rationale":"string","confidence":0.0,'
         '"payload":{"role":"candidate","source_type":"cold_start","generation_strategy":"bottom_up|top_down|both",'
@@ -630,10 +636,17 @@ def _parse_candidates(
     for item in items:
         if not isinstance(item, dict):
             continue
-        description = str(item.get("description") or "").strip()
-        rationale = str(item.get("rationale") or "").strip()
-        if not description or not rationale:
+        description = _normalize_copy_text(
+            item.get("description")
+            or item.get("copy")
+            or item.get("variant_copy")
+            or item.get("text")
+        )
+        rationale = _normalize_copy_text(item.get("rationale") or item.get("why"))
+        if not description:
             continue
+        if not rationale:
+            rationale = "Generated from available experiment and product context."
         label = str(item.get("label") or "Loop candidate").strip() or "Loop candidate"
         payload = item.get("payload")
         if not isinstance(payload, dict):
@@ -698,30 +711,49 @@ def _fallback_cold_start_candidates(
     max_candidates: int,
 ) -> List[GeneratedVariantCandidate]:
     product_name = str(product.get("name") or "the product")
-    intents = summary.get("inferred_intents") or []
-    primary_intent = str(intents[0] if intents else "core user goals")
+    intents = [_normalize_context_phrase(value) for value in (summary.get("inferred_intents") or [])]
+    intents = [value for value in intents if value]
+    primary_intent = str(intents[0] if intents else "daily training performance")
     secondary_intent = str(
         intents[1]
         if isinstance(intents, list) and len(intents) > 1
-        else "decision clarity"
+        else "reliable comfort and support"
     )
+    features = [_normalize_context_phrase(value) for value in (summary.get("top_features") or [])]
+    features = [value for value in features if value]
+    use_cases = [_normalize_context_phrase(value) for value in (summary.get("top_use_cases") or [])]
+    use_cases = [value for value in use_cases if value]
+    audience_segments = [
+        _normalize_context_phrase(value)
+        for value in (summary.get("top_audience_segments") or [])
+    ]
+    audience_segments = [value for value in audience_segments if value]
+    goals = [_normalize_context_phrase(value) for value in (summary.get("top_user_goals") or [])]
+    goals = [value for value in goals if value]
+
+    feature_1 = features[0] if features else "responsive cushioning"
+    feature_2 = features[1] if len(features) > 1 else "stable support"
+    use_case_1 = use_cases[0] if use_cases else "daily miles and gym sessions"
+    audience_1 = audience_segments[0] if audience_segments else "performance-focused runners"
+    goal_1 = goals[0] if goals else "comfort across repeated training sessions"
+
     templates = [
         (
             "Intent-aligned outcome variant",
             (
-                f"{product_name} is built to support {primary_intent} with clear value, "
-                "simple decision framing, and confidence in the end result."
+                f"{product_name}: {feature_1}, {feature_2}, and a fit tuned for {use_case_1}. "
+                f"Made for {audience_1} who want {goal_1}."
             ),
-            "Uses inferred user intent and goals from product context for cold-start copy generation.",
+            "Cold-start baseline using top product features plus inferred audience and goals.",
             0.56,
         ),
         (
             "Audience-fit value variant",
             (
-                f"{product_name} balances practical benefits and trusted context for users seeking "
-                f"{secondary_intent}."
+                f"Choose {product_name} when you need {primary_intent}. "
+                f"It combines {feature_1} with {feature_2} so every run feels steadier and more efficient."
             ),
-            "Balances product context with inferred audience expectations in absence of experiment history.",
+            "Audience-first fallback that keeps claims grounded in available product context.",
             0.53,
         ),
     ]
@@ -729,20 +761,20 @@ def _fallback_cold_start_candidates(
         templates[0] = (
             "Feature-led cold-start variant",
             (
-                f"{product_name} highlights concrete capabilities and practical use-cases that support "
-                f"{primary_intent}."
+                f"{product_name} delivers {feature_1} and {feature_2} for {use_case_1}. "
+                f"Clear performance value for shoppers prioritizing {secondary_intent}."
             ),
-            "Bottom-up fallback grounded in product features and use-cases.",
+            "Bottom-up fallback grounded in explicit product capabilities and use-cases.",
             0.56,
         )
     elif strategy == "top_down":
         templates[0] = (
             "Narrative-led cold-start variant",
             (
-                f"{product_name} leads with user outcomes and positioning for people prioritizing "
-                f"{primary_intent}."
+                f"{product_name} helps you train with more confidence: {feature_1}, {feature_2}, "
+                f"and comfort that supports {goal_1}."
             ),
-            "Top-down fallback grounded in user outcomes and audience context.",
+            "Top-down fallback grounded in inferred user outcomes and audience context.",
             0.56,
         )
 
@@ -819,6 +851,25 @@ def _safe_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_copy_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _normalize_context_phrase(value: Any) -> str:
+    text = _normalize_copy_text(value)
+    if not text:
+        return ""
+    text = text.replace("_", " ").replace("-", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 __all__ = ["ExperimentVariantGenerator", "GeneratedVariantCandidate"]

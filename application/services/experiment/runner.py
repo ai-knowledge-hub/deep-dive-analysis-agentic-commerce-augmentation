@@ -349,7 +349,6 @@ class ExperimentRunner:
             user_id=user_id,
             brand_id=brand_id,
             product_id=product_id,
-            competitor_client_ids=competitor_client_ids,
             retrieval_max_results=retrieval_max_results,
         )
 
@@ -363,7 +362,6 @@ class ExperimentRunner:
         user_id: Optional[str],
         brand_id: Optional[str],
         product_id: Optional[str],
-        competitor_client_ids: Optional[List[str]],
         retrieval_max_results: int,
     ) -> tuple[Dict[str, Any], str, Dict[str, Any]]:
         retrieval_summary: Dict[str, Any] = {
@@ -401,21 +399,33 @@ class ExperimentRunner:
             }
 
         if not retrieval_candidates:
-            fallback_response = self._simulation.run(
+            retrieval_summary["source"] = "web_research"
+            retrieval_summary["fallback_used"] = False
+            retrieval_summary["fallback_reason"] = "no_retrieval_candidates"
+            empty_result = _build_empty_retrieval_result(
+                query_text=query_text,
+                deps=self._deps,
+                target_product=sim_product,
+            )
+            run = self._deps.simulation_runs.create_run(
                 query=query_text,
-                products=[sim_product],
-                client_id=client_id,
+                scenario={
+                    "query": query_text,
+                    "execution_mode": "retrieval_backed",
+                    "retrieval_summary": retrieval_summary,
+                },
+                products=[raw_product],
+                result=empty_result,
                 user_id=user_id,
+                client_id=client_id,
                 brand_id=brand_id,
                 product_id=product_id,
-                raw_products=[raw_product],
-                auto_competitors=True,
-                competitor_client_ids=competitor_client_ids,
             )
-            retrieval_summary["source"] = "local_competitor_fallback"
-            retrieval_summary["fallback_used"] = True
-            retrieval_summary.setdefault("fallback_reason", "no_retrieval_candidates")
-            return fallback_response, "retrieval_backed", retrieval_summary
+            return (
+                {"run_id": run.get("id"), "result": empty_result},
+                "retrieval_backed",
+                retrieval_summary,
+            )
 
         products_for_run: List[SimulationProduct] = [sim_product]
         raw_products_for_run: List[Dict[str, Any]] = [raw_product]
@@ -658,6 +668,27 @@ def _to_simulation_product(raw: Dict[str, Any]) -> SimulationProduct:
         confidence=float(raw.get("confidence") or 0.55),
         metadata=raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {},
     )
+
+
+def _build_empty_retrieval_result(
+    *, query_text: str, deps: AppDeps, target_product: SimulationProduct
+) -> Dict[str, Any]:
+    intent = deps.classify_intent(query_text)
+    return {
+        "intent": intent,
+        "goals": [query_text],
+        "scores": [],
+        "winner_id": None,
+        "scores_keyword": [],
+        "winner_id_keyword": None,
+        "gap_analysis": [],
+        "profiles": [],
+        "lessons": [
+            "No retrieval candidates were returned for this query in retrieval-backed mode."
+        ],
+        "tone": {"summary": None},
+        "metadata": {"target_product_id": target_product.id},
+    }
 
 
 def _extract_protocol_readiness_score_for_product(
