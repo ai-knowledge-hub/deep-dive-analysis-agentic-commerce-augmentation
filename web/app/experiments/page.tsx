@@ -124,7 +124,7 @@ export default function ExperimentsPage() {
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
     "simulation" | "retrieval_backed"
-  >("simulation");
+  >("retrieval_backed");
   const [retrievalMaxResults, setRetrievalMaxResults] = useState("5");
   const [batteryForm, setBatteryForm] = useState({
     name: "",
@@ -141,7 +141,7 @@ export default function ExperimentsPage() {
   const [audienceSegmentsStatus, setAudienceSegmentsStatus] = useState<string | null>(null);
   const [audienceSegmentsOpen, setAudienceSegmentsOpen] = useState(false);
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
-  const [batteryUseLlm, setBatteryUseLlm] = useState(false);
+  const [batteryUseLlm, setBatteryUseLlm] = useState(true);
   const [batterySeedFeatures, setBatterySeedFeatures] = useState("");
   const [batterySeedUseCases, setBatterySeedUseCases] = useState("");
   const [advancedOverridesOpen, setAdvancedOverridesOpen] = useState(false);
@@ -273,6 +273,12 @@ export default function ExperimentsPage() {
     },
     [experimentRunMode, retrievalMaxResults, userId],
   );
+
+  useEffect(() => {
+    if (labMode !== "lab") return;
+    setBatteryUseLlm(true);
+    setExperimentRunMode("retrieval_backed");
+  }, [labMode]);
 
   useEffect(() => {
     if (!userId) return;

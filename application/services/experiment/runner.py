@@ -133,7 +133,6 @@ class ExperimentRunner:
             winner_id = result.get("winner_id")
             winner_id_keyword = result.get("winner_id_keyword")
             scores = result.get("scores") or []
-            scores_keyword = result.get("scores_keyword") or []
             if query_execution_mode == "retrieval_backed":
                 retrieval_backed_runs += 1
                 if retrieval_summary and retrieval_summary.get("fallback_used"):
