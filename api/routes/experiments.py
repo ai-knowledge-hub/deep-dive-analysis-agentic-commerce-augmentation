@@ -60,6 +60,8 @@ class ExperimentRunRequest(BaseModel):
     user_id: Optional[str] = None
     client_id: Optional[str] = None
     variant_id: str = Field(..., min_length=1)
+    execution_mode: Literal["simulation", "retrieval_backed"] = "simulation"
+    retrieval_max_results: int = Field(default=5, ge=1, le=10)
 
 
 class ExperimentScheduleRequest(BaseModel):
@@ -239,6 +241,8 @@ def run_experiment(experiment_id: str, payload: ExperimentRunRequest) -> Dict[st
             variant_id=payload.variant_id,
             client_id=client_id,
             user_id=payload.user_id,
+            execution_mode=payload.execution_mode,
+            retrieval_max_results=payload.retrieval_max_results,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -122,6 +122,10 @@ export default function ExperimentsPage() {
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [batteries, setBatteries] = useState<QueryBattery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
+  const [experimentRunMode, setExperimentRunMode] = useState<
+    "simulation" | "retrieval_backed"
+  >("simulation");
+  const [retrievalMaxResults, setRetrievalMaxResults] = useState("5");
   const [batteryForm, setBatteryForm] = useState({
     name: "",
     purpose: "",
@@ -225,6 +229,8 @@ export default function ExperimentsPage() {
   const [nextTest, setNextTest] = useState<NextTestRecommendation | null>(null);
   const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
+  const [isCreatingSuggestedVariant, setIsCreatingSuggestedVariant] =
+    useState(false);
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
     null,
   );
@@ -254,6 +260,19 @@ export default function ExperimentsPage() {
   const metricsSectionRef = useRef<HTMLElement | null>(null);
 
   const showManualControls = labMode === "manual" || labShowManualControls;
+  const runExperimentWithSelectedMode = useCallback(
+    async (experimentId: string, variantId: string) => {
+      const parsedRetrievalLimit = Number.parseInt(retrievalMaxResults, 10);
+      const safeRetrievalLimit = Number.isFinite(parsedRetrievalLimit)
+        ? Math.max(1, Math.min(10, parsedRetrievalLimit))
+        : 5;
+      return runExperiment(experimentId, variantId, userId, {
+        execution_mode: experimentRunMode,
+        retrieval_max_results: safeRetrievalLimit,
+      });
+    },
+    [experimentRunMode, retrievalMaxResults, userId],
+  );
 
   useEffect(() => {
     if (!userId) return;
@@ -826,7 +845,7 @@ export default function ExperimentsPage() {
       }
       setRunningVariantId(variantId);
       try {
-        await runExperiment(selectedExperimentId, variantId, userId);
+        await runExperimentWithSelectedMode(selectedExperimentId, variantId);
         const [runsResponse, metricsResponse] = await Promise.all([
           listExperimentRuns(selectedExperimentId, userId),
           listExperimentMetrics(selectedExperimentId, userId),
@@ -837,7 +856,7 @@ export default function ExperimentsPage() {
         setRunningVariantId(null);
       }
     },
-    [labMode, selectedExperimentId, userId],
+    [labMode, runExperimentWithSelectedMode, selectedExperimentId],
   );
 
   const handleScheduleSave = useCallback(async () => {
@@ -1329,11 +1348,13 @@ export default function ExperimentsPage() {
             user_id: userId,
           },
         );
-        await runExperiment(response.experiment.id, controlVariant.variant.id, userId);
-        await runExperiment(
+        await runExperimentWithSelectedMode(
+          response.experiment.id,
+          controlVariant.variant.id,
+        );
+        await runExperimentWithSelectedMode(
           response.experiment.id,
           hypothesisVariant.variant.id,
-          userId,
         );
         const [runsResponse, metricsResponse] = await Promise.all([
           listExperimentRuns(response.experiment.id, userId),
@@ -1377,6 +1398,7 @@ export default function ExperimentsPage() {
     parseSeedList,
     productId,
     productName,
+    runExperimentWithSelectedMode,
     userId,
   ]);
 
@@ -1687,7 +1709,7 @@ export default function ExperimentsPage() {
         payload,
         user_id: userId,
       });
-      await runExperiment(selectedExperimentId, created.variant.id, userId);
+      await runExperimentWithSelectedMode(selectedExperimentId, created.variant.id);
       const [variantsResponse, runsResponse, metricsResponse] = await Promise.all([
         listExperimentVariants(selectedExperimentId, userId),
         listExperimentRuns(selectedExperimentId, userId),
@@ -1713,6 +1735,7 @@ export default function ExperimentsPage() {
     loopGeneratedVariants,
     selectedExperimentId,
     selectedLoopCandidateIndex,
+    runExperimentWithSelectedMode,
     userId,
   ]);
 
@@ -1775,7 +1798,7 @@ export default function ExperimentsPage() {
     if (!selectedExperimentId || !nextTest?.variant_id) return;
     setRunningVariantId(nextTest.variant_id);
     try {
-      await runExperiment(selectedExperimentId, nextTest.variant_id, userId);
+      await runExperimentWithSelectedMode(selectedExperimentId, nextTest.variant_id);
       const [runsResponse, metricsResponse] = await Promise.all([
         listExperimentRuns(selectedExperimentId, userId),
         listExperimentMetrics(selectedExperimentId, userId),
@@ -1786,7 +1809,7 @@ export default function ExperimentsPage() {
     } finally {
       setRunningVariantId(null);
     }
-  }, [nextTest?.variant_id, selectedExperimentId, userId]);
+  }, [nextTest?.variant_id, runExperimentWithSelectedMode, selectedExperimentId]);
 
   const handleCreateSuggestedVariant = useCallback(async () => {
     if (!selectedExperimentId || !nextTest || nextTest.action !== "create_variant") {
@@ -1799,6 +1822,7 @@ export default function ExperimentsPage() {
       if (!ok) return;
     }
     setFormError(null);
+    setIsCreatingSuggestedVariant(true);
     setSubmitting(true);
     try {
       const response = await createExperimentVariant(selectedExperimentId, {
@@ -1814,7 +1838,7 @@ export default function ExperimentsPage() {
       const refreshed = await listExperimentVariants(selectedExperimentId, userId);
       setVariants(refreshed.variants ?? []);
       if (labMode === "lab") {
-        await runExperiment(selectedExperimentId, response.variant.id, userId);
+        await runExperimentWithSelectedMode(selectedExperimentId, response.variant.id);
         const [runsResponse, metricsResponse] = await Promise.all([
           listExperimentRuns(selectedExperimentId, userId),
           listExperimentMetrics(selectedExperimentId, userId),
@@ -1833,8 +1857,9 @@ export default function ExperimentsPage() {
       );
     } finally {
       setSubmitting(false);
+      setIsCreatingSuggestedVariant(false);
     }
-  }, [labMode, nextTest, selectedExperimentId, userId]);
+  }, [labMode, nextTest, runExperimentWithSelectedMode, selectedExperimentId, userId]);
 
   const handleCreateVariantFromRecommendation = useCallback(
     async (recommendation: NextTestRecommendation) => {
@@ -1846,6 +1871,7 @@ export default function ExperimentsPage() {
         if (!ok) return;
       }
       setFormError(null);
+      setIsCreatingSuggestedVariant(true);
       setSubmitting(true);
       try {
         const response = await createExperimentVariant(selectedExperimentId, {
@@ -1861,7 +1887,10 @@ export default function ExperimentsPage() {
         const refreshed = await listExperimentVariants(selectedExperimentId, userId);
         setVariants(refreshed.variants ?? []);
         if (labMode === "lab") {
-          await runExperiment(selectedExperimentId, response.variant.id, userId);
+          await runExperimentWithSelectedMode(
+            selectedExperimentId,
+            response.variant.id,
+          );
           const [runsResponse, metricsResponse] = await Promise.all([
             listExperimentRuns(selectedExperimentId, userId),
             listExperimentMetrics(selectedExperimentId, userId),
@@ -1880,9 +1909,10 @@ export default function ExperimentsPage() {
         );
       } finally {
         setSubmitting(false);
+        setIsCreatingSuggestedVariant(false);
       }
     },
-    [labMode, selectedExperimentId, userId],
+    [labMode, runExperimentWithSelectedMode, selectedExperimentId, userId],
   );
 
   const handleRunRecommendation = useCallback(
@@ -1894,7 +1924,7 @@ export default function ExperimentsPage() {
       }
       setRunningVariantId(variantId);
       try {
-        await runExperiment(selectedExperimentId, variantId, userId);
+        await runExperimentWithSelectedMode(selectedExperimentId, variantId);
         const [runsResponse, metricsResponse] = await Promise.all([
           listExperimentRuns(selectedExperimentId, userId),
           listExperimentMetrics(selectedExperimentId, userId),
@@ -1906,7 +1936,7 @@ export default function ExperimentsPage() {
         setRunningVariantId(null);
       }
     },
-    [labMode, selectedExperimentId, userId],
+    [labMode, runExperimentWithSelectedMode, selectedExperimentId],
   );
 
   const latestMetricEntry = metrics[0] ?? null;
@@ -4039,6 +4069,51 @@ export default function ExperimentsPage() {
                 </>
               )}
               <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
+              <div className="panel__grid panel__grid--two">
+                <label className="panel__label">
+                  Execution mode
+                  <select
+                    className="panel__input"
+                    value={experimentRunMode}
+                    onChange={(event) =>
+                      setExperimentRunMode(
+                        event.target.value === "retrieval_backed"
+                          ? "retrieval_backed"
+                          : "simulation",
+                      )
+                    }
+                  >
+                    <option value="simulation">Simulation (catalog competitors)</option>
+                    <option value="retrieval_backed">
+                      Retrieval-backed (web candidates)
+                    </option>
+                  </select>
+                </label>
+                {experimentRunMode === "retrieval_backed" ? (
+                  <label className="panel__label">
+                    Retrieval candidates per query
+                    <input
+                      className="panel__input"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={retrievalMaxResults}
+                      onChange={(event) =>
+                        setRetrievalMaxResults(event.target.value || "5")
+                      }
+                    />
+                  </label>
+                ) : (
+                  <div className="panel__label">
+                    <span className="panel__muted">
+                      Uses local catalog + configured competitor policy.
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="panel__muted">
+                Retrieval-backed mode pulls external web candidates per query, then scores variants against that set.
+              </p>
               {runVariantDisabledReason ? (
                 <p className="panel__muted">{runVariantDisabledReason}</p>
               ) : null}
@@ -4154,7 +4229,7 @@ export default function ExperimentsPage() {
                         onClick={handleCreateSuggestedVariant}
                         disabled={isSubmitting}
                       >
-                        {isSubmitting ? (
+                        {isCreatingSuggestedVariant ? (
                           <>
                             Creating variant<span className="button__dots" />
                           </>
@@ -4384,7 +4459,7 @@ export default function ExperimentsPage() {
                             }
                             disabled={isSubmitting}
                           >
-                            {isSubmitting ? (
+                            {isCreatingSuggestedVariant ? (
                               <>
                                 Creating variant<span className="button__dots" />
                               </>

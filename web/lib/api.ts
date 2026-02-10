@@ -1446,6 +1446,10 @@ export async function runExperiment(
   experimentId: string,
   variantId: string,
   userId?: string | null,
+  options?: {
+    execution_mode?: "simulation" | "retrieval_backed";
+    retrieval_max_results?: number;
+  },
 ): Promise<ExperimentRunResponse> {
   const clientId = getClientId();
   return request<ExperimentRunResponse>(`/experiments/${experimentId}/run`, {
@@ -1454,6 +1458,8 @@ export async function runExperiment(
       client_id: clientId ?? undefined,
       user_id: userId ?? undefined,
       variant_id: variantId,
+      execution_mode: options?.execution_mode ?? "simulation",
+      retrieval_max_results: options?.retrieval_max_results ?? 5,
     }),
   });
 }

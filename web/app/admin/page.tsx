@@ -450,6 +450,57 @@ export default function AdminPage() {
     };
   }, [activeBrandId, activeClientId, activeProductId, selectedProduct]);
 
+  const onboardingFlowSteps = useMemo(
+    () => [
+      { id: 1, label: "Select scope", done: onboardingCompletion.doneClient },
+      { id: 2, label: "Create brand", done: onboardingCompletion.doneBrand },
+      { id: 3, label: "Create product", done: onboardingCompletion.doneProduct },
+      { id: 4, label: "Define canonical intent", done: onboardingCompletion.doneIntent },
+    ],
+    [onboardingCompletion],
+  );
+
+  const onboardingCurrentStep = useMemo(
+    () => onboardingFlowSteps.find((step) => !step.done)?.id ?? onboardingFlowSteps.length,
+    [onboardingFlowSteps],
+  );
+
+  const onboardingNextAction = useMemo(() => {
+    if (!onboardingCompletion.doneClient) {
+      return {
+        label: "Add a client",
+        helper: "Start by creating a client workspace and initial catalog shell.",
+        action: "client" as const,
+      };
+    }
+    if (!onboardingCompletion.doneBrand) {
+      return {
+        label: "Add a brand",
+        helper: "Create at least one brand under the selected client.",
+        action: "brand" as const,
+      };
+    }
+    if (!onboardingCompletion.doneProduct) {
+      return {
+        label: "Add a product",
+        helper: "Create the first product to enable intent spec and query generation.",
+        action: "product" as const,
+      };
+    }
+    if (!onboardingCompletion.doneIntent) {
+      return {
+        label: "Define canonical intent spec",
+        helper: "Set category + use cases so bottom-up generation can run reliably.",
+        action: "intent" as const,
+      };
+    }
+    return {
+      label: "Onboarding complete",
+      helper: "You can now move to Experiments or configure advanced operations.",
+      action: "complete" as const,
+    };
+  }, [onboardingCompletion]);
+
   const selectedOntology = useMemo(() => {
     const key = intentSpecForm.category;
     return key ? canonicalOntology[key] : null;
@@ -1050,6 +1101,27 @@ export default function AdminPage() {
     userId,
   ]);
 
+  const handleRunOnboardingNextAction = useCallback(() => {
+    switch (onboardingNextAction.action) {
+      case "client":
+        setCreateClientDrawerOpen(true);
+        setCreateClientError(null);
+        setCreateClientSuccess(null);
+        return;
+      case "brand":
+        setShowCreateBrand(true);
+        return;
+      case "product":
+        setShowCreateProduct(true);
+        return;
+      case "intent":
+        setIntentDrawerOpen(true);
+        return;
+      default:
+        return;
+    }
+  }, [onboardingNextAction.action]);
+
   useEffect(() => {
     if (!userId || !activeClientId) {
       setLoopMaintenanceHistory([]);
@@ -1150,6 +1222,52 @@ export default function AdminPage() {
                   {onboardingCompletion.completed}/{onboardingCompletion.total} complete
                 </span>
               </div>
+              <p className="panel__subheading">Setup flow</p>
+              <p className="panel__step-helper">
+                Complete onboarding in sequence, then move to operational controls.
+              </p>
+              <section className="flow-rail admin-flow-rail">
+                <div className="flow-rail__header">
+                  <h4>Onboarding steps</h4>
+                  <span className="panel__muted">
+                    Current step: {onboardingCurrentStep} / {onboardingFlowSteps.length}
+                  </span>
+                </div>
+                <div className="flow-rail__steps">
+                  {onboardingFlowSteps.map((step) => (
+                    <div
+                      key={step.id}
+                      className={`flow-rail__step ${
+                        step.done ? "is-done" : step.id === onboardingCurrentStep ? "is-current" : ""
+                      }`}
+                    >
+                      <span className="flow-rail__index">{step.id}</span>
+                      <span className="flow-rail__label">{step.label}</span>
+                      <span className="flow-rail__status">
+                        {step.done
+                          ? "Done"
+                          : step.id === onboardingCurrentStep
+                            ? "Current"
+                            : "Pending"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section className="panel__notice panel__notice--info admin-next-action">
+                <strong>Next recommended action:</strong> {onboardingNextAction.label}
+                <p className="panel__muted">{onboardingNextAction.helper}</p>
+                <div className="panel__actions panel__actions--priority">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--prominent"
+                    onClick={handleRunOnboardingNextAction}
+                    disabled={onboardingNextAction.action === "complete"}
+                  >
+                    {onboardingNextAction.label}
+                  </button>
+                </div>
+              </section>
               <div className="admin-onboarding__scope">
                 <div className="admin__selector">
                   <label className="panel__label" htmlFor="admin-client-select">
@@ -1527,19 +1645,68 @@ export default function AdminPage() {
                   <ul className="admin__list">
                     <li>
                       <span>Client</span>
-                      <span className="admin__meta">{onboardingCompletion.doneClient ? "Done" : "Missing"}</span>
+                      <span className="admin__meta">
+                        {onboardingCompletion.doneClient ? "Done" : "Missing"}
+                      </span>
+                      {!onboardingCompletion.doneClient ? (
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() => {
+                            setCreateClientDrawerOpen(true);
+                            setCreateClientError(null);
+                            setCreateClientSuccess(null);
+                          }}
+                        >
+                          Add client
+                        </button>
+                      ) : null}
                     </li>
                     <li>
                       <span>Brand</span>
-                      <span className="admin__meta">{onboardingCompletion.doneBrand ? "Done" : "Missing"}</span>
+                      <span className="admin__meta">
+                        {onboardingCompletion.doneBrand ? "Done" : "Missing"}
+                      </span>
+                      {!onboardingCompletion.doneBrand ? (
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() => setShowCreateBrand(true)}
+                        >
+                          Add brand
+                        </button>
+                      ) : null}
                     </li>
                     <li>
                       <span>Product</span>
-                      <span className="admin__meta">{onboardingCompletion.doneProduct ? "Done" : "Missing"}</span>
+                      <span className="admin__meta">
+                        {onboardingCompletion.doneProduct ? "Done" : "Missing"}
+                      </span>
+                      {!onboardingCompletion.doneProduct ? (
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() => setShowCreateProduct(true)}
+                        >
+                          Add product
+                        </button>
+                      ) : null}
                     </li>
                     <li>
                       <span>Canonical intent spec</span>
-                      <span className="admin__meta">{onboardingCompletion.doneIntent ? "Done" : "Missing"}</span>
+                      <span className="admin__meta">
+                        {onboardingCompletion.doneIntent ? "Done" : "Missing"}
+                      </span>
+                      {!onboardingCompletion.doneIntent ? (
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() => setIntentDrawerOpen(true)}
+                          disabled={!selectedProduct}
+                        >
+                          Open intent editor
+                        </button>
+                      ) : null}
                     </li>
                   </ul>
                 </details>
@@ -1550,6 +1717,10 @@ export default function AdminPage() {
               <div className="panel__header">
                 <h3>Operational controls</h3>
               </div>
+              <p className="panel__subheading">Advanced operations</p>
+              <p className="panel__step-helper">
+                These controls tune providers, skills, and maintenance after onboarding is complete.
+              </p>
               <details className="admin-ops__details">
                 <summary>Model gateway</summary>
                 {!userId ? (
@@ -1906,7 +2077,19 @@ export default function AdminPage() {
                   <p className="panel__meta">
                     Creates one client, one initial brand, a product list, and canonical/UCP/ACP metadata in one flow.
                   </p>
+                  <div className="admin-scope-strip">
+                    <span className="panel__muted">
+                      Current scope: {selectedClient?.name ?? "No client"} /{" "}
+                      {selectedBrand?.name ?? "No brand"} /{" "}
+                      {selectedProduct?.name ?? "No product"}
+                    </span>
+                  </div>
                   <div className="admin__form">
+                    <section className="admin-drawer-step">
+                      <p className="panel__subheading">Step 1 · Client</p>
+                      <p className="panel__step-helper">
+                        Define the tenant workspace that will own brands and products.
+                      </p>
                     <span className="panel__label">Client</span>
                     <input
                       type="text"
@@ -1930,7 +2113,14 @@ export default function AdminPage() {
                         }))
                       }
                     />
+                    </section>
 
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 2 · Initial brand</p>
+                    <p className="panel__step-helper">
+                      Create the first brand under the new client.
+                    </p>
                     <span className="panel__label">Initial brand</span>
                     <input
                       type="text"
@@ -1954,7 +2144,14 @@ export default function AdminPage() {
                         }))
                       }
                     />
+                    </section>
 
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 3 · Products</p>
+                    <p className="panel__step-helper">
+                      Add one or more products. Each line should include id, name, and description.
+                    </p>
                     <span className="panel__label">Products list</span>
                     <textarea
                       rows={5}
@@ -1967,10 +2164,17 @@ export default function AdminPage() {
                         }))
                       }
                     />
+                    </section>
 
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 4 · Canonical intent spec</p>
+                    <p className="panel__step-helper">
+                      Category and use cases are required to enable bottom-up query generation.
+                    </p>
                     <span className="panel__label">Canonical intent spec</span>
                     <p className="panel__meta">
-                      Category and use cases are required. Choose a category first to load ontology options.
+                      Choose a category first to load ontology options.
                     </p>
                     <label className="panel__label">Category</label>
                     <select
@@ -2149,70 +2353,76 @@ export default function AdminPage() {
                         }))
                       }
                     />
+                    </section>
 
-                    <span className="panel__label">UCP defaults (optional)</span>
-                    <input
-                      type="url"
-                      placeholder="Offer URL"
-                      value={newClientForm.ucpOfferUrl}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          ucpOfferUrl: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      placeholder="Merchant name"
-                      value={newClientForm.ucpMerchantName}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          ucpMerchantName: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      placeholder="Currency"
-                      value={newClientForm.ucpCurrency}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          ucpCurrency: event.target.value,
-                        }))
-                      }
-                    />
-
-                    <span className="panel__label">ACP defaults</span>
-                    <label className="panel__label panel__label--inline">
+                    <div className="panel__separator" />
+                    <details className="admin-advanced-defaults">
+                      <summary>Advanced defaults (optional)</summary>
+                      <span className="panel__label">UCP defaults</span>
                       <input
-                        type="checkbox"
-                        checked={newClientForm.acpEnableSearch}
+                        type="url"
+                        placeholder="Offer URL"
+                        value={newClientForm.ucpOfferUrl}
                         onChange={(event) =>
                           setNewClientForm((current) => ({
                             ...current,
-                            acpEnableSearch: event.target.checked,
+                            ucpOfferUrl: event.target.value,
                           }))
                         }
                       />
-                      Enable search
-                    </label>
-                    <label className="panel__label panel__label--inline">
                       <input
-                        type="checkbox"
-                        checked={newClientForm.acpEnableCheckout}
+                        type="text"
+                        placeholder="Merchant name"
+                        value={newClientForm.ucpMerchantName}
                         onChange={(event) =>
                           setNewClientForm((current) => ({
                             ...current,
-                            acpEnableCheckout: event.target.checked,
+                            ucpMerchantName: event.target.value,
                           }))
                         }
                       />
-                      Enable checkout
-                    </label>
+                      <input
+                        type="text"
+                        placeholder="Currency"
+                        value={newClientForm.ucpCurrency}
+                        onChange={(event) =>
+                          setNewClientForm((current) => ({
+                            ...current,
+                            ucpCurrency: event.target.value,
+                          }))
+                        }
+                      />
 
+                      <span className="panel__label">ACP defaults</span>
+                      <label className="panel__label panel__label--inline">
+                        <input
+                          type="checkbox"
+                          checked={newClientForm.acpEnableSearch}
+                          onChange={(event) =>
+                            setNewClientForm((current) => ({
+                              ...current,
+                              acpEnableSearch: event.target.checked,
+                            }))
+                          }
+                        />
+                        Enable search
+                      </label>
+                      <label className="panel__label panel__label--inline">
+                        <input
+                          type="checkbox"
+                          checked={newClientForm.acpEnableCheckout}
+                          onChange={(event) =>
+                            setNewClientForm((current) => ({
+                              ...current,
+                              acpEnableCheckout: event.target.checked,
+                            }))
+                          }
+                        />
+                        Enable checkout
+                      </label>
+                    </details>
+
+                    <div className="panel__separator" />
                     {createClientError ? <p className="panel__error">{createClientError}</p> : null}
                     {createClientSuccess ? <p className="panel__success">{createClientSuccess}</p> : null}
                     <button
@@ -2251,7 +2461,17 @@ export default function AdminPage() {
                     {selectedBrand?.name ?? "No brand"} /{" "}
                     {selectedProduct?.name ?? "No product"}
                   </p>
+                  <div className="admin-scope-strip">
+                    <span className="panel__muted">
+                      Changes will be saved to the selected product metadata.
+                    </span>
+                  </div>
                   <div className="admin__form">
+                    <section className="admin-drawer-step">
+                      <p className="panel__subheading">Step 1 · Autofill source (optional)</p>
+                      <p className="panel__step-helper">
+                        Load a draft from UCP/ACP/feed signals before editing manually.
+                      </p>
                     <div className="panel__row panel__row--compact">
                       <button
                         type="button"
@@ -2270,6 +2490,13 @@ export default function AdminPage() {
                         Apply autofill
                       </button>
                     </div>
+                    </section>
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 2 · Category and taxonomy</p>
+                    <p className="panel__step-helper">
+                      Set category first, then sub-category and ontology-aligned dimensions.
+                    </p>
                     <label className="panel__label">Category (required)</label>
                     <p className="panel__meta">
                       Choose category first. Use cases are required for bottom-up query generation.
@@ -2308,6 +2535,13 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    </section>
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 3 · Use cases and audience</p>
+                    <p className="panel__step-helper">
+                      Choose concrete use cases and target audience archetypes.
+                    </p>
                     <label className="panel__label">Use cases (ontology)</label>
                     <select
                       multiple
@@ -2355,6 +2589,13 @@ export default function AdminPage() {
                     </select>
                     <p className="panel__meta">
                       Example: beginner_runner, performance_runner
+                    </p>
+                    </section>
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 4 · Features and constraints</p>
+                    <p className="panel__step-helper">
+                      Capture feature concepts, core constraints, and exclusions.
                     </p>
                     <label className="panel__label">Feature concepts (ontology)</label>
                     <select
@@ -2428,6 +2669,13 @@ export default function AdminPage() {
                     <p className="panel__meta">
                       Example: elite_racer_only, non_sport_use
                     </p>
+                    </section>
+                    <div className="panel__separator" />
+                    <section className="admin-drawer-step">
+                    <p className="panel__subheading">Step 5 · Keyword controls (optional)</p>
+                    <p className="panel__step-helper">
+                      Add objective and banned keyword lists to tighten generation behavior.
+                    </p>
                     <textarea
                       rows={2}
                       placeholder="Objective keywords (optional, comma separated)"
@@ -2450,6 +2698,8 @@ export default function AdminPage() {
                         }))
                       }
                     />
+                    </section>
+                    <div className="panel__separator" />
                     <button
                       type="button"
                       className="button button--primary-subtle"

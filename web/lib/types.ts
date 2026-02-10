@@ -685,6 +685,8 @@ export type ExperimentRun = {
   variant_id: string;
   query_id: string;
   simulation_run_id?: string | null;
+  execution_mode?: "simulation" | "retrieval_backed";
+  retrieval_summary?: Record<string, unknown>;
   created_at?: string;
 };
 
@@ -781,6 +783,8 @@ export type ExperimentRunResponse = {
     winner_id_keyword?: string | null;
     score?: number | null;
     score_keyword?: number | null;
+    execution_mode?: "simulation" | "retrieval_backed";
+    retrieval_summary?: Record<string, unknown>;
     protocol_readiness_score?: number | null;
     judge_results?: { provider: string; winner_id?: string | null; raw?: string }[];
     judge_consensus_winner?: string | null;
