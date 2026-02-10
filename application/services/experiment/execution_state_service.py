@@ -87,11 +87,6 @@ class ExperimentExecutionStateService:
             else 0
         )
 
-        retrieval_runs = [
-            run
-            for run in runs
-            if str(run.get("execution_mode") or "").strip().lower() == "retrieval_backed"
-        ]
         retrieval_snapshots_ready = (
             current_snapshot_version > 0 and snapshot_count >= len(enabled_queries)
         )
