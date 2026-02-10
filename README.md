@@ -106,7 +106,7 @@ Experiment protocol transparency APIs:
 
 ## Validation Model
 
-Validation now lives in the dedicated Validation flow/page and splits into:
+Validation lives in the dedicated Validation flow/page and splits into:
 
 1. **Synthetic validation signal**
 - Uses configured provider/model (BYOK).
