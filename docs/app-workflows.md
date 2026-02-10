@@ -56,28 +56,36 @@ Outputs currently available:
 
 ---
 
-## 3) Experiment Workflow (Lab)
+## 3) Experiment Workflow (Lab, Current Protocol)
 
 1. Create/select query battery.
-2. Generate queries (`top_down`, `bottom_up`, `hybrid`).
-3. Review accepted/rejected generation output.
-4. Create experiment and variants.
-5. Choose variant creation path:
+2. Generate and save enabled queries.
+3. Auto-initialize experiment context from product + battery when Step 4 starts.
+4. Retrieval-backed baseline run creates frozen protocol snapshots (`snapshot_version`).
+5. Baseline gate: candidate variants are blocked until control baseline is scored for current snapshot.
+6. Hypotheses are persisted from baseline deltas and linked to variants/runs.
+7. Create variants:
    - manual authoring,
    - simulation revision prefill,
-   - generate from loop evidence (experiment + simulation + validation),
-   - generate cold-start copy (`bottom_up`, `top_down`, `both`) when history is sparse.
-6. Optionally create selected generated candidate in one click.
-7. Run experiment battery.
-8. Review metrics and winners.
-9. Send winner candidates to Validation flow.
+   - loop evidence generation,
+   - cold-start generation (`bottom_up`, `top_down`, `both`).
+8. Run variants on the same frozen snapshot version.
+9. Validate in Validation module (synthetic + observed).
+10. Update posterior and decision action (`promote_variant` / `iterate_variant` / `reject_hypothesis`).
 
 Current guardrails:
 - query quality gating before persistence
-- bottom-up category confidence gate
-- lab-only messaging separated from observed validation
+- frozen retrieval snapshot protocol for fair variant comparison
+- baseline-first enforcement in retrieval-backed mode
+- explicit hypothesis linkage (`hypothesis_id`) for variants/runs
 - loop evidence reliability hierarchy: `validation > experiment > simulation`
-- cold-start mode allows brand/metadata mentions if grounded in product/audience context
+- posterior-driven decision action in run metrics
+
+### 3.1) Protocol Transparency Endpoints
+
+- `GET /experiments/{experiment_id}/execution-state`
+- `GET /experiments/{experiment_id}/retrieval-snapshots`
+- `GET /experiments/{experiment_id}/hypotheses`
 
 ---
 

@@ -8,6 +8,8 @@ import type {
   BrandBelief,
   CopyRevision,
   Experiment,
+  ExperimentExecutionState,
+  ExperimentHypothesis,
   ExperimentMetric,
   ExperimentRecommendation,
   ExperimentRun,
@@ -43,6 +45,8 @@ import {
   updateBattery,
   updateBatteryQuery,
   listExperimentMetrics,
+  getExperimentExecutionState,
+  listExperimentHypotheses,
   listExperimentRuns,
   listExperimentVariants,
   listExperiments,
@@ -105,6 +109,10 @@ export default function ExperimentsPage() {
   const [variants, setVariants] = useState<ExperimentVariant[]>([]);
   const [runs, setRuns] = useState<ExperimentRun[]>([]);
   const [metrics, setMetrics] = useState<ExperimentMetric[]>([]);
+  const [executionState, setExecutionState] = useState<ExperimentExecutionState | null>(
+    null,
+  );
+  const [hypotheses, setHypotheses] = useState<ExperimentHypothesis[]>([]);
   const [recommendations, setRecommendations] = useState<
     ExperimentRecommendation[]
   >([]);
@@ -148,7 +156,6 @@ export default function ExperimentsPage() {
   const [batteryDetailsOpen, setBatteryDetailsOpen] = useState(true);
   const [setupFlowCollapsed, setSetupFlowCollapsed] = useState(true);
   const [historyCollapsed, setHistoryCollapsed] = useState(true);
-  const [setupSecondaryActionsOpen, setSetupSecondaryActionsOpen] = useState(false);
   const [variantSecondaryActionsOpen, setVariantSecondaryActionsOpen] = useState(false);
   const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [labShowManualControls, setLabShowManualControls] = useState(false);
@@ -184,6 +191,10 @@ export default function ExperimentsPage() {
   const [variantGenerationRequestType, setVariantGenerationRequestType] = useState<
     "loop" | "cold_start" | null
   >(null);
+  const [isGeneratingQueries, setIsGeneratingQueries] = useState(false);
+  const [isCreatingVariant, setIsCreatingVariant] = useState(false);
+  const [isCreatingLoopCandidateVariant, setIsCreatingLoopCandidateVariant] =
+    useState(false);
   const [variantSourceMode, setVariantSourceMode] = useState<
     "manual" | "simulation" | "loop_evidence" | "cold_start"
   >("manual");
@@ -192,6 +203,7 @@ export default function ExperimentsPage() {
     "bottom_up" | "top_down" | "both"
   >("both");
   const [expandedVariantId, setExpandedVariantId] = useState<string | null>(null);
+  const [expandedHypothesisId, setExpandedHypothesisId] = useState<string | null>(null);
   const [variantAdvancedOpen, setVariantAdvancedOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [savingExperimentId, setSavingExperimentId] = useState<string | null>(null);
@@ -235,8 +247,6 @@ export default function ExperimentsPage() {
     null,
   );
   const [jsonErrors, setJsonErrors] = useState({
-    hypothesis: null as string | null,
-    competitorPolicy: null as string | null,
     variantPayload: null as string | null,
   });
   const [restoreDraft, setRestoreDraft] = useState<{
@@ -272,6 +282,18 @@ export default function ExperimentsPage() {
       });
     },
     [experimentRunMode, retrievalMaxResults, userId],
+  );
+
+  const refreshExecutionState = useCallback(
+    async (experimentId: string) => {
+      try {
+        const response = await getExperimentExecutionState(experimentId, userId);
+        setExecutionState(response.state ?? null);
+      } catch {
+        setExecutionState(null);
+      }
+    },
+    [userId],
   );
 
   useEffect(() => {
@@ -497,6 +519,8 @@ export default function ExperimentsPage() {
       setVariants([]);
       setRuns([]);
       setMetrics([]);
+      setExecutionState(null);
+      setHypotheses([]);
       setRecommendations([]);
       setValidationSummary(null);
       setLoopGeneratedVariants([]);
@@ -513,6 +537,16 @@ export default function ExperimentsPage() {
     void listExperimentMetrics(selectedExperimentId, userId).then((response) => {
       setMetrics(response.metrics ?? []);
     });
+    void getExperimentExecutionState(selectedExperimentId, userId)
+      .then((response) => {
+        setExecutionState(response.state ?? null);
+      })
+      .catch(() => setExecutionState(null));
+    void listExperimentHypotheses(selectedExperimentId, userId)
+      .then((response) => {
+        setHypotheses(response.hypotheses ?? []);
+      })
+      .catch(() => setHypotheses([]));
     void listExperimentRecommendations(selectedExperimentId, userId).then(
       (response) => {
         setRecommendations(response.recommendations ?? []);
@@ -524,6 +558,20 @@ export default function ExperimentsPage() {
       })
       .catch(() => setValidationSummary(null));
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+
+  useEffect(() => {
+    if (selectedExperimentId) return;
+    if (!productId || !experimentForm.batteryId) return;
+    const existing = [...experiments]
+      .filter(
+        (item) =>
+          item.product_id === productId && item.battery_id === experimentForm.batteryId,
+      )
+      .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))[0];
+    if (existing?.id) {
+      setSelectedExperimentId(existing.id);
+    }
+  }, [experimentForm.batteryId, experiments, productId, selectedExperimentId]);
 
   useEffect(() => {
     if (!runs.length) return;
@@ -644,14 +692,6 @@ export default function ExperimentsPage() {
       return error instanceof Error ? error.message : "Invalid JSON";
     }
   }, []);
-
-  useEffect(() => {
-    setJsonErrors((prev) => ({
-      ...prev,
-      hypothesis: validateJsonField(experimentForm.hypothesis),
-      competitorPolicy: validateJsonField(experimentForm.competitorPolicy),
-    }));
-  }, [experimentForm.hypothesis, experimentForm.competitorPolicy, validateJsonField]);
 
   useEffect(() => {
     setJsonErrors((prev) => ({
@@ -843,12 +883,6 @@ export default function ExperimentsPage() {
   const handleRunVariant = useCallback(
     async (variantId: string) => {
       if (!selectedExperimentId) return;
-      if (labMode === "lab" && labAutoRunEnabled) {
-        const ok = window.confirm(
-          "Run this variant now? We'll execute the query battery and record results.",
-        );
-        if (!ok) return;
-      }
       setRunningVariantId(variantId);
       try {
         await runExperimentWithSelectedMode(selectedExperimentId, variantId);
@@ -858,11 +892,12 @@ export default function ExperimentsPage() {
         ]);
         setRuns(runsResponse.runs ?? []);
         setMetrics(metricsResponse.metrics ?? []);
+        await refreshExecutionState(selectedExperimentId);
       } finally {
         setRunningVariantId(null);
       }
     },
-    [labMode, runExperimentWithSelectedMode, selectedExperimentId],
+    [refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
   );
 
   const handleScheduleSave = useCallback(async () => {
@@ -909,11 +944,12 @@ export default function ExperimentsPage() {
       ]);
       setRuns(runsResponse.runs ?? []);
       setMetrics(metricsResponse.metrics ?? []);
+      await refreshExecutionState(selectedExperimentId);
       setScheduleStatus("Backfill completed.");
     } catch (error) {
       setScheduleStatus("Backfill failed.");
     }
-  }, [productId, selectedExperimentId, userId]);
+  }, [productId, refreshExecutionState, selectedExperimentId, userId]);
 
   const handleCreateBattery = useCallback(async () => {
     if (!productId || !batteryForm.name.trim()) return;
@@ -974,6 +1010,61 @@ export default function ExperimentsPage() {
       .filter(Boolean);
   }, []);
 
+  const ensureExperimentContext = useCallback(async (): Promise<string | null> => {
+    const batteryId = experimentForm.batteryId;
+    if (!productId || !batteryId) {
+      setFormError("Complete Step 1-2 first: select battery and save queries.");
+      return null;
+    }
+    if (queries.length === 0) {
+      setFormError("Save at least one battery query before creating variants.");
+      return null;
+    }
+    if (selectedExperimentId) return selectedExperimentId;
+
+    const existing = [...experiments]
+      .filter(
+        (item) => item.product_id === productId && item.battery_id === batteryId,
+      )
+      .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))[0];
+    if (existing?.id) {
+      setSelectedExperimentId(existing.id);
+      await refreshExecutionState(existing.id);
+      return existing.id;
+    }
+
+    const experimentName =
+      selectedBattery?.name?.trim() ||
+      `${productName?.trim() || "Product"} experiment`;
+    const response = await createExperiment({
+      name: experimentName,
+      product_id: productId,
+      brand_id: brandId ?? undefined,
+      battery_id: batteryId,
+      hypothesis: {},
+      competitor_policy: {},
+      status: "active",
+      user_id: userId,
+    });
+    const refreshed = await listExperiments(userId, productId ?? undefined);
+    setExperiments(refreshed.experiments ?? []);
+    setSelectedExperimentId(response.experiment.id);
+    await refreshExecutionState(response.experiment.id);
+    setExperimentStatus("Experiment context initialized automatically.");
+    return response.experiment.id;
+  }, [
+    brandId,
+    experimentForm.batteryId,
+    experiments,
+    productId,
+    productName,
+    queries.length,
+    refreshExecutionState,
+    selectedBattery?.name,
+    selectedExperimentId,
+    userId,
+  ]);
+
   const hasBottomUpMetadata = useMemo(() => {
     const metadata = productDetail?.metadata ?? {};
     const canonicalSpec =
@@ -1022,6 +1113,7 @@ export default function ExperimentsPage() {
       if (!batteryId) return;
       setFormError(null);
       setSubmitting(true);
+      setIsGeneratingQueries(true);
       try {
         const seedList = parseSeedList(batterySeedQueries);
         const featureSeeds = parseSeedList(batterySeedFeatures);
@@ -1040,6 +1132,7 @@ export default function ExperimentsPage() {
           if (!confirmSwitch) {
             setFormError("Add features/use-cases or seed queries for bottom-up.");
             setSubmitting(false);
+            setIsGeneratingQueries(false);
             return;
           }
           source = "top_down";
@@ -1068,6 +1161,7 @@ export default function ExperimentsPage() {
           );
         }
       } finally {
+        setIsGeneratingQueries(false);
         setSubmitting(false);
       }
     },
@@ -1205,215 +1299,14 @@ export default function ExperimentsPage() {
     [userId],
   );
 
-  const handleCreateExperiment = useCallback(async () => {
-    if (!productId || !experimentForm.name.trim()) return;
-    if (jsonErrors.hypothesis || jsonErrors.competitorPolicy) return;
-    setFormError(null);
-    setExperimentStatus(null);
-    setSubmitting(true);
-    try {
-      let hypothesis: Record<string, unknown> = {};
-      let competitorPolicy: Record<string, unknown> = {};
-      if (experimentForm.hypothesis.trim() !== "") {
-        hypothesis = JSON.parse(experimentForm.hypothesis);
-      }
-      if (experimentForm.competitorPolicy.trim() !== "") {
-        competitorPolicy = JSON.parse(experimentForm.competitorPolicy);
-      }
-
-      const buildSeedQueries = (): string[] => {
-        const seeds: string[] = [];
-        const rationale = String((hypothesis as Record<string, unknown>)?.rationale ?? "");
-        const payload = (hypothesis as Record<string, unknown>)?.variant_payload;
-        const lowered = rationale.toLowerCase();
-        const productLabel = productName ?? "product";
-
-        const keywords = lowered
-          .replace(/[^a-z0-9\s]/g, " ")
-          .split(/\s+/)
-          .filter((word) => word.length > 3)
-          .slice(0, 4);
-
-        keywords.forEach((keyword) => {
-          seeds.push(`best ${productLabel} for ${keyword}`);
-          seeds.push(`${productLabel} that improves ${keyword}`);
-        });
-
-        if (lowered.includes("price") || lowered.includes("pricing") || typeof payload === "object" && payload && "pricing" in payload) {
-          seeds.push(`${productLabel} under budget with strong value`);
-          seeds.push(`${productLabel} on sale with best price`);
-        }
-
-        if (lowered.includes("delivery") || lowered.includes("shipping") || typeof payload === "object" && payload && "fulfillment" in payload) {
-          seeds.push(`${productLabel} with fast delivery options`);
-          seeds.push(`${productLabel} available for delivery this week`);
-        }
-
-        if (lowered.includes("tone") || lowered.includes("voice") || typeof payload === "object" && payload && "copy" in payload) {
-          seeds.push(`${productLabel} with premium positioning`);
-          seeds.push(`${productLabel} focused on outcomes and benefits`);
-        }
-
-        if (seeds.length === 0 && productLabel) {
-          seeds.push(`best ${productLabel} for everyday use`);
-        }
-
-        return Array.from(new Set(seeds)).slice(0, 8);
-      };
-
-      let batteryId = experimentForm.batteryId;
-      if (labMode === "lab" && !batteryId) {
-        const confirmCreate = window.confirm(
-          "Lab mode will create a battery, generate queries, and run a baseline variant. Continue?",
-        );
-        if (!confirmCreate) {
-          setSubmitting(false);
-          return;
-        }
-        const autoBatteryName = `${productName ?? "Product"} Battery`;
-        const seedQueries =
-          Object.keys(hypothesis).length > 0 ? buildSeedQueries() : [];
-        const featureSeeds = parseSeedList(batterySeedFeatures);
-        const useCaseSeeds = parseSeedList(batterySeedUseCases);
-        let generationMode =
-          seedQueries.length > 0 ? "hybrid" : batteryForm.generationMode;
-        if (
-          generationMode === "bottom_up" &&
-          !hasBottomUpMetadata &&
-          seedQueries.length === 0 &&
-          featureSeeds.length === 0 &&
-          useCaseSeeds.length === 0
-        ) {
-          const confirmSwitch = window.confirm(
-            "Bottom-up needs features/use-cases. Switch to top-down for this generation?",
-          );
-          if (!confirmSwitch) {
-            setFormError("Add features/use-cases or seed queries for bottom-up.");
-            setSubmitting(false);
-            return;
-          }
-          generationMode = "top_down";
-          setBatteryForm((prev) => ({ ...prev, generationMode: "top_down" }));
-          setBatteryStatus("Bottom-up metadata missing. Generated with top-down.");
-        }
-        const batteryResponse = await createBattery({
-          name: autoBatteryName,
-          product_id: productId,
-          purpose: experimentForm.hypothesis ? "Hypothesis-driven battery" : undefined,
-          generation_mode: generationMode,
-          user_id: userId,
-        });
-        batteryId = batteryResponse.battery.id;
-        const generationResponse = await generateBatteryQueries(batteryId, {
-          source: generationMode,
-          seed_queries: seedQueries.length > 0 ? seedQueries : undefined,
-          seed_features: featureSeeds.length > 0 ? featureSeeds : undefined,
-          seed_use_cases: useCaseSeeds.length > 0 ? useCaseSeeds : undefined,
-          user_id: userId,
-          use_llm: batteryUseLlm,
-        });
-        setBatteryGenerationReport(generationResponse.report ?? null);
-        const refreshedBatteries = await listBatteries(userId, productId);
-        setBatteries(refreshedBatteries.batteries ?? []);
-        setExperimentForm((prev) => ({ ...prev, batteryId }));
-      }
-      const response = await createExperiment({
-        name: experimentForm.name.trim(),
-        product_id: productId,
-        brand_id: brandId ?? undefined,
-        battery_id: batteryId || undefined,
-        hypothesis,
-        competitor_policy: competitorPolicy,
-        user_id: userId,
-      });
-      const refreshed = await listExperiments(userId, productId ?? undefined);
-      setExperiments(refreshed.experiments ?? []);
-      setSelectedExperimentId(response.experiment.id);
-      if (labMode === "lab" && labAutoRunEnabled) {
-        const hypothesisPayload =
-          (hypothesis as Record<string, unknown>)?.variant_payload ??
-          (hypothesis as Record<string, unknown>)?.payload ??
-          ((hypothesis as Record<string, unknown>)?.proposed_copy
-            ? { description: (hypothesis as Record<string, unknown>).proposed_copy }
-            : {});
-        const controlVariant = await createExperimentVariant(response.experiment.id, {
-          label: "Control (current copy)",
-          type: "copy",
-          payload: {},
-          user_id: userId,
-        });
-        const hypothesisVariant = await createExperimentVariant(
-          response.experiment.id,
-          {
-            label: "Hypothesis (variant)",
-            type: "copy",
-            payload:
-              hypothesisPayload && typeof hypothesisPayload === "object"
-                ? (hypothesisPayload as Record<string, unknown>)
-                : {},
-            user_id: userId,
-          },
-        );
-        await runExperimentWithSelectedMode(
-          response.experiment.id,
-          controlVariant.variant.id,
-        );
-        await runExperimentWithSelectedMode(
-          response.experiment.id,
-          hypothesisVariant.variant.id,
-        );
-        const [runsResponse, metricsResponse] = await Promise.all([
-          listExperimentRuns(response.experiment.id, userId),
-          listExperimentMetrics(response.experiment.id, userId),
-        ]);
-        setRuns(runsResponse.runs ?? []);
-        setMetrics(metricsResponse.metrics ?? []);
-        setExperimentStatus("Lab mode: control + hypothesis runs completed.");
-      } else if (labMode === "lab") {
-        setExperimentStatus(
-          "Lab mode: experiment created. Auto-run is off, so run variants when ready.",
-        );
-      }
-      setExperimentForm({
-        name: "",
-        batteryId: "",
-        hypothesis: "",
-        competitorPolicy: "",
-      });
-      if (labMode !== "lab") {
-        setExperimentStatus("Experiment created.");
-      }
-    } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "Invalid JSON payload.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [
-    batteryForm.generationMode,
-    batterySeedFeatures,
-    batterySeedUseCases,
-    batteryUseLlm,
-    brandId,
-    experimentForm,
-    jsonErrors,
-    labMode,
-    labAutoRunEnabled,
-    hasBottomUpMetadata,
-    parseSeedList,
-    productId,
-    productName,
-    runExperimentWithSelectedMode,
-    userId,
-  ]);
-
   const handleCreateVariant = useCallback(async () => {
-    if (!selectedExperimentId) return;
     if (jsonErrors.variantPayload) return;
     setFormError(null);
     setSubmitting(true);
+    setIsCreatingVariant(true);
     try {
+      const experimentId = await ensureExperimentContext();
+      if (!experimentId) return;
       const basePayload =
         variantForm.payload.trim() !== ""
           ? JSON.parse(variantForm.payload)
@@ -1432,14 +1325,15 @@ export default function ExperimentsPage() {
         : variantForm.role === "control"
           ? "Control (current copy)"
           : "Hypothesis (variant)";
-      await createExperimentVariant(selectedExperimentId, {
+      await createExperimentVariant(experimentId, {
         label: normalizedLabel,
         type: variantForm.type.trim() || "copy",
         payload,
         user_id: userId,
       });
-      const refreshed = await listExperimentVariants(selectedExperimentId, userId);
+      const refreshed = await listExperimentVariants(experimentId, userId);
       setVariants(refreshed.variants ?? []);
+      await refreshExecutionState(experimentId);
       setVariantForm({
         label: "Hypothesis (variant)",
         role: "candidate",
@@ -1453,9 +1347,16 @@ export default function ExperimentsPage() {
         error instanceof Error ? error.message : "Invalid JSON payload.",
       );
     } finally {
+      setIsCreatingVariant(false);
       setSubmitting(false);
     }
-  }, [jsonErrors.variantPayload, selectedExperimentId, userId, variantForm]);
+  }, [
+    ensureExperimentContext,
+    jsonErrors.variantPayload,
+    refreshExecutionState,
+    userId,
+    variantForm,
+  ]);
 
   const handleUseSimulationRevision = useCallback(() => {
     setSimulationRevisionStatus(null);
@@ -1509,15 +1410,13 @@ export default function ExperimentsPage() {
   }, [selectedSimulationRevisionId, simulationRevisions]);
 
   const handleGenerateLoopVariants = useCallback(async () => {
-    if (!selectedExperimentId) {
-      setLoopGenerationStatus("Select an experiment first.");
-      return;
-    }
     setLoopGenerationStatus(null);
     setVariantGenerationRequestType("loop");
     setIsGeneratingLoopVariant(true);
     try {
-      const response = await generateExperimentVariants(selectedExperimentId, {
+      const experimentId = await ensureExperimentContext();
+      if (!experimentId) return;
+      const response = await generateExperimentVariants(experimentId, {
         user_id: userId,
         max_candidates: 3,
         mode: "loop_evidence",
@@ -1541,18 +1440,16 @@ export default function ExperimentsPage() {
       setIsGeneratingLoopVariant(false);
       setVariantGenerationRequestType(null);
     }
-  }, [selectedExperimentId, userId]);
+  }, [ensureExperimentContext, userId]);
 
   const handleGenerateColdStartVariants = useCallback(async () => {
-    if (!selectedExperimentId) {
-      setLoopGenerationStatus("Select an experiment first.");
-      return;
-    }
     setLoopGenerationStatus(null);
     setVariantGenerationRequestType("cold_start");
     setIsGeneratingLoopVariant(true);
     try {
-      const response = await generateExperimentVariants(selectedExperimentId, {
+      const experimentId = await ensureExperimentContext();
+      if (!experimentId) return;
+      const response = await generateExperimentVariants(experimentId, {
         user_id: userId,
         max_candidates: 3,
         mode: "cold_start",
@@ -1576,7 +1473,7 @@ export default function ExperimentsPage() {
       setIsGeneratingLoopVariant(false);
       setVariantGenerationRequestType(null);
     }
-  }, [coldStartGenerationStrategy, selectedExperimentId, userId]);
+  }, [coldStartGenerationStrategy, ensureExperimentContext, userId]);
 
   const buildLoopCandidatePayload = useCallback(
     (
@@ -1638,10 +1535,6 @@ export default function ExperimentsPage() {
   ]);
 
   const handleCreateVariantFromLoopCandidate = useCallback(async () => {
-    if (!selectedExperimentId) {
-      setLoopGenerationStatus("Select an experiment first.");
-      return;
-    }
     const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
     if (!candidate) {
       setLoopGenerationStatus("Generate and select a loop candidate first.");
@@ -1651,7 +1544,10 @@ export default function ExperimentsPage() {
     setFormError(null);
     setLoopGenerationStatus(null);
     setSubmitting(true);
+    setIsCreatingLoopCandidateVariant(true);
     try {
+      const experimentId = await ensureExperimentContext();
+      if (!experimentId) return;
       const payload: Record<string, unknown> = buildLoopCandidatePayload(candidate, {
         role: "candidate",
       });
@@ -1659,14 +1555,15 @@ export default function ExperimentsPage() {
       if (description) {
         payload.description = description;
       }
-      await createExperimentVariant(selectedExperimentId, {
+      await createExperimentVariant(experimentId, {
         label: candidate.label?.trim() || "Hypothesis (variant)",
         type: "copy",
         payload,
         user_id: userId,
       });
-      const refreshed = await listExperimentVariants(selectedExperimentId, userId);
+      const refreshed = await listExperimentVariants(experimentId, userId);
       setVariants(refreshed.variants ?? []);
+      await refreshExecutionState(experimentId);
       setLoopGenerationStatus(
         `Created variant from loop candidate ${selectedLoopCandidateIndex + 1}.`,
       );
@@ -1677,21 +1574,19 @@ export default function ExperimentsPage() {
           : "Unable to create variant from selected loop candidate.",
       );
     } finally {
+      setIsCreatingLoopCandidateVariant(false);
       setSubmitting(false);
     }
   }, [
     buildLoopCandidatePayload,
+    ensureExperimentContext,
     loopGeneratedVariants,
-    selectedExperimentId,
+    refreshExecutionState,
     selectedLoopCandidateIndex,
     userId,
   ]);
 
   const handleCreateAndRunVariantFromLoopCandidate = useCallback(async () => {
-    if (!selectedExperimentId) {
-      setLoopGenerationStatus("Select an experiment first.");
-      return;
-    }
     const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
     if (!candidate) {
       setLoopGenerationStatus("Generate and select a loop candidate first.");
@@ -1701,7 +1596,10 @@ export default function ExperimentsPage() {
     setFormError(null);
     setLoopGenerationStatus(null);
     setSubmitting(true);
+    setIsCreatingLoopCandidateVariant(true);
     try {
+      const experimentId = await ensureExperimentContext();
+      if (!experimentId) return;
       const payload: Record<string, unknown> = buildLoopCandidatePayload(candidate, {
         role: "candidate",
       });
@@ -1709,21 +1607,22 @@ export default function ExperimentsPage() {
       if (description) {
         payload.description = description;
       }
-      const created = await createExperimentVariant(selectedExperimentId, {
+      const created = await createExperimentVariant(experimentId, {
         label: candidate.label?.trim() || "Hypothesis (variant)",
         type: "copy",
         payload,
         user_id: userId,
       });
-      await runExperimentWithSelectedMode(selectedExperimentId, created.variant.id);
+      await runExperimentWithSelectedMode(experimentId, created.variant.id);
       const [variantsResponse, runsResponse, metricsResponse] = await Promise.all([
-        listExperimentVariants(selectedExperimentId, userId),
-        listExperimentRuns(selectedExperimentId, userId),
-        listExperimentMetrics(selectedExperimentId, userId),
+        listExperimentVariants(experimentId, userId),
+        listExperimentRuns(experimentId, userId),
+        listExperimentMetrics(experimentId, userId),
       ]);
       setVariants(variantsResponse.variants ?? []);
       setRuns(runsResponse.runs ?? []);
       setMetrics(metricsResponse.metrics ?? []);
+      await refreshExecutionState(experimentId);
       setLoopGenerationStatus(
         `Created and ran candidate ${selectedLoopCandidateIndex + 1}.`,
       );
@@ -1734,12 +1633,14 @@ export default function ExperimentsPage() {
           : "Unable to create and run variant from selected loop candidate.",
       );
     } finally {
+      setIsCreatingLoopCandidateVariant(false);
       setSubmitting(false);
     }
   }, [
     buildLoopCandidatePayload,
+    ensureExperimentContext,
     loopGeneratedVariants,
-    selectedExperimentId,
+    refreshExecutionState,
     selectedLoopCandidateIndex,
     runExperimentWithSelectedMode,
     userId,
@@ -1811,21 +1712,16 @@ export default function ExperimentsPage() {
       ]);
       setRuns(runsResponse.runs ?? []);
       setMetrics(metricsResponse.metrics ?? []);
+      await refreshExecutionState(selectedExperimentId);
       setNextTestStatus("Recommended variant run completed.");
     } finally {
       setRunningVariantId(null);
     }
-  }, [nextTest?.variant_id, runExperimentWithSelectedMode, selectedExperimentId]);
+  }, [nextTest?.variant_id, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId]);
 
   const handleCreateSuggestedVariant = useCallback(async () => {
     if (!selectedExperimentId || !nextTest || nextTest.action !== "create_variant") {
       return;
-    }
-    if (labMode === "lab") {
-      const ok = window.confirm(
-        "Create and run the suggested variant now?",
-      );
-      if (!ok) return;
     }
     setFormError(null);
     setIsCreatingSuggestedVariant(true);
@@ -1843,6 +1739,7 @@ export default function ExperimentsPage() {
       });
       const refreshed = await listExperimentVariants(selectedExperimentId, userId);
       setVariants(refreshed.variants ?? []);
+      await refreshExecutionState(selectedExperimentId);
       if (labMode === "lab") {
         await runExperimentWithSelectedMode(selectedExperimentId, response.variant.id);
         const [runsResponse, metricsResponse] = await Promise.all([
@@ -1851,6 +1748,7 @@ export default function ExperimentsPage() {
         ]);
         setRuns(runsResponse.runs ?? []);
         setMetrics(metricsResponse.metrics ?? []);
+        await refreshExecutionState(selectedExperimentId);
         setNextTestStatus(
           `Created and ran variant ${response.variant.label}.`,
         );
@@ -1865,16 +1763,12 @@ export default function ExperimentsPage() {
       setSubmitting(false);
       setIsCreatingSuggestedVariant(false);
     }
-  }, [labMode, nextTest, runExperimentWithSelectedMode, selectedExperimentId, userId]);
+  }, [labMode, nextTest, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId]);
 
   const handleCreateVariantFromRecommendation = useCallback(
     async (recommendation: NextTestRecommendation) => {
       if (!selectedExperimentId || recommendation.action !== "create_variant") {
         return;
-      }
-      if (labMode === "lab") {
-        const ok = window.confirm("Create and run the suggested variant now?");
-        if (!ok) return;
       }
       setFormError(null);
       setIsCreatingSuggestedVariant(true);
@@ -1892,6 +1786,7 @@ export default function ExperimentsPage() {
         });
         const refreshed = await listExperimentVariants(selectedExperimentId, userId);
         setVariants(refreshed.variants ?? []);
+        await refreshExecutionState(selectedExperimentId);
         if (labMode === "lab") {
           await runExperimentWithSelectedMode(
             selectedExperimentId,
@@ -1903,6 +1798,7 @@ export default function ExperimentsPage() {
           ]);
           setRuns(runsResponse.runs ?? []);
           setMetrics(metricsResponse.metrics ?? []);
+          await refreshExecutionState(selectedExperimentId);
           setNextTestStatus(
             `Created and ran variant ${response.variant.label}.`,
           );
@@ -1918,16 +1814,12 @@ export default function ExperimentsPage() {
         setIsCreatingSuggestedVariant(false);
       }
     },
-    [labMode, runExperimentWithSelectedMode, selectedExperimentId, userId],
+    [labMode, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
   );
 
   const handleRunRecommendation = useCallback(
     async (variantId: string | null | undefined) => {
       if (!selectedExperimentId || !variantId) return;
-      if (labMode === "lab") {
-        const ok = window.confirm("Run this recommended test now?");
-        if (!ok) return;
-      }
       setRunningVariantId(variantId);
       try {
         await runExperimentWithSelectedMode(selectedExperimentId, variantId);
@@ -1937,12 +1829,13 @@ export default function ExperimentsPage() {
         ]);
         setRuns(runsResponse.runs ?? []);
         setMetrics(metricsResponse.metrics ?? []);
+        await refreshExecutionState(selectedExperimentId);
         setNextTestStatus("Recommended test run completed.");
       } finally {
         setRunningVariantId(null);
       }
     },
-    [labMode, runExperimentWithSelectedMode, selectedExperimentId],
+    [labMode, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
   );
 
   const latestMetricEntry = metrics[0] ?? null;
@@ -2056,6 +1949,12 @@ export default function ExperimentsPage() {
     const validationState = hasValidationSignals
       ? `Started · ${validationSummary?.verified_runs ?? 0} verified`
       : "Pending";
+    const snapshotVersion =
+      typeof latestRunEntry?.snapshot_version === "number"
+        ? latestRunEntry.snapshot_version
+        : typeof selectedExperiment?.protocol_snapshot_version === "number"
+          ? selectedExperiment.protocol_snapshot_version
+          : null;
     return {
       runVariantLabel,
       runQueryLabel,
@@ -2063,30 +1962,107 @@ export default function ExperimentsPage() {
       winRate,
       avgScore,
       validationState,
+      snapshotVersion,
     };
-  }, [hasValidationSignals, metrics, queryMap, runs, validationSummary?.verified_runs, variants]);
+  }, [
+    hasValidationSignals,
+    metrics,
+    queryMap,
+    runs,
+    selectedExperiment?.protocol_snapshot_version,
+    validationSummary?.verified_runs,
+    variants,
+  ]);
+
+  const currentProtocolSnapshotVersion = useMemo(() => {
+    if (typeof selectedExperiment?.protocol_snapshot_version === "number") {
+      return selectedExperiment.protocol_snapshot_version;
+    }
+    const detail = executionState?.phases?.retrieval_snapshots_ready?.detail;
+    if (typeof detail !== "string") return null;
+    const match = detail.match(/snapshot v(\d+)/i);
+    if (!match) return null;
+    const parsed = Number.parseInt(match[1] || "", 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [executionState?.phases?.retrieval_snapshots_ready?.detail, selectedExperiment?.protocol_snapshot_version]);
+
+  const hypothesisLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    hypotheses.forEach((hypothesis, index) => {
+      const statement = (hypothesis.statement ?? {}) as Record<string, unknown>;
+      const explicitName =
+        typeof statement.name === "string" && statement.name.trim()
+          ? statement.name.trim()
+          : null;
+      const ifText =
+        typeof statement.if === "string" && statement.if.trim()
+          ? statement.if.trim()
+          : null;
+      const forText =
+        typeof statement.for === "string" && statement.for.trim()
+          ? statement.for.trim()
+          : null;
+      let label = explicitName ?? "";
+      if (!label && ifText) {
+        label = forText ? `${ifText} (${forText})` : ifText;
+      }
+      if (!label) {
+        label = `Hypothesis ${index + 1}`;
+      }
+      if (label.length > 72) {
+        label = `${label.slice(0, 69)}...`;
+      }
+      map.set(hypothesis.id, label);
+    });
+    return map;
+  }, [hypotheses]);
+
+  const hypothesisStatementById = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>();
+    hypotheses.forEach((hypothesis) => {
+      map.set(
+        hypothesis.id,
+        ((hypothesis.statement ?? {}) as Record<string, unknown>) || {},
+      );
+    });
+    return map;
+  }, [hypotheses]);
 
   const experimentFlowSteps = useMemo(() => {
-    const batteryBuilt = Boolean(selectedExperiment?.battery_id || experimentForm.batteryId);
-    const queriesReady = queries.length > 0;
-    const experimentCreated = Boolean(selectedExperimentId);
-    const variantsReady = variants.length > 0;
-    const hasRuns = runs.length > 0 || Boolean(selectedExperiment?.last_run_at);
-    const outcomesReviewed = metrics.length > 0;
-    const validated = hasValidationSignals;
-    const nextVariantsReady =
+    const phases = executionState?.phases ?? {};
+    const phaseDone = (name: string, fallback: boolean) =>
+      typeof phases[name]?.done === "boolean" ? Boolean(phases[name]?.done) : fallback;
+    const batteryReady = phaseDone(
+      "battery_ready",
+      Boolean(selectedExperiment?.battery_id || experimentForm.batteryId),
+    );
+    const retrievalSnapshotsReady = phaseDone("retrieval_snapshots_ready", false);
+    const baselineScored = phaseDone("baseline_scored", false);
+    const hypothesesReady = phaseDone(
+      "hypotheses_ready",
+      Boolean(selectedExperiment?.hypothesis),
+    );
+    const variantsReady = phaseDone("variants_ready", variants.length > 0);
+    const runCompleted = phaseDone(
+      "experiment_run_completed",
+      runs.length > 0 || Boolean(selectedExperiment?.last_run_at),
+    );
+    const validated = phaseDone("validation_completed", hasValidationSignals);
+    const posteriorUpdated = phaseDone(
+      "posterior_updated",
       loopGeneratedVariants.length > 0 ||
-      Boolean(nextTest) ||
-      recommendations.length > 0;
+        Boolean(nextTest) ||
+        recommendations.length > 0,
+    );
     return [
-      { id: 1, label: "Build query battery", done: batteryBuilt },
-      { id: 2, label: "Generate and review queries", done: queriesReady },
-      { id: 3, label: "Create experiment", done: experimentCreated },
-      { id: 4, label: "Create variants", done: variantsReady },
-      { id: 5, label: "Run experiment", done: hasRuns },
-      { id: 6, label: "Review outcomes and metrics", done: outcomesReviewed },
-      { id: 7, label: "Validate synthetic and observed", done: validated },
-      { id: 8, label: "Generate next variants", done: nextVariantsReady },
+      { id: 1, label: "battery_ready", done: batteryReady },
+      { id: 2, label: "retrieval_snapshots_ready", done: retrievalSnapshotsReady },
+      { id: 3, label: "baseline_scored", done: baselineScored },
+      { id: 4, label: "hypotheses_ready", done: hypothesesReady },
+      { id: 5, label: "variants_ready", done: variantsReady },
+      { id: 6, label: "experiment_run_completed", done: runCompleted },
+      { id: 7, label: "validation_completed", done: validated },
+      { id: 8, label: "posterior_updated", done: posteriorUpdated },
     ];
   }, [
     experimentForm.batteryId,
@@ -2097,6 +2073,7 @@ export default function ExperimentsPage() {
     queries.length,
     recommendations.length,
     runs.length,
+    executionState?.phases,
     selectedExperiment?.battery_id,
     selectedExperiment?.last_run_at,
     selectedExperimentId,
@@ -2104,41 +2081,8 @@ export default function ExperimentsPage() {
   ]);
 
   const labFlowSteps = useMemo(() => {
-    const batteryBuilt = Boolean(selectedExperiment?.battery_id || experimentForm.batteryId);
-    const queriesReady = queries.length > 0;
-    const experimentCreated = Boolean(selectedExperimentId);
-    const variantsReady = variants.length >= 2;
-    const hasRuns = runs.length > 0 || Boolean(selectedExperiment?.last_run_at);
-    const outcomesReviewed = metrics.length > 0;
-    const validated = hasValidationSignals;
-    const nextVariantsReady =
-      loopGeneratedVariants.length > 0 ||
-      Boolean(nextTest) ||
-      recommendations.length > 0;
-    return [
-      { id: 1, label: "Build query battery", done: batteryBuilt },
-      { id: 2, label: "Generate and review queries", done: queriesReady },
-      { id: 3, label: "Create experiment", done: experimentCreated },
-      { id: 4, label: "Create baseline + hypothesis variants", done: variantsReady },
-      { id: 5, label: "Run baseline + hypothesis", done: hasRuns },
-      { id: 6, label: "Review outcomes and metrics", done: outcomesReviewed },
-      { id: 7, label: "Validation checkpoint", done: validated },
-      { id: 8, label: "Generate next variants", done: nextVariantsReady },
-    ];
-  }, [
-    experimentForm.batteryId,
-    hasValidationSignals,
-    loopGeneratedVariants.length,
-    metrics.length,
-    nextTest,
-    queries.length,
-    recommendations.length,
-    runs.length,
-    selectedExperiment?.battery_id,
-    selectedExperiment?.last_run_at,
-    selectedExperimentId,
-    variants.length,
-  ]);
+    return experimentFlowSteps;
+  }, [experimentFlowSteps]);
 
   const activeFlowSteps = labMode === "lab" ? labFlowSteps : experimentFlowSteps;
 
@@ -2152,30 +2096,38 @@ export default function ExperimentsPage() {
     : isSubmitting
       ? "Please wait for the current action to finish."
       : null;
-  const createExperimentDisabledReason = isSubmitting
-    ? "Please wait for the current action to finish."
-    : experimentForm.name.trim() === ""
-      ? "Enter an experiment name."
-      : jsonErrors.hypothesis
-        ? "Fix invalid Hypothesis JSON."
-        : jsonErrors.competitorPolicy
-          ? "Fix invalid Competitor policy JSON."
-          : null;
   const addVariantDisabledReason = isSubmitting
     ? "Please wait for the current action to finish."
-    : !selectedExperimentId
-      ? "Create or select an experiment first."
+    : !experimentForm.batteryId
+      ? "Select a battery first."
+      : queries.length === 0
+        ? "Generate and save battery queries first."
       : jsonErrors.variantPayload
         ? "Fix invalid payload JSON."
         : null;
+  const batteryReadyForRun =
+    typeof executionState?.phases?.battery_ready?.done === "boolean"
+      ? Boolean(executionState?.phases?.battery_ready?.done)
+      : Boolean((selectedExperiment?.battery_id || experimentForm.batteryId) && queries.length > 0);
+  const variantsReadyForRun =
+    typeof executionState?.phases?.variants_ready?.done === "boolean"
+      ? Boolean(executionState?.phases?.variants_ready?.done)
+      : variants.length >= 2;
   const canRunVariantTests = Boolean(
-    selectedExperimentId && (selectedExperiment?.battery_id || experimentForm.batteryId),
+    selectedExperimentId &&
+      batteryReadyForRun &&
+      variantsReadyForRun &&
+      (selectedExperiment?.battery_id || experimentForm.batteryId),
   ) && queries.length > 0;
   const runVariantDisabledReason = !selectedExperimentId
     ? "Create or select an experiment first."
+    : !batteryReadyForRun
+      ? "Complete Step 1-2 first: battery must have enabled saved queries."
+    : !variantsReadyForRun
+      ? "Create at least baseline + hypothesis variants first."
     : !(selectedExperiment?.battery_id || experimentForm.batteryId)
       ? "Link a battery to this experiment first."
-      : queries.length === 0
+    : queries.length === 0
         ? "Generate and save at least one enabled query first."
         : null;
   const loopEvidenceAdvisory =
@@ -2225,30 +2177,45 @@ export default function ExperimentsPage() {
   ]);
 
   const nextFlowAction = useMemo(() => {
-    if (!selectedExperimentId && setupFlowCollapsed) {
+    const hasBatteryAndQueries = Boolean(experimentForm.batteryId) && queries.length > 0;
+    if (!hasBatteryAndQueries && setupFlowCollapsed) {
       return {
         label: "Expand setup and start Step 1",
         helper: "Start by creating a battery and generating queries.",
         action: "expand_setup" as const,
       };
     }
+    if (!hasBatteryAndQueries) {
+      return {
+        label: "Finish battery setup",
+        helper: "Create/select battery, generate queries, and save enabled queries.",
+        action: "scroll_setup" as const,
+      };
+    }
     if (!selectedExperimentId) {
       return {
-        label: "Create experiment (Step 3)",
-        helper: "Complete battery/query setup, then create the experiment.",
-        action: "scroll_setup" as const,
+        label: "Continue to variants (auto context)",
+        helper: "Experiment context auto-initializes when you generate or add a variant.",
+        action: "scroll_variants" as const,
+      };
+    }
+    if (!executionState?.phases?.retrieval_snapshots_ready?.done) {
+      return {
+        label: "Run retrieval snapshots (Step 2)",
+        helper: "Run baseline/control variant to collect retrieval snapshots.",
+        action: "run_first_variant" as const,
       };
     }
     if (variants.length === 0) {
       return {
-        label: "Create first variant (Step 4)",
-        helper: "Use manual, simulation, loop, or cold-start source.",
+        label: "Create variants (Step 5)",
+        helper: "Generate copy variants from retrieval evidence and hypotheses.",
         action: "scroll_variants" as const,
       };
     }
-    if (runs.length === 0) {
+    if (!executionState?.phases?.experiment_run_completed?.done) {
       return {
-        label: "Run first variant test (Step 5)",
+        label: "Complete experiment run (Step 6)",
         helper: "Run a variant across the linked battery queries.",
         action: "run_first_variant" as const,
       };
@@ -2265,7 +2232,15 @@ export default function ExperimentsPage() {
       helper: "Use loop evidence to iterate on the next candidate copy.",
       action: "generate_next_variant" as const,
     };
-  }, [hasValidationSignals, runs.length, selectedExperimentId, setupFlowCollapsed, variants]);
+  }, [
+    executionState?.phases,
+    experimentForm.batteryId,
+    hasValidationSignals,
+    queries.length,
+    selectedExperimentId,
+    setupFlowCollapsed,
+    variants,
+  ]);
 
   const metricsHistory = useMemo(() => {
     return [...metrics]
@@ -2453,16 +2428,6 @@ export default function ExperimentsPage() {
       </svg>
     );
   };
-
-  const hypothesisBeliefId = useMemo(() => {
-    if (!experimentForm.hypothesis.trim()) return null;
-    try {
-      const parsed = JSON.parse(experimentForm.hypothesis);
-      return typeof parsed?.belief_id === "string" ? parsed.belief_id : null;
-    } catch {
-      return null;
-    }
-  }, [experimentForm.hypothesis]);
 
   const formatTimestamp = useCallback((value?: string | null) => {
     if (!value) return "—";
@@ -2838,22 +2803,33 @@ export default function ExperimentsPage() {
                 </button>
               </div>
             </div>
-            <p className="panel__subheading">Setup phase · Steps 1 to 3</p>
+            <div className="panel__meta">
+              <span className="panel__badge panel__badge--secondary">
+                Protocol snapshot:{" "}
+                {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0
+                  ? `v${currentProtocolSnapshotVersion}`
+                  : "pending"}
+              </span>
+              <span className="panel__badge panel__badge--secondary">
+                Hypotheses:{" "}
+                {executionState?.phases?.hypotheses_ready?.done ? "ready" : "pending"}
+              </span>
+            </div>
+            <p className="panel__subheading">Setup phase · Step 1</p>
             <p className="panel__muted">
               {labMode === "lab"
-                ? "Automation-first: create experiment and let Lab mode handle the default setup path."
-                : "Build battery, generate queries, then create experiment."}
+                ? "Prepare battery and queries first. Experiment context is initialized once and then stays in the background."
+                : "Prepare battery and queries first. Experiment context auto-initializes when Step 4 starts."}
             </p>
             {setupFlowCollapsed ? (
               <p className="panel__empty">
-                Setup is collapsed. Expand to edit battery and experiment inputs.
+                Setup is collapsed. Expand to edit battery and query controls.
               </p>
             ) : productId ? (
               <div className="panel__form">
                 {labMode === "lab" && !showManualControls ? (
                   <section className="panel__notice panel__notice--info">
-                    <strong>Lab automation path:</strong> Steps 1 and 2 are handled during
-                    experiment creation when no battery is selected.
+                    <strong>Lab setup path:</strong> Keep setup explicit. Build battery, generate queries, and save them before running experiments.
                     <div className="panel__actions panel__actions--priority">
                       <button
                         type="button"
@@ -3014,7 +2990,7 @@ export default function ExperimentsPage() {
                   onClick={() => handleGenerateQueries(experimentForm.batteryId)}
                   disabled={Boolean(queryGenerationDisabledReason)}
                 >
-                  {isSubmitting ? (
+                  {isGeneratingQueries ? (
                     <>
                       Generating queries<span className="button__dots" />
                     </>
@@ -3426,157 +3402,11 @@ export default function ExperimentsPage() {
                 ) : null}
                   </>
                 ) : null}
-                <p className="panel__subheading">
-                  Step 3 · Create experiment from the configured battery
-                </p>
+                <p className="panel__subheading">Experiment context</p>
                 <p className="panel__step-helper">
-                  {labMode === "lab"
-                    ? "Define hypothesis/policy, then create experiment. Lab mode can auto-create and auto-run the baseline path."
-                    : "Define hypothesis and competitor policy, then create the experiment."}
+                  Experiment records are now initialized automatically when you start Step 4.
                 </p>
-                {experimentStatus ? (
-                  <p className="panel__success">{experimentStatus}</p>
-                ) : null}
-                <label className="panel__label">
-                  Experiment name
-                  <input
-                    className="panel__input"
-                    value={experimentForm.name}
-                    onChange={(event) =>
-                      setExperimentForm((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                    placeholder="Copy test for stability"
-                  />
-                </label>
-                <label className="panel__label">
-                  Battery
-                  <select
-                    className="panel__input"
-                    value={experimentForm.batteryId}
-                    onChange={(event) =>
-                      setExperimentForm((prev) => ({
-                        ...prev,
-                        batteryId: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Select battery</option>
-                    {batteries.map((battery) => (
-                      <option key={battery.id} value={battery.id}>
-                        {battery.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="panel__label">
-                  Hypothesis (JSON)
-                  <textarea
-                    className="panel__textarea"
-                    value={experimentForm.hypothesis}
-                    onChange={(event) =>
-                      setExperimentForm((prev) => ({
-                        ...prev,
-                        hypothesis: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder='{"metric":"win_rate","direction":"increase"}'
-                  />
-                  {hypothesisBeliefId ? (
-                    <span className="panel__success">
-                      Created from belief: {hypothesisBeliefId}
-                    </span>
-                  ) : null}
-                  {jsonErrors.hypothesis ? (
-                    <span className="panel__error">{jsonErrors.hypothesis}</span>
-                  ) : null}
-                </label>
-                <label className="panel__label">
-                  Competitor policy (JSON)
-                  <textarea
-                    className="panel__textarea"
-                    value={experimentForm.competitorPolicy}
-                    onChange={(event) =>
-                      setExperimentForm((prev) => ({
-                        ...prev,
-                        competitorPolicy: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder='{"competitor_client_ids":["client-nike"]}'
-                  />
-                  {jsonErrors.competitorPolicy ? (
-                    <span className="panel__error">{jsonErrors.competitorPolicy}</span>
-                  ) : null}
-                </label>
-                <details
-                  className="panel__details"
-                  open={setupSecondaryActionsOpen}
-                  onToggle={(event) =>
-                    setSetupSecondaryActionsOpen(event.currentTarget.open)
-                  }
-                >
-                  <summary className="panel__details-summary">More setup actions</summary>
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() =>
-                        setExperimentForm((prev) => ({
-                          ...prev,
-                          hypothesis:
-                            '{"metric":"win_rate","direction":"increase","rationale":"Outcome framing improves intent alignment"}',
-                        }))
-                      }
-                    >
-                      Use hypothesis template
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() =>
-                        setExperimentForm((prev) => ({
-                          ...prev,
-                          competitorPolicy:
-                            '{"competitor_client_ids":["client-nike","client-adidas"],"strategy":"hold_constant"}',
-                        }))
-                      }
-                    >
-                      Use competitor template
-                    </button>
-                  </div>
-                </details>
-                {labMode === "lab" && showManualControls ? (
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(false)}
-                    >
-                      Hide manual setup controls
-                    </button>
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleCreateExperiment}
-                  disabled={Boolean(createExperimentDisabledReason)}
-                >
-                  {isSubmitting ? (
-                    <>
-                      Creating experiment<span className="button__dots" />
-                    </>
-                  ) : (
-                    "Create experiment"
-                  )}
-                </button>
-                {createExperimentDisabledReason ? (
-                  <p className="panel__muted">{createExperimentDisabledReason}</p>
-                ) : null}
+                {experimentStatus ? <p className="panel__success">{experimentStatus}</p> : null}
               </div>
             ) : (
               <p className="panel__empty">Select a product to create a battery.</p>
@@ -3634,7 +3464,11 @@ export default function ExperimentsPage() {
                           ? void handleGenerateLoopVariants()
                           : void handleGenerateColdStartVariants()
                       }
-                      disabled={!selectedExperimentId || isGeneratingLoopVariant}
+                      disabled={
+                        !experimentForm.batteryId ||
+                        queries.length === 0 ||
+                        isGeneratingLoopVariant
+                      }
                     >
                       {isGeneratingLoopVariant
                         ? "Generating candidates…"
@@ -3648,7 +3482,7 @@ export default function ExperimentsPage() {
                       onClick={handleCreateAndRunVariantFromLoopCandidate}
                       disabled={loopGeneratedVariants.length === 0 || isSubmitting}
                     >
-                      {isSubmitting
+                      {isCreatingLoopCandidateVariant
                         ? "Creating + running candidate…"
                         : "Create + run selected candidate"}
                     </button>
@@ -3895,11 +3729,19 @@ export default function ExperimentsPage() {
                         type="button"
                         className="panel__action panel__action--ghost"
                         onClick={handleGenerateLoopVariants}
-                        disabled={!selectedExperimentId || isGeneratingLoopVariant}
+                        disabled={
+                          !experimentForm.batteryId ||
+                          queries.length === 0 ||
+                          isGeneratingLoopVariant
+                        }
                       >
                         {isGeneratingLoopVariant &&
                         variantGenerationRequestType === "loop"
-                          ? "Generating from loop…"
+                          ? (
+                              <>
+                                Generating from loop<span className="button__dots" />
+                              </>
+                            )
                           : "Generate from loop evidence"}
                       </button>
                     </div>
@@ -3910,6 +3752,42 @@ export default function ExperimentsPage() {
                     ) : null}
                     {loopGenerationStatus ? (
                       <p className="panel__success">{loopGenerationStatus}</p>
+                    ) : null}
+                    {loopGeneratedVariants.length > 0 ? (
+                      <div className="panel__card">
+                        <div className="panel__header">
+                          <h4>Generated copy preview</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {loopGeneratedVariants.length}
+                          </span>
+                        </div>
+                        <ul className="panel__list">
+                          {loopGeneratedVariants.map((candidate, index) => (
+                            <li key={`${candidate.label}-${index}`}>
+                              <div className="panel__meta">
+                                <label className="panel__toggle">
+                                  <input
+                                    type="radio"
+                                    name="generated-copy-preview-loop"
+                                    checked={selectedLoopCandidateIndex === index}
+                                    onChange={() => setSelectedLoopCandidateIndex(index)}
+                                  />
+                                  <span>
+                                    {index + 1}. {candidate.label}
+                                  </span>
+                                </label>
+                                <span className="panel__badge panel__badge--secondary">
+                                  conf {candidate.confidence.toFixed(2)}
+                                </span>
+                              </div>
+                              <pre className="panel__pre">{candidate.description}</pre>
+                              {candidate.rationale ? (
+                                <p className="panel__muted">{candidate.rationale}</p>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ) : null}
                     {loopEvidenceAdvisory ? (
                       <p className="panel__muted">{loopEvidenceAdvisory}</p>
@@ -3940,16 +3818,61 @@ export default function ExperimentsPage() {
                         type="button"
                         className="panel__action panel__action--ghost"
                         onClick={handleGenerateColdStartVariants}
-                        disabled={!selectedExperimentId || isGeneratingLoopVariant}
+                        disabled={
+                          !experimentForm.batteryId ||
+                          queries.length === 0 ||
+                          isGeneratingLoopVariant
+                        }
                       >
                         {isGeneratingLoopVariant &&
                         variantGenerationRequestType === "cold_start"
-                          ? "Generating cold-start copy…"
+                          ? (
+                              <>
+                                Generating cold-start copy
+                                <span className="button__dots" />
+                              </>
+                            )
                           : "Generate cold-start copy"}
                       </button>
                     </div>
                     {loopGenerationStatus ? (
                       <p className="panel__success">{loopGenerationStatus}</p>
+                    ) : null}
+                    {loopGeneratedVariants.length > 0 ? (
+                      <div className="panel__card">
+                        <div className="panel__header">
+                          <h4>Generated copy preview</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {loopGeneratedVariants.length}
+                          </span>
+                        </div>
+                        <ul className="panel__list">
+                          {loopGeneratedVariants.map((candidate, index) => (
+                            <li key={`${candidate.label}-${index}`}>
+                              <div className="panel__meta">
+                                <label className="panel__toggle">
+                                  <input
+                                    type="radio"
+                                    name="generated-copy-preview"
+                                    checked={selectedLoopCandidateIndex === index}
+                                    onChange={() => setSelectedLoopCandidateIndex(index)}
+                                  />
+                                  <span>
+                                    {index + 1}. {candidate.label}
+                                  </span>
+                                </label>
+                                <span className="panel__badge panel__badge--secondary">
+                                  conf {candidate.confidence.toFixed(2)}
+                                </span>
+                              </div>
+                              <pre className="panel__pre">{candidate.description}</pre>
+                              {candidate.rationale ? (
+                                <p className="panel__muted">{candidate.rationale}</p>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ) : null}
                     <div className="panel__separator" />
                   </>
@@ -3979,7 +3902,7 @@ export default function ExperimentsPage() {
                           onClick={handleCreateVariantFromLoopCandidate}
                           disabled={loopGeneratedVariants.length === 0 || isSubmitting}
                         >
-                          {isSubmitting
+                          {isCreatingLoopCandidateVariant
                             ? "Creating variant…"
                             : "Create variant from selected loop candidate"}
                         </button>
@@ -4049,7 +3972,7 @@ export default function ExperimentsPage() {
                   onClick={handleCreateVariant}
                   disabled={Boolean(addVariantDisabledReason)}
                 >
-                  {isSubmitting ? (
+                  {isCreatingVariant ? (
                     <>
                       Adding variant<span className="button__dots" />
                     </>
@@ -4075,6 +3998,9 @@ export default function ExperimentsPage() {
                 </>
               )}
               <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
+              <p className="panel__step-helper">
+                Runs in retrieval-backed mode use frozen protocol snapshots to keep variant comparisons fair.
+              </p>
               <div className="panel__grid panel__grid--two">
                 <label className="panel__label">
                   Execution mode
@@ -4120,6 +4046,11 @@ export default function ExperimentsPage() {
               <p className="panel__muted">
                 Retrieval-backed mode pulls external web candidates per query, then scores variants against that set.
               </p>
+              {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0 ? (
+                <p className="panel__muted">
+                  Active frozen protocol: snapshot v{currentProtocolSnapshotVersion}
+                </p>
+              ) : null}
               {runVariantDisabledReason ? (
                 <p className="panel__muted">{runVariantDisabledReason}</p>
               ) : null}
@@ -4148,7 +4079,54 @@ export default function ExperimentsPage() {
                       >
                         {metricsByVariant.has(variant.id) ? "Tested" : "Draft"}
                       </span>
+                      {variant.hypothesis_id ? (
+                        <span className="panel__badge panel__badge--secondary">
+                          {hypothesisLabelById.get(variant.hypothesis_id) ?? "Hypothesis-linked"}
+                        </span>
+                      ) : null}
                     </div>
+                    {variant.hypothesis_id ? (
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() =>
+                            setExpandedHypothesisId((current) =>
+                              current === variant.hypothesis_id
+                                ? null
+                                : variant.hypothesis_id ?? null,
+                            )
+                          }
+                        >
+                          {expandedHypothesisId === variant.hypothesis_id
+                            ? "Hide hypothesis details"
+                            : "View hypothesis details"}
+                        </button>
+                      </div>
+                    ) : null}
+                    {variant.hypothesis_id &&
+                    expandedHypothesisId === variant.hypothesis_id ? (
+                      <div className="panel__meta panel__meta--stack">
+                        <span className="panel__muted">
+                          If:{" "}
+                          {String(
+                            hypothesisStatementById.get(variant.hypothesis_id)?.if ?? "—",
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          Then:{" "}
+                          {String(
+                            hypothesisStatementById.get(variant.hypothesis_id)?.then ?? "—",
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          For:{" "}
+                          {String(
+                            hypothesisStatementById.get(variant.hypothesis_id)?.for ?? "—",
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
                     {resolvedDescription ? (
                       <div className="panel__actions">
                         <button
@@ -4187,6 +4165,24 @@ export default function ExperimentsPage() {
                               string,
                               unknown
                             >).total_runs,
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          Posterior:{" "}
+                          {renderMetricValue(
+                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >).posterior,
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          Decision:{" "}
+                          {renderMetricValue(
+                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >).decision_action,
                           )}
                         </span>
                       </div>
@@ -4294,6 +4290,12 @@ export default function ExperimentsPage() {
                     <span className="outcome-snapshot__value">
                       {outcomeSnapshot.validationState}
                     </span>
+                    <span className="panel__muted">
+                      Protocol snapshot:{" "}
+                      {outcomeSnapshot.snapshotVersion && outcomeSnapshot.snapshotVersion > 0
+                        ? `v${outcomeSnapshot.snapshotVersion}`
+                        : "pending"}
+                    </span>
                     {!hasValidationSignals ? (
                       <button
                         type="button"
@@ -4334,6 +4336,17 @@ export default function ExperimentsPage() {
                       <li>
                         Judge consensus win rate:{" "}
                         {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
+                      </li>
+                      <li>
+                        Snapshot version:{" "}
+                        {renderMetricValue(latestMetric.snapshot_version, "-")}
+                      </li>
+                      <li>
+                        Posterior: {renderMetricValue(latestMetric.posterior, "-")}
+                      </li>
+                      <li>
+                        Decision action:{" "}
+                        {renderMetricValue(latestMetric.decision_action, "-")}
                       </li>
                     </ul>
                   ) : (
@@ -4680,6 +4693,57 @@ export default function ExperimentsPage() {
                           <span className="history-panel__meta">
                             Variant: {run.variant_id}
                           </span>
+                          {typeof run.snapshot_version === "number" ? (
+                            <span className="history-panel__meta">
+                              Snapshot: v{run.snapshot_version}
+                            </span>
+                          ) : null}
+                          {run.hypothesis_id ? (
+                            <span className="history-panel__meta">
+                              Hypothesis:{" "}
+                              {hypothesisLabelById.get(run.hypothesis_id) ?? "Hypothesis-linked"}
+                            </span>
+                          ) : null}
+                          {run.hypothesis_id ? (
+                            <button
+                              type="button"
+                              className="panel__action panel__action--ghost"
+                              onClick={() =>
+                                setExpandedHypothesisId((current) =>
+                                  current === run.hypothesis_id
+                                    ? null
+                                    : run.hypothesis_id ?? null,
+                                )
+                              }
+                            >
+                              {expandedHypothesisId === run.hypothesis_id
+                                ? "Hide hypothesis details"
+                                : "View hypothesis details"}
+                            </button>
+                          ) : null}
+                          {run.hypothesis_id &&
+                          expandedHypothesisId === run.hypothesis_id ? (
+                            <div className="panel__meta panel__meta--stack">
+                              <span className="panel__muted">
+                                If:{" "}
+                                {String(
+                                  hypothesisStatementById.get(run.hypothesis_id)?.if ?? "—",
+                                )}
+                              </span>
+                              <span className="panel__muted">
+                                Then:{" "}
+                                {String(
+                                  hypothesisStatementById.get(run.hypothesis_id)?.then ?? "—",
+                                )}
+                              </span>
+                              <span className="panel__muted">
+                                For:{" "}
+                                {String(
+                                  hypothesisStatementById.get(run.hypothesis_id)?.for ?? "—",
+                                )}
+                              </span>
+                            </div>
+                          ) : null}
                           {run.simulation_run_id ? (
                             <span className="history-panel__meta">
                               Run ID:{" "}

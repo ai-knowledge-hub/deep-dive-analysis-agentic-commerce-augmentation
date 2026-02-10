@@ -15,14 +15,16 @@ def create_run(
     simulation_run_id: Optional[str] = None,
     execution_mode: Optional[str] = None,
     retrieval_summary: Optional[Dict[str, Any]] = None,
+    snapshot_version: Optional[int] = None,
+    hypothesis_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute(
         """
         INSERT INTO experiment_runs
-            (id, experiment_id, variant_id, query_id, simulation_run_id, execution_mode, retrieval_summary_json)
-        VALUES (?, ?, ?, ?, ?, ?, json(?))
+            (id, experiment_id, variant_id, query_id, simulation_run_id, execution_mode, retrieval_summary_json, snapshot_version, hypothesis_id)
+        VALUES (?, ?, ?, ?, ?, ?, json(?), ?, ?)
         """,
         (
             run_id,
@@ -32,6 +34,8 @@ def create_run(
             simulation_run_id,
             execution_mode or "simulation",
             to_json(retrieval_summary) or to_json({}),
+            snapshot_version,
+            hypothesis_id,
         ),
     )
     conn.commit()
@@ -184,6 +188,10 @@ def _run_row(row) -> Dict[str, Any]:
         "retrieval_summary": from_json(row["retrieval_summary_json"], default={})
         if "retrieval_summary_json" in row.keys()
         else {},
+        "snapshot_version": int(row["snapshot_version"])
+        if "snapshot_version" in row.keys() and row["snapshot_version"] is not None
+        else None,
+        "hypothesis_id": row["hypothesis_id"] if "hypothesis_id" in row.keys() else None,
         "created_at": row["created_at"],
     }
 

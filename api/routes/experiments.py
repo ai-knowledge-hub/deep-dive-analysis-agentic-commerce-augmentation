@@ -15,6 +15,9 @@ from application.services.experiment.variant_generator import ExperimentVariantG
 from application.services.experiment.validation_service import (
     ExperimentValidationService,
 )
+from application.services.experiment.execution_state_service import (
+    ExperimentExecutionStateService,
+)
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -25,6 +28,7 @@ SCHEDULER = ExperimentScheduler(deps=DEPS)
 ORCHESTRATOR = ExperimentOrchestrator(deps=DEPS)
 VALIDATIONS = ExperimentValidationService(deps=DEPS)
 VARIANT_GENERATOR = ExperimentVariantGenerator(deps=DEPS)
+EXECUTION_STATE = ExperimentExecutionStateService(deps=DEPS)
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -54,6 +58,8 @@ class VariantCreateRequest(BaseModel):
     label: str = Field(..., min_length=1)
     type: str = Field(..., min_length=1)
     payload: Dict[str, Any] = Field(default_factory=dict)
+    hypothesis_id: Optional[str] = None
+    provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ExperimentRunRequest(BaseModel):
@@ -178,11 +184,16 @@ def delete_experiment(
 @router.post("/{experiment_id}/variants")
 def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
+    inferred_hypothesis_id = payload.hypothesis_id
+    if not inferred_hypothesis_id and isinstance(payload.payload, dict):
+        inferred_hypothesis_id = str(payload.payload.get("hypothesis_id") or "") or None
     variant = SERVICE.add_variant(
         experiment_id=experiment_id,
         label=payload.label,
         variant_type=payload.type,
         payload=payload.payload,
+        hypothesis_id=inferred_hypothesis_id,
+        provenance=payload.provenance,
     )
     try:
         experiment = SERVICE.get_experiment(experiment_id=experiment_id)
@@ -322,6 +333,52 @@ def list_runs(
     return {"runs": runs}
 
 
+@router.get("/{experiment_id}/retrieval-snapshots")
+def list_retrieval_snapshots(
+    experiment_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    snapshot_version: Optional[int] = None,
+    limit: int = 500,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    experiment = SERVICE.get_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    rows = DEPS.experiment_retrieval_snapshots.list_snapshots(
+        experiment_id=experiment_id,
+        snapshot_version=snapshot_version,
+        limit=limit,
+    )
+    return {"snapshots": rows}
+
+
+@router.get("/{experiment_id}/hypotheses")
+def list_hypotheses(
+    experiment_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    snapshot_version: Optional[int] = None,
+    status: Optional[str] = None,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    experiment = SERVICE.get_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    rows = DEPS.experiment_hypotheses.list_hypotheses(
+        experiment_id=experiment_id,
+        snapshot_version=snapshot_version,
+        status=status,
+        limit=limit,
+    )
+    return {"hypotheses": rows}
+
+
 @router.delete("/{experiment_id}/runs/{run_id}")
 def delete_run(
     experiment_id: str,
@@ -390,6 +447,21 @@ def validation_summary(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     return {"summary": summary.to_dict()}
+
+
+@router.get("/{experiment_id}/execution-state")
+def execution_state(
+    experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    try:
+        state = EXECUTION_STATE.get_state(
+            experiment_id=experiment_id,
+            client_id=scoped_client_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"state": state}
 
 
 @router.get("/{experiment_id}/recommendations")

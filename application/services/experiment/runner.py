@@ -11,6 +11,7 @@ from application.services.simulation.runner import run_simulation
 from application.services.experiment.brand_belief_service import BrandBeliefService
 from application.services.experiment.belief_update_agent import BeliefUpdateAgent
 from application.services.experiment.pairwise_judge import judge_pairwise
+from application.services.loop.belief_update_service import BeliefUpdateService
 from domain.simulation.ranking import score_for_product
 from domain.simulation.types import SimulationProduct
 from shared.config.env import settings
@@ -30,6 +31,7 @@ class ExperimentRunner:
         self._simulation = SimulationService(deps=deps)
         self._beliefs = BrandBeliefService(repo=deps.brand_beliefs)
         self._belief_agent = BeliefUpdateAgent()
+        self._belief_updates = BeliefUpdateService(deps=deps)
         self._judge_providers = _parse_judge_providers()
 
     def run_experiment(
@@ -76,6 +78,28 @@ class ExperimentRunner:
 
         runs_payload: List[Dict[str, Any]] = []
         normalized_execution_mode = _normalize_execution_mode(execution_mode)
+        frozen_snapshot_version: Optional[int] = None
+        retrieval_candidates_by_query: Dict[str, List[Dict[str, Any]]] = {}
+        if normalized_execution_mode == "retrieval_backed":
+            (
+                frozen_snapshot_version,
+                retrieval_candidates_by_query,
+            ) = self._ensure_frozen_retrieval_snapshots(
+                experiment=experiment,
+                enabled_queries=enabled_queries,
+                client_id=client_id,
+                user_id=user_id,
+                retrieval_max_results=retrieval_max_results,
+            )
+            if not _is_control_variant(variant):
+                if not self._has_control_baseline_for_snapshot(
+                    experiment_id=experiment_id,
+                    snapshot_version=frozen_snapshot_version,
+                ):
+                    raise ValueError(
+                        "Baseline not scored yet for current frozen retrieval snapshot. "
+                        "Run the control variant first."
+                    )
         retrieval_backed_runs = 0
         retrieval_fallback_runs = 0
         wins = 0
@@ -116,6 +140,7 @@ class ExperimentRunner:
             )
             response, query_execution_mode, retrieval_summary = (
                 self._run_query_with_mode(
+                    query_id=query["id"],
                     query_text=query["query_text"],
                     sim_product=sim_product,
                     raw_product=raw_product,
@@ -126,6 +151,10 @@ class ExperimentRunner:
                     product_id=experiment.get("product_id"),
                     competitor_client_ids=competitor_client_ids,
                     retrieval_max_results=retrieval_max_results,
+                    retrieval_candidates_override=retrieval_candidates_by_query.get(
+                        query.get("id"), []
+                    ),
+                    snapshot_version=frozen_snapshot_version,
                 )
             )
             run_id = response.get("run_id")
@@ -197,6 +226,8 @@ class ExperimentRunner:
                 simulation_run_id=run_id,
                 execution_mode=query_execution_mode,
                 retrieval_summary=retrieval_summary,
+                snapshot_version=frozen_snapshot_version,
+                hypothesis_id=variant.get("hypothesis_id"),
             )
 
             runs_payload.append(
@@ -213,6 +244,8 @@ class ExperimentRunner:
                     "is_competitive": is_competitive,
                     "execution_mode": query_execution_mode,
                     "retrieval_summary": retrieval_summary,
+                    "snapshot_version": frozen_snapshot_version,
+                    "hypothesis_id": variant.get("hypothesis_id"),
                     "protocol_readiness_score": readiness_score,
                     "judge_results": judge_results,
                     "judge_consensus_winner": consensus_winner,
@@ -283,7 +316,30 @@ class ExperimentRunner:
             )
             if retrieval_backed_runs > 0
             else None,
+            "snapshot_version": frozen_snapshot_version,
         }
+
+        if normalized_execution_mode == "retrieval_backed" and _is_control_variant(variant):
+            self._seed_hypotheses_from_baseline(
+                experiment=experiment,
+                runs=runs_payload,
+                snapshot_version=frozen_snapshot_version or 0,
+            )
+
+        if (
+            normalized_execution_mode == "retrieval_backed"
+            and not _is_control_variant(variant)
+            and experiment.get("brand_id")
+        ):
+            posterior = self._update_variant_posterior(
+                experiment=experiment,
+                variant=variant,
+                metrics=metrics,
+                client_id=client_id,
+            )
+            if posterior is not None:
+                metrics["posterior"] = round(posterior, 4)
+                metrics["decision_action"] = _decision_from_posterior(posterior)
 
         metric_row = self._deps.experiment_runs.create_metric(
             experiment_id=experiment_id,
@@ -314,9 +370,256 @@ class ExperimentRunner:
             metrics=metrics,
         )
 
+    def _ensure_frozen_retrieval_snapshots(
+        self,
+        *,
+        experiment: Dict[str, Any],
+        enabled_queries: List[Dict[str, Any]],
+        client_id: str,
+        user_id: Optional[str],
+        retrieval_max_results: int,
+    ) -> tuple[int, Dict[str, List[Dict[str, Any]]]]:
+        experiment_id = str(experiment.get("id") or "")
+        battery_id = str(experiment.get("battery_id") or "")
+        if not experiment_id or not battery_id:
+            return 0, {}
+        current_version = int(experiment.get("protocol_snapshot_version") or 0)
+        expected_query_ids = {str(item.get("id") or "") for item in enabled_queries}
+        if current_version > 0:
+            existing_rows = self._deps.experiment_retrieval_snapshots.list_snapshots(
+                experiment_id=experiment_id,
+                snapshot_version=current_version,
+                limit=max(2000, len(expected_query_ids) * 3),
+            )
+            existing_query_ids = {
+                str(row.get("query_id") or "")
+                for row in existing_rows
+                if row.get("query_id")
+            }
+            if expected_query_ids.issubset(existing_query_ids):
+                return current_version, self._load_snapshot_candidates(
+                    experiment_id=experiment_id,
+                    snapshot_version=current_version,
+                    enabled_queries=enabled_queries,
+                )
+
+        next_version = max(
+            current_version,
+            int(
+                self._deps.experiment_retrieval_snapshots.latest_snapshot_version(
+                    experiment_id=experiment_id
+                )
+                or 0
+            ),
+        ) + 1
+
+        candidates_by_query: Dict[str, List[Dict[str, Any]]] = {}
+        for query in enabled_queries:
+            query_text = str(query.get("query_text") or "")
+            query_id = str(query.get("id") or "")
+            retrieval_payload = _build_retrieval_payload(
+                query_text=query_text,
+                research=self._safe_run_research(
+                    query_text=query_text,
+                    client_id=client_id,
+                    user_id=user_id,
+                ),
+                retrieval_max_results=retrieval_max_results,
+            )
+            self._deps.experiment_retrieval_snapshots.create_snapshot(
+                experiment_id=experiment_id,
+                battery_id=battery_id,
+                query_id=query_id,
+                snapshot_version=next_version,
+                retrieval=retrieval_payload,
+            )
+            candidates_by_query[query_id] = retrieval_payload.get("candidates") or []
+
+        self._deps.experiments.update_experiment(
+            experiment_id=experiment_id,
+            client_id=client_id,
+            competitor_policy={
+                **(experiment.get("competitor_policy") or {}),
+                "protocol": {"frozen": True, "snapshot_version": next_version},
+            },
+            protocol_snapshot_version=next_version,
+        )
+        return next_version, candidates_by_query
+
+    def _load_snapshot_candidates(
+        self,
+        *,
+        experiment_id: str,
+        snapshot_version: int,
+        enabled_queries: List[Dict[str, Any]],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        query_ids = {str(item.get("id") or "") for item in enabled_queries}
+        rows = self._deps.experiment_retrieval_snapshots.list_snapshots(
+            experiment_id=experiment_id,
+            snapshot_version=snapshot_version,
+            limit=max(2000, len(query_ids) * 3),
+        )
+        result: Dict[str, List[Dict[str, Any]]] = {}
+        for row in rows:
+            query_id = str(row.get("query_id") or "")
+            if query_id not in query_ids or query_id in result:
+                continue
+            retrieval = row.get("retrieval") or {}
+            candidates = retrieval.get("candidates")
+            if isinstance(candidates, list):
+                result[query_id] = [item for item in candidates if isinstance(item, dict)]
+            else:
+                result[query_id] = []
+        for query_id in query_ids:
+            result.setdefault(query_id, [])
+        return result
+
+    def _safe_run_research(
+        self,
+        *,
+        query_text: str,
+        client_id: str,
+        user_id: Optional[str],
+    ) -> Dict[str, Any]:
+        try:
+            return self._deps.run_research(
+                query=query_text,
+                goals=[query_text],
+                context=(
+                    "Return candidate products for this exact shopping query. "
+                    "Include source URLs and concise snippets."
+                ),
+                client_id=client_id,
+                user_id=user_id,
+            )
+        except Exception:
+            return {}
+
+    def _has_control_baseline_for_snapshot(
+        self, *, experiment_id: str, snapshot_version: Optional[int]
+    ) -> bool:
+        if snapshot_version is None:
+            return False
+        variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
+        control_ids = {
+            str(item.get("id") or "")
+            for item in variants
+            if _is_control_variant(item)
+        }
+        if not control_ids:
+            return False
+        metrics = self._deps.experiment_runs.list_metrics(
+            experiment_id=experiment_id, limit=500
+        )
+        for metric in metrics:
+            if str(metric.get("variant_id") or "") not in control_ids:
+                continue
+            payload = metric.get("metrics") or {}
+            if int(payload.get("snapshot_version") or 0) == int(snapshot_version):
+                return True
+        return False
+
+    def _seed_hypotheses_from_baseline(
+        self,
+        *,
+        experiment: Dict[str, Any],
+        runs: List[Dict[str, Any]],
+        snapshot_version: int,
+    ) -> None:
+        experiment_id = str(experiment.get("id") or "")
+        if not experiment_id or snapshot_version <= 0:
+            return
+        existing = self._deps.experiment_hypotheses.count_hypotheses(
+            experiment_id=experiment_id,
+            snapshot_version=snapshot_version,
+        )
+        if existing > 0:
+            return
+        signal_counts: Dict[str, int] = {}
+        for row in runs:
+            run_id = row.get("run_id")
+            if not run_id:
+                continue
+            sim_run = self._deps.simulation_runs.get_run(run_id)
+            gap_analysis = ((sim_run or {}).get("result") or {}).get("gap_analysis") or []
+            if not isinstance(gap_analysis, list):
+                continue
+            target = next(
+                (
+                    item
+                    for item in gap_analysis
+                    if item.get("product_id") == experiment.get("product_id")
+                ),
+                gap_analysis[0] if gap_analysis else None,
+            )
+            for signal in (target or {}).get("missing_signals") or []:
+                key = str(signal or "").strip()
+                if not key:
+                    continue
+                signal_counts[key] = signal_counts.get(key, 0) + 1
+
+        top_signals = [
+            signal
+            for signal, _count in sorted(
+                signal_counts.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:4]
+        ]
+        if not top_signals:
+            return
+        for signal in top_signals:
+            self._deps.experiment_hypotheses.create_hypothesis(
+                experiment_id=experiment_id,
+                snapshot_version=snapshot_version,
+                source="retrieval_gap",
+                statement={
+                    "if": f"add or strengthen signal '{signal}'",
+                    "then": "rank-fit and comparative score improve",
+                    "for": "queries where this signal appears in winners",
+                },
+            )
+
+    def _update_variant_posterior(
+        self,
+        *,
+        experiment: Dict[str, Any],
+        variant: Dict[str, Any],
+        metrics: Dict[str, Any],
+        client_id: str,
+    ) -> Optional[float]:
+        hypothesis_id = str(variant.get("hypothesis_id") or "").strip() or str(
+            variant.get("id") or ""
+        ).strip()
+        if not hypothesis_id:
+            return None
+        evidence = {
+            "source": "synthetic",
+            "provider": "experiment_runner",
+            "score": float(metrics.get("win_rate") or 0.0),
+            "confidence": float(metrics.get("judge_consensus_win_rate") or 0.5),
+            "support_size": int(metrics.get("competitive_runs") or 1),
+            "experiment_id": experiment.get("id"),
+            "variant_id": variant.get("id"),
+            "snapshot_version": metrics.get("snapshot_version"),
+        }
+        revision = self._belief_updates.update(
+            client_id=client_id,
+            brand_id=experiment.get("brand_id"),
+            product_id=experiment.get("product_id"),
+            hypothesis_key=f"experiment_hypothesis:{hypothesis_id}",
+            evidence=evidence,
+        )
+        posterior = revision.get("posterior")
+        try:
+            return float(posterior)
+        except (TypeError, ValueError):
+            return None
+
     def _run_query_with_mode(
         self,
         *,
+        query_id: str,
         query_text: str,
         sim_product: SimulationProduct,
         raw_product: Dict[str, Any],
@@ -327,6 +630,8 @@ class ExperimentRunner:
         product_id: Optional[str],
         competitor_client_ids: Optional[List[str]],
         retrieval_max_results: int,
+        retrieval_candidates_override: Optional[List[Dict[str, Any]]] = None,
+        snapshot_version: Optional[int] = None,
     ) -> tuple[Dict[str, Any], str, Dict[str, Any]]:
         if normalized_execution_mode != "retrieval_backed":
             response = self._simulation.run(
@@ -342,6 +647,7 @@ class ExperimentRunner:
             )
             return response, "simulation", {}
         return self._run_query_retrieval_backed(
+            query_id=query_id,
             query_text=query_text,
             sim_product=sim_product,
             raw_product=raw_product,
@@ -349,13 +655,15 @@ class ExperimentRunner:
             user_id=user_id,
             brand_id=brand_id,
             product_id=product_id,
-            competitor_client_ids=competitor_client_ids,
             retrieval_max_results=retrieval_max_results,
+            retrieval_candidates_override=retrieval_candidates_override,
+            snapshot_version=snapshot_version,
         )
 
     def _run_query_retrieval_backed(
         self,
         *,
+        query_id: str,
         query_text: str,
         sim_product: SimulationProduct,
         raw_product: Dict[str, Any],
@@ -363,59 +671,81 @@ class ExperimentRunner:
         user_id: Optional[str],
         brand_id: Optional[str],
         product_id: Optional[str],
-        competitor_client_ids: Optional[List[str]],
         retrieval_max_results: int,
+        retrieval_candidates_override: Optional[List[Dict[str, Any]]] = None,
+        snapshot_version: Optional[int] = None,
     ) -> tuple[Dict[str, Any], str, Dict[str, Any]]:
         retrieval_summary: Dict[str, Any] = {
             "source": "web_research",
             "fallback_used": False,
             "candidate_count": 0,
         }
-        try:
-            research = self._deps.run_research(
-                query=query_text,
-                goals=[query_text],
-                context=(
-                    "Return candidate products for this exact shopping query. "
-                    "Include source URLs and concise snippets."
-                ),
-                client_id=client_id,
-                user_id=user_id,
-            )
-            retrieval_candidates = _extract_retrieval_candidates(
-                research=research, limit=retrieval_max_results
-            )
+        if retrieval_candidates_override is not None:
+            retrieval_candidates = [
+                item for item in retrieval_candidates_override if isinstance(item, dict)
+            ][:retrieval_max_results]
+            retrieval_summary["source"] = "frozen_snapshot"
             retrieval_summary["candidate_count"] = len(retrieval_candidates)
-            if research and isinstance(research, dict):
-                insights = research.get("insights")
-                retrieval_summary["insight_count"] = (
-                    len(insights) if isinstance(insights, list) else 0
+            retrieval_summary["query_id"] = query_id
+            retrieval_summary["snapshot_version"] = snapshot_version
+        else:
+            try:
+                research = self._deps.run_research(
+                    query=query_text,
+                    goals=[query_text],
+                    context=(
+                        "Return candidate products for this exact shopping query. "
+                        "Include source URLs and concise snippets."
+                    ),
+                    client_id=client_id,
+                    user_id=user_id,
                 )
-        except Exception as exc:
-            retrieval_candidates = []
-            retrieval_summary = {
-                "source": "web_research",
-                "fallback_used": True,
-                "candidate_count": 0,
-                "error": str(exc),
-            }
+                retrieval_candidates = _extract_retrieval_candidates(
+                    research=research, limit=retrieval_max_results
+                )
+                retrieval_summary["candidate_count"] = len(retrieval_candidates)
+                if research and isinstance(research, dict):
+                    insights = research.get("insights")
+                    retrieval_summary["insight_count"] = (
+                        len(insights) if isinstance(insights, list) else 0
+                    )
+            except Exception as exc:
+                retrieval_candidates = []
+                retrieval_summary = {
+                    "source": "web_research",
+                    "fallback_used": True,
+                    "candidate_count": 0,
+                    "error": str(exc),
+                }
 
         if not retrieval_candidates:
-            fallback_response = self._simulation.run(
+            retrieval_summary["source"] = "web_research"
+            retrieval_summary["fallback_used"] = False
+            retrieval_summary["fallback_reason"] = "no_retrieval_candidates"
+            empty_result = _build_empty_retrieval_result(
+                query_text=query_text,
+                deps=self._deps,
+                target_product=sim_product,
+            )
+            run = self._deps.simulation_runs.create_run(
                 query=query_text,
-                products=[sim_product],
-                client_id=client_id,
+                scenario={
+                    "query": query_text,
+                    "execution_mode": "retrieval_backed",
+                    "retrieval_summary": retrieval_summary,
+                },
+                products=[raw_product],
+                result=empty_result,
                 user_id=user_id,
+                client_id=client_id,
                 brand_id=brand_id,
                 product_id=product_id,
-                raw_products=[raw_product],
-                auto_competitors=True,
-                competitor_client_ids=competitor_client_ids,
             )
-            retrieval_summary["source"] = "local_competitor_fallback"
-            retrieval_summary["fallback_used"] = True
-            retrieval_summary.setdefault("fallback_reason", "no_retrieval_candidates")
-            return fallback_response, "retrieval_backed", retrieval_summary
+            return (
+                {"run_id": run.get("id"), "result": empty_result},
+                "retrieval_backed",
+                retrieval_summary,
+            )
 
         products_for_run: List[SimulationProduct] = [sim_product]
         raw_products_for_run: List[Dict[str, Any]] = [raw_product]
@@ -647,6 +977,43 @@ def _extract_retrieval_candidates(
     return candidates[:limit]
 
 
+def _build_retrieval_payload(
+    *,
+    query_text: str,
+    research: Dict[str, Any] | None,
+    retrieval_max_results: int,
+) -> Dict[str, Any]:
+    candidates = _extract_retrieval_candidates(
+        research=research or {},
+        limit=retrieval_max_results,
+    )
+    return {
+        "query_text": query_text,
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "insight_count": len(research.get("insights") or [])
+        if isinstance(research, dict)
+        else 0,
+    }
+
+
+def _is_control_variant(variant: Dict[str, Any]) -> bool:
+    payload = variant.get("payload") or {}
+    role = str(payload.get("role") or "").strip().lower()
+    if role == "control":
+        return True
+    label = str(variant.get("label") or "").strip().lower()
+    return "control" in label
+
+
+def _decision_from_posterior(posterior: float) -> str:
+    if posterior >= 0.75:
+        return "promote_variant"
+    if posterior >= 0.45:
+        return "iterate_variant"
+    return "reject_hypothesis"
+
+
 def _to_simulation_product(raw: Dict[str, Any]) -> SimulationProduct:
     return SimulationProduct(
         id=str(raw.get("id") or ""),
@@ -658,6 +1025,27 @@ def _to_simulation_product(raw: Dict[str, Any]) -> SimulationProduct:
         confidence=float(raw.get("confidence") or 0.55),
         metadata=raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {},
     )
+
+
+def _build_empty_retrieval_result(
+    *, query_text: str, deps: AppDeps, target_product: SimulationProduct
+) -> Dict[str, Any]:
+    intent = deps.classify_intent(query_text)
+    return {
+        "intent": intent,
+        "goals": [query_text],
+        "scores": [],
+        "winner_id": None,
+        "scores_keyword": [],
+        "winner_id_keyword": None,
+        "gap_analysis": [],
+        "profiles": [],
+        "lessons": [
+            "No retrieval candidates were returned for this query in retrieval-backed mode."
+        ],
+        "tone": {"summary": None},
+        "metadata": {"target_product_id": target_product.id},
+    }
 
 
 def _extract_protocol_readiness_score_for_product(

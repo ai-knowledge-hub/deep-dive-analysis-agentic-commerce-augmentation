@@ -113,6 +113,7 @@ def update_experiment(
     schedule_interval_minutes: Optional[int] = None,
     last_run_at: Optional[str] = None,
     next_run_at: Optional[str] = None,
+    protocol_snapshot_version: Optional[int] = None,
 ) -> Dict[str, Any] | None:
     conn = get_connection()
     updates: list[str] = []
@@ -141,6 +142,9 @@ def update_experiment(
     if next_run_at is not None:
         updates.append("next_run_at = ?")
         params.append(next_run_at)
+    if protocol_snapshot_version is not None:
+        updates.append("protocol_snapshot_version = ?")
+        params.append(protocol_snapshot_version)
     if not updates:
         return get_experiment(experiment_id, client_id=client_id)
     updates.append("updated_at = datetime('now')")
@@ -163,14 +167,16 @@ def add_variant(
     label: str,
     variant_type: str,
     payload: Optional[Dict[str, Any]] = None,
+    hypothesis_id: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     variant_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute(
         """
         INSERT INTO experiment_variants
-            (id, experiment_id, label, type, payload_json)
-        VALUES (?, ?, ?, ?, json(?))
+            (id, experiment_id, label, type, payload_json, hypothesis_id, provenance_json)
+        VALUES (?, ?, ?, ?, json(?), ?, json(?))
         """,
         (
             variant_id,
@@ -178,6 +184,8 @@ def add_variant(
             label,
             variant_type,
             to_json(payload) or to_json({}),
+            hypothesis_id,
+            to_json(provenance) or to_json({}),
         ),
     )
     conn.commit()
@@ -292,6 +300,10 @@ def _experiment_row(row) -> Dict[str, Any]:
         "schedule_interval_minutes": row["schedule_interval_minutes"],
         "last_run_at": row["last_run_at"],
         "next_run_at": row["next_run_at"],
+        "protocol_snapshot_version": int(row["protocol_snapshot_version"])
+        if "protocol_snapshot_version" in row.keys()
+        and row["protocol_snapshot_version"] is not None
+        else 0,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -304,6 +316,10 @@ def _variant_row(row) -> Dict[str, Any]:
         "label": row["label"],
         "type": row["type"],
         "payload": from_json(row["payload_json"], default={}),
+        "hypothesis_id": row["hypothesis_id"] if "hypothesis_id" in row.keys() else None,
+        "provenance": from_json(row["provenance_json"], default={})
+        if "provenance_json" in row.keys()
+        else {},
         "created_at": row["created_at"],
     }
 

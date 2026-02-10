@@ -10,12 +10,14 @@ That led to **Intent Loop Commerce: LLM Discoverability Lab**: a validation-firs
 Intent Loop Commerce helps teams optimize product copy for LLM-driven discovery by running a structured closed loop:
 
 1. Build query batteries (`bottom_up`, `top_down`, `hybrid`).
-2. Create and test copy variants in controlled experiments.
-3. Review run outcomes and aggregate metrics.
-4. Validate with two signals:
+2. Freeze retrieval-backed protocol snapshots and score baseline first.
+3. Create and test hypothesis-linked copy variants in controlled experiments.
+4. Review run outcomes and aggregate metrics.
+5. Validate with two signals:
    - synthetic validation (in-app BYOK, provider run, manual fallback),
    - observed reality validation (manual observed checks).
-5. Generate next variants from weighted loop evidence (`validation > experiment > simulation`).
+6. Generate next variants from weighted loop evidence (`validation > experiment > simulation`).
+7. Convert posterior updates into explicit actions (`promote_variant`, `iterate_variant`, `reject_hypothesis`).
 
 The lab also supports cold-start variant generation and derives behavioral audience segments from recent session/analytics events to condition top-down/hybrid query generation.
 
@@ -25,6 +27,7 @@ The lab also supports cold-start variant generation and derives behavioral audie
 - **Frontend:** Next.js + TypeScript with step-based UX for simulation, experiments, and validation.
 - **Validation integration:** Provider-run orchestration (OpenAI MCP path implemented), callback verification, TTL, and replay protection.
 - **Learning loop:** Beliefs, memory artifacts, calibration signals, and explicit evidence weighting.
+- **Experiment protocol:** frozen snapshot versioning, baseline gating, hypothesis linkage, posterior decisioning.
 - **Operational controls:** Multi-tenant admin setup, canonical intent spec, model gateway (BYOK), and history/audit surfaces.
 
 ## Challenges we ran into
@@ -38,6 +41,7 @@ The lab also supports cold-start variant generation and derives behavioral audie
 ## Accomplishments that we're proud of
 
 - Delivered an end-to-end experiment flow with explicit validation checkpoint.
+- Added frozen retrieval snapshot protocol and baseline-first enforcement for fair variant comparisons.
 - Implemented closed-loop variant generation and cold-start generation in the same UX.
 - Added provider-run validation contracts with callback security controls.
 - Improved UX hierarchy across core modules for clearer next actions.
