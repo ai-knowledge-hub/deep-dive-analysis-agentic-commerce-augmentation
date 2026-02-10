@@ -163,11 +163,12 @@ class LocalEmbeddingProvider(EmbeddingProvider):
             logger.info(
                 f"Local embedding provider initialized with {self.config.local_model}"
             )
-        except ImportError:
+        except Exception as exc:
             raise ImportError(
-                "sentence-transformers not installed. "
-                "Run: pip install sentence-transformers"
-            )
+                "Local embedding provider unavailable. "
+                "Install/repair sentence-transformers dependencies. "
+                f"Root cause: {exc}"
+            ) from exc
 
     def embed(self, text: str) -> List[float]:
         self._ensure_initialized()
@@ -392,7 +393,14 @@ def similarity(text_a: str, text_b: str) -> float:
 def embedding_available() -> bool:
     """Return True if any embedding provider should be usable."""
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    local_available = importlib.util.find_spec("sentence_transformers") is not None
+    local_available = False
+    if importlib.util.find_spec("sentence_transformers") is not None:
+        try:
+            import sentence_transformers  # noqa: F401
+
+            local_available = True
+        except Exception:
+            local_available = False
     return bool(gemini_key) or local_available
 
 

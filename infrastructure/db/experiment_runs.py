@@ -13,16 +13,26 @@ def create_run(
     variant_id: str,
     query_id: str,
     simulation_run_id: Optional[str] = None,
+    execution_mode: Optional[str] = None,
+    retrieval_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute(
         """
         INSERT INTO experiment_runs
-            (id, experiment_id, variant_id, query_id, simulation_run_id)
-        VALUES (?, ?, ?, ?, ?)
+            (id, experiment_id, variant_id, query_id, simulation_run_id, execution_mode, retrieval_summary_json)
+        VALUES (?, ?, ?, ?, ?, ?, json(?))
         """,
-        (run_id, experiment_id, variant_id, query_id, simulation_run_id),
+        (
+            run_id,
+            experiment_id,
+            variant_id,
+            query_id,
+            simulation_run_id,
+            execution_mode or "simulation",
+            to_json(retrieval_summary) or to_json({}),
+        ),
     )
     conn.commit()
     return get_run(run_id) or {}
@@ -170,6 +180,10 @@ def _run_row(row) -> Dict[str, Any]:
         "variant_id": row["variant_id"],
         "query_id": row["query_id"],
         "simulation_run_id": row["simulation_run_id"],
+        "execution_mode": row["execution_mode"] if "execution_mode" in row.keys() else "simulation",
+        "retrieval_summary": from_json(row["retrieval_summary_json"], default={})
+        if "retrieval_summary_json" in row.keys()
+        else {},
         "created_at": row["created_at"],
     }
 

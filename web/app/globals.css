@@ -2962,6 +2962,14 @@ input[type="checkbox"]:focus-visible {
   gap: 14px;
 }
 
+.admin-flow-rail {
+  margin-bottom: 4px;
+}
+
+.admin-next-action {
+  margin-top: 0;
+}
+
 .admin-onboarding__scope {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -3031,6 +3039,11 @@ input[type="checkbox"]:focus-visible {
   color: var(--text-secondary);
 }
 
+.admin-onboarding__panels .admin__list li {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .admin-onboarding__drawer-overlay {
   position: fixed;
   inset: 0;
@@ -3050,6 +3063,36 @@ input[type="checkbox"]:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.admin-scope-strip {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-drawer-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-advanced-defaults {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.01);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-advanced-defaults summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
 .admin-ops {

@@ -57,26 +57,35 @@ def run_simulation(
     for product in normalized:
         score = score_map.get(product.id)
         if score:
+            winner_for_comparison = (
+                winner_product
+                if winner_product and winner_product.id != product.id
+                else None
+            )
             gap = deps.simulation_analyze_gap(
                 goal=primary_goal,
                 product=product,
                 score=score.score,
-                winner=winner_product,
+                winner=winner_for_comparison,
             )
-            extracted = signal_extractor.extract(
-                goal=primary_goal,
-                product={
-                    "id": product.id,
-                    "name": product.name,
-                    "description": product.description,
-                },
-                winner={
-                    "id": winner_product.id,
-                    "name": winner_product.name,
-                    "description": winner_product.description,
-                }
-                if winner_product
-                else None,
+            extracted = (
+                signal_extractor.extract(
+                    goal=primary_goal,
+                    product={
+                        "id": product.id,
+                        "name": product.name,
+                        "description": product.description,
+                    },
+                    winner={
+                        "id": winner_for_comparison.id,
+                        "name": winner_for_comparison.name,
+                        "description": winner_for_comparison.description,
+                    }
+                    if winner_for_comparison
+                    else None,
+                )
+                if winner_for_comparison
+                else None
             )
             if extracted:
                 if extracted.missing_signals:

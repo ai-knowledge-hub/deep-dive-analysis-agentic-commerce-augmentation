@@ -178,6 +178,32 @@ Scope: incidents discovered during iterative dev/test in this cycle and already 
 
 ---
 
+## 10) Backend boot failure after `uv sync` (`ModuleNotFoundError: pydantic_settings`)
+
+- Symptom:
+  - Backend failed to start on:
+    - `DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000`
+  - Error:
+    - `ModuleNotFoundError: No module named 'pydantic_settings'`
+- Root cause:
+  - `shared/config/env.py` imports `pydantic_settings`, but `pyproject.toml` did not include `pydantic-settings`.
+  - `uv sync` reconciled strictly to `pyproject.toml`/`uv.lock`, so the package was removed from `.venv`.
+  - `requirements.txt` had the dependency, but `uv` install/sync path is driven by `pyproject.toml`.
+- Fix:
+  - Added `pydantic-settings>=2.7.0` to project dependencies in:
+    - `pyproject.toml`
+  - Regenerated lock and synced env.
+- Recovery commands:
+  1. `uv lock`
+  2. `uv sync --extra dev`
+  3. `DATABASE_PATH=./tmp/local.db uv run uvicorn api.main:app --reload --port 8000`
+- One-off temporary workaround (if needed before lock/sync):
+  - `uv pip install pydantic-settings`
+- Pattern:
+  - Keep runtime dependencies in `pyproject.toml` (single source of truth). Do not rely on `requirements.txt` entries when using `uv sync`.
+
+---
+
 ## Pre-release checks to re-run
 
 1. Tenant switch matrix:

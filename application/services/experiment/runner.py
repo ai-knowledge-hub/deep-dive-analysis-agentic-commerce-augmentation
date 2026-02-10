@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
+from typing import Literal
 from typing import Any, Dict, List, Optional
 
 from application.ports.deps import AppDeps
 from application.services.simulation.service import SimulationService
+from application.services.simulation.runner import run_simulation
 from application.services.experiment.brand_belief_service import BrandBeliefService
 from application.services.experiment.belief_update_agent import BeliefUpdateAgent
 from application.services.experiment.pairwise_judge import judge_pairwise
@@ -36,6 +39,8 @@ class ExperimentRunner:
         variant_id: str,
         client_id: str,
         user_id: Optional[str] = None,
+        execution_mode: Literal["simulation", "retrieval_backed"] = "simulation",
+        retrieval_max_results: int = 5,
     ) -> ExperimentRunResult:
         experiment = self._deps.experiments.get_experiment(
             experiment_id=experiment_id, client_id=client_id
@@ -70,6 +75,9 @@ class ExperimentRunner:
         )
 
         runs_payload: List[Dict[str, Any]] = []
+        normalized_execution_mode = _normalize_execution_mode(execution_mode)
+        retrieval_backed_runs = 0
+        retrieval_fallback_runs = 0
         wins = 0
         wins_keyword = 0
         wins_robust = 0
@@ -86,6 +94,9 @@ class ExperimentRunner:
         weighted_wins = 0.0
         weighted_wins_keyword = 0.0
         weighted_wins_robust = 0.0
+        competitive_weight_total = 0.0
+        competitive_runs = 0
+        single_candidate_runs = 0
         weighted_score_sum = 0.0
         weighted_score_weight = 0.0
         weighted_score_keyword_sum = 0.0
@@ -103,21 +114,31 @@ class ExperimentRunner:
             sim_product, raw_product = _build_variant_product(
                 product=product, variant=variant
             )
-            response = self._simulation.run(
-                query=query["query_text"],
-                products=[sim_product],
-                client_id=client_id,
-                user_id=user_id,
-                brand_id=experiment.get("brand_id"),
-                product_id=experiment.get("product_id"),
-                raw_products=[raw_product],
-                auto_competitors=True,
-                competitor_client_ids=competitor_client_ids,
+            response, query_execution_mode, retrieval_summary = (
+                self._run_query_with_mode(
+                    query_text=query["query_text"],
+                    sim_product=sim_product,
+                    raw_product=raw_product,
+                    normalized_execution_mode=normalized_execution_mode,
+                    client_id=client_id,
+                    user_id=user_id,
+                    brand_id=experiment.get("brand_id"),
+                    product_id=experiment.get("product_id"),
+                    competitor_client_ids=competitor_client_ids,
+                    retrieval_max_results=retrieval_max_results,
+                )
             )
             run_id = response.get("run_id")
             result = response.get("result") or {}
             winner_id = result.get("winner_id")
             winner_id_keyword = result.get("winner_id_keyword")
+            scores = result.get("scores") or []
+            if query_execution_mode == "retrieval_backed":
+                retrieval_backed_runs += 1
+                if retrieval_summary and retrieval_summary.get("fallback_used"):
+                    retrieval_fallback_runs += 1
+            candidate_count = len(scores) if isinstance(scores, list) else 0
+            is_competitive = candidate_count > 1
 
             score = score_for_product(result.get("scores", []), product["id"])
             score_kw = score_for_product(
@@ -129,13 +150,23 @@ class ExperimentRunner:
             if score_kw is not None:
                 weighted_score_keyword_sum += score_kw * query_weight
                 weighted_score_keyword_weight += query_weight
-            if winner_id == product["id"]:
+            if is_competitive:
+                competitive_runs += 1
+                competitive_weight_total += query_weight
+            else:
+                single_candidate_runs += 1
+
+            if is_competitive and winner_id == product["id"]:
                 wins += 1
                 weighted_wins += query_weight
-            if winner_id_keyword == product["id"]:
+            if is_competitive and winner_id_keyword == product["id"]:
                 wins_keyword += 1
                 weighted_wins_keyword += query_weight
-            if winner_id == product["id"] and winner_id_keyword == product["id"]:
+            if (
+                is_competitive
+                and winner_id == product["id"]
+                and winner_id_keyword == product["id"]
+            ):
                 wins_robust += 1
                 weighted_wins_robust += query_weight
 
@@ -164,6 +195,8 @@ class ExperimentRunner:
                 variant_id=variant_id,
                 query_id=query["id"],
                 simulation_run_id=run_id,
+                execution_mode=query_execution_mode,
+                retrieval_summary=retrieval_summary,
             )
 
             runs_payload.append(
@@ -176,6 +209,10 @@ class ExperimentRunner:
                     "winner_id_keyword": winner_id_keyword,
                     "score": score,
                     "score_keyword": score_kw,
+                    "candidate_count": candidate_count,
+                    "is_competitive": is_competitive,
+                    "execution_mode": query_execution_mode,
+                    "retrieval_summary": retrieval_summary,
                     "protocol_readiness_score": readiness_score,
                     "judge_results": judge_results,
                     "judge_consensus_winner": consensus_winner,
@@ -183,18 +220,13 @@ class ExperimentRunner:
             )
 
         total = len(enabled_queries)
-        win_rate = (
-            weighted_wins / effective_weight_total if effective_weight_total else 0.0
-        )
+        denominator = competitive_weight_total if competitive_weight_total > 0 else 0.0
+        win_rate = (weighted_wins / denominator) if denominator else 0.0
         win_rate_keyword = (
-            weighted_wins_keyword / effective_weight_total
-            if effective_weight_total
-            else 0.0
+            (weighted_wins_keyword / denominator) if denominator else 0.0
         )
         win_rate_robust = (
-            weighted_wins_robust / effective_weight_total
-            if effective_weight_total
-            else 0.0
+            (weighted_wins_robust / denominator) if denominator else 0.0
         )
         judge_consensus_win_rate = (
             (weighted_judge_consensus_wins / weighted_judge_total)
@@ -218,7 +250,13 @@ class ExperimentRunner:
         )
         metrics = {
             "total_runs": total,
+            "competitive_runs": competitive_runs,
+            "single_candidate_runs": single_candidate_runs,
+            "competitive_coverage": round((competitive_runs / total), 4)
+            if total
+            else 0.0,
             "total_weight": round(effective_weight_total, 4),
+            "competitive_weight_total": round(competitive_weight_total, 4),
             "weights_applied": use_weighted_metrics,
             "wins": wins,
             "weighted_wins": round(weighted_wins, 4),
@@ -236,6 +274,15 @@ class ExperimentRunner:
             if judge_consensus_win_rate is not None
             else None,
             "judge_provider_count": len(self._judge_providers),
+            "execution_mode": normalized_execution_mode,
+            "retrieval_backed_runs": retrieval_backed_runs,
+            "retrieval_fallback_runs": retrieval_fallback_runs,
+            "retrieval_success_rate": round(
+                (retrieval_backed_runs - retrieval_fallback_runs) / retrieval_backed_runs,
+                4,
+            )
+            if retrieval_backed_runs > 0
+            else None,
         }
 
         metric_row = self._deps.experiment_runs.create_metric(
@@ -266,6 +313,138 @@ class ExperimentRunner:
             runs=runs_payload,
             metrics=metrics,
         )
+
+    def _run_query_with_mode(
+        self,
+        *,
+        query_text: str,
+        sim_product: SimulationProduct,
+        raw_product: Dict[str, Any],
+        normalized_execution_mode: str,
+        client_id: str,
+        user_id: Optional[str],
+        brand_id: Optional[str],
+        product_id: Optional[str],
+        competitor_client_ids: Optional[List[str]],
+        retrieval_max_results: int,
+    ) -> tuple[Dict[str, Any], str, Dict[str, Any]]:
+        if normalized_execution_mode != "retrieval_backed":
+            response = self._simulation.run(
+                query=query_text,
+                products=[sim_product],
+                client_id=client_id,
+                user_id=user_id,
+                brand_id=brand_id,
+                product_id=product_id,
+                raw_products=[raw_product],
+                auto_competitors=True,
+                competitor_client_ids=competitor_client_ids,
+            )
+            return response, "simulation", {}
+        return self._run_query_retrieval_backed(
+            query_text=query_text,
+            sim_product=sim_product,
+            raw_product=raw_product,
+            client_id=client_id,
+            user_id=user_id,
+            brand_id=brand_id,
+            product_id=product_id,
+            competitor_client_ids=competitor_client_ids,
+            retrieval_max_results=retrieval_max_results,
+        )
+
+    def _run_query_retrieval_backed(
+        self,
+        *,
+        query_text: str,
+        sim_product: SimulationProduct,
+        raw_product: Dict[str, Any],
+        client_id: str,
+        user_id: Optional[str],
+        brand_id: Optional[str],
+        product_id: Optional[str],
+        competitor_client_ids: Optional[List[str]],
+        retrieval_max_results: int,
+    ) -> tuple[Dict[str, Any], str, Dict[str, Any]]:
+        retrieval_summary: Dict[str, Any] = {
+            "source": "web_research",
+            "fallback_used": False,
+            "candidate_count": 0,
+        }
+        try:
+            research = self._deps.run_research(
+                query=query_text,
+                goals=[query_text],
+                context=(
+                    "Return candidate products for this exact shopping query. "
+                    "Include source URLs and concise snippets."
+                ),
+                client_id=client_id,
+                user_id=user_id,
+            )
+            retrieval_candidates = _extract_retrieval_candidates(
+                research=research, limit=retrieval_max_results
+            )
+            retrieval_summary["candidate_count"] = len(retrieval_candidates)
+            if research and isinstance(research, dict):
+                insights = research.get("insights")
+                retrieval_summary["insight_count"] = (
+                    len(insights) if isinstance(insights, list) else 0
+                )
+        except Exception as exc:
+            retrieval_candidates = []
+            retrieval_summary = {
+                "source": "web_research",
+                "fallback_used": True,
+                "candidate_count": 0,
+                "error": str(exc),
+            }
+
+        if not retrieval_candidates:
+            fallback_response = self._simulation.run(
+                query=query_text,
+                products=[sim_product],
+                client_id=client_id,
+                user_id=user_id,
+                brand_id=brand_id,
+                product_id=product_id,
+                raw_products=[raw_product],
+                auto_competitors=True,
+                competitor_client_ids=competitor_client_ids,
+            )
+            retrieval_summary["source"] = "local_competitor_fallback"
+            retrieval_summary["fallback_used"] = True
+            retrieval_summary.setdefault("fallback_reason", "no_retrieval_candidates")
+            return fallback_response, "retrieval_backed", retrieval_summary
+
+        products_for_run: List[SimulationProduct] = [sim_product]
+        raw_products_for_run: List[Dict[str, Any]] = [raw_product]
+        products_for_run.extend(
+            [_to_simulation_product(candidate) for candidate in retrieval_candidates]
+        )
+        raw_products_for_run.extend(retrieval_candidates)
+
+        result = run_simulation(
+            deps=self._deps,
+            query=query_text,
+            products=products_for_run,
+        )
+        run = self._deps.simulation_runs.create_run(
+            query=query_text,
+            scenario={
+                "query": query_text,
+                "execution_mode": "retrieval_backed",
+                "retrieval_summary": retrieval_summary,
+            },
+            products=raw_products_for_run,
+            result=result,
+            user_id=user_id,
+            client_id=client_id,
+            brand_id=brand_id,
+            product_id=product_id,
+        )
+        response = {"run_id": run.get("id"), "result": result}
+        return response, "retrieval_backed", retrieval_summary
 
     def _record_belief(
         self,
@@ -373,6 +552,112 @@ def _build_variant_product(
         metadata=raw.get("metadata") or {},
     )
     return sim, raw
+
+
+def _normalize_execution_mode(mode: str | None) -> str:
+    if (mode or "").strip().lower() == "retrieval_backed":
+        return "retrieval_backed"
+    return "simulation"
+
+
+def _extract_retrieval_candidates(
+    *, research: Dict[str, Any] | None, limit: int
+) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+
+    insights = []
+    tool_outputs = []
+    if isinstance(research, dict):
+        raw_insights = research.get("insights")
+        if isinstance(raw_insights, list):
+            insights = [item for item in raw_insights if isinstance(item, dict)]
+        raw_tool_outputs = research.get("tool_outputs")
+        if isinstance(raw_tool_outputs, list):
+            tool_outputs = [item for item in raw_tool_outputs if isinstance(item, dict)]
+
+    def _append_candidate(
+        *,
+        name: Any,
+        description: Any,
+        url: Any,
+        source: Any,
+        price: Any = None,
+    ) -> None:
+        name_val = str(name or "").strip()
+        if not name_val:
+            return
+        desc_val = str(description or name_val).strip()
+        url_val = str(url or "").strip() or None
+        source_val = str(source or "retrieval").strip() or "retrieval"
+        key = (url_val or f"{name_val}:{desc_val}")[:256]
+        candidate_id = f"retrieval-{hashlib.sha1(key.encode('utf-8')).hexdigest()[:12]}"
+        if candidate_id in seen:
+            return
+        seen.add(candidate_id)
+        candidates.append(
+            {
+                "id": candidate_id,
+                "brand_id": None,
+                "name": name_val,
+                "description": desc_val,
+                "source": "retrieval",
+                "url": url_val,
+                "price": _safe_optional_float(price),
+                "confidence": 0.55,
+                "metadata": {
+                    "retrieval_source": source_val,
+                    "source_url": url_val,
+                },
+            }
+        )
+
+    for insight in insights:
+        _append_candidate(
+            name=insight.get("title") or insight.get("name"),
+            description=insight.get("summary"),
+            url=insight.get("url") or insight.get("source_url"),
+            source=insight.get("source"),
+            price=insight.get("price"),
+        )
+        if len(candidates) >= limit:
+            return candidates[:limit]
+
+    for output in tool_outputs:
+        source_name = output.get("name") or "retrieval_tool"
+        payload = output.get("output")
+        if not isinstance(payload, dict):
+            continue
+        results = payload.get("results")
+        if not isinstance(results, list):
+            continue
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            _append_candidate(
+                name=item.get("name") or item.get("title"),
+                description=item.get("snippet") or item.get("summary"),
+                url=item.get("url"),
+                source=source_name,
+                price=item.get("price"),
+            )
+            if len(candidates) >= limit:
+                return candidates[:limit]
+
+    return candidates[:limit]
+
+
+def _to_simulation_product(raw: Dict[str, Any]) -> SimulationProduct:
+    return SimulationProduct(
+        id=str(raw.get("id") or ""),
+        name=str(raw.get("name") or "Retrieved product"),
+        description=str(raw.get("description") or ""),
+        source=str(raw.get("source") or "retrieval"),
+        url=raw.get("url"),
+        price=_safe_optional_float(raw.get("price")),
+        confidence=float(raw.get("confidence") or 0.55),
+        metadata=raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {},
+    )
 
 
 def _extract_protocol_readiness_score_for_product(
@@ -535,3 +820,12 @@ def _resolve_query_weight(*, raw_weight: Any, use_weighted_metrics: bool) -> flo
     if not use_weighted_metrics:
         return 1.0
     return _coerce_non_negative_weight(raw_weight)
+
+
+def _safe_optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
