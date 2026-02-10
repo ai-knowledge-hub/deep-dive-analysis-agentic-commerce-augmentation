@@ -201,6 +201,30 @@ class ExperimentValidationsStore(Protocol):
     def count_validations(self, **kwargs: Any) -> int: ...
 
 
+class ExperimentRetrievalSnapshotsStore(Protocol):
+    def create_snapshot(self, **kwargs: Any) -> dict: ...
+
+    def get_snapshot(self, **kwargs: Any) -> dict | None: ...
+
+    def get_snapshot_for_query(self, **kwargs: Any) -> dict | None: ...
+
+    def list_snapshots(self, **kwargs: Any) -> list[dict]: ...
+
+    def count_snapshots(self, **kwargs: Any) -> int: ...
+
+    def latest_snapshot_version(self, **kwargs: Any) -> int: ...
+
+
+class ExperimentHypothesesStore(Protocol):
+    def create_hypothesis(self, **kwargs: Any) -> dict: ...
+
+    def get_hypothesis(self, **kwargs: Any) -> dict | None: ...
+
+    def list_hypotheses(self, **kwargs: Any) -> list[dict]: ...
+
+    def count_hypotheses(self, **kwargs: Any) -> int: ...
+
+
 class ExperimentCalibrationsStore(Protocol):
     def upsert_calibration(self, **kwargs: Any) -> dict: ...
 
@@ -359,6 +383,8 @@ class AppDeps:
     experiment_runs: ExperimentRunsStore
     experiment_recommendations: ExperimentRecommendationsStore
     experiment_validations: ExperimentValidationsStore
+    experiment_retrieval_snapshots: ExperimentRetrievalSnapshotsStore
+    experiment_hypotheses: ExperimentHypothesesStore
     experiment_calibrations: ExperimentCalibrationsStore
     analytics_events: AnalyticsEventsStore
     validation_jobs: ValidationJobsStore

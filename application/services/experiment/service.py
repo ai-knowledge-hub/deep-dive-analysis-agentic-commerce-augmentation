@@ -71,6 +71,7 @@ class ExperimentService:
         schedule_interval_minutes: Optional[int] = None,
         last_run_at: Optional[str] = None,
         next_run_at: Optional[str] = None,
+        protocol_snapshot_version: Optional[int] = None,
     ) -> Dict[str, Any] | None:
         return self._repo.update_experiment(
             experiment_id=experiment_id,
@@ -83,6 +84,7 @@ class ExperimentService:
             schedule_interval_minutes=schedule_interval_minutes,
             last_run_at=last_run_at,
             next_run_at=next_run_at,
+            protocol_snapshot_version=protocol_snapshot_version,
         )
 
     def delete_experiment(self, *, experiment_id: str, client_id: str) -> bool:
@@ -97,12 +99,16 @@ class ExperimentService:
         label: str,
         variant_type: str,
         payload: Optional[Dict[str, Any]] = None,
+        hypothesis_id: Optional[str] = None,
+        provenance: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return self._repo.add_variant(
             experiment_id=experiment_id,
             label=label,
             variant_type=variant_type,
             payload=payload,
+            hypothesis_id=hypothesis_id,
+            provenance=provenance,
         )
 
     def list_variants(self, *, experiment_id: str) -> list[Dict[str, Any]]:

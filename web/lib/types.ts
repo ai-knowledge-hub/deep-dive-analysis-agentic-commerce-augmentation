@@ -666,6 +666,7 @@ export type Experiment = {
   schedule_interval_minutes?: number | null;
   last_run_at?: string | null;
   next_run_at?: string | null;
+  protocol_snapshot_version?: number | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -676,6 +677,8 @@ export type ExperimentVariant = {
   label: string;
   type: string;
   payload?: Record<string, unknown>;
+  hypothesis_id?: string | null;
+  provenance?: Record<string, unknown>;
   created_at?: string;
 };
 
@@ -687,6 +690,8 @@ export type ExperimentRun = {
   simulation_run_id?: string | null;
   execution_mode?: "simulation" | "retrieval_backed";
   retrieval_summary?: Record<string, unknown>;
+  snapshot_version?: number | null;
+  hypothesis_id?: string | null;
   created_at?: string;
 };
 
@@ -785,6 +790,8 @@ export type ExperimentRunResponse = {
     score_keyword?: number | null;
     execution_mode?: "simulation" | "retrieval_backed";
     retrieval_summary?: Record<string, unknown>;
+    snapshot_version?: number | null;
+    hypothesis_id?: string | null;
     protocol_readiness_score?: number | null;
     judge_results?: { provider: string; winner_id?: string | null; raw?: string }[];
     judge_consensus_winner?: string | null;
@@ -803,6 +810,21 @@ export type ExperimentExecutionState = {
 
 export type ExperimentExecutionStateResponse = {
   state: ExperimentExecutionState;
+};
+
+export type ExperimentHypothesis = {
+  id: string;
+  experiment_id: string;
+  snapshot_version: number;
+  statement?: Record<string, unknown>;
+  status?: string;
+  source?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ExperimentHypothesisListResponse = {
+  hypotheses: ExperimentHypothesis[];
 };
 
 export type LoopGeneratedVariantCandidate = {

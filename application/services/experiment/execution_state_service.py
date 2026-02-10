@@ -77,15 +77,23 @@ class ExperimentExecutionStateService:
         client_id: str,
     ) -> Dict[str, Dict[str, Any]]:
         battery_ready = bool(experiment.get("battery_id")) and len(enabled_queries) > 0
+        current_snapshot_version = int(experiment.get("protocol_snapshot_version") or 0)
+        snapshot_count = (
+            self._deps.experiment_retrieval_snapshots.count_snapshots(
+                experiment_id=experiment.get("id"),
+                snapshot_version=current_snapshot_version,
+            )
+            if current_snapshot_version > 0
+            else 0
+        )
 
         retrieval_runs = [
             run
             for run in runs
             if str(run.get("execution_mode") or "").strip().lower() == "retrieval_backed"
         ]
-        retrieval_snapshots_ready = any(
-            _to_int((run.get("retrieval_summary") or {}).get("candidate_count")) > 0
-            for run in retrieval_runs
+        retrieval_snapshots_ready = (
+            current_snapshot_version > 0 and snapshot_count >= len(enabled_queries)
         )
 
         hypothesis = experiment.get("hypothesis") or {}
@@ -103,7 +111,15 @@ class ExperimentExecutionStateService:
             )
             for item in variants
         )
-        hypotheses_ready = bool(hypothesis) or candidate_variant_exists
+        hypotheses_count = (
+            self._deps.experiment_hypotheses.count_hypotheses(
+                experiment_id=experiment.get("id"),
+                snapshot_version=current_snapshot_version if current_snapshot_version > 0 else None,
+            )
+            if experiment.get("id")
+            else 0
+        )
+        hypotheses_ready = bool(hypothesis) or candidate_variant_exists or hypotheses_count > 0
 
         control_variant_ids = [
             item.get("id")
@@ -112,26 +128,22 @@ class ExperimentExecutionStateService:
             and "control" in item.get("label", "").lower()
         ]
         baseline_scored = any(
-            metric.get("variant_id") in control_variant_ids for metric in metrics
+            metric.get("variant_id") in control_variant_ids
+            and (
+                current_snapshot_version == 0
+                or int(((metric.get("metrics") or {}).get("snapshot_version") or 0))
+                == current_snapshot_version
+            )
+            for metric in metrics
         )
 
         variants_ready = len(variants) >= 2
         experiment_run_completed = len(runs) > 0 and len(metrics) > 0
         validation_completed = len(validations) > 0
 
-        posterior_updated = False
-        brand_id = experiment.get("brand_id")
-        if brand_id:
-            latest = self._deps.brand_beliefs.latest_belief(
-                client_id=client_id, brand_id=brand_id
-            )
-            if latest:
-                evidence = latest.get("evidence") or {}
-                metadata = latest.get("metadata") or {}
-                posterior_updated = (
-                    evidence.get("experiment_id") == experiment.get("id")
-                    or metadata.get("experiment_id") == experiment.get("id")
-                )
+        posterior_updated = any(
+            (metric.get("metrics") or {}).get("posterior") is not None for metric in metrics
+        )
 
         return {
             "battery_ready": {
@@ -140,7 +152,7 @@ class ExperimentExecutionStateService:
             },
             "retrieval_snapshots_ready": {
                 "done": retrieval_snapshots_ready,
-                "detail": f"{len(retrieval_runs)} retrieval-backed runs",
+                "detail": f"snapshot v{current_snapshot_version} · {snapshot_count}/{len(enabled_queries)} queries",
             },
             "baseline_scored": {
                 "done": baseline_scored,
@@ -148,7 +160,7 @@ class ExperimentExecutionStateService:
             },
             "hypotheses_ready": {
                 "done": hypotheses_ready,
-                "detail": "Candidate hypothesis/variant is defined",
+                "detail": f"{hypotheses_count} stored hypotheses",
             },
             "variants_ready": {
                 "done": variants_ready,
@@ -164,7 +176,7 @@ class ExperimentExecutionStateService:
             },
             "posterior_updated": {
                 "done": posterior_updated,
-                "detail": "Latest brand belief references this experiment",
+                "detail": "Posterior computed from run + validation evidence",
             },
         }
 

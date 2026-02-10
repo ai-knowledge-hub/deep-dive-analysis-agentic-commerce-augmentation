@@ -9,6 +9,7 @@ import type {
   CopyRevision,
   Experiment,
   ExperimentExecutionState,
+  ExperimentHypothesis,
   ExperimentMetric,
   ExperimentRecommendation,
   ExperimentRun,
@@ -45,6 +46,7 @@ import {
   updateBatteryQuery,
   listExperimentMetrics,
   getExperimentExecutionState,
+  listExperimentHypotheses,
   listExperimentRuns,
   listExperimentVariants,
   listExperiments,
@@ -110,6 +112,7 @@ export default function ExperimentsPage() {
   const [executionState, setExecutionState] = useState<ExperimentExecutionState | null>(
     null,
   );
+  const [hypotheses, setHypotheses] = useState<ExperimentHypothesis[]>([]);
   const [recommendations, setRecommendations] = useState<
     ExperimentRecommendation[]
   >([]);
@@ -200,6 +203,7 @@ export default function ExperimentsPage() {
     "bottom_up" | "top_down" | "both"
   >("both");
   const [expandedVariantId, setExpandedVariantId] = useState<string | null>(null);
+  const [expandedHypothesisId, setExpandedHypothesisId] = useState<string | null>(null);
   const [variantAdvancedOpen, setVariantAdvancedOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [savingExperimentId, setSavingExperimentId] = useState<string | null>(null);
@@ -516,6 +520,7 @@ export default function ExperimentsPage() {
       setRuns([]);
       setMetrics([]);
       setExecutionState(null);
+      setHypotheses([]);
       setRecommendations([]);
       setValidationSummary(null);
       setLoopGeneratedVariants([]);
@@ -537,6 +542,11 @@ export default function ExperimentsPage() {
         setExecutionState(response.state ?? null);
       })
       .catch(() => setExecutionState(null));
+    void listExperimentHypotheses(selectedExperimentId, userId)
+      .then((response) => {
+        setHypotheses(response.hypotheses ?? []);
+      })
+      .catch(() => setHypotheses([]));
     void listExperimentRecommendations(selectedExperimentId, userId).then(
       (response) => {
         setRecommendations(response.recommendations ?? []);
@@ -1939,6 +1949,12 @@ export default function ExperimentsPage() {
     const validationState = hasValidationSignals
       ? `Started · ${validationSummary?.verified_runs ?? 0} verified`
       : "Pending";
+    const snapshotVersion =
+      typeof latestRunEntry?.snapshot_version === "number"
+        ? latestRunEntry.snapshot_version
+        : typeof selectedExperiment?.protocol_snapshot_version === "number"
+          ? selectedExperiment.protocol_snapshot_version
+          : null;
     return {
       runVariantLabel,
       runQueryLabel,
@@ -1946,8 +1962,71 @@ export default function ExperimentsPage() {
       winRate,
       avgScore,
       validationState,
+      snapshotVersion,
     };
-  }, [hasValidationSignals, metrics, queryMap, runs, validationSummary?.verified_runs, variants]);
+  }, [
+    hasValidationSignals,
+    metrics,
+    queryMap,
+    runs,
+    selectedExperiment?.protocol_snapshot_version,
+    validationSummary?.verified_runs,
+    variants,
+  ]);
+
+  const currentProtocolSnapshotVersion = useMemo(() => {
+    if (typeof selectedExperiment?.protocol_snapshot_version === "number") {
+      return selectedExperiment.protocol_snapshot_version;
+    }
+    const detail = executionState?.phases?.retrieval_snapshots_ready?.detail;
+    if (typeof detail !== "string") return null;
+    const match = detail.match(/snapshot v(\d+)/i);
+    if (!match) return null;
+    const parsed = Number.parseInt(match[1] || "", 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [executionState?.phases?.retrieval_snapshots_ready?.detail, selectedExperiment?.protocol_snapshot_version]);
+
+  const hypothesisLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    hypotheses.forEach((hypothesis, index) => {
+      const statement = (hypothesis.statement ?? {}) as Record<string, unknown>;
+      const explicitName =
+        typeof statement.name === "string" && statement.name.trim()
+          ? statement.name.trim()
+          : null;
+      const ifText =
+        typeof statement.if === "string" && statement.if.trim()
+          ? statement.if.trim()
+          : null;
+      const forText =
+        typeof statement.for === "string" && statement.for.trim()
+          ? statement.for.trim()
+          : null;
+      let label = explicitName ?? "";
+      if (!label && ifText) {
+        label = forText ? `${ifText} (${forText})` : ifText;
+      }
+      if (!label) {
+        label = `Hypothesis ${index + 1}`;
+      }
+      if (label.length > 72) {
+        label = `${label.slice(0, 69)}...`;
+      }
+      map.set(hypothesis.id, label);
+    });
+    return map;
+  }, [hypotheses]);
+
+  const hypothesisStatementById = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>();
+    hypotheses.forEach((hypothesis) => {
+      map.set(
+        hypothesis.id,
+        ((hypothesis.statement ?? {}) as Record<string, unknown>) || {},
+      );
+    });
+    return map;
+  }, [hypotheses]);
 
   const experimentFlowSteps = useMemo(() => {
     const phases = executionState?.phases ?? {};
@@ -2723,6 +2802,18 @@ export default function ExperimentsPage() {
                   {setupFlowCollapsed ? "Expand setup" : "Collapse setup"}
                 </button>
               </div>
+            </div>
+            <div className="panel__meta">
+              <span className="panel__badge panel__badge--secondary">
+                Protocol snapshot:{" "}
+                {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0
+                  ? `v${currentProtocolSnapshotVersion}`
+                  : "pending"}
+              </span>
+              <span className="panel__badge panel__badge--secondary">
+                Hypotheses:{" "}
+                {executionState?.phases?.hypotheses_ready?.done ? "ready" : "pending"}
+              </span>
             </div>
             <p className="panel__subheading">Setup phase · Step 1</p>
             <p className="panel__muted">
@@ -3907,6 +3998,9 @@ export default function ExperimentsPage() {
                 </>
               )}
               <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
+              <p className="panel__step-helper">
+                Runs in retrieval-backed mode use frozen protocol snapshots to keep variant comparisons fair.
+              </p>
               <div className="panel__grid panel__grid--two">
                 <label className="panel__label">
                   Execution mode
@@ -3952,6 +4046,11 @@ export default function ExperimentsPage() {
               <p className="panel__muted">
                 Retrieval-backed mode pulls external web candidates per query, then scores variants against that set.
               </p>
+              {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0 ? (
+                <p className="panel__muted">
+                  Active frozen protocol: snapshot v{currentProtocolSnapshotVersion}
+                </p>
+              ) : null}
               {runVariantDisabledReason ? (
                 <p className="panel__muted">{runVariantDisabledReason}</p>
               ) : null}
@@ -3980,7 +4079,54 @@ export default function ExperimentsPage() {
                       >
                         {metricsByVariant.has(variant.id) ? "Tested" : "Draft"}
                       </span>
+                      {variant.hypothesis_id ? (
+                        <span className="panel__badge panel__badge--secondary">
+                          {hypothesisLabelById.get(variant.hypothesis_id) ?? "Hypothesis-linked"}
+                        </span>
+                      ) : null}
                     </div>
+                    {variant.hypothesis_id ? (
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="panel__action panel__action--ghost"
+                          onClick={() =>
+                            setExpandedHypothesisId((current) =>
+                              current === variant.hypothesis_id
+                                ? null
+                                : variant.hypothesis_id ?? null,
+                            )
+                          }
+                        >
+                          {expandedHypothesisId === variant.hypothesis_id
+                            ? "Hide hypothesis details"
+                            : "View hypothesis details"}
+                        </button>
+                      </div>
+                    ) : null}
+                    {variant.hypothesis_id &&
+                    expandedHypothesisId === variant.hypothesis_id ? (
+                      <div className="panel__meta panel__meta--stack">
+                        <span className="panel__muted">
+                          If:{" "}
+                          {String(
+                            hypothesisStatementById.get(variant.hypothesis_id)?.if ?? "—",
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          Then:{" "}
+                          {String(
+                            hypothesisStatementById.get(variant.hypothesis_id)?.then ?? "—",
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          For:{" "}
+                          {String(
+                            hypothesisStatementById.get(variant.hypothesis_id)?.for ?? "—",
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
                     {resolvedDescription ? (
                       <div className="panel__actions">
                         <button
@@ -4019,6 +4165,24 @@ export default function ExperimentsPage() {
                               string,
                               unknown
                             >).total_runs,
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          Posterior:{" "}
+                          {renderMetricValue(
+                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >).posterior,
+                          )}
+                        </span>
+                        <span className="panel__muted">
+                          Decision:{" "}
+                          {renderMetricValue(
+                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                              string,
+                              unknown
+                            >).decision_action,
                           )}
                         </span>
                       </div>
@@ -4126,6 +4290,12 @@ export default function ExperimentsPage() {
                     <span className="outcome-snapshot__value">
                       {outcomeSnapshot.validationState}
                     </span>
+                    <span className="panel__muted">
+                      Protocol snapshot:{" "}
+                      {outcomeSnapshot.snapshotVersion && outcomeSnapshot.snapshotVersion > 0
+                        ? `v${outcomeSnapshot.snapshotVersion}`
+                        : "pending"}
+                    </span>
                     {!hasValidationSignals ? (
                       <button
                         type="button"
@@ -4166,6 +4336,17 @@ export default function ExperimentsPage() {
                       <li>
                         Judge consensus win rate:{" "}
                         {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
+                      </li>
+                      <li>
+                        Snapshot version:{" "}
+                        {renderMetricValue(latestMetric.snapshot_version, "-")}
+                      </li>
+                      <li>
+                        Posterior: {renderMetricValue(latestMetric.posterior, "-")}
+                      </li>
+                      <li>
+                        Decision action:{" "}
+                        {renderMetricValue(latestMetric.decision_action, "-")}
                       </li>
                     </ul>
                   ) : (
@@ -4512,6 +4693,57 @@ export default function ExperimentsPage() {
                           <span className="history-panel__meta">
                             Variant: {run.variant_id}
                           </span>
+                          {typeof run.snapshot_version === "number" ? (
+                            <span className="history-panel__meta">
+                              Snapshot: v{run.snapshot_version}
+                            </span>
+                          ) : null}
+                          {run.hypothesis_id ? (
+                            <span className="history-panel__meta">
+                              Hypothesis:{" "}
+                              {hypothesisLabelById.get(run.hypothesis_id) ?? "Hypothesis-linked"}
+                            </span>
+                          ) : null}
+                          {run.hypothesis_id ? (
+                            <button
+                              type="button"
+                              className="panel__action panel__action--ghost"
+                              onClick={() =>
+                                setExpandedHypothesisId((current) =>
+                                  current === run.hypothesis_id
+                                    ? null
+                                    : run.hypothesis_id ?? null,
+                                )
+                              }
+                            >
+                              {expandedHypothesisId === run.hypothesis_id
+                                ? "Hide hypothesis details"
+                                : "View hypothesis details"}
+                            </button>
+                          ) : null}
+                          {run.hypothesis_id &&
+                          expandedHypothesisId === run.hypothesis_id ? (
+                            <div className="panel__meta panel__meta--stack">
+                              <span className="panel__muted">
+                                If:{" "}
+                                {String(
+                                  hypothesisStatementById.get(run.hypothesis_id)?.if ?? "—",
+                                )}
+                              </span>
+                              <span className="panel__muted">
+                                Then:{" "}
+                                {String(
+                                  hypothesisStatementById.get(run.hypothesis_id)?.then ?? "—",
+                                )}
+                              </span>
+                              <span className="panel__muted">
+                                For:{" "}
+                                {String(
+                                  hypothesisStatementById.get(run.hypothesis_id)?.for ?? "—",
+                                )}
+                              </span>
+                            </div>
+                          ) : null}
                           {run.simulation_run_id ? (
                             <span className="history-panel__meta">
                               Run ID:{" "}

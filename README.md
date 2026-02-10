@@ -37,6 +37,7 @@ It does **not** claim guaranteed production ranking outcomes from lab scores alo
 4. Distill high-quality memory artifacts.
 5. Use those artifacts in future query generation and copy optimization.
 6. Recalibrate policy weights from drift between synthetic vs observed outcomes.
+7. Convert posterior into decision action (`promote_variant`, `iterate_variant`, `reject_hypothesis`).
 
 Loop APIs:
 - `GET /loop/state`
@@ -82,6 +83,9 @@ Layer rule enforced by architecture checks:
 - Query battery generation (top-down / bottom-up / hybrid).
 - Canonical intent spec and controlled onboarding.
 - Experiment orchestration with variants/runs/metrics.
+- Retrieval-backed frozen protocol snapshots (`snapshot_version`) for fair variant comparison.
+- Baseline-first gating for candidate runs in retrieval-backed mode.
+- Hypothesis persistence and linkage (`hypothesis_id`) across variants and runs.
 - Variant generation paths for experiments:
   - manual variant authoring,
   - simulation revision prefill,
@@ -92,6 +96,11 @@ Layer rule enforced by architecture checks:
   - Observed reality validation (manual observed outcomes).
 - Belief revisions, decision events, calibration profiles.
 - Memory artifacts with quality/support gating and provenance tracking.
+
+Experiment protocol transparency APIs:
+- `GET /experiments/{experiment_id}/execution-state`
+- `GET /experiments/{experiment_id}/retrieval-snapshots`
+- `GET /experiments/{experiment_id}/hypotheses`
 
 ---
 

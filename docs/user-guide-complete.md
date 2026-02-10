@@ -59,10 +59,10 @@ Sidebar workflow order:
 - Enable/disable/edit weights.
 - Save battery.
 
-### Step 3 — Create experiment
-- Select battery.
-- Define hypothesis JSON.
-- Create experiment record.
+### Step 3 — Experiment context (auto)
+- There is no required manual \"Create experiment\" action now.
+- After battery + queries are ready, experiment context is initialized automatically when you start variant work.
+- The protocol then tracks frozen snapshot versioning and hypothesis linkage in the background.
 
 ### Step 4 — Add variants (4 supported paths)
 You can create experiment variants in any of these ways:
@@ -88,10 +88,17 @@ Once a candidate is selected, you can:
 - Execute runs over battery queries.
 - Metrics displayed include win-rate signals.
 - Robust metrics and consensus fields appear when configured.
+- In retrieval-backed mode, runs use a frozen protocol snapshot (`snapshot_version`) for fair comparison.
+- Candidate runs are baseline-gated: control must be scored first for the active snapshot.
 
 ### Step 6 — Review outcomes and aggregate metrics
 - Review the latest run winner, key metrics, and current validation state in the outcome snapshot.
 - Compare variant-level win-rate and score trends before deciding next action.
+- Review protocol-specific fields now shown in UI:
+  - snapshot version,
+  - linked hypothesis (human-readable label),
+  - posterior,
+  - decision action.
 
 ### Step 7 — Validate synthetic and observed results
 - Open Validation from Experiments when runs exist.
@@ -103,6 +110,10 @@ Once a candidate is selected, you can:
 - Review outcomes, recommendations, and validation agreement.
 - Generate next variants from updated evidence.
 - Continue until observed validation confidence is strong enough for decisioning.
+- Posterior-driven decisions follow:
+  - `promote_variant`,
+  - `iterate_variant`,
+  - `reject_hypothesis`.
 
 ---
 

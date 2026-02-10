@@ -37,6 +37,7 @@ import {
   ExperimentRunListResponse,
   ExperimentMetricListResponse,
   ExperimentExecutionStateResponse,
+  ExperimentHypothesisListResponse,
   ExperimentRunResponse,
   LoopGeneratedVariantResponse,
   NextTestRecommendationResponse,
@@ -1236,6 +1237,8 @@ export async function createExperimentVariant(
     label: string;
     type: string;
     payload?: Record<string, unknown>;
+    hypothesis_id?: string | null;
+    provenance?: Record<string, unknown>;
     user_id?: string | null;
   },
 ): Promise<{ variant: ExperimentVariant }> {
@@ -1250,6 +1253,8 @@ export async function createExperimentVariant(
         label: payload.label,
         type: payload.type,
         payload: payload.payload ?? {},
+        hypothesis_id: payload.hypothesis_id ?? undefined,
+        provenance: payload.provenance ?? undefined,
       }),
     },
   );
@@ -1453,6 +1458,19 @@ export async function getExperimentExecutionState(
   if (userId) params.set("user_id", userId);
   return request<ExperimentExecutionStateResponse>(
     `/experiments/${experimentId}/execution-state?${params.toString()}`,
+  );
+}
+
+export async function listExperimentHypotheses(
+  experimentId: string,
+  userId?: string | null,
+): Promise<ExperimentHypothesisListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<ExperimentHypothesisListResponse>(
+    `/experiments/${experimentId}/hypotheses?${params.toString()}`,
   );
 }
 

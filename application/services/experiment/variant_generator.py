@@ -153,6 +153,29 @@ class ExperimentVariantGenerator:
                 candidates = _fallback_candidates(summary=summary, product=product)
                 used_fallback = True
 
+        snapshot_version = int(experiment.get("protocol_snapshot_version") or 0)
+        hypotheses = self._deps.experiment_hypotheses.list_hypotheses(
+            experiment_id=experiment_id,
+            snapshot_version=snapshot_version if snapshot_version > 0 else None,
+            limit=20,
+        )
+        if hypotheses:
+            for index, candidate in enumerate(candidates):
+                linked = hypotheses[min(index, len(hypotheses) - 1)]
+                statement = linked.get("statement") or {}
+                payload = {
+                    **(candidate.payload or {}),
+                    "hypothesis_id": linked.get("id"),
+                    "hypothesis_statement": statement,
+                }
+                candidates[index] = GeneratedVariantCandidate(
+                    label=candidate.label,
+                    description=candidate.description,
+                    rationale=candidate.rationale,
+                    payload=payload,
+                    confidence=candidate.confidence,
+                )
+
         return {
             "experiment_id": experiment_id,
             "product_id": experiment.get("product_id"),

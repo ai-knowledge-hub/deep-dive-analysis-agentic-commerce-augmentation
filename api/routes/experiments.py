@@ -58,6 +58,8 @@ class VariantCreateRequest(BaseModel):
     label: str = Field(..., min_length=1)
     type: str = Field(..., min_length=1)
     payload: Dict[str, Any] = Field(default_factory=dict)
+    hypothesis_id: Optional[str] = None
+    provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ExperimentRunRequest(BaseModel):
@@ -182,11 +184,16 @@ def delete_experiment(
 @router.post("/{experiment_id}/variants")
 def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
+    inferred_hypothesis_id = payload.hypothesis_id
+    if not inferred_hypothesis_id and isinstance(payload.payload, dict):
+        inferred_hypothesis_id = str(payload.payload.get("hypothesis_id") or "") or None
     variant = SERVICE.add_variant(
         experiment_id=experiment_id,
         label=payload.label,
         variant_type=payload.type,
         payload=payload.payload,
+        hypothesis_id=inferred_hypothesis_id,
+        provenance=payload.provenance,
     )
     try:
         experiment = SERVICE.get_experiment(experiment_id=experiment_id)
@@ -324,6 +331,52 @@ def list_runs(
         experiment_id=experiment_id, variant_id=variant_id, limit=limit
     )
     return {"runs": runs}
+
+
+@router.get("/{experiment_id}/retrieval-snapshots")
+def list_retrieval_snapshots(
+    experiment_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    snapshot_version: Optional[int] = None,
+    limit: int = 500,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    experiment = SERVICE.get_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    rows = DEPS.experiment_retrieval_snapshots.list_snapshots(
+        experiment_id=experiment_id,
+        snapshot_version=snapshot_version,
+        limit=limit,
+    )
+    return {"snapshots": rows}
+
+
+@router.get("/{experiment_id}/hypotheses")
+def list_hypotheses(
+    experiment_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    snapshot_version: Optional[int] = None,
+    status: Optional[str] = None,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(client_id, user_id)
+    experiment = SERVICE.get_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    rows = DEPS.experiment_hypotheses.list_hypotheses(
+        experiment_id=experiment_id,
+        snapshot_version=snapshot_version,
+        status=status,
+        limit=limit,
+    )
+    return {"hypotheses": rows}
 
 
 @router.delete("/{experiment_id}/runs/{run_id}")
