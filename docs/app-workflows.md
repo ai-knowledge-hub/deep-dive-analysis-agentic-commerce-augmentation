@@ -219,6 +219,26 @@ Loop control endpoints:
 - `POST /memory/distill`
 - `GET /calibration/profile`
 
+---
+
+## 7) Agent Operator Mode (Planned)
+
+This is a planned orchestration layer that can run the lab protocol under policy constraints.
+
+Key principles:
+1. Agent autonomy is **plan autonomy**, not raw execution autonomy.
+2. The system remains the enforcement layer (baseline-first, frozen snapshots, spend caps, approval gates).
+3. Capabilities are explicit and versioned (prompts, scoring parameters, validation weighting, provider configs).
+
+Architecture additions (planned):
+- `AgentRuntime`: backend job runner for agent sessions.
+- `CapabilityRegistry`: agents request named capabilities; they do not call raw routes.
+- Policy-as-code checks shared across human and agent flows.
+- `agent_actions` audit log.
+- capability/policy version registry for reproducibility.
+
+See `docs/agentic-layer.md`.
+
 Maintenance endpoints:
 - `POST /admin/ops/loop-maintenance`
 - `GET /admin/ops/loop-maintenance/history`

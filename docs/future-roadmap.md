@@ -102,7 +102,11 @@ This document complements:
 
 ## 8) Agentic Loop Extensions (Deferred)
 
-1. **Full agent loop orchestration**
+1. **Agent operator mode (governed orchestration layer)**
+   - AgentRuntime job runner (backend)
+   - Capability registry + policy-as-code
+   - Agent action audit log + reproducible capability version pinning
+   - Multi-agent roles (planner/variant/validation/policy)
 2. **Active learning from “lessons learned”**
 3. **Knowledge graph & ontology‑based reasoning**
 4. **Scheduled experiment execution automation**

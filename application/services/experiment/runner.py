@@ -10,8 +10,14 @@ from application.services.simulation.service import SimulationService
 from application.services.simulation.runner import run_simulation
 from application.services.experiment.brand_belief_service import BrandBeliefService
 from application.services.experiment.belief_update_agent import BeliefUpdateAgent
+from application.services.experiment.decision_policy import (
+    DecisionInputs,
+    EvidenceSignal,
+    as_audit_payload,
+    decide,
+)
 from application.services.experiment.pairwise_judge import judge_pairwise
-from application.services.loop.belief_update_service import BeliefUpdateService
+from application.services.loop.belief_update_service import BeliefUpdateService, clamp
 from domain.simulation.ranking import score_for_product
 from domain.simulation.types import SimulationProduct
 from shared.config.env import settings
@@ -331,6 +337,16 @@ class ExperimentRunner:
             and not _is_control_variant(variant)
             and experiment.get("brand_id")
         ):
+            baseline_win_rate = self._get_baseline_win_rate_for_snapshot(
+                experiment=experiment,
+                snapshot_version=frozen_snapshot_version or 0,
+            )
+            if baseline_win_rate is not None:
+                metrics["baseline_win_rate"] = round(float(baseline_win_rate), 4)
+                metrics["win_rate_lift"] = round(
+                    float(metrics.get("win_rate") or 0.0) - float(baseline_win_rate), 4
+                )
+
             posterior = self._update_variant_posterior(
                 experiment=experiment,
                 variant=variant,
@@ -339,7 +355,18 @@ class ExperimentRunner:
             )
             if posterior is not None:
                 metrics["posterior"] = round(posterior, 4)
-                metrics["decision_action"] = _decision_from_posterior(posterior)
+
+            decision_inputs, decision_outputs = self._build_and_apply_decision_policy(
+                experiment=experiment,
+                variant=variant,
+                enabled_queries=enabled_queries,
+                metrics=metrics,
+                client_id=client_id,
+            )
+            metrics["decision_action"] = decision_outputs.get("action")
+            metrics["decision_policy_version"] = decision_outputs.get("policy_version")
+            metrics["decision_inputs"] = decision_inputs
+            metrics["decision_outputs"] = decision_outputs
 
         metric_row = self._deps.experiment_runs.create_metric(
             experiment_id=experiment_id,
@@ -615,6 +642,214 @@ class ExperimentRunner:
             return float(posterior)
         except (TypeError, ValueError):
             return None
+
+    def _get_baseline_win_rate_for_snapshot(
+        self, *, experiment: Dict[str, Any], snapshot_version: int
+    ) -> float | None:
+        experiment_id = str(experiment.get("id") or "")
+        if not experiment_id:
+            return None
+        variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
+        control = next((v for v in variants if _is_control_variant(v)), None)
+        if not control:
+            return None
+        control_metrics = self._deps.experiment_runs.list_metrics(
+            experiment_id=experiment_id, variant_id=str(control.get("id") or ""), limit=50
+        )
+        for row in control_metrics:
+            m = row.get("metrics") or {}
+            if int(m.get("snapshot_version") or -1) != int(snapshot_version):
+                continue
+            if str(m.get("execution_mode") or "") != "retrieval_backed":
+                continue
+            try:
+                return float(m.get("win_rate"))
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _build_and_apply_decision_policy(
+        self,
+        *,
+        experiment: Dict[str, Any],
+        variant: Dict[str, Any],
+        enabled_queries: List[Dict[str, Any]],
+        metrics: Dict[str, Any],
+        client_id: str,
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        # Experiment signal: use lift if available, otherwise fall back to raw win_rate centered at 0.5.
+        win_rate = _safe_optional_float(metrics.get("win_rate"))
+        baseline_win_rate = _safe_optional_float(metrics.get("baseline_win_rate"))
+        if baseline_win_rate is None:
+            baseline_win_rate = 0.5
+        exp_effect = _safe_optional_float(metrics.get("win_rate_lift"))
+        if exp_effect is None and win_rate is not None:
+            exp_effect = win_rate - baseline_win_rate
+        exp_effect = max(-1.0, min(1.0, float(exp_effect or 0.0)))
+
+        consensus = _safe_optional_float(metrics.get("judge_consensus_win_rate"))
+        total_runs = int(metrics.get("total_runs") or 0)
+        competitive_coverage = _safe_optional_float(metrics.get("competitive_coverage")) or 0.0
+        r_exp = clamp(
+            ((consensus if consensus is not None else 0.5) * 0.4)
+            + (min(1.0, total_runs / 10.0) * 0.3)
+            + (competitive_coverage * 0.3)
+        )
+
+        # Observed signal: manual validations linked to this variant (best-effort today).
+        validations = self._deps.experiment_validations.list_validations(
+            experiment_id=str(experiment.get("id") or ""), limit=200
+        )
+        variant_id = str(variant.get("id") or "")
+        v_validations = [
+            v for v in validations if str(v.get("variant_id") or "") == variant_id
+        ]
+        verified = [v for v in v_validations if v.get("is_correct") is not None]
+        correct = [v for v in verified if v.get("is_correct") is True]
+        verified_runs = len(verified)
+        correct_runs = len(correct)
+        obs_accuracy = (correct_runs / verified_runs) if verified_runs else None
+        obs_effect = (
+            None
+            if obs_accuracy is None
+            else max(-1.0, min(1.0, (obs_accuracy * 2.0) - 1.0))
+        )
+        r_obs = clamp(min(1.0, verified_runs / 10.0)) if verified_runs else 0.0
+
+        distinct_q = {
+            str(v.get("query_text") or "").strip().lower()
+            for v in verified
+            if str(v.get("query_text") or "").strip()
+        }
+        coverage_obs = (len(distinct_q) / len(enabled_queries)) if enabled_queries else 0.0
+
+        # Synthetic validation signal (Validation jobs/results linked to this experiment id).
+        syn_effect = None
+        syn_reliability = 0.0
+        syn_support = 0
+        try:
+            variants = self._deps.experiments.list_variants(
+                experiment_id=str(experiment.get("id") or "")
+            )
+            control = next((v for v in variants if _is_control_variant(v)), None)
+            control_id = str((control or {}).get("id") or "")
+            jobs = self._deps.validation_jobs.list_jobs(
+                client_id=client_id,
+                entity_type="experiment_run",
+                entity_id=str(experiment.get("id") or ""),
+                limit=200,
+            )
+            scored: List[tuple[float, float]] = []
+            provider_counts: Dict[str, int] = {}
+            for job in jobs:
+                if str(job.get("status") or "").lower() != "completed":
+                    continue
+                provider_counts[str(job.get("provider") or "unknown")] = (
+                    provider_counts.get(str(job.get("provider") or "unknown"), 0) + 1
+                )
+                result = self._deps.validation_results.get_latest_for_job(
+                    job_id=str(job.get("id") or "")
+                )
+                if not result:
+                    continue
+                structured = result.get("structured_result") or {}
+                winner_raw = str(
+                    result.get("winner_id") or structured.get("winner_id") or ""
+                ).strip()
+                winner_id = _resolve_validation_winner_variant_id(
+                    winner_raw=winner_raw,
+                    job_input_payload=job.get("input_payload") or {},
+                    current_variant_id=str(variant.get("id") or ""),
+                    control_variant_id=control_id,
+                )
+                score = _safe_optional_float(result.get("score"))
+                if score is None:
+                    score = _safe_optional_float(structured.get("score"))
+                confidence = _safe_optional_float(structured.get("confidence"))
+                evidence_strength = str(
+                    result.get("evidence_strength")
+                    or structured.get("evidence_strength")
+                    or ""
+                ).lower()
+
+                # If the judge doesn't pick a known winner, skip the datapoint (non-informative).
+                if not winner_id:
+                    continue
+                if winner_id not in {str(variant.get("id") or ""), control_id}:
+                    continue
+
+                if score is None:
+                    # Treat unknown score as weak signal.
+                    score = 0.5
+                score = clamp(float(score))
+                base = (score * 2.0) - 1.0  # [-1, +1]
+                effect_i = base if winner_id == str(variant.get("id") or "") else -base
+
+                strength_map = {"weak": 0.3, "moderate": 0.6, "strong": 0.9}
+                strength = float(strength_map.get(evidence_strength, 0.5))
+                conf = clamp(float(confidence) if confidence is not None else 0.5)
+                r_i = clamp((conf * 0.6) + (strength * 0.4))
+                scored.append((effect_i, r_i))
+
+            syn_support = len(scored)
+            if syn_support:
+                # Reliability-weighted mean effect.
+                denom = sum(r for _e, r in scored) or 1.0
+                syn_effect = sum(e * r for e, r in scored) / denom
+                syn_effect = max(-1.0, min(1.0, float(syn_effect)))
+                # Aggregate reliability scales with sample size.
+                mean_r = sum(r for _e, r in scored) / float(syn_support)
+                syn_reliability = clamp(mean_r * min(1.0, syn_support / 10.0))
+                metrics["synthetic_validation_summary"] = {
+                    "jobs_considered": len(jobs),
+                    "results_scored": syn_support,
+                    "providers": provider_counts,
+                }
+        except Exception:
+            # Synthetic validation is optional; decisioning will still work with experiment+observed.
+            syn_effect = None
+            syn_reliability = 0.0
+            syn_support = 0
+
+        inputs = DecisionInputs(
+            exp=EvidenceSignal(
+                effect=exp_effect,
+                reliability=r_exp,
+                support_size=total_runs,
+                details={
+                    "win_rate": win_rate,
+                    "baseline_win_rate": baseline_win_rate,
+                    "win_rate_lift": exp_effect,
+                    "judge_consensus_win_rate": consensus,
+                    "competitive_coverage": competitive_coverage,
+                    "total_runs": total_runs,
+                },
+            ),
+            syn=EvidenceSignal(
+                effect=syn_effect,
+                reliability=syn_reliability,
+                support_size=syn_support or None,
+                details={
+                    "support_size": syn_support,
+                }
+                if syn_support
+                else None,
+            ),
+            obs=EvidenceSignal(
+                effect=obs_effect,
+                reliability=r_obs,
+                support_size=verified_runs,
+                details={
+                    "verified_runs": verified_runs,
+                    "correct_runs": correct_runs,
+                    "accuracy": obs_accuracy,
+                },
+            ),
+            coverage_obs=coverage_obs,
+        )
+        outputs = decide(inputs)
+        inputs_payload, outputs_payload = as_audit_payload(inputs=inputs, outputs=outputs)
+        return inputs_payload, outputs_payload
 
     def _run_query_with_mode(
         self,
@@ -1006,12 +1241,66 @@ def _is_control_variant(variant: Dict[str, Any]) -> bool:
     return "control" in label
 
 
-def _decision_from_posterior(posterior: float) -> str:
-    if posterior >= 0.75:
-        return "promote_variant"
-    if posterior >= 0.45:
-        return "iterate_variant"
-    return "reject_hypothesis"
+def _resolve_validation_winner_variant_id(
+    *,
+    winner_raw: str,
+    job_input_payload: Dict[str, Any],
+    current_variant_id: str,
+    control_variant_id: str,
+) -> str | None:
+    """
+    Validation results may return:
+    - a concrete variant_id (ideal)
+    - a label (e.g. "Control (current copy)")
+    - symbolic ids like "control" / "candidate" (copy_revision-style)
+
+    This resolver normalizes those to a concrete experiment variant_id when possible.
+    """
+    raw = str(winner_raw or "").strip()
+    if not raw:
+        return None
+    key = raw.strip().lower()
+
+    # Common symbolic values.
+    if key in {"control", "baseline", "control_copy"}:
+        return control_variant_id or None
+    if key in {"candidate", "variant", "candidate_copy"}:
+        # If the job explicitly carried candidate ids, prefer those; otherwise fall back
+        # to the "current" variant for which we're computing a decision signal.
+        for candidate_key in ("candidate_variant_id", "variant_id", "candidate_id"):
+            v = job_input_payload.get(candidate_key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        candidate_obj = job_input_payload.get("candidate")
+        if isinstance(candidate_obj, dict):
+            cid = candidate_obj.get("id")
+            if isinstance(cid, str) and cid.strip():
+                return cid.strip()
+        return current_variant_id or None
+
+    # If the raw string already matches an id in the payload variants list, accept it.
+    variants = job_input_payload.get("variants")
+    if isinstance(variants, list):
+        for item in variants:
+            if not isinstance(item, dict):
+                continue
+            vid = item.get("id")
+            if isinstance(vid, str) and vid.strip() == raw:
+                return vid.strip()
+            # Map a winner "label" back to id when possible.
+            label = item.get("label")
+            if isinstance(label, str) and label.strip() and label.strip().lower() == key:
+                if isinstance(vid, str) and vid.strip():
+                    return vid.strip()
+
+    # Copy-revision style payloads include explicit control/candidate objects (rare for experiments,
+    # but supported here for completeness).
+    control_obj = job_input_payload.get("control")
+    if isinstance(control_obj, dict):
+        cid = control_obj.get("id")
+        if isinstance(cid, str) and cid.strip().lower() == key:
+            return control_variant_id or None
+    return None
 
 
 def _to_simulation_product(raw: Dict[str, Any]) -> SimulationProduct:

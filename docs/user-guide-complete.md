@@ -115,6 +115,12 @@ Once a candidate is selected, you can:
   - `iterate_variant`,
   - `reject_hypothesis`.
 
+Implementation note:
+- Decisions are produced by a versioned decision policy and stored in metrics as:
+  - `decision_policy_version`
+  - `decision_inputs`
+  - `decision_outputs`
+
 ---
 
 ## 4) Lab vs Manual Mode (Experiments)
@@ -123,6 +129,16 @@ Once a candidate is selected, you can:
 - **Manual mode**: controlled operation where user drives each step directly.
 
 Tooltips in UI explain both modes on hover (separately for each toggle).
+
+### Agent operator mode (Planned, not built)
+
+Planned: an **agent operator mode** that can run the same experiment protocol automatically under strict policy constraints.
+
+Key idea:
+- agents propose/queue actions (plan autonomy),
+- the system enforces protocol constraints and can require approvals at defined gates.
+
+Reference: `docs/agentic-layer.md`.
 
 ---
 

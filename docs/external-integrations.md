@@ -132,3 +132,11 @@ Use this rule of thumb:
 - Need provider-native execution with callback: `provider_openai_mcp`.
 - Need fallback when provider callback cannot be used: `manual_fallback`.
 - Need production confidence decisions: prioritize observed reality validation over synthetic signal.
+
+---
+
+## 8) Agent Operator Mode (Planned)
+
+Planned: agents can request validations and use the same provider integrations, but they will do so through a capability registry and policy enforcer (not raw route calls).
+
+Reference: `docs/agentic-layer.md`.
