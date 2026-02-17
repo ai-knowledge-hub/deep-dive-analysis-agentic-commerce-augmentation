@@ -75,6 +75,27 @@ Each capability definition includes:
 - preconditions (policy-as-code checks)
 - explicit side effects: which tables/artifacts it can write
 
+### 3.2.1 Capability Inventory and Status
+
+| Capability | Purpose | Current Status |
+|---|---|---|
+| `freeze_retrieval_protocol` | Create/reuse frozen retrieval snapshot set for the experiment battery | **Implemented (executable)** |
+| `run_control_baseline` | Run control variant in retrieval-backed mode on frozen snapshot | **Implemented (executable)** |
+| `seed_hypotheses` | Persist baseline-derived hypotheses from missing winner signals | Planned (action only) |
+| `generate_variants` | Generate draft variants from hypotheses/evidence | Planned (action only) |
+| `run_variant` | Execute one candidate variant on frozen snapshot | Planned (action only) |
+| `request_synthetic_validation` | Create/start synthetic validation jobs | Planned (action only) |
+| `update_posterior_and_decisions` | Recompute posterior and decision outputs from evidence | Planned (action only) |
+| `review_validation_readiness` | Evaluate observed/synthetic coverage and readiness gates | Planned |
+| `recommend_next_action` | Emit ranked next-step recommendations under constraints | Planned |
+| `promote_variant_lab` | Promote variant for lab progression | Planned (approval policy aware) |
+| `promote_variant_prod` | Promote variant for production/publish path | Planned (approval-gated) |
+| `publish_copy_revision` | Publish selected revision to product copy | Planned (approval-gated) |
+
+Notes:
+- `action only` means the planner seeds it as a proposed action, but execution is not wired yet.
+- v0 default remains `run_mode=plan_only`; execution requires switching to `auto_execute_safe`.
+
 ### 3.3 Policy-as-code (enforcement stays system-side)
 
 Formalize enforcement checks used by both humans and agents:
@@ -198,4 +219,3 @@ Potential future coordination mechanisms:
 
 Key principle:
 **Scaling changes the orchestrator, not the protocol engine.** The protocol engine stays the source of truth and enforcement.
-
