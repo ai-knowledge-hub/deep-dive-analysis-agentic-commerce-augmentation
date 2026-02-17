@@ -1117,6 +1117,179 @@ class ExperimentRunner:
             "status": "frozen",
         }
 
+    def seed_hypotheses_for_snapshot(
+        self,
+        *,
+        experiment_id: str,
+        client_id: str,
+        snapshot_version: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        experiment = self._deps.experiments.get_experiment(
+            experiment_id=experiment_id, client_id=client_id
+        )
+        if not experiment:
+            raise ValueError("experiment not found")
+        target_snapshot_version = int(
+            snapshot_version
+            if snapshot_version is not None
+            else (experiment.get("protocol_snapshot_version") or 0)
+        )
+        if target_snapshot_version <= 0:
+            raise ValueError(
+                "seed_hypotheses requires a frozen snapshot_version (run freeze first)"
+            )
+        variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
+        control_ids = {
+            str(v.get("id") or "") for v in variants if _is_control_variant(v)
+        }
+        if not control_ids:
+            raise ValueError("seed_hypotheses requires a control variant")
+        runs = self._deps.experiment_runs.list_runs(experiment_id=experiment_id, limit=5000)
+        baseline_runs = [
+            {
+                "run_id": run.get("simulation_run_id"),
+                "snapshot_version": run.get("snapshot_version"),
+            }
+            for run in runs
+            if str(run.get("variant_id") or "") in control_ids
+            and int(run.get("snapshot_version") or 0) == target_snapshot_version
+            and run.get("simulation_run_id")
+        ]
+        if not baseline_runs:
+            raise ValueError(
+                "seed_hypotheses requires baseline runs for the target snapshot_version"
+            )
+        before = self._deps.experiment_hypotheses.count_hypotheses(
+            experiment_id=experiment_id,
+            snapshot_version=target_snapshot_version,
+        )
+        self._seed_hypotheses_from_baseline(
+            experiment=experiment,
+            runs=baseline_runs,
+            snapshot_version=target_snapshot_version,
+        )
+        after = self._deps.experiment_hypotheses.count_hypotheses(
+            experiment_id=experiment_id,
+            snapshot_version=target_snapshot_version,
+        )
+        return {
+            "experiment_id": experiment_id,
+            "snapshot_version": target_snapshot_version,
+            "baseline_runs_count": len(baseline_runs),
+            "hypotheses_before": before,
+            "hypotheses_after": after,
+            "created_count": max(0, after - before),
+            "status": "seeded",
+        }
+
+    def update_posterior_and_decisions(
+        self,
+        *,
+        experiment_id: str,
+        client_id: str,
+        variant_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        experiment = self._deps.experiments.get_experiment(
+            experiment_id=experiment_id, client_id=client_id
+        )
+        if not experiment:
+            raise ValueError("experiment not found")
+        battery_id = experiment.get("battery_id")
+        if not battery_id:
+            raise ValueError("experiment missing battery_id")
+        queries = self._deps.query_batteries.list_queries(battery_id=battery_id)
+        enabled_queries = [q for q in queries if q.get("enabled")]
+        if not enabled_queries:
+            raise ValueError("battery has no enabled queries")
+
+        variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
+        variant_map = {str(v.get("id") or ""): v for v in variants}
+
+        selected_variant: Dict[str, Any] | None = None
+        if variant_id:
+            selected_variant = variant_map.get(str(variant_id))
+            if not selected_variant:
+                raise ValueError("variant not found for experiment")
+        else:
+            for item in variants:
+                if _is_control_variant(item):
+                    continue
+                selected_variant = item
+                break
+        if not selected_variant:
+            raise ValueError("no candidate variant found")
+        if _is_control_variant(selected_variant):
+            raise ValueError("update_posterior_and_decisions requires candidate variant")
+
+        selected_variant_id = str(selected_variant.get("id") or "")
+        metric_rows = self._deps.experiment_runs.list_metrics(
+            experiment_id=experiment_id,
+            variant_id=selected_variant_id,
+            limit=50,
+        )
+        latest_metric = None
+        for row in metric_rows:
+            payload = row.get("metrics") or {}
+            if str(payload.get("execution_mode") or "") == "retrieval_backed":
+                latest_metric = row
+                break
+        if not latest_metric:
+            raise ValueError(
+                "no retrieval-backed metric found for variant; run variant first"
+            )
+
+        metrics = dict((latest_metric.get("metrics") or {}))
+        snapshot_version = int(metrics.get("snapshot_version") or 0)
+        if snapshot_version > 0 and metrics.get("baseline_win_rate") is None:
+            baseline = self._get_baseline_win_rate_for_snapshot(
+                experiment=experiment,
+                snapshot_version=snapshot_version,
+            )
+            if baseline is not None:
+                metrics["baseline_win_rate"] = round(float(baseline), 4)
+                metrics["win_rate_lift"] = round(
+                    float(metrics.get("win_rate") or 0.0) - float(baseline), 4
+                )
+
+        posterior = self._update_variant_posterior(
+            experiment=experiment,
+            variant=selected_variant,
+            metrics=metrics,
+            client_id=client_id,
+        )
+        if posterior is not None:
+            metrics["posterior"] = round(posterior, 4)
+
+        decision_inputs, decision_outputs = self._build_and_apply_decision_policy(
+            experiment=experiment,
+            variant=selected_variant,
+            enabled_queries=enabled_queries,
+            metrics=metrics,
+            client_id=client_id,
+        )
+        metrics["decision_action"] = decision_outputs.get("action")
+        metrics["decision_policy_version"] = decision_outputs.get("policy_version")
+        metrics["decision_inputs"] = decision_inputs
+        metrics["decision_outputs"] = decision_outputs
+        metrics["decision_refresh_of_metric_id"] = latest_metric.get("id")
+
+        new_metric = self._deps.experiment_runs.create_metric(
+            experiment_id=experiment_id,
+            variant_id=selected_variant_id,
+            metrics=metrics,
+        )
+
+        return {
+            "experiment_id": experiment_id,
+            "variant_id": selected_variant_id,
+            "source_metric_id": latest_metric.get("id"),
+            "new_metric_id": new_metric.get("id"),
+            "posterior": metrics.get("posterior"),
+            "decision_action": metrics.get("decision_action"),
+            "decision_policy_version": metrics.get("decision_policy_version"),
+            "status": "posterior_updated",
+        }
+
 
 def _build_variant_product(
     *, product: Dict[str, Any], variant: Dict[str, Any]

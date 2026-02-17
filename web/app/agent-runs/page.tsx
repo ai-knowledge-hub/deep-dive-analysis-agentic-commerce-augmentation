@@ -21,7 +21,12 @@ const DEFAULT_ALLOWED_CAPABILITIES = [
   "generate_variants",
   "run_variant",
   "request_synthetic_validation",
+  "review_validation_readiness",
   "update_posterior_and_decisions",
+  "recommend_next_action",
+  "promote_variant_lab",
+  "promote_variant_prod",
+  "publish_copy_revision",
 ];
 
 function formatJsonPreview(value: unknown): string {

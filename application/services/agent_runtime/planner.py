@@ -76,7 +76,13 @@ def build_initial_plan(
             ProposedAction(
                 capability_name="generate_variants",
                 capability_version=v("generate_variants"),
-                inputs={**base_inputs, "mode": "draft"},
+                inputs={
+                    **base_inputs,
+                    "mode": "loop_evidence",
+                    "strategy": "both",
+                    "max_candidates": 3,
+                    "persist_count": 2,
+                },
                 rationale="Generate candidate variants linked to hypotheses (draft only until reviewed).",
                 confidence=0.6,
             )
@@ -96,9 +102,32 @@ def build_initial_plan(
             ProposedAction(
                 capability_name="request_synthetic_validation",
                 capability_version=v("request_synthetic_validation"),
-                inputs={**base_inputs, "mode": "in_app_byok"},
+                inputs={
+                    **base_inputs,
+                    "provider": "openrouter",
+                    "mode": "in_app_byok",
+                    "auto_run": True,
+                    "variant_selection": "top_1",
+                    "prompt_version": "v1",
+                },
                 rationale="Request synthetic validation jobs for the latest candidate to increase evidence reliability.",
                 confidence=0.55,
+            )
+        )
+    if "review_validation_readiness" in allowed:
+        actions.append(
+            ProposedAction(
+                capability_name="review_validation_readiness",
+                capability_version=v("review_validation_readiness"),
+                inputs={
+                    **base_inputs,
+                    "variant_selection": "top_1",
+                    "prod_min_coverage": 0.2,
+                    "min_verified_runs": 3,
+                    "min_synthetic_results": 1,
+                },
+                rationale="Review observed and synthetic validation gates before promotion decisions.",
+                confidence=0.6,
             )
         )
     if "update_posterior_and_decisions" in allowed:
@@ -109,6 +138,61 @@ def build_initial_plan(
                 inputs=base_inputs,
                 rationale="Compute posterior and decision outputs from combined experiment/synthetic/observed evidence.",
                 confidence=0.6,
+            )
+        )
+    if "recommend_next_action" in allowed:
+        actions.append(
+            ProposedAction(
+                capability_name="recommend_next_action",
+                capability_version=v("recommend_next_action"),
+                inputs=base_inputs,
+                rationale="Generate a constrained next-step recommendation from experiment outcomes, validation state, and policy context.",
+                confidence=0.6,
+            )
+        )
+    if "promote_variant_lab" in allowed:
+        actions.append(
+            ProposedAction(
+                capability_name="promote_variant_lab",
+                capability_version=v("promote_variant_lab"),
+                inputs={
+                    **base_inputs,
+                    "variant_selection": "top_1",
+                    "require_promote_decision": True,
+                },
+                rationale="Promote a candidate to lab tier when policy outputs indicate promote (without triggering prod/publish paths).",
+                confidence=0.55,
+            )
+        )
+    if "promote_variant_prod" in allowed:
+        actions.append(
+            ProposedAction(
+                capability_name="promote_variant_prod",
+                capability_version=v("promote_variant_prod"),
+                inputs={
+                    **base_inputs,
+                    "variant_selection": "top_1",
+                    "require_promote_decision": True,
+                    "prod_min_coverage": 0.2,
+                    "min_verified_runs": 3,
+                    "min_synthetic_results": 1,
+                },
+                rationale="Promote a candidate to prod tier only when observed-readiness gates pass and decision policy indicates promotion.",
+                confidence=0.5,
+            )
+        )
+    if "publish_copy_revision" in allowed:
+        actions.append(
+            ProposedAction(
+                capability_name="publish_copy_revision",
+                capability_version=v("publish_copy_revision"),
+                inputs={
+                    **base_inputs,
+                    "variant_selection": "top_1",
+                    "require_prod_promotion": True,
+                },
+                rationale="Publish copy revision from a prod-promoted variant into product description, with auditable events.",
+                confidence=0.45,
             )
         )
     return actions

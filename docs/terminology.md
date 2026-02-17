@@ -321,7 +321,12 @@ Examples:
 - `generate_variants`
 - `run_variant`
 - `request_synthetic_validation`
+- `review_validation_readiness`
 - `update_posterior_and_decisions`
+- `recommend_next_action`
+- `promote_variant_lab`
+- `promote_variant_prod`
+- `publish_copy_revision`
 
 **Capability Registry**
 A catalog that defines for each capability:
