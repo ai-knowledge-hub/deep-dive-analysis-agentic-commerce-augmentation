@@ -354,6 +354,7 @@ class LLMProviderConfigsStore(Protocol):
 
     def set_active_provider(self, **kwargs: Any) -> None: ...
 
+
 class AgentRunsStore(Protocol):
     def create_agent_run(self, **kwargs: Any) -> dict: ...
 

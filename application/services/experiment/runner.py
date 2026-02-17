@@ -261,12 +261,8 @@ class ExperimentRunner:
         total = len(enabled_queries)
         denominator = competitive_weight_total if competitive_weight_total > 0 else 0.0
         win_rate = (weighted_wins / denominator) if denominator else 0.0
-        win_rate_keyword = (
-            (weighted_wins_keyword / denominator) if denominator else 0.0
-        )
-        win_rate_robust = (
-            (weighted_wins_robust / denominator) if denominator else 0.0
-        )
+        win_rate_keyword = (weighted_wins_keyword / denominator) if denominator else 0.0
+        win_rate_robust = (weighted_wins_robust / denominator) if denominator else 0.0
         judge_consensus_win_rate = (
             (weighted_judge_consensus_wins / weighted_judge_total)
             if weighted_judge_total > 0
@@ -317,7 +313,8 @@ class ExperimentRunner:
             "retrieval_backed_runs": retrieval_backed_runs,
             "retrieval_fallback_runs": retrieval_fallback_runs,
             "retrieval_success_rate": round(
-                (retrieval_backed_runs - retrieval_fallback_runs) / retrieval_backed_runs,
+                (retrieval_backed_runs - retrieval_fallback_runs)
+                / retrieval_backed_runs,
                 4,
             )
             if retrieval_backed_runs > 0
@@ -325,7 +322,9 @@ class ExperimentRunner:
             "snapshot_version": frozen_snapshot_version,
         }
 
-        if normalized_execution_mode == "retrieval_backed" and _is_control_variant(variant):
+        if normalized_execution_mode == "retrieval_backed" and _is_control_variant(
+            variant
+        ):
             self._seed_hypotheses_from_baseline(
                 experiment=experiment,
                 runs=runs_payload,
@@ -430,15 +429,18 @@ class ExperimentRunner:
                     enabled_queries=enabled_queries,
                 )
 
-        next_version = max(
-            current_version,
-            int(
-                self._deps.experiment_retrieval_snapshots.latest_snapshot_version(
-                    experiment_id=experiment_id
-                )
-                or 0
-            ),
-        ) + 1
+        next_version = (
+            max(
+                current_version,
+                int(
+                    self._deps.experiment_retrieval_snapshots.latest_snapshot_version(
+                        experiment_id=experiment_id
+                    )
+                    or 0
+                ),
+            )
+            + 1
+        )
 
         candidates_by_query: Dict[str, List[Dict[str, Any]]] = {}
         for query in enabled_queries:
@@ -494,7 +496,9 @@ class ExperimentRunner:
             retrieval = row.get("retrieval") or {}
             candidates = retrieval.get("candidates")
             if isinstance(candidates, list):
-                result[query_id] = [item for item in candidates if isinstance(item, dict)]
+                result[query_id] = [
+                    item for item in candidates if isinstance(item, dict)
+                ]
             else:
                 result[query_id] = []
         for query_id in query_ids:
@@ -529,9 +533,7 @@ class ExperimentRunner:
             return False
         variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
         control_ids = {
-            str(item.get("id") or "")
-            for item in variants
-            if _is_control_variant(item)
+            str(item.get("id") or "") for item in variants if _is_control_variant(item)
         }
         if not control_ids:
             return False
@@ -568,7 +570,9 @@ class ExperimentRunner:
             if not run_id:
                 continue
             sim_run = self._deps.simulation_runs.get_run(run_id)
-            gap_analysis = ((sim_run or {}).get("result") or {}).get("gap_analysis") or []
+            gap_analysis = ((sim_run or {}).get("result") or {}).get(
+                "gap_analysis"
+            ) or []
             if not isinstance(gap_analysis, list):
                 continue
             target = next(
@@ -615,9 +619,10 @@ class ExperimentRunner:
         metrics: Dict[str, Any],
         client_id: str,
     ) -> Optional[float]:
-        hypothesis_id = str(variant.get("hypothesis_id") or "").strip() or str(
-            variant.get("id") or ""
-        ).strip()
+        hypothesis_id = (
+            str(variant.get("hypothesis_id") or "").strip()
+            or str(variant.get("id") or "").strip()
+        )
         if not hypothesis_id:
             return None
         evidence = {
@@ -654,7 +659,9 @@ class ExperimentRunner:
         if not control:
             return None
         control_metrics = self._deps.experiment_runs.list_metrics(
-            experiment_id=experiment_id, variant_id=str(control.get("id") or ""), limit=50
+            experiment_id=experiment_id,
+            variant_id=str(control.get("id") or ""),
+            limit=50,
         )
         for row in control_metrics:
             m = row.get("metrics") or {}
@@ -689,7 +696,9 @@ class ExperimentRunner:
 
         consensus = _safe_optional_float(metrics.get("judge_consensus_win_rate"))
         total_runs = int(metrics.get("total_runs") or 0)
-        competitive_coverage = _safe_optional_float(metrics.get("competitive_coverage")) or 0.0
+        competitive_coverage = (
+            _safe_optional_float(metrics.get("competitive_coverage")) or 0.0
+        )
         r_exp = clamp(
             ((consensus if consensus is not None else 0.5) * 0.4)
             + (min(1.0, total_runs / 10.0) * 0.3)
@@ -721,7 +730,9 @@ class ExperimentRunner:
             for v in verified
             if str(v.get("query_text") or "").strip()
         }
-        coverage_obs = (len(distinct_q) / len(enabled_queries)) if enabled_queries else 0.0
+        coverage_obs = (
+            (len(distinct_q) / len(enabled_queries)) if enabled_queries else 0.0
+        )
 
         # Synthetic validation signal (Validation jobs/results linked to this experiment id).
         syn_effect = None
@@ -848,7 +859,9 @@ class ExperimentRunner:
             coverage_obs=coverage_obs,
         )
         outputs = decide(inputs)
-        inputs_payload, outputs_payload = as_audit_payload(inputs=inputs, outputs=outputs)
+        inputs_payload, outputs_payload = as_audit_payload(
+            inputs=inputs, outputs=outputs
+        )
         return inputs_payload, outputs_payload
 
     def _run_query_with_mode(
@@ -1144,7 +1157,9 @@ class ExperimentRunner:
         }
         if not control_ids:
             raise ValueError("seed_hypotheses requires a control variant")
-        runs = self._deps.experiment_runs.list_runs(experiment_id=experiment_id, limit=5000)
+        runs = self._deps.experiment_runs.list_runs(
+            experiment_id=experiment_id, limit=5000
+        )
         baseline_runs = [
             {
                 "run_id": run.get("simulation_run_id"),
@@ -1219,7 +1234,9 @@ class ExperimentRunner:
         if not selected_variant:
             raise ValueError("no candidate variant found")
         if _is_control_variant(selected_variant):
-            raise ValueError("update_posterior_and_decisions requires candidate variant")
+            raise ValueError(
+                "update_posterior_and_decisions requires candidate variant"
+            )
 
         selected_variant_id = str(selected_variant.get("id") or "")
         metric_rows = self._deps.experiment_runs.list_metrics(
@@ -1498,7 +1515,11 @@ def _resolve_validation_winner_variant_id(
                 return vid.strip()
             # Map a winner "label" back to id when possible.
             label = item.get("label")
-            if isinstance(label, str) and label.strip() and label.strip().lower() == key:
+            if (
+                isinstance(label, str)
+                and label.strip()
+                and label.strip().lower() == key
+            ):
                 if isinstance(vid, str) and vid.strip():
                     return vid.strip()
 

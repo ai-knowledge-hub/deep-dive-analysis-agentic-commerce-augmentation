@@ -47,7 +47,9 @@ def execute_capability(
     if name == "run_control_baseline":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
         if not experiment_id:
-            raise CapabilityExecutionError("run_control_baseline requires experiment_id")
+            raise CapabilityExecutionError(
+                "run_control_baseline requires experiment_id"
+            )
         control_variant_id = _resolve_control_variant_id(
             deps=deps, experiment_id=experiment_id
         )
@@ -113,12 +115,16 @@ def execute_capability(
         for index, item in enumerate(candidates[:persist_count], start=1):
             if not isinstance(item, dict):
                 continue
-            candidate_label = str(item.get("label") or "").strip() or f"Candidate {index}"
+            candidate_label = (
+                str(item.get("label") or "").strip() or f"Candidate {index}"
+            )
             candidate_description = str(item.get("description") or "").strip()
             candidate_rationale = str(item.get("rationale") or "").strip()
             candidate_confidence = item.get("confidence")
             candidate_payload = item.get("payload")
-            payload_dict = candidate_payload if isinstance(candidate_payload, dict) else {}
+            payload_dict = (
+                candidate_payload if isinstance(candidate_payload, dict) else {}
+            )
             hypothesis_id = str(payload_dict.get("hypothesis_id") or "").strip() or None
 
             persisted_payload = {
@@ -164,14 +170,18 @@ def execute_capability(
             raise CapabilityExecutionError("run_variant requires experiment_id")
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
-            variant_selection = str(inputs.get("variant_selection") or "top_1").strip().lower()
+            variant_selection = (
+                str(inputs.get("variant_selection") or "top_1").strip().lower()
+            )
             variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
                 strategy=variant_selection,
             )
         if not variant_id:
-            raise CapabilityExecutionError("run_variant could not resolve a candidate variant")
+            raise CapabilityExecutionError(
+                "run_variant could not resolve a candidate variant"
+            )
         retrieval_max_results = int(inputs.get("retrieval_max_results") or 5)
         runner = ExperimentRunner(deps=deps)
         result = runner.run_experiment(
@@ -209,9 +219,9 @@ def execute_capability(
         auto_run = bool(inputs.get("auto_run", True))
         target_variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not target_variant_id:
-            variant_selection = str(
-                inputs.get("variant_selection") or "top_1"
-            ).strip().lower()
+            variant_selection = (
+                str(inputs.get("variant_selection") or "top_1").strip().lower()
+            )
             target_variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
@@ -271,9 +281,9 @@ def execute_capability(
             )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
-            variant_selection = str(
-                inputs.get("variant_selection") or "top_1"
-            ).strip().lower()
+            variant_selection = (
+                str(inputs.get("variant_selection") or "top_1").strip().lower()
+            )
             variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
@@ -342,7 +352,8 @@ def execute_capability(
             recommendation=recommendation,
         )
         latest_metric = (
-            deps.experiment_runs.list_metrics(experiment_id=experiment_id, limit=1) or [{}]
+            deps.experiment_runs.list_metrics(experiment_id=experiment_id, limit=1)
+            or [{}]
         )[0]
         jobs = deps.validation_jobs.list_jobs(
             client_id=context.client_id,
@@ -351,7 +362,9 @@ def execute_capability(
             limit=200,
         )
         completed_jobs = [
-            item for item in jobs if str(item.get("status") or "").lower() == "completed"
+            item
+            for item in jobs
+            if str(item.get("status") or "").lower() == "completed"
         ]
         return {
             "experiment_id": experiment_id,
@@ -387,9 +400,9 @@ def execute_capability(
             raise CapabilityExecutionError("promote_variant_lab requires experiment_id")
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
-            variant_selection = str(
-                inputs.get("variant_selection") or "top_1"
-            ).strip().lower()
+            variant_selection = (
+                str(inputs.get("variant_selection") or "top_1").strip().lower()
+            )
             variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
@@ -454,7 +467,9 @@ def execute_capability(
             or "Lab-tier promotion approved by agent runtime after policy checks."
         )
         posterior = (
-            metric_payload.get("posterior") if isinstance(metric_payload, dict) else None
+            metric_payload.get("posterior")
+            if isinstance(metric_payload, dict)
+            else None
         )
         confidence = _safe_float(posterior, default=0.0)
 
@@ -503,12 +518,14 @@ def execute_capability(
     if name == "promote_variant_prod":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
         if not experiment_id:
-            raise CapabilityExecutionError("promote_variant_prod requires experiment_id")
+            raise CapabilityExecutionError(
+                "promote_variant_prod requires experiment_id"
+            )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
-            variant_selection = str(
-                inputs.get("variant_selection") or "top_1"
-            ).strip().lower()
+            variant_selection = (
+                str(inputs.get("variant_selection") or "top_1").strip().lower()
+            )
             variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
@@ -624,12 +641,14 @@ def execute_capability(
     if name == "publish_copy_revision":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
         if not experiment_id:
-            raise CapabilityExecutionError("publish_copy_revision requires experiment_id")
+            raise CapabilityExecutionError(
+                "publish_copy_revision requires experiment_id"
+            )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
-            variant_selection = str(
-                inputs.get("variant_selection") or "top_1"
-            ).strip().lower()
+            variant_selection = (
+                str(inputs.get("variant_selection") or "top_1").strip().lower()
+            )
             variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
@@ -795,10 +814,7 @@ def _select_candidate_variant_id(
 ) -> str | None:
     variants = deps.experiments.list_variants(experiment_id=experiment_id)
     candidates = [
-        v
-        for v in variants
-        if str(v.get("id") or "")
-        and not _is_control_variant_row(v)
+        v for v in variants if str(v.get("id") or "") and not _is_control_variant_row(v)
     ]
     if not candidates:
         return None
@@ -872,8 +888,7 @@ def _extract_observed_coverage(
     enabled_queries = [
         item
         for item in queries
-        if bool(item.get("enabled", True))
-        and str(item.get("query_text") or "").strip()
+        if bool(item.get("enabled", True)) and str(item.get("query_text") or "").strip()
     ]
     validations = deps.experiment_validations.list_validations(
         experiment_id=experiment_id, limit=500
@@ -912,7 +927,9 @@ def _compute_validation_readiness(
     )
     metric_payload = (latest_metric or {}).get("metrics") or {}
     decision_inputs = (
-        metric_payload.get("decision_inputs") if isinstance(metric_payload, dict) else None
+        metric_payload.get("decision_inputs")
+        if isinstance(metric_payload, dict)
+        else None
     )
     coverage_obs = _extract_observed_coverage(
         deps=deps,
@@ -937,7 +954,9 @@ def _compute_validation_readiness(
     ]
     scored_results = 0
     for job in completed_jobs:
-        result = deps.validation_results.get_latest_for_job(job_id=str(job.get("id") or ""))
+        result = deps.validation_results.get_latest_for_job(
+            job_id=str(job.get("id") or "")
+        )
         if not result:
             continue
         if result.get("score") is not None or result.get("winner_id"):

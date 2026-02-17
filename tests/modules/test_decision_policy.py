@@ -60,7 +60,9 @@ def test_decision_policy_prod_tier_requires_min_observed_coverage() -> None:
     assert out.promotion_tier == "prod"
 
 
-def test_decision_policy_can_promote_with_strong_synthetic_signal_when_weighted() -> None:
+def test_decision_policy_can_promote_with_strong_synthetic_signal_when_weighted() -> (
+    None
+):
     # This doesn't assert the exact threshold math, just that synthetic contributes.
     inputs = DecisionInputs(
         exp=EvidenceSignal(effect=0.0, reliability=1.0),

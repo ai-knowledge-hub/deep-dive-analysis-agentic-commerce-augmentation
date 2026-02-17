@@ -136,7 +136,7 @@ This separation keeps experiment UX focused on design/run/analyze while validati
 
 ```bash
 cp .env.example .env.local
-uv sync
+uv sync --extra dev
 uv run uvicorn api.main:app --reload --port 8000
 ```
 
@@ -230,8 +230,15 @@ Loop maintenance can run:
 
 ## Testing and Quality Gates
 
+Install dev tools first (includes `ruff`):
+
+```bash
+uv sync --extra dev
+```
+
 ```bash
 make lint
+make format
 make arch-check
 make test
 make web-lint

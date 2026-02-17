@@ -60,7 +60,9 @@ class DecisionOutputs:
     promotion_tier: Optional[PromotionTier] = None
 
 
-def _reliability_adjusted(effect: Optional[float], reliability: Optional[float]) -> float:
+def _reliability_adjusted(
+    effect: Optional[float], reliability: Optional[float]
+) -> float:
     if effect is None:
         return 0.0
     r = clamp(float(reliability) if reliability is not None else 0.0)
@@ -113,9 +115,7 @@ def decide(inputs: DecisionInputs) -> DecisionOutputs:
     syn_c = _reliability_adjusted(inputs.syn.effect, inputs.syn.reliability)
     obs_c = _reliability_adjusted(inputs.obs.effect, inputs.obs.reliability)
 
-    combined = (
-        weights["exp"] * exp_c + weights["syn"] * syn_c + weights["obs"] * obs_c
-    )
+    combined = weights["exp"] * exp_c + weights["syn"] * syn_c + weights["obs"] * obs_c
     combined = max(-1.0, min(1.0, float(combined)))
     likelihood = clamp((combined + 1.0) / 2.0)
 
@@ -128,7 +128,11 @@ def decide(inputs: DecisionInputs) -> DecisionOutputs:
 
     tier: Optional[PromotionTier] = None
     if action == "promote_variant":
-        tier = "prod" if float(inputs.coverage_obs) >= float(inputs.prod_min_coverage) else "lab"
+        tier = (
+            "prod"
+            if float(inputs.coverage_obs) >= float(inputs.prod_min_coverage)
+            else "lab"
+        )
 
     return DecisionOutputs(
         policy_version=DECISION_POLICY_VERSION,
@@ -155,4 +159,3 @@ __all__ = [
     "decide",
     "as_audit_payload",
 ]
-

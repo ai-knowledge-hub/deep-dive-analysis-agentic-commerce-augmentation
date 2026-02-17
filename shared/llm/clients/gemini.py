@@ -36,8 +36,9 @@ def _model_priority() -> List[str]:
 class GeminiConfig:
     model_priority: List[str] = field(default_factory=_model_priority)
     api_key: str | None = field(
-        default_factory=lambda: os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY")
+        default_factory=lambda: (
+            os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        )
     )
     max_retries: int = 3
     base_delay: float = 1.0

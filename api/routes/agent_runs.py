@@ -63,7 +63,9 @@ class AgentRunControlRequest(BaseModel):
 
 def _hash_payload(value: Any) -> str:
     try:
-        encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
     except Exception:
         encoded = str(value).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -180,7 +182,9 @@ def step_agent_run(
             detail="Run is plan-only. Switch mode to execute steps.",
         )
     actions = DEPS.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
-    next_action = next((item for item in actions if item.get("status") == "approved"), None)
+    next_action = next(
+        (item for item in actions if item.get("status") == "approved"), None
+    )
     if not next_action:
         raise HTTPException(status_code=409, detail="No approved action to execute")
     action_id = str(next_action.get("id") or "")
