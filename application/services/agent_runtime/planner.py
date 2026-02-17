@@ -46,7 +46,7 @@ def build_initial_plan(
             ProposedAction(
                 capability_name="freeze_retrieval_protocol",
                 capability_version=v("freeze_retrieval_protocol"),
-                inputs=base_inputs,
+                inputs={**base_inputs, "retrieval_max_results": 5},
                 rationale="Freeze a retrieval snapshot set so variant comparisons are fair and time-drift resistant.",
                 confidence=0.7,
             )
@@ -115,4 +115,3 @@ def build_initial_plan(
 
 
 __all__ = ["ProposedAction", "build_initial_plan"]
-

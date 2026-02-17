@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
+from application.services.agent_runtime.capabilities import (
+    CapabilityContext,
+    CapabilityExecutionError,
+    execute_capability,
+)
 from application.services.agent_runtime.planner import build_initial_plan
 
 
@@ -178,13 +183,55 @@ def step_agent_run(
     next_action = next((item for item in actions if item.get("status") == "approved"), None)
     if not next_action:
         raise HTTPException(status_code=409, detail="No approved action to execute")
-    executed = DEPS.agent_actions.update_agent_action_status(
-        action_id=str(next_action.get("id") or ""),
-        status="executed",
-        outputs={"status": "executed_stub_v0"},
-        outputs_hash=_hash_payload({"status": "executed_stub_v0"}),
+    action_id = str(next_action.get("id") or "")
+    capability_name = str(next_action.get("capability_name") or "")
+    inputs = next_action.get("inputs") or {}
+    context = CapabilityContext(
+        client_id=str(run.get("client_id") or ""),
+        user_id=payload.user_id,
     )
-    DEPS.agent_runs.update_agent_run(run_id=run_id, status="running")
+    try:
+        outputs = execute_capability(
+            deps=DEPS,
+            context=context,
+            capability_name=capability_name,
+            inputs=inputs,
+        )
+        executed = DEPS.agent_actions.update_agent_action_status(
+            action_id=action_id,
+            status="executed",
+            outputs=outputs,
+            outputs_hash=_hash_payload(outputs),
+        )
+        DEPS.agent_runs.update_agent_run(run_id=run_id, status="running")
+    except CapabilityExecutionError as exc:
+        executed = DEPS.agent_actions.update_agent_action_status(
+            action_id=action_id,
+            status="failed",
+            outputs={},
+            outputs_hash=_hash_payload({}),
+            error=str(exc),
+        )
+        DEPS.agent_runs.update_agent_run(
+            run_id=run_id,
+            status="failed",
+            error=str(exc),
+        )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        executed = DEPS.agent_actions.update_agent_action_status(
+            action_id=action_id,
+            status="failed",
+            outputs={},
+            outputs_hash=_hash_payload({}),
+            error=str(exc),
+        )
+        DEPS.agent_runs.update_agent_run(
+            run_id=run_id,
+            status="failed",
+            error=str(exc),
+        )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"run": DEPS.agent_runs.get_agent_run(run_id=run_id), "action": executed}
 
 

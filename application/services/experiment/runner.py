@@ -1081,6 +1081,42 @@ class ExperimentRunner:
             )
         return results
 
+    def freeze_retrieval_protocol(
+        self,
+        *,
+        experiment_id: str,
+        client_id: str,
+        user_id: Optional[str] = None,
+        retrieval_max_results: int = 5,
+    ) -> Dict[str, Any]:
+        experiment = self._deps.experiments.get_experiment(
+            experiment_id=experiment_id, client_id=client_id
+        )
+        if not experiment:
+            raise ValueError("experiment not found")
+        battery_id = experiment.get("battery_id")
+        if not battery_id:
+            raise ValueError("experiment missing battery_id")
+        queries = self._deps.query_batteries.list_queries(battery_id=battery_id)
+        enabled_queries = [q for q in queries if q.get("enabled")]
+        if not enabled_queries:
+            raise ValueError("battery has no enabled queries")
+
+        snapshot_version, candidates = self._ensure_frozen_retrieval_snapshots(
+            experiment=experiment,
+            enabled_queries=enabled_queries,
+            client_id=client_id,
+            user_id=user_id,
+            retrieval_max_results=retrieval_max_results,
+        )
+        return {
+            "experiment_id": experiment_id,
+            "snapshot_version": snapshot_version,
+            "query_count": len(enabled_queries),
+            "retrieval_candidates_by_query_count": len(candidates),
+            "status": "frozen",
+        }
+
 
 def _build_variant_product(
     *, product: Dict[str, Any], variant: Dict[str, Any]
