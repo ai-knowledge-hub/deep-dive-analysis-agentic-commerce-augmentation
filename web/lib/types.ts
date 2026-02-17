@@ -957,6 +957,68 @@ export type ValidationProviderRunResponse = {
   status?: string | null;
 };
 
+export type AgentRun = {
+  id: string;
+  client_id: string;
+  brand_id?: string | null;
+  product_id?: string | null;
+  experiment_id?: string | null;
+  objective?: Record<string, unknown>;
+  allowed_capabilities?: string[];
+  capability_versions?: Record<string, unknown>;
+  budgets?: Record<string, unknown>;
+  approval_policy?: Record<string, unknown>;
+  requires_approval?: boolean;
+  run_mode?: "plan_only" | "auto_execute_safe" | string;
+  state?: string | null;
+  status?: string | null;
+  error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_heartbeat_at?: string | null;
+};
+
+export type AgentAction = {
+  id: string;
+  agent_run_id: string;
+  sequence: number;
+  status: string;
+  capability_name: string;
+  capability_version?: string | null;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  inputs_hash?: string | null;
+  outputs_hash?: string | null;
+  rationale?: string | null;
+  confidence?: number | null;
+  snapshot_version?: number | null;
+  hypothesis_id?: string | null;
+  variant_id?: string | null;
+  validation_job_id?: string | null;
+  error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AgentRunCreateResponse = {
+  run: AgentRun;
+};
+
+export type AgentRunListResponse = {
+  runs: AgentRun[];
+};
+
+export type AgentRunDetailResponse = {
+  run: AgentRun;
+  actions: AgentAction[];
+};
+
+export type AgentRunControlResponse = {
+  run: AgentRun;
+  action?: AgentAction;
+  message?: string;
+};
+
 export type ValidationJobListResponse = {
   jobs: ValidationJob[];
 };

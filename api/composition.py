@@ -16,6 +16,8 @@ from pathlib import Path
 from application.ports.deps import AppDeps
 from infrastructure.alignment import goal_alignment_gateway
 from infrastructure.db import (
+    agent_actions as agent_actions_repo,
+    agent_runs as agent_runs_repo,
     clients as clients_repo,
     episodes as episodes_repo,
     experiments as experiments_repo,
@@ -99,6 +101,8 @@ def default_deps() -> AppDeps:
         loop_maintenance_runs=loop_maintenance_runs_repo,
         skills=skills_repo,
         llm_provider_configs=llm_provider_configs_repo,
+        agent_runs=agent_runs_repo,
+        agent_actions=agent_actions_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),

@@ -738,6 +738,108 @@ export async function publishCopyRevision(
   );
 }
 
+export async function createAgentRun(
+  payload: {
+    brand_id?: string | null;
+    product_id?: string | null;
+    experiment_id?: string | null;
+    objective?: Record<string, unknown>;
+    allowed_capabilities?: string[];
+    capability_versions?: Record<string, unknown>;
+    budgets?: Record<string, unknown>;
+    approval_policy?: Record<string, unknown>;
+    requires_approval?: boolean;
+    run_mode?: "plan_only" | "auto_execute_safe";
+    state?: string | null;
+    status?: string | null;
+  },
+  userId?: string | null,
+): Promise<import("./types").AgentRunCreateResponse> {
+  const clientId = getClientId();
+  return request<import("./types").AgentRunCreateResponse>("/agent-runs", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
+export async function listAgentRuns(
+  payload: {
+    experiment_id?: string | null;
+    product_id?: string | null;
+    status?: string | null;
+    limit?: number;
+  } = {},
+  userId?: string | null,
+): Promise<import("./types").AgentRunListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  if (payload.experiment_id) params.set("experiment_id", payload.experiment_id);
+  if (payload.product_id) params.set("product_id", payload.product_id);
+  if (payload.status) params.set("status", payload.status);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<import("./types").AgentRunListResponse>(
+    `/agent-runs?${params.toString()}`,
+  );
+}
+
+export async function getAgentRun(
+  runId: string,
+  payload: { limit?: number } = {},
+  userId?: string | null,
+): Promise<import("./types").AgentRunDetailResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<import("./types").AgentRunDetailResponse>(
+    `/agent-runs/${runId}${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function decideAgentAction(
+  actionId: string,
+  payload: { decision: "approve" | "reject" },
+  userId?: string | null,
+): Promise<{ action: import("./types").AgentAction }> {
+  const clientId = getClientId();
+  return request<{ action: import("./types").AgentAction }>(
+    `/agent-runs/actions/${actionId}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        decision: payload.decision,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function controlAgentRun(
+  runId: string,
+  action: "start" | "pause" | "cancel" | "step",
+  userId?: string | null,
+): Promise<import("./types").AgentRunControlResponse> {
+  const clientId = getClientId();
+  return request<import("./types").AgentRunControlResponse>(
+    `/agent-runs/${runId}/${action}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
+}
+
 export async function getHealthLLM(): Promise<HealthLLMResponse> {
   return request<HealthLLMResponse>("/health/llm");
 }
