@@ -140,6 +140,19 @@ export function Sidebar({
         </svg>
       ),
     },
+    {
+      href: "/agent-runs",
+      label: "Agent runs",
+      shortLabel: "AR",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 2a8 8 0 0 1 8 8v2a4 4 0 0 1-4 4h-1.1l-.9 3H10l-.9-3H8a4 4 0 0 1-4-4v-2a8 8 0 0 1 8-8zm0 2a6 6 0 0 0-6 6v2a2 2 0 0 0 2 2h2.6l.6 2h1.6l.6-2H16a2 2 0 0 0 2-2v-2a6 6 0 0 0-6-6zm-2.5 6a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
   ];
   const adminItems = isAdminMode
     ? [

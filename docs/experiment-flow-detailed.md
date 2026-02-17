@@ -82,6 +82,9 @@ Metrics include standard run KPIs plus protocol fields:
 - `snapshot_version`
 - `posterior` (when updated)
 - `decision_action`
+- `decision_policy_version`
+- `decision_inputs` (persisted for reproducibility)
+- `decision_outputs` (persisted for reproducibility, includes weights and promotion tier)
 
 ## 8) Validation and Unified Evidence
 
@@ -95,10 +98,26 @@ Experiment flow consumes validation summaries and uses them in closed-loop itera
 
 For hypothesis-linked candidate runs, posterior updates are computed and persisted.
 
-Decision action is derived from posterior:
-- `posterior >= 0.75` -> `promote_variant`
-- `0.45 <= posterior < 0.75` -> `iterate_variant`
-- `posterior < 0.45` -> `reject_hypothesis`
+Decision action is derived from a **versioned decision policy** that combines:
+- experiment outcomes (retrieval-backed deltas)
+- synthetic validation outcomes (validation jobs/results)
+- observed validation outcomes (manual observed logging)
+
+The policy persists its full inputs/outputs into metrics for auditability and reproducibility.
+
+Current policy shape (summary):
+- evidence is normalized into `effect ∈ [-1, +1]` and `reliability ∈ [0, 1]`
+- combined score uses reliability-adjusted contributions (`effect * sqrt(reliability)`)
+- action thresholds are applied on a normalized likelihood `[0, 1]`:
+  - `>= 0.75` -> `promote_variant`
+  - `>= 0.45` -> `iterate_variant`
+  - else -> `reject_hypothesis`
+- promotion is tiered:
+  - `lab` tier can proceed in loop
+  - `prod` tier requires minimum observed coverage
+
+Implementation note:
+- `decision_policy_version`, `decision_inputs`, and `decision_outputs` are persisted per metrics row.
 
 These actions are visible in metrics and support step-8 iteration.
 

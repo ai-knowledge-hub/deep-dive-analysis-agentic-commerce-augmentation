@@ -355,6 +355,26 @@ class LLMProviderConfigsStore(Protocol):
     def set_active_provider(self, **kwargs: Any) -> None: ...
 
 
+class AgentRunsStore(Protocol):
+    def create_agent_run(self, **kwargs: Any) -> dict: ...
+
+    def update_agent_run(self, **kwargs: Any) -> dict | None: ...
+
+    def get_agent_run(self, **kwargs: Any) -> dict | None: ...
+
+    def list_agent_runs(self, **kwargs: Any) -> list[dict]: ...
+
+
+class AgentActionsStore(Protocol):
+    def create_agent_action(self, **kwargs: Any) -> dict: ...
+
+    def update_agent_action_status(self, **kwargs: Any) -> dict | None: ...
+
+    def get_agent_action(self, **kwargs: Any) -> dict | None: ...
+
+    def list_agent_actions(self, **kwargs: Any) -> list[dict]: ...
+
+
 class SemanticMemory(Protocol):
     def get(self, key: str) -> list[str]: ...
 
@@ -401,6 +421,8 @@ class AppDeps:
     loop_maintenance_runs: LoopMaintenanceRunsStore
     skills: SkillsStore
     llm_provider_configs: LLMProviderConfigsStore
+    agent_runs: AgentRunsStore
+    agent_actions: AgentActionsStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

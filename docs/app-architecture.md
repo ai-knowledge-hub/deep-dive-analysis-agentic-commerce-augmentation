@@ -175,3 +175,9 @@ Loop maintenance:
 - native GA4 connector (current analytics ingestion is generic API-based)
 - confidence-scored simulation lesson promotion beyond current safeguards
 - full backend serverless hardening for Vercel Python runtime
+- **Agent operator mode** (governed orchestration layer):
+  - backend `AgentRuntime` that runs agent sessions as jobs (not UI-driven)
+  - capability registry + policy enforcer + audit log (`agent_actions`)
+  - version registry for capability/policy semantics (prompts, scoring, weights, provider configs)
+  - multi-agent role model (planner/variant/validation/policy) using shared capabilities
+  - reference: `docs/agentic-layer.md`

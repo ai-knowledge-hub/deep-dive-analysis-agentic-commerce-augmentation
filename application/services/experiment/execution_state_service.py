@@ -24,7 +24,9 @@ class ExperimentExecutionStateService:
         )
         enabled_queries = [item for item in queries if item.get("enabled")]
         variants = self._deps.experiments.list_variants(experiment_id=experiment_id)
-        runs = self._deps.experiment_runs.list_runs(experiment_id=experiment_id, limit=1000)
+        runs = self._deps.experiment_runs.list_runs(
+            experiment_id=experiment_id, limit=1000
+        )
         metrics = self._deps.experiment_runs.list_metrics(
             experiment_id=experiment_id, limit=1000
         )
@@ -109,12 +111,16 @@ class ExperimentExecutionStateService:
         hypotheses_count = (
             self._deps.experiment_hypotheses.count_hypotheses(
                 experiment_id=experiment.get("id"),
-                snapshot_version=current_snapshot_version if current_snapshot_version > 0 else None,
+                snapshot_version=current_snapshot_version
+                if current_snapshot_version > 0
+                else None,
             )
             if experiment.get("id")
             else 0
         )
-        hypotheses_ready = bool(hypothesis) or candidate_variant_exists or hypotheses_count > 0
+        hypotheses_ready = (
+            bool(hypothesis) or candidate_variant_exists or hypotheses_count > 0
+        )
 
         control_variant_ids = [
             item.get("id")
@@ -137,7 +143,8 @@ class ExperimentExecutionStateService:
         validation_completed = len(validations) > 0
 
         posterior_updated = any(
-            (metric.get("metrics") or {}).get("posterior") is not None for metric in metrics
+            (metric.get("metrics") or {}).get("posterior") is not None
+            for metric in metrics
         )
 
         return {

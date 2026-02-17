@@ -27,7 +27,7 @@ cp .env.example .env.local
 # Optional: VALIDATION_CALLBACK_SIGNING_SECRET=change-me
 
 # 2. Install dependencies
-uv sync
+uv sync --extra dev
 
 # 3. Start server (use uv to ensure the venv is active)
 uv run uvicorn api.main:app --reload --port 8000

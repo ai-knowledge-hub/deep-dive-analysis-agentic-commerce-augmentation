@@ -51,3 +51,6 @@ db/*.db-*
 db/*.sqlite
 db/*.sqlite-*
 tmp/
+
+# TypeScript incremental build artifacts (should not be tracked)
+web/tsconfig.tsbuildinfo

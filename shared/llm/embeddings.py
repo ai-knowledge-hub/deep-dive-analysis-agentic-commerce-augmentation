@@ -33,8 +33,9 @@ class EmbeddingConfig:
     # Gemini settings
     gemini_model: str = "text-embedding-004"
     gemini_api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY")
+        default_factory=lambda: (
+            os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        )
     )
     gemini_task_type: str = "SEMANTIC_SIMILARITY"
 
@@ -46,8 +47,9 @@ class EmbeddingConfig:
 
     # Behavior
     prefer_local: bool = field(
-        default_factory=lambda: os.getenv("EMBEDDING_PREFER_LOCAL", "false").lower()
-        == "true"
+        default_factory=lambda: (
+            os.getenv("EMBEDDING_PREFER_LOCAL", "false").lower() == "true"
+        )
     )
 
 

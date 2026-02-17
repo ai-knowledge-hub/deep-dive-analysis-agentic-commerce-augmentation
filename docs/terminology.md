@@ -280,6 +280,110 @@ infrastructure/db/
 
 ---
 
+## Agent Operator Mode
+
+**Definition**
+A planned operating mode where an automated agent can run the lab protocol (experiments/validation/learning loop) under strict constraints.
+
+Key idea:
+- agents have **plan autonomy** (they propose and queue actions),
+- the system retains **execution enforcement** (guardrails, budgets, and approval gates).
+
+**In Docs**
+`docs/agentic-layer.md`
+
+---
+
+## AgentRuntime
+
+**Definition**
+A backend orchestration boundary that runs agent sessions as jobs.
+
+An `agent_run` maintains:
+- current protocol stage/state
+- objective (what is being optimized)
+- tenant scope (client/brand/product/experiment)
+- allowed capabilities + pinned capability/policy versions
+
+It emits a sequence of `agent_actions` (proposed and executed).
+
+---
+
+## Capability (Registry)
+
+**Definition**
+A named, versioned unit of system functionality that can be requested by agents or humans.
+
+Examples:
+- `freeze_retrieval_protocol`
+- `run_control_baseline`
+- `seed_hypotheses`
+- `generate_variants`
+- `run_variant`
+- `request_synthetic_validation`
+- `review_validation_readiness`
+- `update_posterior_and_decisions`
+- `recommend_next_action`
+- `promote_variant_lab`
+- `promote_variant_prod`
+- `publish_copy_revision`
+
+**Capability Registry**
+A catalog that defines for each capability:
+- input/output schema
+- preconditions (policy checks)
+- side effects (which artifacts/tables it can write)
+
+Agents should request capabilities, not call raw API routes directly.
+
+---
+
+## Policy-as-Code (Enforcement)
+
+**Definition**
+Explicit system-side checks that enforce protocol correctness for both human and agent flows.
+
+Examples:
+- retrieval-backed runs require frozen snapshots (`snapshot_version`)
+- baseline-first gating (control must be scored before candidates)
+- spend/runs/query caps per cycle
+- approval gates for promotion/publish actions
+
+---
+
+## Agent Action (Audit Event)
+
+**Definition**
+An auditable event that records an agent request and its outcome.
+
+Typical fields:
+- `agent_run_id`, `agent_id`
+- `capability_name`, `capability_version`
+- `inputs_hash`, `outputs_hash`
+- scope anchors: `client_id`, `brand_id`, `product_id`, `experiment_id`
+- protocol anchors: `snapshot_version`, `hypothesis_id`, `variant_id`
+- `rationale`, `confidence`
+- status: `proposed | approved | executed | rejected | failed`
+
+---
+
+## Capability/Policy Versioning
+
+**Definition**
+Versioning that captures experiment semantics, not just code changes.
+
+Must cover:
+- prompts/prompt versions
+- scoring parameters
+- validation weighting thresholds
+- provider configs/modes
+
+Purpose:
+- keep results comparable over time
+- make agent decisions reproducible and defensible
+
+---
+
 ## UCP — Universal Commerce Protocol
 
 **Definition**

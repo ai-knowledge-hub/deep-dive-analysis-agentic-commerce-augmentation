@@ -734,7 +734,10 @@ def _fallback_cold_start_candidates(
     max_candidates: int,
 ) -> List[GeneratedVariantCandidate]:
     product_name = str(product.get("name") or "the product")
-    intents = [_normalize_context_phrase(value) for value in (summary.get("inferred_intents") or [])]
+    intents = [
+        _normalize_context_phrase(value)
+        for value in (summary.get("inferred_intents") or [])
+    ]
     intents = [value for value in intents if value]
     primary_intent = str(intents[0] if intents else "daily training performance")
     secondary_intent = str(
@@ -742,22 +745,33 @@ def _fallback_cold_start_candidates(
         if isinstance(intents, list) and len(intents) > 1
         else "reliable comfort and support"
     )
-    features = [_normalize_context_phrase(value) for value in (summary.get("top_features") or [])]
+    features = [
+        _normalize_context_phrase(value)
+        for value in (summary.get("top_features") or [])
+    ]
     features = [value for value in features if value]
-    use_cases = [_normalize_context_phrase(value) for value in (summary.get("top_use_cases") or [])]
+    use_cases = [
+        _normalize_context_phrase(value)
+        for value in (summary.get("top_use_cases") or [])
+    ]
     use_cases = [value for value in use_cases if value]
     audience_segments = [
         _normalize_context_phrase(value)
         for value in (summary.get("top_audience_segments") or [])
     ]
     audience_segments = [value for value in audience_segments if value]
-    goals = [_normalize_context_phrase(value) for value in (summary.get("top_user_goals") or [])]
+    goals = [
+        _normalize_context_phrase(value)
+        for value in (summary.get("top_user_goals") or [])
+    ]
     goals = [value for value in goals if value]
 
     feature_1 = features[0] if features else "responsive cushioning"
     feature_2 = features[1] if len(features) > 1 else "stable support"
     use_case_1 = use_cases[0] if use_cases else "daily miles and gym sessions"
-    audience_1 = audience_segments[0] if audience_segments else "performance-focused runners"
+    audience_1 = (
+        audience_segments[0] if audience_segments else "performance-focused runners"
+    )
     goal_1 = goals[0] if goals else "comfort across repeated training sessions"
 
     templates = [

@@ -15,6 +15,10 @@ This project is a multi-tenant agentic commerce system for:
 
 The core moat is not a single score. It is the **feedback loop** that continuously updates decisions using observed evidence.
 
+Planned extension:
+- **Agent operator mode** (a governed backend orchestration layer that can run the lab protocol under policy constraints).
+  See `docs/agentic-layer.md`.
+
 ---
 
 ## Product Positioning
@@ -86,6 +90,7 @@ Layer rule enforced by architecture checks:
 - Retrieval-backed frozen protocol snapshots (`snapshot_version`) for fair variant comparison.
 - Baseline-first gating for candidate runs in retrieval-backed mode.
 - Hypothesis persistence and linkage (`hypothesis_id`) across variants and runs.
+- Versioned decision policy inputs/outputs persisted per metrics row (`decision_policy_version`, `decision_inputs`, `decision_outputs`).
 - Variant generation paths for experiments:
   - manual variant authoring,
   - simulation revision prefill,
@@ -131,7 +136,7 @@ This separation keeps experiment UX focused on design/run/analyze while validati
 
 ```bash
 cp .env.example .env.local
-uv sync
+uv sync --extra dev
 uv run uvicorn api.main:app --reload --port 8000
 ```
 
@@ -225,8 +230,15 @@ Loop maintenance can run:
 
 ## Testing and Quality Gates
 
+Install dev tools first (includes `ruff`):
+
+```bash
+uv sync --extra dev
+```
+
 ```bash
 make lint
+make format
 make arch-check
 make test
 make web-lint
