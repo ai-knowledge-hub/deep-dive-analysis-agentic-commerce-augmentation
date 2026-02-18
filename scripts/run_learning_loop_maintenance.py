@@ -82,6 +82,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     os.environ.setdefault(
-        "DATABASE_PATH", os.getenv("DATABASE_PATH", "./db/discovery.db")
+        "DATABASE_PATH", os.getenv("DATABASE_PATH", "./tmp/local.db")
     )
     main()

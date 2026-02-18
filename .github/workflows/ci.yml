@@ -11,6 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Guard legacy DB paths
+        run: |
+          set -euo pipefail
+          if [ -d "db/migrations" ] || [ -f "db/schema.sql" ]; then
+            echo "Legacy DB artifacts detected under db/. Use shared/db/* as canonical source."
+            exit 1
+          fi
+          if grep -R -n --exclude-dir=.git --exclude-dir=.venv --include='*.py' --include='*.md' --include='*.yml' --include='*.yaml' --include='.env*' '\./db/discovery\.db' .; then
+            echo "Legacy DATABASE_PATH default './db/discovery.db' detected. Use './tmp/local.db'."
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
