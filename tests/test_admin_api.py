@@ -20,7 +20,7 @@ if "google" not in sys.modules:
 from shared.db.connection import init_db, set_database_path
 from api.main import app
 from shared.config.env import settings
-from infrastructure.db.users import ensure_user
+from infrastructure.db.search.users import ensure_user
 
 
 ADMIN_USER_ID = "admin-user"

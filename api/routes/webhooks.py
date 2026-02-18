@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
     Request = Any  # type: ignore
 
 from shared.config.env import settings
-from infrastructure.db import users as users_repo
+import infrastructure.db.search.users as users_repo
 
 
 def _raise_http(status_code: int, detail: str) -> None:

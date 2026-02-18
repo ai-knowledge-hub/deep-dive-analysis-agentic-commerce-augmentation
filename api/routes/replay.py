@@ -9,7 +9,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore
 
 from api.utils.tenancy import is_admin, require_client_id
-from infrastructure.db import replays as replays_repo
+import infrastructure.db.session.replays as replays_repo
 
 if APIRouter:
     router = APIRouter(prefix="/replay", tags=["replay"])

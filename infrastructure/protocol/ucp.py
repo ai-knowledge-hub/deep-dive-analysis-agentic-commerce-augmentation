@@ -7,7 +7,7 @@ from domain.protocol.types import (
     ProtocolReadinessIssue,
     StructuredQuery,
 )
-from infrastructure.db import clients as clients_repo
+import infrastructure.db.catalog.clients as clients_repo
 from infrastructure.protocol.ucp_profile import validate_ucp_profile
 
 

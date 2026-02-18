@@ -25,8 +25,8 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 from api.main import app
-from infrastructure.db import analytics_events as analytics_repo
-from infrastructure.db import clients as clients_repo
+import infrastructure.db.search.analytics_events as analytics_repo
+import infrastructure.db.catalog.clients as clients_repo
 from shared.db.connection import init_db, set_database_path
 
 

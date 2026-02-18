@@ -60,6 +60,7 @@ Notes:
 - `db-migrate` currently re-applies schema bootstrap (SQLite helper), not Alembic-style versioned migrations.
 - Use the same `DATABASE_PATH` for init/seed/run to keep tenant data consistent.
 - Canonical schema and migrations are under `shared/db/schema.sql` and `shared/db/migrations/*.sql`.
+- Runtime DB adapters are grouped under `infrastructure/db/{core,agent,experiment,validation,loop,catalog,session,search}`.
 
 ---
 

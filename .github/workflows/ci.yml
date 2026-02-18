@@ -22,6 +22,15 @@ jobs:
             echo "Legacy DATABASE_PATH default './db/discovery.db' detected. Use './tmp/local.db'."
             exit 1
           fi
+          if find infrastructure/db -maxdepth 1 -type f -name '*.py' ! -name '__init__.py' | grep -q .; then
+            echo "Flat DB adapter modules detected in infrastructure/db/. Use grouped packages (core/agent/experiment/validation/loop/catalog/session/search)."
+            find infrastructure/db -maxdepth 1 -type f -name '*.py' ! -name '__init__.py'
+            exit 1
+          fi
+          if grep -R -n --exclude-dir=.git --exclude-dir=.venv --include='*.py' -E 'from infrastructure\.db\.[a-z_]+[[:space:]]+import|import infrastructure\.db\.[a-z_]+([[:space:]]+as[[:space:]]+[A-Za-z_][A-Za-z0-9_]*)?[[:space:]]*$' .; then
+            echo "Legacy flat imports detected. Use grouped imports (e.g., infrastructure.db.experiment.experiment_runs)."
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

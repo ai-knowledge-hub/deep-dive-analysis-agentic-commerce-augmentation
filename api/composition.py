@@ -15,45 +15,43 @@ from pathlib import Path
 
 from application.ports.deps import AppDeps
 from infrastructure.alignment import goal_alignment_gateway
-from infrastructure.db import (
-    agent_actions as agent_actions_repo,
-    agent_runs as agent_runs_repo,
-    clients as clients_repo,
-    episodes as episodes_repo,
-    experiments as experiments_repo,
-    experiment_runs as experiment_runs_repo,
-    experiment_recommendations as experiment_recommendations_repo,
-    experiment_validations as experiment_validations_repo,
-    experiment_retrieval_snapshots as experiment_retrieval_snapshots_repo,
-    experiment_hypotheses as experiment_hypotheses_repo,
-    experiment_calibrations as experiment_calibrations_repo,
-    analytics_events as analytics_events_repo,
-    validation_jobs as validation_jobs_repo,
-    validation_results as validation_results_repo,
-    validation_callback_tokens as validation_callback_tokens_repo,
-    copy_revisions as copy_revisions_repo,
-    audience_archetypes as audience_archetypes_repo,
-    brand_beliefs as brand_beliefs_repo,
-    world_states as world_states_repo,
-    belief_revisions as belief_revisions_repo,
-    decision_events as decision_events_repo,
-    memory_artifacts as memory_artifacts_repo,
-    calibration_profiles as calibration_profiles_repo,
-    loop_maintenance_runs as loop_maintenance_runs_repo,
-    llm_provider_configs as llm_provider_configs_repo,
-    goals as goals_repo,
-    skills as skills_repo,
-    platform_profiles as platform_profiles_repo,
-    query_batteries as query_batteries_repo,
-    replays as replays_repo,
-    recommendations as recommendations_repo,
-    sessions as sessions_repo,
-    simulation_runs as simulation_runs_repo,
-    turns as turns_repo,
-    users as users_repo,
-)
-from infrastructure.db.connection import init_db, set_database_path
-from infrastructure.db.semantic import DEFAULT_CLIENT_ID, DEFAULT_USER_ID
+import infrastructure.db.agent.agent_actions as agent_actions_repo
+import infrastructure.db.agent.agent_runs as agent_runs_repo
+import infrastructure.db.catalog.audience_archetypes as audience_archetypes_repo
+import infrastructure.db.catalog.brand_beliefs as brand_beliefs_repo
+import infrastructure.db.catalog.clients as clients_repo
+import infrastructure.db.catalog.copy_revisions as copy_revisions_repo
+import infrastructure.db.catalog.llm_provider_configs as llm_provider_configs_repo
+import infrastructure.db.catalog.platform_profiles as platform_profiles_repo
+import infrastructure.db.experiment.experiment_calibrations as experiment_calibrations_repo
+import infrastructure.db.experiment.experiment_hypotheses as experiment_hypotheses_repo
+import infrastructure.db.experiment.experiment_recommendations as experiment_recommendations_repo
+import infrastructure.db.experiment.experiment_retrieval_snapshots as experiment_retrieval_snapshots_repo
+import infrastructure.db.experiment.experiment_runs as experiment_runs_repo
+import infrastructure.db.experiment.experiment_validations as experiment_validations_repo
+import infrastructure.db.experiment.experiments as experiments_repo
+import infrastructure.db.loop.belief_revisions as belief_revisions_repo
+import infrastructure.db.loop.calibration_profiles as calibration_profiles_repo
+import infrastructure.db.loop.decision_events as decision_events_repo
+import infrastructure.db.loop.loop_maintenance_runs as loop_maintenance_runs_repo
+import infrastructure.db.loop.memory_artifacts as memory_artifacts_repo
+import infrastructure.db.loop.world_states as world_states_repo
+import infrastructure.db.search.analytics_events as analytics_events_repo
+import infrastructure.db.search.query_batteries as query_batteries_repo
+import infrastructure.db.search.simulation_runs as simulation_runs_repo
+import infrastructure.db.search.skills as skills_repo
+import infrastructure.db.search.users as users_repo
+import infrastructure.db.session.episodes as episodes_repo
+import infrastructure.db.session.goals as goals_repo
+import infrastructure.db.session.recommendations as recommendations_repo
+import infrastructure.db.session.replays as replays_repo
+import infrastructure.db.session.sessions as sessions_repo
+import infrastructure.db.session.turns as turns_repo
+import infrastructure.db.validation.validation_callback_tokens as validation_callback_tokens_repo
+import infrastructure.db.validation.validation_jobs as validation_jobs_repo
+import infrastructure.db.validation.validation_results as validation_results_repo
+from infrastructure.db.core.connection import init_db, set_database_path
+from infrastructure.db.search.semantic import DEFAULT_CLIENT_ID, DEFAULT_USER_ID
 from infrastructure.llm.gateway import embed, embedding_available, generate
 from infrastructure.llm.intent_classifier import classify_intent
 from infrastructure.llm.prompts import build_optimization_prompt

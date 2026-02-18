@@ -1,0 +1,1 @@
+"""validation DB adapters."""
