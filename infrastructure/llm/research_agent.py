@@ -16,7 +16,7 @@ import urllib.parse
 import re
 
 from domain.conversation import research as research_domain
-from infrastructure.db import replays as replays_repo
+import infrastructure.db.session.replays as replays_repo
 from infrastructure.llm.gateway import generate as generate
 from infrastructure.llm.gateway import generate_with_tools as generate_with_tools
 from infrastructure.agents.agent_loop import AgentLoop

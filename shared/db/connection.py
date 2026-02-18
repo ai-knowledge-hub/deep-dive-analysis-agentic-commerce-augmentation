@@ -13,7 +13,7 @@ from typing import Callable, Iterator, Optional
 from shared.db.migrations import apply_migrations
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
-DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "./db/discovery.db")).resolve()
+DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "./tmp/local.db")).resolve()
 
 _lock = Lock()
 _thread_local = local()

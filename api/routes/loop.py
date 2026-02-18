@@ -10,7 +10,7 @@ from api.composition import default_deps
 from api.utils.tenancy import require_client_id
 from application.services.loop.policy_service import PolicyService
 from application.services.loop.state_service import StateService
-from infrastructure.db.connection import get_connection
+from infrastructure.db.core.connection import get_connection
 
 router = APIRouter(prefix="/loop", tags=["loop"])
 

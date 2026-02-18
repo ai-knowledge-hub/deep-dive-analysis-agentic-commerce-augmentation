@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from infrastructure.memory.semantic_memory import SemanticMemory
 from application.services.conversation.session_manager import SessionManager
-from infrastructure.db import goals as goals_repo
+import infrastructure.db.session.goals as goals_repo
 from domain.memory.working import WorkingMemory
 from api.composition import default_deps
 

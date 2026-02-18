@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from domain.protocol.types import ProtocolReadinessIssue
-from infrastructure.db.platform_profiles import (
+from infrastructure.db.catalog.platform_profiles import (
     DEFAULT_PROFILE_ID,
     ensure_platform_profile,
     get_platform_profile,

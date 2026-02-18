@@ -26,7 +26,7 @@ if "google" not in sys.modules:
 
 from shared.db.connection import init_db, set_database_path
 from api.main import app
-from infrastructure.db import clients as clients_repo
+import infrastructure.db.catalog.clients as clients_repo
 
 CLIENT_ID = "test-client"
 

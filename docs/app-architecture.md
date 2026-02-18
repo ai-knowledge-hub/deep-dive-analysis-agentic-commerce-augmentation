@@ -42,7 +42,7 @@ Application Services
             │
             ▼
 Infrastructure
-  ├─ SQLite repositories
+  ├─ SQLite repositories (`infrastructure/db/*`)
   ├─ LLM provider adapters (BYOK)
   ├─ protocol adapters (UCP/ACP readiness)
   └─ skill + config persistence
@@ -92,6 +92,18 @@ Admin onboarding is section-based (collapsible panels):
 
 ### Architecture guardrail
 - `make arch-check` enforces that application services do not import infrastructure directly.
+
+### DB adapter layout (current)
+- DB adapters are grouped by domain under `infrastructure/db/`:
+  - `core/` (connection, json, tenancy)
+  - `agent/`
+  - `experiment/`
+  - `validation/`
+  - `loop/`
+  - `catalog/`
+  - `session/`
+  - `search/`
+- Flat adapter modules under `infrastructure/db/*.py` (except `__init__.py`) were removed.
 
 ---
 

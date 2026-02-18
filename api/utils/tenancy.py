@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from shared.config.env import settings
 from shared.db.connection import get_connection
-from infrastructure.db.tenancy import DEFAULT_CLIENT_ID
+from infrastructure.db.core.tenancy import DEFAULT_CLIENT_ID
 
 
 def _admin_ids() -> set[str]:

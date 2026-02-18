@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from infrastructure.db.connection import init_db, set_database_path
+from infrastructure.db.core.connection import init_db, set_database_path
 from infrastructure.memory.semantic_memory import SemanticMemory
 from infrastructure.mcp.tools import image_analyze, memory_write, web_fetch
 

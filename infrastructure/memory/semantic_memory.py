@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Sequence
 
-from infrastructure.db.connection import init_db, set_database_path
-from infrastructure.db import semantic as semantic_store
+from infrastructure.db.core.connection import init_db, set_database_path
+import infrastructure.db.search.semantic as semantic_store
 
 
 class SemanticMemory:

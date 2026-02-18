@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from infrastructure.db.connection import init_db, set_database_path
-from infrastructure.db.embeddings import (
+from infrastructure.db.core.connection import init_db, set_database_path
+from infrastructure.db.search.embeddings import (
     get_intent_embedding,
     get_product_embedding,
     upsert_intent_embedding,

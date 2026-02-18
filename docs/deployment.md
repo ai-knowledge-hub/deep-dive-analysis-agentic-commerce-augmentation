@@ -5,7 +5,7 @@
 | Environment | LLM Provider | DB Path | Notes |
 |-------------|--------------|---------|-------|
 | **Local** | `openrouter` | `./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
-| **Dev / Preview** | `gemini` | `./db/discovery.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
+| **Dev / Preview** | `gemini` | `./tmp/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
 | **Production** | `gemini` | `/var/lib/app/prod.db` | Full telemetry, rate-limit logging. |
 
 Copy the relevant section from `.env.example` into `.env.local` (local) or configure as platform secrets (dev/prod).
@@ -59,6 +59,8 @@ make seed-demo
 Notes:
 - `db-migrate` currently re-applies schema bootstrap (SQLite helper), not Alembic-style versioned migrations.
 - Use the same `DATABASE_PATH` for init/seed/run to keep tenant data consistent.
+- Canonical schema and migrations are under `shared/db/schema.sql` and `shared/db/migrations/*.sql`.
+- Runtime DB adapters are grouped under `infrastructure/db/{core,agent,experiment,validation,loop,catalog,session,search}`.
 
 ---
 

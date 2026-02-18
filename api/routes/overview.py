@@ -5,14 +5,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter
 
 from api.utils.tenancy import require_client_id
-from infrastructure.db.connection import get_connection
-from infrastructure.db.json import from_json
-from infrastructure.db.query_batteries import list_batteries
+from infrastructure.db.core.connection import get_connection
+from infrastructure.db.core.json import from_json
+from infrastructure.db.search.query_batteries import list_batteries
 from application.services.query_battery.service import QueryBatteryService
-from infrastructure.db import query_batteries as query_batteries_repo
-from infrastructure.db.experiment_validations import accuracy_summary
-from infrastructure.db.simulation_runs import list_lessons
-from infrastructure.db.experiment_recommendations import list_recommendations
+import infrastructure.db.search.query_batteries as query_batteries_repo
+from infrastructure.db.experiment.experiment_validations import accuracy_summary
+from infrastructure.db.search.simulation_runs import list_lessons
+from infrastructure.db.experiment.experiment_recommendations import list_recommendations
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 

@@ -9,7 +9,7 @@ from domain.protocol.types import (
     ProtocolReadinessIssue,
     StructuredQuery,
 )
-from infrastructure.db import clients as clients_repo
+import infrastructure.db.catalog.clients as clients_repo
 from shared.config.env import settings
 
 

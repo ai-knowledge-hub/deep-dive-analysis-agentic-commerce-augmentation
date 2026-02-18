@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from shared.replay.versions import default_versions
-from infrastructure.db import replays as replays_repo
+import infrastructure.db.session.replays as replays_repo
 from infrastructure.llm.gateway import generate
 from infrastructure.llm.hybrid_intent_classifier import HybridIntentClassifier
 from infrastructure.llm.intent_taxonomy import INTENT_TAXONOMY

@@ -23,7 +23,7 @@ from api.main import app
 from application.services.validation_service import ValidationService
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
-from infrastructure.db import clients as clients_repo
+import infrastructure.db.catalog.clients as clients_repo
 
 
 @pytest.fixture

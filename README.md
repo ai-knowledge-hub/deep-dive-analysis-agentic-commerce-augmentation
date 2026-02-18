@@ -159,6 +159,10 @@ Open:
 
 Use one DB file for migrations + seeds + backend runtime.
 
+Canonical DB bootstrap/migration sources:
+- schema: `shared/db/schema.sql`
+- migrations: `shared/db/migrations/*.sql`
+
 ```bash
 rm -f ./tmp/local.db
 DATABASE_PATH=./tmp/local.db make db-init
