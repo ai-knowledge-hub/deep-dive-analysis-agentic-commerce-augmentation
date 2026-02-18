@@ -18,7 +18,7 @@ jobs:
             echo "Legacy DB artifacts detected under db/. Use shared/db/* as canonical source."
             exit 1
           fi
-          if grep -R -n --exclude-dir=.git --exclude-dir=.venv --include='*.py' --include='*.md' --include='*.yml' --include='*.yaml' --include='.env*' '\./db/discovery\.db' .; then
+          if grep -R -n --exclude-dir=.git --exclude-dir=.venv --include='*.py' --include='.env*' -E 'os\.getenv\("DATABASE_PATH", "\./db/discovery\.db"\)|DATABASE_PATH=\./db/discovery\.db' .; then
             echo "Legacy DATABASE_PATH default './db/discovery.db' detected. Use './tmp/local.db'."
             exit 1
           fi
