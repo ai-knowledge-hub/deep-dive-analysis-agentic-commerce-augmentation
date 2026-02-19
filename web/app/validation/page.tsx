@@ -42,6 +42,7 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { ValidationFlowHeader } from "../../components/validation/ValidationFlowHeader";
 
 type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
 type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
@@ -939,100 +940,29 @@ export default function ValidationPage() {
             onBack={() => router.push("/experiments")}
             backLabel="Back to experiments"
           />
-          <section className="panel__card panel__card--primary">
-            <div className="flow-rail">
-              <div className="flow-rail__header">
-                <h4>Validation Flow</h4>
-                <span className="panel__muted">Current step: {validationCurrentStep} / 5</span>
-              </div>
-              <div className="flow-rail__steps">
-                {validationFlowSteps.map((step) => (
-                  <div
-                    key={step.id}
-                    className={`flow-rail__step ${
-                      step.done ? "is-done" : step.id === validationCurrentStep ? "is-current" : ""
-                    }`}
-                  >
-                    <span className="flow-rail__index">{step.id}</span>
-                    <span className="flow-rail__label">{step.label}</span>
-                    <span className="flow-rail__status">
-                      {step.done
-                        ? "Done"
-                        : step.id === validationCurrentStep
-                          ? "Current"
-                          : "Pending"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="panel__separator" />
-            <section className="panel__notice panel__notice--info flow-next-action">
-              <strong>Next recommended action:</strong> {validationNextAction.label}
-              <p className="panel__muted">{validationNextAction.helper}</p>
-              <div className="panel__actions panel__actions--priority">
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleRunValidationNextAction}
-                >
-                  {validationNextAction.label}
-                </button>
-                <button
-                  type="button"
-                  className="panel__action panel__action--ghost"
-                  onClick={() =>
-                    router.push(
-                      manualExperimentId
-                        ? `/experiments?experiment_id=${manualExperimentId}`
-                        : "/experiments",
-                    )
-                  }
-                >
-                  Open Experiments
-                </button>
-              </div>
-            </section>
-            <div className="panel__separator" />
-            <section className="panel__notice panel__notice--info outcome-snapshot">
-              <div className="panel__meta">
-                <strong>Validation outcome snapshot</strong>
-                <span className="panel__badge panel__badge--secondary">Unified view</span>
-              </div>
-              <div className="outcome-snapshot__grid">
-                <div className="outcome-snapshot__item">
-                  <span className="outcome-snapshot__label">Synthetic winner</span>
-                  <span className="outcome-snapshot__value">
-                    {winnerContext?.winnerLabel ?? result?.winner_id ?? "No result yet"}
-                  </span>
-                  <span className="panel__muted">
-                    Score: {renderMetricValue(result?.score)} · Evidence:{" "}
-                    {renderMetricValue(result?.evidence_strength)}
-                  </span>
-                </div>
-                <div className="outcome-snapshot__item">
-                  <span className="outcome-snapshot__label">Observed signals</span>
-                  <span className="outcome-snapshot__value">
-                    {observedLogged} logged · {observedVerified} verified
-                  </span>
-                  <span className="panel__muted">
-                    Accuracy:{" "}
-                    {observedAccuracy !== null ? `${Math.round(observedAccuracy * 100)}%` : "—"}
-                  </span>
-                </div>
-                <div className="outcome-snapshot__item">
-                  <span className="outcome-snapshot__label">Readiness</span>
-                  <span className="outcome-snapshot__value">
-                    {observedUnlockReady ? "Ready for next variant" : "Needs more validation"}
-                  </span>
-                  <span className="panel__muted">
-                    Synthetic: {result ? "available" : "pending"} · Observed:{" "}
-                    {observedLogged > 0 ? "available" : "pending"}
-                  </span>
-                </div>
-              </div>
-            </section>
-          </section>
+          <ValidationFlowHeader
+            currentStep={validationCurrentStep}
+            steps={validationFlowSteps}
+            nextAction={validationNextAction}
+            winnerLabel={winnerContext?.winnerLabel ?? result?.winner_id ?? "No result yet"}
+            scoreText={renderMetricValue(result?.score)}
+            evidenceText={renderMetricValue(result?.evidence_strength)}
+            observedLogged={observedLogged}
+            observedVerified={observedVerified}
+            observedAccuracyText={
+              observedAccuracy !== null ? `${Math.round(observedAccuracy * 100)}%` : "—"
+            }
+            observedUnlockReady={observedUnlockReady}
+            hasSyntheticResult={Boolean(result)}
+            onRunNextAction={handleRunValidationNextAction}
+            onOpenExperiments={() =>
+              router.push(
+                manualExperimentId
+                  ? `/experiments?experiment_id=${manualExperimentId}`
+                  : "/experiments",
+              )
+            }
+          />
           <section className="panel__card panel__card--secondary panel__card--compact">
             <div className="panel__subheading">Step 1 · Configure provider defaults</div>
             <p className="panel__step-helper">

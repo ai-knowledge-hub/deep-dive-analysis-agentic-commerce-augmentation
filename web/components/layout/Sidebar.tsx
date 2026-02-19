@@ -146,9 +146,53 @@ export function Sidebar({
       shortLabel: "AR",
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect
+            x="4.5"
+            y="6.5"
+            width="15"
+            height="12"
+            rx="3"
+            ry="3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.3"
+          />
+          <line
+            x1="12"
+            y1="6.5"
+            x2="12"
+            y2="3.8"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+          />
+          <circle cx="12" cy="2.6" r="1.25" fill="currentColor" />
+          <line
+            x1="4.5"
+            y1="11.5"
+            x2="3"
+            y2="11.5"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+          />
+          <line
+            x1="19.5"
+            y1="11.5"
+            x2="21"
+            y2="11.5"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+          />
+          <circle cx="9.1" cy="11.2" r="1.3" fill="currentColor" />
+          <circle cx="14.9" cy="11.2" r="1.3" fill="currentColor" />
           <path
-            d="M12 2a8 8 0 0 1 8 8v2a4 4 0 0 1-4 4h-1.1l-.9 3H10l-.9-3H8a4 4 0 0 1-4-4v-2a8 8 0 0 1 8-8zm0 2a6 6 0 0 0-6 6v2a2 2 0 0 0 2 2h2.6l.6 2h1.6l.6-2H16a2 2 0 0 0 2-2v-2a6 6 0 0 0-6-6zm-2.5 6a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"
-            fill="currentColor"
+            d="M8.8 14.8c.9.9 2 1.3 3.2 1.3s2.3-.5 3.2-1.3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
           />
         </svg>
       ),

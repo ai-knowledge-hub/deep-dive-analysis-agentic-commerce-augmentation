@@ -140,6 +140,8 @@ uv sync --extra dev
 uv run uvicorn api.main:app --reload --port 8000
 ```
 
+Note: `make lint` and `make format` require dev dependencies (`uv sync --extra dev`) because `ruff` is installed via the `dev` extra.
+
 ### Frontend
 
 ```bash
@@ -239,6 +241,8 @@ Install dev tools first (includes `ruff`):
 ```bash
 uv sync --extra dev
 ```
+
+If you see `No module named ruff` when running `make lint` or `make format`, run `uv sync --extra dev` again in the repo root.
 
 ```bash
 make lint

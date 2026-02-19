@@ -40,10 +40,13 @@ web-test:
 
 .PHONY: lint
 lint:
-	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m ruff check . --force-exclude; \
+	@if [ -x ./.venv/bin/ruff ]; then \
+		./.venv/bin/ruff check . --force-exclude; \
+	elif command -v ruff >/dev/null 2>&1; then \
+		ruff check . --force-exclude; \
 	else \
-		$(PYTHON) -m ruff check . --force-exclude; \
+		echo "ruff is not installed. Run: uv sync --extra dev (or pip install -r requirements.txt)"; \
+		exit 1; \
 	fi
 
 .PHONY: arch-check
@@ -54,12 +57,23 @@ arch-check:
 		$(PYTHON) -m scripts.arch_check; \
 	fi
 
+.PHONY: bloat-check
+bloat-check:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.bloat_check; \
+	else \
+		$(PYTHON) -m scripts.bloat_check; \
+	fi
+
 .PHONY: format
 format:
-	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m ruff format . --force-exclude; \
+	@if [ -x ./.venv/bin/ruff ]; then \
+		./.venv/bin/ruff format . --force-exclude; \
+	elif command -v ruff >/dev/null 2>&1; then \
+		ruff format . --force-exclude; \
 	else \
-		$(PYTHON) -m ruff format . --force-exclude; \
+		echo "ruff is not installed. Run: uv sync --extra dev (or pip install -r requirements.txt)"; \
+		exit 1; \
 	fi
 
 .PHONY: run-local

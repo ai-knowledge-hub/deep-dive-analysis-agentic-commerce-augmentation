@@ -72,8 +72,18 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
-import { MLPrediction } from "../../components/experiments/MLPrediction";
-import { ThompsonSamplingGauge } from "../../components/experiments/ThompsonSamplingGauge";
+import { ExperimentOutcomeReview } from "../../components/experiments/ExperimentOutcomeReview";
+import { ExperimentRunSettings } from "../../components/experiments/ExperimentRunSettings";
+import { ExperimentHistoryPanel } from "../../components/experiments/ExperimentHistoryPanel";
+import { ExperimentVariantRunItem } from "../../components/experiments/ExperimentVariantRunItem";
+import { NextTestNotice } from "../../components/experiments/NextTestNotice";
+import { OutcomeSnapshot } from "../../components/experiments/OutcomeSnapshot";
+import { VariantCreationPanel } from "../../components/experiments/VariantCreationPanel";
+import {
+  BatteryGenerationReportNotice,
+  type BatteryGenerationReport,
+} from "../../components/experiments/BatteryGenerationReportNotice";
+import { FlowStatusPanel } from "../../components/experiments/FlowStatusPanel";
 import { buildTenantStorageKey } from "../../lib/storage";
 
 export default function ExperimentsPage() {
@@ -209,24 +219,8 @@ export default function ExperimentsPage() {
   const [savingExperimentId, setSavingExperimentId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
-  const [batteryGenerationReport, setBatteryGenerationReport] = useState<{
-    accepted_count: number;
-    rejected_count: number;
-    generated_count?: number;
-    generated_preview?: { query_text: string; query_type?: string | null }[];
-    required_category?: string | null;
-    category_confidence?: number | null;
-    category_candidates?: { category: string; score: number }[];
-    clarification_required?: boolean;
-    clarification_prompt?: string | null;
-    regeneration_count?: number;
-    acceptance_rate?: number;
-    rejected?: { query_text: string; reason: string }[];
-    audience_segments_generated?: number;
-    audience_segment_labels?: string[];
-    audience_segments_source?: "behavioral" | "canonical_fallback";
-    audience_segments_fallback_reason?: string | null;
-  } | null>(null);
+  const [batteryGenerationReport, setBatteryGenerationReport] =
+    useState<BatteryGenerationReport | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
   const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [scheduleForm, setScheduleForm] = useState({
@@ -2650,138 +2644,29 @@ export default function ExperimentsPage() {
                 </div>
               </section>
             ) : null}
-            <div className="flow-rail">
-              <div className="flow-rail__header">
-                <h4>{labMode === "lab" ? "Lab Flow" : "Experiment Flow"}</h4>
-                <span className="panel__muted">Current step: {currentFlowStep} / 8</span>
-              </div>
-              <div className="flow-rail__steps">
-                {activeFlowSteps.map((step) => (
-                  <div
-                    key={step.id}
-                    className={`flow-rail__step ${
-                      step.done ? "is-done" : step.id === currentFlowStep ? "is-current" : ""
-                    }`}
-                  >
-                    <span className="flow-rail__index">{step.id}</span>
-                    <span className="flow-rail__label">{step.label}</span>
-                    <span className="flow-rail__status">
-                      {step.done ? "Done" : step.id === currentFlowStep ? "Current" : "Pending"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="lab-loop__steps">
-              {labLoopSteps.map((step) => (
-                <div key={step.label} className="lab-loop__step">
-                  <span className={`lab-loop__status lab-loop__status--${step.tone}`}>
-                    {step.status}
-                  </span>
-                  <span className="lab-loop__label">{step.label}</span>
-                </div>
-              ))}
-            </div>
-            <div className="lab-loop__summary">
-              <div className="lab-loop__summary-card">
-                <div className="lab-loop__summary-title">Last run</div>
-                <div className="lab-loop__summary-value">
-                  {lastRun?.created_at
-                    ? new Date(lastRun.created_at).toLocaleString()
-                    : "No runs yet"}
-                </div>
-                <div className="lab-loop__summary-meta">
-                  {lastRun?.variant_id
-                    ? `Variant: ${lastRun.variant_id}`
-                    : "Run a variant to start"}
-                </div>
-              </div>
-              <div className="lab-loop__summary-card">
-                <div className="lab-loop__summary-title">Last belief</div>
-                <div className="lab-loop__summary-value">
-                  {latestBelief?.created_at
-                    ? new Date(latestBelief.created_at).toLocaleString()
-                    : "No beliefs yet"}
-                </div>
-                <button
-                  type="button"
-                  className="lab-loop__summary-meta lab-loop__summary-link"
-                  onClick={handleOpenBeliefsTimeline}
-                  disabled={!latestBelief}
-                >
-                  {latestBeliefSummary}
-                </button>
-                <div className="lab-loop__summary-actions">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={handleOpenBeliefsTimeline}
-                    disabled={!latestBelief}
-                  >
-                    View timeline
-                  </button>
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={handleUseLatestBelief}
-                    disabled={!latestBelief}
-                  >
-                    Use latest belief
-                  </button>
-                </div>
-              </div>
-            </div>
-            <section className="panel__notice panel__notice--info flow-next-action">
-              <strong>Next recommended action:</strong> {nextFlowAction.label}
-              <p className="panel__muted">{nextFlowAction.helper}</p>
-              <div className="panel__actions panel__actions--priority">
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleRunNextFlowAction}
-                >
-                  {nextFlowAction.label}
-                </button>
-                <button
-                  type="button"
-                  className="panel__action panel__action--ghost"
-                  onClick={() =>
-                    router.push(
-                      selectedExperimentId
-                        ? `/validation?experiment_id=${selectedExperimentId}`
-                        : "/validation",
-                    )
-                  }
-                >
-                  Open Validation
-                </button>
-              </div>
-            </section>
-            {labMode === "lab" && runs.length > 0 && !hasValidationSignals ? (
-              <section className="panel__notice panel__notice--warning lab-checkpoint">
-                <strong>Validation checkpoint (Step 7):</strong> Runs exist, but no
-                validation evidence is logged yet.
-                <p className="panel__muted">
-                  Complete synthetic and/or observed validation before trusting automated
-                  iteration decisions.
-                </p>
-                <div className="panel__actions panel__actions--priority">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--prominent"
-                    onClick={() =>
-                      router.push(
-                        selectedExperimentId
-                          ? `/validation?experiment_id=${selectedExperimentId}`
-                          : "/validation",
-                      )
-                    }
-                  >
-                    Go to Validation (Step 7)
-                  </button>
-                </div>
-              </section>
-            ) : null}
+            <FlowStatusPanel
+              labMode={labMode}
+              currentFlowStep={currentFlowStep}
+              activeFlowSteps={activeFlowSteps}
+              labLoopSteps={labLoopSteps}
+              lastRun={lastRun}
+              latestBelief={latestBelief}
+              latestBeliefSummary={latestBeliefSummary}
+              nextFlowAction={nextFlowAction}
+              showValidationCheckpoint={
+                labMode === "lab" && runs.length > 0 && !hasValidationSignals
+              }
+              onOpenBeliefsTimeline={handleOpenBeliefsTimeline}
+              onUseLatestBelief={handleUseLatestBelief}
+              onRunNextFlowAction={handleRunNextFlowAction}
+              onOpenValidation={() =>
+                router.push(
+                  selectedExperimentId
+                    ? `/validation?experiment_id=${selectedExperimentId}`
+                    : "/validation",
+                )
+              }
+            />
           </section>
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
@@ -3160,108 +3045,10 @@ export default function ExperimentsPage() {
                   )}
                 </details>
                 {batteryGenerationReport ? (
-                  <div className="panel__notice panel__notice--info">
-                    {typeof batteryGenerationReport.generated_count === "number" ? (
-                      <>
-                        Generated: {batteryGenerationReport.generated_count} ·{" "}
-                      </>
-                    ) : null}
-                    Accepted: {batteryGenerationReport.accepted_count} · Rejected:{" "}
-                    {batteryGenerationReport.rejected_count}
-                    {typeof batteryGenerationReport.acceptance_rate === "number" ? (
-                      <>
-                        {" "}
-                        · Acceptance rate:{" "}
-                        {Math.round(batteryGenerationReport.acceptance_rate * 100)}%
-                      </>
-                    ) : null}
-                    {typeof batteryGenerationReport.regeneration_count === "number" ? (
-                      <> · Regenerations: {batteryGenerationReport.regeneration_count}</>
-                    ) : null}
-                    {typeof batteryGenerationReport.audience_segments_generated ===
-                    "number" ? (
-                      <>
-                        {" "}
-                        · Audience segments:{" "}
-                        {batteryGenerationReport.audience_segments_generated}
-                      </>
-                    ) : null}
-                    {batteryGenerationReport.required_category ? (
-                      <>
-                        {" "}
-                        · Required category: {batteryGenerationReport.required_category}
-                      </>
-                    ) : null}
-                    {typeof batteryGenerationReport.category_confidence === "number" ? (
-                      <>
-                        {" "}
-                        · Category confidence:{" "}
-                        {Math.round(batteryGenerationReport.category_confidence * 100)}%
-                      </>
-                    ) : null}
-                    {batteryGenerationReport.clarification_required &&
-                    batteryGenerationReport.clarification_prompt ? (
-                      <>
-                        <p className="panel__error">
-                          {batteryGenerationReport.clarification_prompt}
-                        </p>
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => router.push("/admin")}
-                        >
-                          Open Admin to set canonical spec
-                        </button>
-                      </>
-                    ) : null}
-                    {batteryGenerationReport.audience_segment_labels &&
-                    batteryGenerationReport.audience_segment_labels.length > 0 ? (
-                      <>
-                        <p className="panel__muted">Behavioral segments applied</p>
-                        <ul className="panel__list">
-                          {batteryGenerationReport.audience_segment_labels
-                            .slice(0, 4)
-                            .map((label) => (
-                              <li key={label}>{label}</li>
-                            ))}
-                        </ul>
-                      </>
-                    ) : null}
-                    {batteryGenerationReport.audience_segments_source ===
-                      "canonical_fallback" &&
-                    batteryGenerationReport.audience_segments_fallback_reason ? (
-                      <p className="panel__muted">
-                        Fallback:{" "}
-                        {batteryGenerationReport.audience_segments_fallback_reason}
-                      </p>
-                    ) : null}
-                    {batteryGenerationReport.rejected &&
-                    batteryGenerationReport.rejected.length > 0 ? (
-                      <ul className="panel__list">
-                        {batteryGenerationReport.rejected.slice(0, 5).map((item) => (
-                          <li key={`${item.query_text}-${item.reason}`}>
-                            <span className="panel__muted">{item.reason}:</span>{" "}
-                            {item.query_text}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {batteryGenerationReport.generated_preview &&
-                    batteryGenerationReport.generated_preview.length > 0 ? (
-                      <>
-                        <p className="panel__muted">Pre-validation generated sample</p>
-                        <ul className="panel__list">
-                          {batteryGenerationReport.generated_preview
-                            .slice(0, 5)
-                            .map((item, index) => (
-                              <li key={`${item.query_text}-${index}`}>
-                                {item.query_text}
-                              </li>
-                            ))}
-                        </ul>
-                      </>
-                    ) : null}
-                  </div>
+                  <BatteryGenerationReportNotice
+                    report={batteryGenerationReport}
+                    onOpenAdmin={() => router.push("/admin")}
+                  />
                 ) : null}
                 {selectedBattery ? (
                   <details
@@ -3523,893 +3310,147 @@ export default function ExperimentsPage() {
                 </section>
               ) : (
                 <>
-              <div className="variant-source">
-                <div className="variant-source__header">
-                  <h4>Choose variant source</h4>
-                  <span className="panel__muted">
-                    Recommended now:{" "}
-                    <strong>{recommendedVariantSource.replace("_", " ")}</strong>
-                  </span>
-                </div>
-                <div className="variant-source__tabs">
-                  <button
-                    type="button"
-                    className={`variant-source__tab ${
-                      variantSourceMode === "manual" ? "is-active" : ""
-                    }`}
-                    onClick={() => {
-                      setVariantSourceMode("manual");
-                      setVariantSourceManualOverride(true);
-                    }}
-                  >
-                    Manual
-                  </button>
-                  <button
-                    type="button"
-                    className={`variant-source__tab ${
-                      variantSourceMode === "simulation" ? "is-active" : ""
-                    }`}
-                    onClick={() => {
-                      setVariantSourceMode("simulation");
-                      setVariantSourceManualOverride(true);
-                    }}
-                  >
-                    Simulation prefill
-                  </button>
-                  <button
-                    type="button"
-                    className={`variant-source__tab ${
-                      variantSourceMode === "loop_evidence" ? "is-active" : ""
-                    }`}
-                    onClick={() => {
-                      setVariantSourceMode("loop_evidence");
-                      setVariantSourceManualOverride(true);
-                    }}
-                  >
-                    Loop evidence
-                  </button>
-                  <button
-                    type="button"
-                    className={`variant-source__tab ${
-                      variantSourceMode === "cold_start" ? "is-active" : ""
-                    }`}
-                    onClick={() => {
-                      setVariantSourceMode("cold_start");
-                      setVariantSourceManualOverride(true);
-                    }}
-                  >
-                    Cold-start
-                  </button>
-                </div>
-                <p className="panel__step-helper">{recommendedVariantSourceReason}</p>
-                <p className="variant-source__hint">
-                  {variantSourceMode === "manual"
-                    ? "Use when you already have candidate copy and want full control."
-                    : variantSourceMode === "simulation"
-                      ? "Use when simulation already produced a useful revision for this product."
-                      : variantSourceMode === "loop_evidence"
-                        ? "Use when runs/metrics/validation history exists and you want evidence-weighted candidates."
-                        : "Use when history is sparse and you need a first set of aligned variants."}
-                </p>
-                {variantSourceManualOverride &&
-                variantSourceMode !== recommendedVariantSource ? (
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => {
-                        setVariantSourceMode(recommendedVariantSource);
-                        setVariantSourceManualOverride(false);
-                      }}
-                    >
-                      Use recommended source
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <p className="panel__subheading">Step 8 · Generate next variants from updated evidence</p>
-              <p className="panel__step-helper">
-                Prefer loop evidence once runs and validation signals are available.
-              </p>
-              <div className="panel__form">
-                <label className="panel__label">
-                  Role
-                  <select
-                    className="panel__input"
-                    value={variantForm.role}
-                    onChange={(event) => {
-                      const role = event.target.value as "candidate" | "control";
-                      setVariantForm((prev) => ({
-                        ...prev,
-                        role,
-                        label:
-                          role === "control"
-                            ? "Control (current copy)"
-                            : prev.label === "Control (current copy)"
-                              ? "Hypothesis (variant)"
-                              : prev.label,
-                      }));
-                    }}
-                  >
-                    <option value="candidate">Candidate</option>
-                    <option value="control">Control</option>
-                  </select>
-                </label>
-                <label className="panel__label">
-                  Label
-                  <input
-                    className="panel__input"
-                    value={variantForm.label}
-                    onChange={(event) =>
-                      setVariantForm((prev) => ({
-                        ...prev,
-                        label: event.target.value,
-                      }))
-                    }
-                    placeholder="Variant A"
-                  />
-                </label>
-                <label className="panel__label">
-                  Candidate description
-                  <textarea
-                    className="panel__textarea"
-                    value={variantForm.description}
-                    onChange={(event) =>
-                      setVariantForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                    rows={5}
-                    placeholder="Write the copy variation to test..."
-                  />
-                </label>
-                {variantSourceMode === "simulation" ? (
-                  <>
-                    <label className="panel__label">
-                      Prefill from simulation revision (same product)
-                      <select
-                        className="panel__input"
-                        value={selectedSimulationRevisionId}
-                        onChange={(event) => setSelectedSimulationRevisionId(event.target.value)}
-                        disabled={simulationRevisions.length === 0}
-                      >
-                        {simulationRevisions.length === 0 ? (
-                          <option value="">No simulation revisions found</option>
-                        ) : null}
-                        {simulationRevisions.map((revision) => (
-                          <option key={revision.id} value={revision.id}>
-                            {new Date(
-                              revision.updated_at ?? revision.created_at ?? "",
-                            ).toLocaleString()} · {revision.status ?? "draft"}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="panel__action panel__action--ghost"
-                        onClick={handleUseSimulationRevision}
-                        disabled={simulationRevisions.length === 0}
-                      >
-                        Use selected simulation revision
-                      </button>
-                    </div>
-                    {simulationRevisionStatus ? (
-                      <p className="panel__success">{simulationRevisionStatus}</p>
-                    ) : null}
-                    <div className="panel__separator" />
-                  </>
-                ) : null}
-                {variantSourceMode === "loop_evidence" ? (
-                  <>
-                    <label className="panel__label">
-                      Prefill from loop evidence (experiment + simulation + validation)
-                      <select
-                        className="panel__input"
-                        value={String(selectedLoopCandidateIndex)}
-                        onChange={(event) =>
-                          setSelectedLoopCandidateIndex(Number(event.target.value))
-                        }
-                        disabled={loopGeneratedVariants.length === 0}
-                      >
-                        {loopGeneratedVariants.length === 0 ? (
-                          <option value="0">No generated candidates yet</option>
-                        ) : null}
-                        {loopGeneratedVariants.map((candidate, index) => (
-                          <option key={`${candidate.label}-${index}`} value={String(index)}>
-                            {index + 1}. {candidate.label} · conf {candidate.confidence.toFixed(2)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="panel__action panel__action--ghost"
-                        onClick={handleGenerateLoopVariants}
-                        disabled={
-                          !experimentForm.batteryId ||
-                          queries.length === 0 ||
-                          isGeneratingLoopVariant
-                        }
-                      >
-                        {isGeneratingLoopVariant &&
-                        variantGenerationRequestType === "loop"
-                          ? (
-                              <>
-                                Generating from loop<span className="button__dots" />
-                              </>
-                            )
-                          : "Generate from loop evidence"}
-                      </button>
-                    </div>
-                    {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale ? (
-                      <p className="panel__muted">
-                        {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale}
-                      </p>
-                    ) : null}
-                    {loopGenerationStatus ? (
-                      <p className="panel__success">{loopGenerationStatus}</p>
-                    ) : null}
-                    {loopGeneratedVariants.length > 0 ? (
-                      <div className="panel__card">
-                        <div className="panel__header">
-                          <h4>Generated copy preview</h4>
-                          <span className="panel__badge panel__badge--secondary">
-                            {loopGeneratedVariants.length}
-                          </span>
-                        </div>
-                        <ul className="panel__list">
-                          {loopGeneratedVariants.map((candidate, index) => (
-                            <li key={`${candidate.label}-${index}`}>
-                              <div className="panel__meta">
-                                <label className="panel__toggle">
-                                  <input
-                                    type="radio"
-                                    name="generated-copy-preview-loop"
-                                    checked={selectedLoopCandidateIndex === index}
-                                    onChange={() => setSelectedLoopCandidateIndex(index)}
-                                  />
-                                  <span>
-                                    {index + 1}. {candidate.label}
-                                  </span>
-                                </label>
-                                <span className="panel__badge panel__badge--secondary">
-                                  conf {candidate.confidence.toFixed(2)}
-                                </span>
-                              </div>
-                              <pre className="panel__pre">{candidate.description}</pre>
-                              {candidate.rationale ? (
-                                <p className="panel__muted">{candidate.rationale}</p>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {loopEvidenceAdvisory ? (
-                      <p className="panel__muted">{loopEvidenceAdvisory}</p>
-                    ) : null}
-                    <div className="panel__separator" />
-                  </>
-                ) : null}
-                {variantSourceMode === "cold_start" ? (
-                  <>
-                    <label className="panel__label">
-                      Generate cold-start copy (no prior loop evidence)
-                      <select
-                        className="panel__input"
-                        value={coldStartGenerationStrategy}
-                        onChange={(event) =>
-                          setColdStartGenerationStrategy(
-                            event.target.value as "bottom_up" | "top_down" | "both",
-                          )
-                        }
-                      >
-                        <option value="both">Both (recommended)</option>
-                        <option value="bottom_up">Bottom-up (features/use-cases)</option>
-                        <option value="top_down">Top-down (goals/positioning)</option>
-                      </select>
-                    </label>
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="panel__action panel__action--ghost"
-                        onClick={handleGenerateColdStartVariants}
-                        disabled={
-                          !experimentForm.batteryId ||
-                          queries.length === 0 ||
-                          isGeneratingLoopVariant
-                        }
-                      >
-                        {isGeneratingLoopVariant &&
-                        variantGenerationRequestType === "cold_start"
-                          ? (
-                              <>
-                                Generating cold-start copy
-                                <span className="button__dots" />
-                              </>
-                            )
-                          : "Generate cold-start copy"}
-                      </button>
-                    </div>
-                    {loopGenerationStatus ? (
-                      <p className="panel__success">{loopGenerationStatus}</p>
-                    ) : null}
-                    {loopGeneratedVariants.length > 0 ? (
-                      <div className="panel__card">
-                        <div className="panel__header">
-                          <h4>Generated copy preview</h4>
-                          <span className="panel__badge panel__badge--secondary">
-                            {loopGeneratedVariants.length}
-                          </span>
-                        </div>
-                        <ul className="panel__list">
-                          {loopGeneratedVariants.map((candidate, index) => (
-                            <li key={`${candidate.label}-${index}`}>
-                              <div className="panel__meta">
-                                <label className="panel__toggle">
-                                  <input
-                                    type="radio"
-                                    name="generated-copy-preview"
-                                    checked={selectedLoopCandidateIndex === index}
-                                    onChange={() => setSelectedLoopCandidateIndex(index)}
-                                  />
-                                  <span>
-                                    {index + 1}. {candidate.label}
-                                  </span>
-                                </label>
-                                <span className="panel__badge panel__badge--secondary">
-                                  conf {candidate.confidence.toFixed(2)}
-                                </span>
-                              </div>
-                              <pre className="panel__pre">{candidate.description}</pre>
-                              {candidate.rationale ? (
-                                <p className="panel__muted">{candidate.rationale}</p>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    <div className="panel__separator" />
-                  </>
-                ) : null}
-                <details
-                  className="panel__details"
-                  open={variantSecondaryActionsOpen}
-                  onToggle={(event) =>
-                    setVariantSecondaryActionsOpen(event.currentTarget.open)
-                  }
-                >
-                  <summary className="panel__details-summary">More variant actions</summary>
-                  <div className="panel__actions">
-                    {variantSourceMode === "loop_evidence" ? (
-                      <>
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={handleUseGeneratedLoopVariant}
-                          disabled={loopGeneratedVariants.length === 0}
-                        >
-                          Use selected loop candidate
-                        </button>
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={handleCreateVariantFromLoopCandidate}
-                          disabled={loopGeneratedVariants.length === 0 || isSubmitting}
-                        >
-                          {isCreatingLoopCandidateVariant
-                            ? "Creating variant…"
-                            : "Create variant from selected loop candidate"}
-                        </button>
-                      </>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() =>
-                        setVariantForm((prev) => ({
-                          ...prev,
-                          description:
-                            "Outcome-led copy that emphasizes user goals and capabilities.",
-                        }))
-                      }
-                    >
-                      Use description template
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setVariantAdvancedOpen((open) => !open)}
-                    >
-                      {variantAdvancedOpen ? "Hide advanced" : "Advanced JSON"}
-                    </button>
-                  </div>
-                </details>
-                {variantAdvancedOpen ? (
-                  <>
-                    <label className="panel__label">
-                      Type
-                      <input
-                        className="panel__input"
-                        value={variantForm.type}
-                        onChange={(event) =>
-                          setVariantForm((prev) => ({
-                            ...prev,
-                            type: event.target.value,
-                          }))
-                        }
-                        placeholder="copy"
-                      />
-                    </label>
-                    <label className="panel__label">
-                      Payload overrides (JSON)
-                      <textarea
-                        className="panel__textarea"
-                        value={variantForm.payload}
-                        onChange={(event) =>
-                          setVariantForm((prev) => ({
-                            ...prev,
-                            payload: event.target.value,
-                          }))
-                        }
-                        rows={3}
-                        placeholder='{"metadata":{"channel":"web"}}'
-                      />
-                    </label>
-                    {jsonErrors.variantPayload ? (
-                      <span className="panel__error">{jsonErrors.variantPayload}</span>
-                    ) : null}
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleCreateVariant}
-                  disabled={Boolean(addVariantDisabledReason)}
-                >
-                  {isCreatingVariant ? (
-                    <>
-                      Adding variant<span className="button__dots" />
-                    </>
-                  ) : (
-                    "Add variant"
-                  )}
-                </button>
-                {addVariantDisabledReason ? (
-                  <p className="panel__muted">{addVariantDisabledReason}</p>
-                ) : null}
-              </div>
-                {labMode === "lab" ? (
-                  <div className="panel__actions">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(false)}
-                    >
-                      Hide manual variant controls
-                    </button>
-                  </div>
-                ) : null}
+              <VariantCreationPanel
+                variantSourceMode={variantSourceMode}
+                setVariantSourceMode={setVariantSourceMode}
+                setVariantSourceManualOverride={setVariantSourceManualOverride}
+                recommendedVariantSource={recommendedVariantSource}
+                recommendedVariantSourceReason={recommendedVariantSourceReason}
+                variantSourceManualOverride={variantSourceManualOverride}
+                variantForm={variantForm}
+                setVariantForm={setVariantForm}
+                selectedSimulationRevisionId={selectedSimulationRevisionId}
+                setSelectedSimulationRevisionId={setSelectedSimulationRevisionId}
+                simulationRevisions={simulationRevisions}
+                handleUseSimulationRevision={handleUseSimulationRevision}
+                simulationRevisionStatus={simulationRevisionStatus}
+                loopGeneratedVariants={loopGeneratedVariants}
+                selectedLoopCandidateIndex={selectedLoopCandidateIndex}
+                setSelectedLoopCandidateIndex={setSelectedLoopCandidateIndex}
+                handleGenerateLoopVariants={handleGenerateLoopVariants}
+                handleUseGeneratedLoopVariant={handleUseGeneratedLoopVariant}
+                handleCreateVariantFromLoopCandidate={handleCreateVariantFromLoopCandidate}
+                loopGenerationStatus={loopGenerationStatus}
+                loopEvidenceAdvisory={loopEvidenceAdvisory}
+                coldStartGenerationStrategy={coldStartGenerationStrategy}
+                setColdStartGenerationStrategy={setColdStartGenerationStrategy}
+                handleGenerateColdStartVariants={handleGenerateColdStartVariants}
+                variantSecondaryActionsOpen={variantSecondaryActionsOpen}
+                setVariantSecondaryActionsOpen={setVariantSecondaryActionsOpen}
+                variantAdvancedOpen={variantAdvancedOpen}
+                setVariantAdvancedOpen={setVariantAdvancedOpen}
+                jsonErrorVariantPayload={jsonErrors.variantPayload}
+                addVariantDisabledReason={addVariantDisabledReason}
+                handleCreateVariant={handleCreateVariant}
+                labMode={labMode}
+                setLabShowManualControls={setLabShowManualControls}
+                isSubmitting={isSubmitting}
+                isGeneratingLoopVariant={isGeneratingLoopVariant}
+                variantGenerationRequestType={variantGenerationRequestType}
+                isCreatingVariant={isCreatingVariant}
+                isCreatingLoopCandidateVariant={isCreatingLoopCandidateVariant}
+                canGenerateCandidates={
+                  Boolean(experimentForm.batteryId) && queries.length > 0
+                }
+              />
                 </>
               )}
               <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
               <p className="panel__step-helper">
                 Runs in retrieval-backed mode use frozen protocol snapshots to keep variant comparisons fair.
               </p>
-              <div className="panel__grid panel__grid--two">
-                <label className="panel__label">
-                  Execution mode
-                  <select
-                    className="panel__input"
-                    value={experimentRunMode}
-                    onChange={(event) =>
-                      setExperimentRunMode(
-                        event.target.value === "retrieval_backed"
-                          ? "retrieval_backed"
-                          : "simulation",
-                      )
-                    }
-                  >
-                    <option value="simulation">Simulation (catalog competitors)</option>
-                    <option value="retrieval_backed">
-                      Retrieval-backed (web candidates)
-                    </option>
-                  </select>
-                </label>
-                {experimentRunMode === "retrieval_backed" ? (
-                  <label className="panel__label">
-                    Retrieval candidates per query
-                    <input
-                      className="panel__input"
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={retrievalMaxResults}
-                      onChange={(event) =>
-                        setRetrievalMaxResults(event.target.value || "5")
-                      }
-                    />
-                  </label>
-                ) : (
-                  <div className="panel__label">
-                    <span className="panel__muted">
-                      Uses local catalog + configured competitor policy.
-                    </span>
-                  </div>
-                )}
-              </div>
-              <p className="panel__muted">
-                Retrieval-backed mode pulls external web candidates per query, then scores variants against that set.
-              </p>
-              {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0 ? (
-                <p className="panel__muted">
-                  Active frozen protocol: snapshot v{currentProtocolSnapshotVersion}
-                </p>
-              ) : null}
-              {runVariantDisabledReason ? (
-                <p className="panel__muted">{runVariantDisabledReason}</p>
-              ) : null}
+              <ExperimentRunSettings
+                runMode={experimentRunMode}
+                retrievalMaxResults={retrievalMaxResults}
+                currentProtocolSnapshotVersion={currentProtocolSnapshotVersion}
+                runVariantDisabledReason={runVariantDisabledReason}
+                onRunModeChange={setExperimentRunMode}
+                onRetrievalMaxResultsChange={setRetrievalMaxResults}
+              />
               {variants.length === 0 ? (
                 <p className="panel__empty">Add variants to run experiments.</p>
               ) : (
                 <ul className="panel__list">
-                {variants.map((variant) => (
-                  <li key={variant.id}>
-                    {(() => {
-                      const resolvedDescription = resolveVariantDescription(variant);
-                      const isExpanded = expandedVariantId === variant.id;
-                      return (
-                        <>
-                    <div className="panel__meta">
-                      <span>{variant.label}</span>
-                      <span className="panel__badge panel__badge--secondary">
-                        {variant.type}
-                      </span>
-                      <span
-                        className={`panel__badge ${
-                          metricsByVariant.has(variant.id)
-                            ? "panel__badge--success"
-                            : "panel__badge--secondary"
-                        }`}
-                      >
-                        {metricsByVariant.has(variant.id) ? "Tested" : "Draft"}
-                      </span>
-                      {variant.hypothesis_id ? (
-                        <span className="panel__badge panel__badge--secondary">
-                          {hypothesisLabelById.get(variant.hypothesis_id) ?? "Hypothesis-linked"}
-                        </span>
-                      ) : null}
-                    </div>
-                    {variant.hypothesis_id ? (
-                      <div className="panel__actions">
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() =>
+                  {variants.map((variant) => {
+                    const resolvedDescription = resolveVariantDescription(variant);
+                    const hypothesisId = variant.hypothesis_id ?? null;
+                    const tested = metricsByVariant.has(variant.id);
+                    const metricValues = tested
+                      ? (((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
+                          string,
+                          unknown
+                        >) ?? null)
+                      : null;
+                    return (
+                      <li key={variant.id}>
+                        <ExperimentVariantRunItem
+                          variant={variant}
+                          tested={tested}
+                          hypothesisLabel={
+                            hypothesisId
+                              ? hypothesisLabelById.get(hypothesisId) ?? "Hypothesis-linked"
+                              : "Hypothesis-linked"
+                          }
+                          hypothesisStatement={
+                            hypothesisId
+                              ? (hypothesisStatementById.get(hypothesisId) ?? null)
+                              : null
+                          }
+                          hypothesisExpanded={
+                            Boolean(hypothesisId) && expandedHypothesisId === hypothesisId
+                          }
+                          copyExpanded={expandedVariantId === variant.id}
+                          resolvedDescription={resolvedDescription}
+                          metricValues={metricValues}
+                          runButtonProminent={!(labMode === "lab" && !showManualControls)}
+                          running={runningVariantId === variant.id}
+                          canRun={canRunVariantTests}
+                          renderMetricValue={renderMetricValue}
+                          onToggleHypothesis={() =>
                             setExpandedHypothesisId((current) =>
-                              current === variant.hypothesis_id
-                                ? null
-                                : variant.hypothesis_id ?? null,
+                              current === hypothesisId ? null : hypothesisId,
                             )
                           }
-                        >
-                          {expandedHypothesisId === variant.hypothesis_id
-                            ? "Hide hypothesis details"
-                            : "View hypothesis details"}
-                        </button>
-                      </div>
-                    ) : null}
-                    {variant.hypothesis_id &&
-                    expandedHypothesisId === variant.hypothesis_id ? (
-                      <div className="panel__meta panel__meta--stack">
-                        <span className="panel__muted">
-                          If:{" "}
-                          {String(
-                            hypothesisStatementById.get(variant.hypothesis_id)?.if ?? "—",
-                          )}
-                        </span>
-                        <span className="panel__muted">
-                          Then:{" "}
-                          {String(
-                            hypothesisStatementById.get(variant.hypothesis_id)?.then ?? "—",
-                          )}
-                        </span>
-                        <span className="panel__muted">
-                          For:{" "}
-                          {String(
-                            hypothesisStatementById.get(variant.hypothesis_id)?.for ?? "—",
-                          )}
-                        </span>
-                      </div>
-                    ) : null}
-                    {resolvedDescription ? (
-                      <div className="panel__actions">
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() =>
+                          onToggleCopy={() =>
                             setExpandedVariantId((current) =>
                               current === variant.id ? null : variant.id,
                             )
                           }
-                        >
-                          {isExpanded ? "Hide tested copy" : "View tested copy"}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="panel__muted">No copy payload yet.</span>
-                    )}
-                    {isExpanded && resolvedDescription ? (
-                      <pre className="panel__pre">{resolvedDescription}</pre>
-                    ) : null}
-                    {metricsByVariant.has(variant.id) ? (
-                      <div className="panel__meta">
-                        <span className="panel__muted">
-                          Win rate:{" "}
-                          {renderMetricValue(
-                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
-                              string,
-                              unknown
-                            >).win_rate,
-                          )}
-                        </span>
-                        <span className="panel__muted">
-                          Runs:{" "}
-                          {renderMetricValue(
-                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
-                              string,
-                              unknown
-                            >).total_runs,
-                          )}
-                        </span>
-                        <span className="panel__muted">
-                          Posterior:{" "}
-                          {renderMetricValue(
-                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
-                              string,
-                              unknown
-                            >).posterior,
-                          )}
-                        </span>
-                        <span className="panel__muted">
-                          Decision:{" "}
-                          {renderMetricValue(
-                            ((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
-                              string,
-                              unknown
-                            >).decision_action,
-                          )}
-                        </span>
-                      </div>
-                    ) : null}
-                    <button
-                      type="button"
-                      className={`panel__action ${
-                        labMode === "lab" && !showManualControls
-                          ? "panel__action--ghost"
-                          : "panel__action--prominent"
-                      }`}
-                      onClick={() => handleRunVariant(variant.id)}
-                      disabled={runningVariantId === variant.id || !canRunVariantTests}
-                    >
-                        {runningVariantId === variant.id ? "Running…" : "Run variant test"}
-                    </button>
-                        </>
-                      );
-                    })()}
-                  </li>
-                ))}
+                          onRun={() => handleRunVariant(variant.id)}
+                        />
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
-              {nextTest ? (
-                <div className="panel__notice panel__notice--info experiments-next-test">
-                  <strong>Next test:</strong> {nextTest.reason}
-                  {nextTest.action === "run_variant" && nextTest.variant_id ? (
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="panel__action"
-                        onClick={handleRunRecommended}
-                        disabled={runningVariantId === nextTest.variant_id || !canRunVariantTests}
-                      >
-                        {runningVariantId === nextTest.variant_id
-                          ? "Running…"
-                          : "Run recommended"}
-                      </button>
-                    </div>
-                  ) : null}
-                  {nextTest.action === "create_variant" ? (
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="panel__action"
-                        onClick={handleCreateSuggestedVariant}
-                        disabled={isSubmitting}
-                      >
-                        {isCreatingSuggestedVariant ? (
-                          <>
-                            Creating variant<span className="button__dots" />
-                          </>
-                        ) : (
-                          "Create suggested variant"
-                        )}
-                      </button>
-                    </div>
-                  ) : null}
-                  {nextTest.ml_prediction ? (
-                    <div className="panel__meta panel__meta--stack">
-                      <MLPrediction prediction={nextTest.ml_prediction} />
-                    </div>
-                  ) : null}
-                  {typeof nextTest.exploration_score === "number" &&
-                  typeof nextTest.exploitation_score === "number" ? (
-                    <div className="panel__meta panel__meta--stack">
-                      <ThompsonSamplingGauge
-                        explorationScore={nextTest.exploration_score}
-                        exploitationScore={nextTest.exploitation_score}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+              <NextTestNotice
+                nextTest={nextTest}
+                canRunVariantTests={canRunVariantTests}
+                runningVariantId={runningVariantId}
+                isSubmitting={isSubmitting}
+                isCreatingSuggestedVariant={isCreatingSuggestedVariant}
+                onRunRecommended={handleRunRecommended}
+                onCreateSuggestedVariant={handleCreateSuggestedVariant}
+              />
               {nextTestStatus ? (
                 <p className="panel__success">{nextTestStatus}</p>
               ) : null}
-              <section className="panel__notice panel__notice--info outcome-snapshot">
-                <div className="panel__meta">
-                  <strong>Outcome snapshot</strong>
-                  <span className="panel__badge panel__badge--secondary">Unified view</span>
-                </div>
-                <div className="outcome-snapshot__grid">
-                  <div className="outcome-snapshot__item">
-                    <span className="outcome-snapshot__label">Latest run</span>
-                    <span className="outcome-snapshot__value">
-                      {outcomeSnapshot.runVariantLabel}
-                    </span>
-                    <span className="panel__muted">
-                      Query: {outcomeSnapshot.runQueryLabel}
-                      {outcomeSnapshot.runCreatedAt
-                        ? ` · ${new Date(outcomeSnapshot.runCreatedAt).toLocaleString()}`
-                        : ""}
-                    </span>
-                  </div>
-                  <div className="outcome-snapshot__item">
-                    <span className="outcome-snapshot__label">Key metrics</span>
-                    <span className="outcome-snapshot__value">
-                      Win rate: {outcomeSnapshot.winRate}
-                    </span>
-                    <span className="panel__muted">Avg score: {outcomeSnapshot.avgScore}</span>
-                  </div>
-                  <div className="outcome-snapshot__item">
-                    <span className="outcome-snapshot__label">Validation state</span>
-                    <span className="outcome-snapshot__value">
-                      {outcomeSnapshot.validationState}
-                    </span>
-                    <span className="panel__muted">
-                      Protocol snapshot:{" "}
-                      {outcomeSnapshot.snapshotVersion && outcomeSnapshot.snapshotVersion > 0
-                        ? `v${outcomeSnapshot.snapshotVersion}`
-                        : "pending"}
-                    </span>
-                    {!hasValidationSignals ? (
-                      <button
-                        type="button"
-                        className="panel__action panel__action--ghost"
-                        onClick={() =>
-                          router.push(
-                            selectedExperimentId
-                              ? `/validation?experiment_id=${selectedExperimentId}`
-                              : "/validation",
-                          )
-                        }
-                      >
-                        Go to Validation
-                      </button>
-                    ) : (
-                      <span className="panel__muted">Signals are being tracked.</span>
-                    )}
-                  </div>
-                </div>
-              </section>
-              <div className="panel__grid">
-                <div className="panel__column">
-                  <h4 className="panel__subtitle">Step 6 · Review outcomes and metrics</h4>
-                  {latestMetric ? (
-                    <ul className="panel__list panel__list--compact">
-                      <li>Total runs: {renderMetricValue(latestMetric.total_runs, "-")}</li>
-                      <li>Wins: {renderMetricValue(latestMetric.wins, "-")}</li>
-                      <li>Win rate: {renderMetricValue(latestMetric.win_rate, "-")}</li>
-                      <li>
-                        Win rate (keyword):{" "}
-                        {renderMetricValue(latestMetric.win_rate_keyword, "-")}
-                      </li>
-                      <li>
-                        Win rate (robust):{" "}
-                        {renderMetricValue(latestMetric.win_rate_robust, "-")}
-                      </li>
-                      <li>Avg score: {renderMetricValue(latestMetric.avg_score, "-")}</li>
-                      <li>
-                        Judge consensus win rate:{" "}
-                        {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
-                      </li>
-                      <li>
-                        Snapshot version:{" "}
-                        {renderMetricValue(latestMetric.snapshot_version, "-")}
-                      </li>
-                      <li>
-                        Posterior: {renderMetricValue(latestMetric.posterior, "-")}
-                      </li>
-                      <li>
-                        Decision action:{" "}
-                        {renderMetricValue(latestMetric.decision_action, "-")}
-                      </li>
-                    </ul>
-                  ) : (
-                    <p className="panel__muted">Run a variant to generate metrics.</p>
-                  )}
-                </div>
-                <div className="panel__column">
-                  <div className="panel__meta">
-                    <h4 className="panel__subtitle">Why we lost (experiment deltas)</h4>
-                    {experimentGapSummary?.total ? (
-                      <span className="panel__badge panel__badge--secondary">
-                        {experimentGapSummary.total} linked runs
-                      </span>
-                    ) : null}
-                  </div>
-                  {!experimentGapSummary || experimentGapSummary.total === 0 ? (
-                    <p className="panel__muted">
-                      Run a variant with linked simulations to see gap signals.
-                    </p>
-                  ) : (
-                    <div className="panel__grid">
-                      <div className="panel__column">
-                        <h4 className="panel__subtitle">Top missing signals</h4>
-                        {experimentGapSummary.missing.length === 0 ? (
-                          <p className="panel__muted">No missing signals yet.</p>
-                        ) : (
-                          <ul className="panel__list panel__list--compact">
-                            {experimentGapSummary.missing.map((item) => (
-                              <li key={`missing-${item.signal}`}>
-                                {item.signal} · {item.count}x
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div className="panel__column">
-                        <h4 className="panel__subtitle">Winner signals</h4>
-                        {experimentGapSummary.winner.length === 0 ? (
-                          <p className="panel__muted">No winner signals yet.</p>
-                        ) : (
-                          <ul className="panel__list panel__list--compact">
-                            {experimentGapSummary.winner.map((item) => (
-                              <li key={`winner-${item.signal}`}>
-                                {item.signal} · {item.count}x
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      {experimentGapSummary.summaries.length > 0 ? (
-                        <div className="panel__column">
-                          <h4 className="panel__subtitle">Gap summaries</h4>
-                          <ul className="panel__list panel__list--compact">
-                            {experimentGapSummary.summaries.map((summary, index) => (
-                              <li key={`summary-${index}`}>{summary}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <OutcomeSnapshot
+                snapshot={outcomeSnapshot}
+                hasValidationSignals={hasValidationSignals}
+                onOpenValidation={() =>
+                  router.push(
+                    selectedExperimentId
+                      ? `/validation?experiment_id=${selectedExperimentId}`
+                      : "/validation",
+                  )
+                }
+              />
+              <ExperimentOutcomeReview
+                latestMetric={latestMetric}
+                experimentGapSummary={experimentGapSummary}
+                renderMetricValue={renderMetricValue}
+              />
             </section>
 
             <section className="panel__card panel__card--secondary panel__card--full-row">
@@ -4496,292 +3537,46 @@ export default function ExperimentsPage() {
 
           </div>
 
-          <section className="panel__card panel__card--secondary panel__card--full-row">
-            <div className="panel__header">
-              <h3>History</h3>
-              <div className="panel__meta">
-                <span className="panel__badge panel__badge--secondary">
-                  Experiments: {experiments.length}
-                </span>
-                <span className="panel__badge panel__badge--secondary">
-                  Runs: {runs.length}
-                </span>
-                <button
-                  type="button"
-                  className="panel__action panel__action--ghost"
-                  onClick={() => setHistoryCollapsed((open) => !open)}
-                >
-                  {historyCollapsed ? "Expand history" : "Collapse history"}
-                </button>
-              </div>
-            </div>
-            <p className="panel__subheading">Reference history</p>
-            <p className="panel__step-helper">
-              Review past experiments, runs, and metrics without interrupting the active flow.
-            </p>
-            {historyCollapsed ? (
-              <p className="panel__muted">
-                History is collapsed to keep focus on the active experiment flow.
-              </p>
-            ) : (
-              <div className="panel__grid">
-              <div className="panel__column">
-                <div className="panel__meta">
-                  <h4 className="panel__subtitle">Experiments</h4>
-                  {experiments.length > 0 ? (
-                    <span className="panel__badge">{experiments.length}</span>
-                  ) : null}
-                </div>
-                {experiments.length === 0 ? (
-                  <p className="panel__empty">No experiments yet.</p>
-                ) : (
-                  <ul className="panel__list">
-                    {experiments.map((experiment) => (
-                      <li key={experiment.id}>
-                        <button
-                          type="button"
-                          className={`history-panel__item ${
-                            experiment.id === selectedExperimentId ? "is-active" : ""
-                          }`}
-                          onClick={() => setSelectedExperimentId(experiment.id)}
-                        >
-                          <div className="history-panel__row">
-                            <span className="history-panel__title">{experiment.name}</span>
-                            {experiment.status ? (
-                              <span className="panel__badge panel__badge--secondary">
-                                {experiment.status}
-                              </span>
-                            ) : null}
-                          </div>
-                          {experiment.hypothesis ? (
-                            <span className="history-panel__meta">
-                              Hypothesis configured
-                            </span>
-                          ) : (
-                            <span className="history-panel__meta">
-                              No hypothesis yet
-                            </span>
-                          )}
-                          <span className="history-panel__meta">
-                            Created: {formatTimestamp(experiment.created_at)}
-                          </span>
-                          {typeof experimentSnapshots[experiment.id]?.winRate ===
-                          "number" ? (
-                            <span className="history-panel__meta">
-                              Latest win rate:{" "}
-                              {Math.round(
-                                (experimentSnapshots[experiment.id]?.winRate ?? 0) * 100,
-                              )}
-                              % · Winner:{" "}
-                              {experimentSnapshots[experiment.id]?.winnerLabel ?? "—"}
-                            </span>
-                          ) : (
-                            <span className="history-panel__meta">
-                              Latest win rate: — · Winner: —
-                            </span>
-                          )}
-                        </button>
-                        {experiment.id === selectedExperimentId ? (
-                          <div className="panel__meta panel__meta--stack">
-                            <span className="panel__muted">
-                              Battery:{" "}
-                              {batteries.find(
-                                (battery) => battery.id === experiment.battery_id,
-                              )?.name ??
-                                experiment.battery_id ??
-                                "Not linked"}
-                            </span>
-                            <span className="panel__muted">
-                              Updated: {formatTimestamp(experiment.updated_at)}
-                            </span>
-                            <span className="panel__muted">
-                              Variants: {variants.length}
-                            </span>
-                            <span className="panel__muted">Runs: {runs.length}</span>
-                            <span className="panel__muted">
-                              Metrics: {metrics.length}
-                            </span>
-                            <div className="panel__actions">
-                              {experiment.status === "draft" ? (
-                                <button
-                                  type="button"
-                                  className="panel__action"
-                                  onClick={() =>
-                                    handleSaveExperimentDraft(experiment.id)
-                                  }
-                                  disabled={savingExperimentId === experiment.id}
-                                >
-                                  {savingExperimentId === experiment.id
-                                    ? "Saving…"
-                                    : "Save draft"}
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="panel__action panel__action--ghost"
-                                onClick={() =>
-                                  variantsSectionRef.current?.scrollIntoView({
-                                    behavior: "smooth",
-                                  })
-                                }
-                              >
-                                View variants
-                              </button>
-                              <button
-                                type="button"
-                                className="panel__action panel__action--ghost"
-                                onClick={() =>
-                                  runsSectionRef.current?.scrollIntoView({
-                                    behavior: "smooth",
-                                  })
-                                }
-                              >
-                                View runs
-                              </button>
-                              <button
-                                type="button"
-                                className="panel__action panel__action--ghost"
-                                onClick={() =>
-                                  metricsSectionRef.current?.scrollIntoView({
-                                    behavior: "smooth",
-                                  })
-                                }
-                              >
-                                View metrics
-                              </button>
-                            </div>
-                          </div>
-                        ) : experiment.status === "draft" ? (
-                          <div className="panel__actions">
-                            <button
-                              type="button"
-                              className="panel__action panel__action--ghost"
-                              onClick={() => handleSaveExperimentDraft(experiment.id)}
-                              disabled={savingExperimentId === experiment.id}
-                            >
-                              {savingExperimentId === experiment.id
-                                ? "Saving…"
-                                : "Save draft"}
-                            </button>
-                          </div>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="panel__column" ref={runsSectionRef}>
-                <div className="panel__meta">
-                  <h4 className="panel__subtitle">Runs</h4>
-                  {runs.length > 0 ? (
-                    <span className="panel__badge">{runs.length}</span>
-                  ) : null}
-                </div>
-                {runs.length === 0 ? (
-                  <p className="panel__empty">No experiment runs yet.</p>
-                ) : (
-                  <ul className="panel__list">
-                    {runs.map((run) => (
-                      <li key={run.id}>
-                        <div className="panel__meta">
-                          <span>{queryMap.get(run.query_id) ?? run.query_id}</span>
-                          <span className="panel__badge panel__badge--secondary">
-                            {run.simulation_run_id ? "linked" : "pending"}
-                          </span>
-                        </div>
-                        <div className="panel__meta panel__meta--stack">
-                          <span className="history-panel__meta">
-                            Variant: {run.variant_id}
-                          </span>
-                          {typeof run.snapshot_version === "number" ? (
-                            <span className="history-panel__meta">
-                              Snapshot: v{run.snapshot_version}
-                            </span>
-                          ) : null}
-                          {run.hypothesis_id ? (
-                            <span className="history-panel__meta">
-                              Hypothesis:{" "}
-                              {hypothesisLabelById.get(run.hypothesis_id) ?? "Hypothesis-linked"}
-                            </span>
-                          ) : null}
-                          {run.hypothesis_id ? (
-                            <button
-                              type="button"
-                              className="panel__action panel__action--ghost"
-                              onClick={() =>
-                                setExpandedHypothesisId((current) =>
-                                  current === run.hypothesis_id
-                                    ? null
-                                    : run.hypothesis_id ?? null,
-                                )
-                              }
-                            >
-                              {expandedHypothesisId === run.hypothesis_id
-                                ? "Hide hypothesis details"
-                                : "View hypothesis details"}
-                            </button>
-                          ) : null}
-                          {run.hypothesis_id &&
-                          expandedHypothesisId === run.hypothesis_id ? (
-                            <div className="panel__meta panel__meta--stack">
-                              <span className="panel__muted">
-                                If:{" "}
-                                {String(
-                                  hypothesisStatementById.get(run.hypothesis_id)?.if ?? "—",
-                                )}
-                              </span>
-                              <span className="panel__muted">
-                                Then:{" "}
-                                {String(
-                                  hypothesisStatementById.get(run.hypothesis_id)?.then ?? "—",
-                                )}
-                              </span>
-                              <span className="panel__muted">
-                                For:{" "}
-                                {String(
-                                  hypothesisStatementById.get(run.hypothesis_id)?.for ?? "—",
-                                )}
-                              </span>
-                            </div>
-                          ) : null}
-                          {run.simulation_run_id ? (
-                            <span className="history-panel__meta">
-                              Run ID:{" "}
-                              <a
-                                className="panel__link"
-                                href={`/simulation?run_id=${run.simulation_run_id}`}
-                              >
-                                {run.simulation_run_id}
-                              </a>
-                            </span>
-                          ) : null}
-                          {runGapDetails.get(run.id) ? (
-                            <span className="history-panel__meta">
-                              Gap:{" "}
-                              {runGapDetails
-                                .get(run.id)
-                                ?.missing_signals?.slice(0, 3)
-                                .join(", ") || "—"}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="panel__actions">
-                          <button
-                            type="button"
-                            className="panel__action panel__action--ghost"
-                            onClick={() => void handleDeleteExperimentRun(run.id)}
-                          >
-                            Delete run
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-            )}
-          </section>
+          <ExperimentHistoryPanel
+            experiments={experiments}
+            runs={runs}
+            metricsCount={metrics.length}
+            variantCount={variants.length}
+            historyCollapsed={historyCollapsed}
+            selectedExperimentId={selectedExperimentId}
+            experimentSnapshots={experimentSnapshots}
+            batteries={batteries}
+            savingExperimentId={savingExperimentId}
+            queryMap={queryMap}
+            runGapDetails={runGapDetails}
+            hypothesisLabelById={hypothesisLabelById}
+            hypothesisStatementById={hypothesisStatementById}
+            expandedHypothesisId={expandedHypothesisId}
+            runsSectionRef={runsSectionRef}
+            formatTimestamp={formatTimestamp}
+            onToggleHistory={() => setHistoryCollapsed((open) => !open)}
+            onSelectExperiment={setSelectedExperimentId}
+            onSaveExperimentDraft={handleSaveExperimentDraft}
+            onScrollVariants={() =>
+              variantsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+            onScrollRuns={() =>
+              runsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+            onScrollMetrics={() =>
+              metricsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+            onToggleHypothesis={setExpandedHypothesisId}
+            onDeleteRun={(runId) => {
+              void handleDeleteExperimentRun(runId);
+            }}
+          />
 
           <section className="panel__card panel__card--secondary" ref={metricsSectionRef}>
             <div className="panel__header">
