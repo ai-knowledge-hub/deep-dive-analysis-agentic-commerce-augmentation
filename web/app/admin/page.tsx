@@ -43,6 +43,8 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { OnboardingFlowStatus } from "../../components/admin/OnboardingFlowStatus";
+import { ScopeSelectors } from "../../components/admin/ScopeSelectors";
 
 const emptyForm = {
   id: "",
@@ -1226,121 +1228,35 @@ export default function AdminPage() {
               <p className="panel__step-helper">
                 Complete onboarding in sequence, then move to operational controls.
               </p>
-              <section className="flow-rail admin-flow-rail">
-                <div className="flow-rail__header">
-                  <h4>Onboarding steps</h4>
-                  <span className="panel__muted">
-                    Current step: {onboardingCurrentStep} / {onboardingFlowSteps.length}
-                  </span>
-                </div>
-                <div className="flow-rail__steps">
-                  {onboardingFlowSteps.map((step) => (
-                    <div
-                      key={step.id}
-                      className={`flow-rail__step ${
-                        step.done ? "is-done" : step.id === onboardingCurrentStep ? "is-current" : ""
-                      }`}
-                    >
-                      <span className="flow-rail__index">{step.id}</span>
-                      <span className="flow-rail__label">{step.label}</span>
-                      <span className="flow-rail__status">
-                        {step.done
-                          ? "Done"
-                          : step.id === onboardingCurrentStep
-                            ? "Current"
-                            : "Pending"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="panel__notice panel__notice--info admin-next-action">
-                <strong>Next recommended action:</strong> {onboardingNextAction.label}
-                <p className="panel__muted">{onboardingNextAction.helper}</p>
-                <div className="panel__actions panel__actions--priority">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--prominent"
-                    onClick={handleRunOnboardingNextAction}
-                    disabled={onboardingNextAction.action === "complete"}
-                  >
-                    {onboardingNextAction.label}
-                  </button>
-                </div>
-              </section>
-              <div className="admin-onboarding__scope">
-                <div className="admin__selector">
-                  <label className="panel__label" htmlFor="admin-client-select">
-                    Scope client
-                  </label>
-                  <select
-                    id="admin-client-select"
-                    value={activeClientId}
-                    onChange={(event) => {
-                      const nextClientId = event.target.value;
-                      setActiveClientId(nextClientId);
-                      setTenantClientId(nextClientId || "");
-                      setActiveBrandId("");
-                      setActiveProductId("");
-                    }}
-                  >
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="admin__selector">
-                  <label className="panel__label" htmlFor="admin-brand-select">
-                    Scope brand
-                  </label>
-                  <select
-                    id="admin-brand-select"
-                    value={activeBrandId}
-                    onChange={(event) => {
-                      const nextBrandId = event.target.value;
-                      setActiveBrandId(nextBrandId);
-                      setTenantBrandId(nextBrandId || null);
-                      setActiveProductId("");
-                    }}
-                    disabled={!activeClientId || brands.length === 0}
-                  >
-                    {brands.length === 0 ? (
-                      <option value="">Select brand</option>
-                    ) : null}
-                    {brands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>
-                        {brand.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="admin__selector">
-                  <label className="panel__label" htmlFor="admin-product-select">
-                    Scope product
-                  </label>
-                  <select
-                    id="admin-product-select"
-                    value={activeProductId}
-                    onChange={(event) => {
-                      const nextProductId = event.target.value;
-                      setActiveProductId(nextProductId);
-                      setTenantProductId(nextProductId || null);
-                    }}
-                    disabled={!activeBrandId || products.length === 0}
-                  >
-                    {products.length === 0 ? (
-                      <option value="">Select product</option>
-                    ) : null}
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              <OnboardingFlowStatus
+                currentStep={onboardingCurrentStep}
+                steps={onboardingFlowSteps}
+                nextAction={onboardingNextAction}
+                onRunNextAction={handleRunOnboardingNextAction}
+              />
+              <ScopeSelectors
+                activeClientId={activeClientId}
+                activeBrandId={activeBrandId}
+                activeProductId={activeProductId}
+                clients={clients}
+                brands={brands}
+                products={products}
+                onClientChange={(nextClientId) => {
+                  setActiveClientId(nextClientId);
+                  setTenantClientId(nextClientId || "");
+                  setActiveBrandId("");
+                  setActiveProductId("");
+                }}
+                onBrandChange={(nextBrandId) => {
+                  setActiveBrandId(nextBrandId);
+                  setTenantBrandId(nextBrandId || null);
+                  setActiveProductId("");
+                }}
+                onProductChange={(nextProductId) => {
+                  setActiveProductId(nextProductId);
+                  setTenantProductId(nextProductId || null);
+                }}
+              />
               <p className="panel__meta">
                 All onboarding changes are saved against the selected scope above.
               </p>

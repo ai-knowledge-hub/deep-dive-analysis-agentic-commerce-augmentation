@@ -43,6 +43,8 @@ jobs:
         run: make lint
       - name: Architecture Check
         run: make arch-check
+      - name: Bloat Check
+        run: make bloat-check
       - name: Tests
         env:
           CATALOG_SOURCE: mock

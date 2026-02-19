@@ -29,6 +29,17 @@ const DEFAULT_ALLOWED_CAPABILITIES = [
   "publish_copy_revision",
 ];
 
+const AGENT_FLOW_STEPS: { id: AgentRun["state"] | string; label: string }[] = [
+  { id: "battery_ready", label: "Battery ready" },
+  { id: "retrieval_snapshots_ready", label: "Retrieval snapshots ready" },
+  { id: "baseline_scored", label: "Baseline scored" },
+  { id: "hypotheses_ready", label: "Hypotheses ready" },
+  { id: "variants_ready", label: "Variants ready" },
+  { id: "experiment_run_completed", label: "Experiment run completed" },
+  { id: "validation_completed", label: "Validation completed" },
+  { id: "posterior_updated", label: "Posterior updated" },
+];
+
 function formatJsonPreview(value: unknown): string {
   try {
     return JSON.stringify(value ?? {}, null, 2);
@@ -51,6 +62,7 @@ export default function AgentRunsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   const [createForm, setCreateForm] = useState({
     experiment_id: experimentIdParam || "",
@@ -120,6 +132,24 @@ export default function AgentRunsPage() {
     if (!selectedRun) return null;
     return `${selectedRun.status ?? "unknown"} · ${selectedRun.state ?? "unknown"}`;
   }, [selectedRun]);
+
+  const flowSteps = useMemo(() => {
+    const currentIndex = AGENT_FLOW_STEPS.findIndex(
+      (step) => step.id === (selectedRun?.state ?? null),
+    );
+    return AGENT_FLOW_STEPS.map((step, index) => {
+      let status = "Pending";
+      let className = "";
+      if (currentIndex >= 0 && index < currentIndex) {
+        status = "Done";
+        className = "is-done";
+      } else if (currentIndex >= 0 && index === currentIndex) {
+        status = "Current";
+        className = "is-current";
+      }
+      return { ...step, status, className };
+    });
+  }, [selectedRun?.state]);
 
   const handleCreate = useCallback(async () => {
     if (!userId) return;
@@ -195,10 +225,10 @@ export default function AgentRunsPage() {
   );
 
   return (
-    <div className="layout">
+    <div className="app agent-runs-page">
       <Sidebar
-        mobileOpen={false}
-        onMobileClose={() => {}}
+        mobileOpen={isSidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
         onNewConversation={() => router.push("/")}
         sessions={[]}
         activeSessionId={null}
@@ -208,17 +238,14 @@ export default function AgentRunsPage() {
         showHistoryButton={false}
       />
 
-      <main className="main">
-        <DetailHeader title="Agent runs" subtitle={selectedSummary || "Governed lab automation (planned)"} />
-
-        <section className="panel__card panel__card--secondary panel__card--full-row">
-          <div className="panel__header">
-            <div className="panel__meta panel__meta--stack">
-              <h3>Runs</h3>
-              <div className="panel__subtitle">
-                Agents propose actions. Guardrails and approvals are enforced by the platform.
-              </div>
-            </div>
+      <main className="main main--detail">
+        <div className="detail">
+        <DetailHeader
+          title="Agent runs"
+          subtitle={selectedSummary || "Governed lab automation (planned)"}
+          onMenu={() => setSidebarOpen(true)}
+          onBack={() => router.push("/experiments")}
+          actions={
             <button
               type="button"
               className="button button--primary"
@@ -227,15 +254,42 @@ export default function AgentRunsPage() {
             >
               New agent run
             </button>
+          }
+        />
+
+        <section className="panel__card panel__card--secondary panel__card--full-row">
+          <div className="panel__header">
+            <div className="panel__meta panel__meta--stack">
+              <h3>Agent operator workspace</h3>
+              <div className="panel__subtitle">
+                Agents propose actions. Guardrails and approvals are enforced by the platform.
+              </div>
+            </div>
           </div>
+          <p className="panel__subheading">Step 1 · Select scope and run</p>
+          <p className="panel__step-helper">
+            Define the run scope, create a run when needed, then select the run you want to operate.
+          </p>
 
           {error && <div className="panel__error">{error}</div>}
 
-          <div className="panel__grid" style={{ gridTemplateColumns: "340px 1fr" }}>
-            <div className="panel__column">
+          <div className="detail__grid">
+            <section className="panel__card panel__card--secondary">
+              <p className="panel__subheading">Step 1 · Scope and run selection</p>
+              <p className="panel__step-helper">
+                Use recent runs to inspect history and continue from the current state.
+              </p>
               <div className="panel__card">
                 <div className="panel__header">
                   <h3>Recent</h3>
+                  <button
+                    type="button"
+                    className="button button--primary-subtle"
+                    onClick={() => setDrawerOpen(true)}
+                    disabled={!userId || loading}
+                  >
+                    New run
+                  </button>
                 </div>
                 <div className="list">
                   {(runs ?? []).map((run) => {
@@ -262,9 +316,32 @@ export default function AgentRunsPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="panel__column">
+            <section className="panel__card panel__card--secondary">
+              <p className="panel__subheading">Step 2 · Control execution</p>
+              <p className="panel__step-helper">
+                Start, pause, or refresh the selected run while keeping policy and budgets enforced.
+              </p>
+              {selectedRun ? (
+                <div className="flow-rail">
+                  <div className="flow-rail__header">
+                    <h4>Execution flow</h4>
+                    <span className="flow-rail__status">
+                      Current: {selectedRun.state ?? "unknown"}
+                    </span>
+                  </div>
+                  <div className="flow-rail__steps">
+                    {flowSteps.map((step, index) => (
+                      <div key={step.id} className={`flow-rail__step ${step.className}`}>
+                        <span className="flow-rail__index">{index + 1}</span>
+                        <span className="flow-rail__label">{step.label}</span>
+                        <span className="flow-rail__status">{step.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="panel__card">
                 <div className="panel__header">
                   <h3>Action queue</h3>
@@ -325,6 +402,10 @@ export default function AgentRunsPage() {
 
                 {selectedRun && (
                   <>
+                    <p className="panel__subheading">Step 3 · Review approvals and audit</p>
+                    <p className="panel__step-helper">
+                      Approve or reject proposed actions and inspect rationale plus I/O for traceability.
+                    </p>
                     <div className="panel__meta-strip">
                       <div>
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}
@@ -410,9 +491,10 @@ export default function AgentRunsPage() {
                   </>
                 )}
               </div>
-            </div>
+            </section>
           </div>
         </section>
+        </div>
 
         {drawerOpen && (
           <div className="drawer">
