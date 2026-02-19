@@ -155,6 +155,65 @@ def list_agent_runs(
     return [_row(r) for r in rows]
 
 
+def acquire_run_lock(*, run_id: str, lock_token: str, ttl_seconds: int = 30) -> bool:
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        UPDATE agent_runs
+        SET
+            lock_token = ?,
+            lock_acquired_at = datetime('now'),
+            lock_expires_at = datetime('now', ?),
+            updated_at = datetime('now')
+        WHERE id = ?
+          AND (
+              lock_token IS NULL
+              OR lock_expires_at IS NULL
+              OR lock_expires_at <= datetime('now')
+              OR lock_token = ?
+          )
+        """,
+        (lock_token, f"+{max(1, int(ttl_seconds))} seconds", run_id, lock_token),
+    )
+    conn.commit()
+    return bool(cursor.rowcount and cursor.rowcount > 0)
+
+
+def heartbeat_run_lock(*, run_id: str, lock_token: str, ttl_seconds: int = 30) -> bool:
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        UPDATE agent_runs
+        SET
+            last_heartbeat_at = datetime('now'),
+            lock_expires_at = datetime('now', ?),
+            updated_at = datetime('now')
+        WHERE id = ? AND lock_token = ?
+        """,
+        (f"+{max(1, int(ttl_seconds))} seconds", run_id, lock_token),
+    )
+    conn.commit()
+    return bool(cursor.rowcount and cursor.rowcount > 0)
+
+
+def release_run_lock(*, run_id: str, lock_token: str) -> bool:
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        UPDATE agent_runs
+        SET
+            lock_token = NULL,
+            lock_acquired_at = NULL,
+            lock_expires_at = NULL,
+            updated_at = datetime('now')
+        WHERE id = ? AND lock_token = ?
+        """,
+        (run_id, lock_token),
+    )
+    conn.commit()
+    return bool(cursor.rowcount and cursor.rowcount > 0)
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -177,6 +236,13 @@ def _row(row) -> Dict[str, Any]:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "last_heartbeat_at": row["last_heartbeat_at"],
+        "lock_token": row["lock_token"] if "lock_token" in row.keys() else None,
+        "lock_acquired_at": row["lock_acquired_at"]
+        if "lock_acquired_at" in row.keys()
+        else None,
+        "lock_expires_at": row["lock_expires_at"]
+        if "lock_expires_at" in row.keys()
+        else None,
     }
 
 
@@ -185,4 +251,7 @@ __all__ = [
     "update_agent_run",
     "get_agent_run",
     "list_agent_runs",
+    "acquire_run_lock",
+    "heartbeat_run_lock",
+    "release_run_lock",
 ]

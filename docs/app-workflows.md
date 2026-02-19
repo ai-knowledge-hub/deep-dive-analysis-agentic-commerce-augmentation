@@ -221,21 +221,27 @@ Loop control endpoints:
 
 ---
 
-## 7) Agent Operator Mode (Planned)
+## 7) Agent Operator Mode (Current + Next)
 
-This is a planned orchestration layer that can run the lab protocol under policy constraints.
+Agent operator mode is partially implemented and can already run approved steps under runtime controls.
 
 Key principles:
 1. Agent autonomy is **plan autonomy**, not raw execution autonomy.
 2. The system remains the enforcement layer (baseline-first, frozen snapshots, spend caps, approval gates).
 3. Capabilities are explicit and versioned (prompts, scoring parameters, validation weighting, provider configs).
 
-Architecture additions (planned):
-- `AgentRuntime`: backend job runner for agent sessions.
-- `CapabilityRegistry`: agents request named capabilities; they do not call raw routes.
-- Policy-as-code checks shared across human and agent flows.
-- `agent_actions` audit log.
-- capability/policy version registry for reproducibility.
+Current implementation:
+- `AgentRuntime` service is wired to `/agent-runs` controls (`start`, `pause`, `cancel`, `step`).
+- `agent_runs` + `agent_actions` persistence is active.
+- v0 defaults to `plan_only`; execution requires `auto_execute_safe`.
+- runtime uses per-run short lease lock + heartbeat refresh.
+- action execution is atomic (`approved -> executing -> executed|failed`).
+
+Still in progress:
+- centralized `PolicyEnforcer` module
+- formal `CapabilityRegistry` object
+- autonomous background scheduler/tick worker
+- broader explainability UI around side effects/budgets
 
 See `docs/agentic-layer.md`.
 
@@ -312,3 +318,4 @@ Operational controls:
 - Gemini function-call provider run execution (mode is scaffolded, backend runtime not yet enabled)
 - deeper automatic promotion logic for simulation lessons
 - full backend serverless hardening for Vercel Python runtime
+- full autonomous agent tick scheduling (runtime worker loop beyond manual `step`)

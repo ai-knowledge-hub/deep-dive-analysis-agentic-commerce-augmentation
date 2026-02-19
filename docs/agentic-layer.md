@@ -1,8 +1,17 @@
 # Build The Agentic Layer (Approach, Rationale, Roadmap)
 
-This document describes the planned **agent operator mode**: a governed orchestration layer that can run the lab protocol end-to-end (or partially) under explicit constraints.
+This document describes the **agent operator mode**: a governed orchestration layer that can run the lab protocol end-to-end (or partially) under explicit constraints.
 
-Status: **Planned (not built end-to-end)**. Individual prerequisites already exist (frozen snapshots, baseline gating, hypotheses, decision policy inputs/outputs, audit primitives).
+Status: **Partially implemented (v0 Runtime Core complete; end-to-end autonomy still in progress)**.
+Implemented now:
+- Agent run and action persistence (`agent_runs`, `agent_actions`)
+- Plan-first run creation + approval workflow
+- Runtime step execution service with short lease locking and heartbeat refresh
+- Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
+Still pending:
+- centralized policy-as-code module
+- fully structured capability registry object
+- autonomous background tick worker / scheduler
 
 ---
 
@@ -46,13 +55,21 @@ Target state:
 
 ### 3.1 AgentRuntime (backend boundary)
 
-Add an `AgentRuntime` service inside the backend (not frontend-driven).
+Implemented in v0: `AgentRuntimeService` inside backend (not frontend-driven).
 
 It runs **agent sessions** as jobs:
 - `agent_run` has: state machine stage, objective, allowed capabilities, scope (tenant/product/experiment), and pinned capability versions.
 - It produces `agent_actions` (proposed + executed), with a stable event-like format.
 
 This prevents “UI-driven autonomy” and keeps the system auditable and reproducible.
+
+v0 Runtime Core behavior:
+- `plan_only` remains default and blocks execution.
+- `auto_execute_safe` enables stepping approved actions.
+- Per-run short lease lock prevents concurrent execution (`lock_token`, `lock_expires_at`).
+- Heartbeat is refreshed during execution (`last_heartbeat_at`).
+- Action claim is atomic (`approved -> executing -> executed|failed`).
+- Route handlers delegate to runtime service instead of duplicating execution logic.
 
 ### 3.2 Capability Registry (the key abstraction)
 

@@ -10,16 +10,23 @@ from pydantic import BaseModel, Field
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
 from application.services.agent_runtime.capabilities import (
-    CapabilityContext,
     CapabilityExecutionError,
-    execute_capability,
 )
 from application.services.agent_runtime.planner import build_initial_plan
+from application.services.agent_runtime.runtime import (
+    AgentRuntimeError,
+    AgentRuntimeService,
+    NoApprovedActionError,
+    PlanOnlyModeError,
+    RunBusyError,
+    RunNotFoundError,
+)
 
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
 
 DEPS = default_deps()
+RUNTIME = AgentRuntimeService(deps=DEPS)
 
 
 class AgentRunCreateRequest(BaseModel):
@@ -123,21 +130,11 @@ def start_agent_run(
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
-    run = DEPS.agent_runs.get_agent_run(run_id=run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    run_mode = str(run.get("run_mode") or "plan_only")
-    if run_mode == "plan_only":
-        updated = DEPS.agent_runs.update_agent_run(
-            run_id=run_id,
-            status="planned",
-        )
-        return {
-            "run": updated or run,
-            "message": "Run is in plan-only mode. Actions can be approved/rejected but not executed.",
-        }
-    updated = DEPS.agent_runs.update_agent_run(run_id=run_id, status="running")
-    return {"run": updated or run}
+    try:
+        result = RUNTIME.start_run(run_id=run_id)
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"run": result.run, "message": result.message}
 
 
 @router.post("/{run_id}/pause")
@@ -146,11 +143,11 @@ def pause_agent_run(
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
-    run = DEPS.agent_runs.get_agent_run(run_id=run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    updated = DEPS.agent_runs.update_agent_run(run_id=run_id, status="paused")
-    return {"run": updated or run}
+    try:
+        result = RUNTIME.pause_run(run_id=run_id)
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"run": result.run}
 
 
 @router.post("/{run_id}/cancel")
@@ -159,11 +156,11 @@ def cancel_agent_run(
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
-    run = DEPS.agent_runs.get_agent_run(run_id=run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    updated = DEPS.agent_runs.update_agent_run(run_id=run_id, status="canceled")
-    return {"run": updated or run}
+    try:
+        result = RUNTIME.cancel_run(run_id=run_id)
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"run": result.run}
 
 
 @router.post("/{run_id}/step")
@@ -172,71 +169,20 @@ def step_agent_run(
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
     require_client_id(payload.client_id, payload.user_id)
-    run = DEPS.agent_runs.get_agent_run(run_id=run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    run_mode = str(run.get("run_mode") or "plan_only")
-    if run_mode == "plan_only":
-        raise HTTPException(
-            status_code=409,
-            detail="Run is plan-only. Switch mode to execute steps.",
-        )
-    actions = DEPS.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
-    next_action = next(
-        (item for item in actions if item.get("status") == "approved"), None
-    )
-    if not next_action:
-        raise HTTPException(status_code=409, detail="No approved action to execute")
-    action_id = str(next_action.get("id") or "")
-    capability_name = str(next_action.get("capability_name") or "")
-    inputs = next_action.get("inputs") or {}
-    context = CapabilityContext(
-        client_id=str(run.get("client_id") or ""),
-        user_id=payload.user_id,
-    )
     try:
-        outputs = execute_capability(
-            deps=DEPS,
-            context=context,
-            capability_name=capability_name,
-            inputs=inputs,
+        result = RUNTIME.step_once(
+            run_id=run_id,
+            user_id=payload.user_id,
         )
-        executed = DEPS.agent_actions.update_agent_action_status(
-            action_id=action_id,
-            status="executed",
-            outputs=outputs,
-            outputs_hash=_hash_payload(outputs),
-        )
-        DEPS.agent_runs.update_agent_run(run_id=run_id, status="running")
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PlanOnlyModeError, NoApprovedActionError, RunBusyError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except CapabilityExecutionError as exc:
-        executed = DEPS.agent_actions.update_agent_action_status(
-            action_id=action_id,
-            status="failed",
-            outputs={},
-            outputs_hash=_hash_payload({}),
-            error=str(exc),
-        )
-        DEPS.agent_runs.update_agent_run(
-            run_id=run_id,
-            status="failed",
-            error=str(exc),
-        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ValueError as exc:
-        executed = DEPS.agent_actions.update_agent_action_status(
-            action_id=action_id,
-            status="failed",
-            outputs={},
-            outputs_hash=_hash_payload({}),
-            error=str(exc),
-        )
-        DEPS.agent_runs.update_agent_run(
-            run_id=run_id,
-            status="failed",
-            error=str(exc),
-        )
+    except AgentRuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"run": DEPS.agent_runs.get_agent_run(run_id=run_id), "action": executed}
+    return {"run": result.run, "action": result.action}
 
 
 @router.get("")
