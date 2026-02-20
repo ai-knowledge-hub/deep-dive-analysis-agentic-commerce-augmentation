@@ -15,8 +15,8 @@ This project is a multi-tenant agentic commerce system for:
 
 The core moat is not a single score. It is the **feedback loop** that continuously updates decisions using observed evidence.
 
-Planned extension:
-- **Agent operator mode** (partially implemented): governed backend orchestration with run/action persistence and runtime step controls; policy/registry hardening is in progress.
+Current extension:
+- **Agent operator mode (v0)**: governed backend orchestration with run/action persistence, runtime step controls, centralized capability registry, and policy enforcement.
   See `docs/agentic-layer.md`.
 
 ---
@@ -101,11 +101,27 @@ Layer rule enforced by architecture checks:
   - Observed reality validation (manual observed outcomes).
 - Belief revisions, decision events, calibration profiles.
 - Memory artifacts with quality/support gating and provenance tracking.
+- Agent operator mode:
+  - plan-first run creation (`plan_only` default),
+  - approved action execution in `auto_execute_safe`,
+  - runtime safety with run lock + heartbeat refresh,
+  - centralized capability specs + policy checks,
+  - operator UI in `Agent runs` with approvals and action explainability.
 
 Experiment protocol transparency APIs:
 - `GET /experiments/{experiment_id}/execution-state`
 - `GET /experiments/{experiment_id}/retrieval-snapshots`
 - `GET /experiments/{experiment_id}/hypotheses`
+
+Agent operator APIs:
+- `POST /agent-runs`
+- `GET /agent-runs`
+- `GET /agent-runs/{run_id}`
+- `POST /agent-runs/{run_id}/start`
+- `POST /agent-runs/{run_id}/pause`
+- `POST /agent-runs/{run_id}/cancel`
+- `POST /agent-runs/{run_id}/step`
+- `POST /agent-runs/actions/{action_id}/decision`
 
 ---
 

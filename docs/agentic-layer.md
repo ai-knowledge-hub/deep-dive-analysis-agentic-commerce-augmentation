@@ -8,6 +8,8 @@ Implemented now:
 - Plan-first run creation + approval workflow
 - Runtime step execution service with short lease locking and heartbeat refresh
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
+- Operator UX in `/agent-runs` with queue approvals and action explainability
+- Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 Still pending:
 - autonomous scheduler/tick worker loop
 
@@ -66,6 +68,7 @@ v0 Runtime Core behavior:
 - Heartbeat is refreshed during execution (`last_heartbeat_at`).
 - Action claim is atomic (`approved -> executing -> executed|failed`).
 - Route handlers delegate to runtime service instead of duplicating execution logic.
+- UI exposes action rationale, side effects summary, and linked artifacts for selected actions.
 
 ### 3.2 Capability Registry (the key abstraction)
 
