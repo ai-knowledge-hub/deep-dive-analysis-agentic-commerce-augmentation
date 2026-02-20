@@ -9,6 +9,7 @@ from application.ports.deps import AppDeps
 from application.services.experiment.orchestrator import ExperimentOrchestrator
 from application.services.experiment.runner import ExperimentRunner
 from application.services.experiment.variant_generator import ExperimentVariantGenerator
+from application.services.agent_runtime.registry import get_capability_spec
 from application.services.validation_service import ValidationService
 
 
@@ -30,12 +31,22 @@ def execute_capability(
     inputs: Dict[str, Any],
 ) -> Dict[str, Any]:
     name = str(capability_name or "").strip()
+    spec = get_capability_spec(name)
+    if not spec:
+        raise CapabilityExecutionError(f"Unsupported capability: {name}")
+    inputs = spec.normalize_inputs(inputs or {})
+    missing_inputs = []
+    for key in spec.required_inputs:
+        value = inputs.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing_inputs.append(key)
+    if missing_inputs:
+        raise CapabilityExecutionError(
+            f"{name} missing required inputs: {', '.join(missing_inputs)}"
+        )
+
     if name == "freeze_retrieval_protocol":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "freeze_retrieval_protocol requires experiment_id"
-            )
         retrieval_max_results = int(inputs.get("retrieval_max_results") or 5)
         runner = ExperimentRunner(deps=deps)
         return runner.freeze_retrieval_protocol(
@@ -46,10 +57,6 @@ def execute_capability(
         )
     if name == "run_control_baseline":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "run_control_baseline requires experiment_id"
-            )
         control_variant_id = _resolve_control_variant_id(
             deps=deps, experiment_id=experiment_id
         )
@@ -79,8 +86,6 @@ def execute_capability(
         }
     if name == "seed_hypotheses":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError("seed_hypotheses requires experiment_id")
         snapshot_version_raw = inputs.get("snapshot_version")
         snapshot_version = (
             int(snapshot_version_raw) if snapshot_version_raw is not None else None
@@ -93,8 +98,6 @@ def execute_capability(
         )
     if name == "generate_variants":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError("generate_variants requires experiment_id")
         mode = str(inputs.get("mode") or "loop_evidence").strip().lower()
         strategy = str(inputs.get("strategy") or "both").strip().lower()
         max_candidates = int(inputs.get("max_candidates") or 3)
@@ -166,8 +169,6 @@ def execute_capability(
         }
     if name == "run_variant":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError("run_variant requires experiment_id")
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
             variant_selection = (
@@ -208,10 +209,6 @@ def execute_capability(
         }
     if name == "request_synthetic_validation":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "request_synthetic_validation requires experiment_id"
-            )
         provider = str(inputs.get("provider") or "openrouter").strip().lower()
         mode = str(inputs.get("mode") or "in_app_byok").strip().lower()
         model = str(inputs.get("model") or "").strip() or None
@@ -275,10 +272,6 @@ def execute_capability(
         }
     if name == "review_validation_readiness":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "review_validation_readiness requires experiment_id"
-            )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
             variant_selection = (
@@ -324,10 +317,6 @@ def execute_capability(
         }
     if name == "update_posterior_and_decisions":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "update_posterior_and_decisions requires experiment_id"
-            )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         runner = ExperimentRunner(deps=deps)
         return runner.update_posterior_and_decisions(
@@ -337,10 +326,6 @@ def execute_capability(
         )
     if name == "recommend_next_action":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "recommend_next_action requires experiment_id"
-            )
         orchestrator = ExperimentOrchestrator(deps=deps)
         recommendation = orchestrator.suggest_next_test(
             experiment_id=experiment_id,
@@ -396,8 +381,6 @@ def execute_capability(
         }
     if name == "promote_variant_lab":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError("promote_variant_lab requires experiment_id")
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
             variant_selection = (
@@ -517,10 +500,6 @@ def execute_capability(
         }
     if name == "promote_variant_prod":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "promote_variant_prod requires experiment_id"
-            )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
             variant_selection = (
@@ -640,10 +619,6 @@ def execute_capability(
         }
     if name == "publish_copy_revision":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
-        if not experiment_id:
-            raise CapabilityExecutionError(
-                "publish_copy_revision requires experiment_id"
-            )
         variant_id = str(inputs.get("variant_id") or "").strip() or None
         if not variant_id:
             variant_selection = (

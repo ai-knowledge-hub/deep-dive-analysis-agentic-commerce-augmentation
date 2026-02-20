@@ -109,6 +109,27 @@ def update_agent_action_status(
     return get_agent_action(action_id)
 
 
+def transition_agent_action_status(
+    *,
+    action_id: str,
+    from_status: str,
+    to_status: str,
+) -> Dict[str, Any] | None:
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        UPDATE agent_actions
+        SET status = ?, updated_at = datetime('now')
+        WHERE id = ? AND status = ?
+        """,
+        (to_status, action_id, from_status),
+    )
+    conn.commit()
+    if not cursor.rowcount:
+        return None
+    return get_agent_action(action_id)
+
+
 def get_agent_action(action_id: str) -> Dict[str, Any] | None:
     row = (
         get_connection()
@@ -175,7 +196,7 @@ def _row(row) -> Dict[str, Any]:
 __all__ = [
     "create_agent_action",
     "update_agent_action_status",
+    "transition_agent_action_status",
     "get_agent_action",
     "list_agent_actions",
 ]
-

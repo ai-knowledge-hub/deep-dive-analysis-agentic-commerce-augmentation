@@ -1,14 +1,19 @@
 # Build The Agentic Layer (Approach, Rationale, Roadmap)
 
-This document describes the planned **agent operator mode**: a governed orchestration layer that can run the lab protocol end-to-end (or partially) under explicit constraints.
+This document describes the **agent operator mode**: a governed orchestration layer that can run the lab protocol end-to-end (or partially) under explicit constraints.
 
-Status: **Planned (not built end-to-end)**. Individual prerequisites already exist (frozen snapshots, baseline gating, hypotheses, decision policy inputs/outputs, audit primitives).
+Status: **Partially implemented (v0 Runtime Core complete; end-to-end autonomy still in progress)**.
+Implemented now:
+- Agent run and action persistence (`agent_runs`, `agent_actions`)
+- Plan-first run creation + approval workflow
+- Runtime step execution service with short lease locking and heartbeat refresh
+- Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
+Still pending:
+- autonomous scheduler/tick worker loop
 
 ---
 
-## 1) Does The Plan Make Sense?
-
-Yes, with two clarifications:
+## 1) Two specific points
 
 1. **Agent autonomy must be plan autonomy, not execution autonomy.**
    - Agents propose and queue actions.
@@ -26,7 +31,7 @@ The goal is scientific reproducibility: the same inputs + same capability versio
 
 ## 2) Separate Layer vs Converting The Whole Lab
 
-Build it as a **separate orchestration layer** that drives the existing lab protocol.
+Build as a **separate orchestration layer** that drives the existing lab protocol.
 
 Reason:
 - The current app is already a protocol engine + UI. Replacing it with agents would regress reliability and debuggability.
@@ -46,7 +51,7 @@ Target state:
 
 ### 3.1 AgentRuntime (backend boundary)
 
-Add an `AgentRuntime` service inside the backend (not frontend-driven).
+Implemented in v0: `AgentRuntimeService` inside backend (not frontend-driven).
 
 It runs **agent sessions** as jobs:
 - `agent_run` has: state machine stage, objective, allowed capabilities, scope (tenant/product/experiment), and pinned capability versions.
@@ -54,7 +59,20 @@ It runs **agent sessions** as jobs:
 
 This prevents “UI-driven autonomy” and keeps the system auditable and reproducible.
 
+v0 Runtime Core behavior:
+- `plan_only` remains default and blocks execution.
+- `auto_execute_safe` enables stepping approved actions.
+- Per-run short lease lock prevents concurrent execution (`lock_token`, `lock_expires_at`).
+- Heartbeat is refreshed during execution (`last_heartbeat_at`).
+- Action claim is atomic (`approved -> executing -> executed|failed`).
+- Route handlers delegate to runtime service instead of duplicating execution logic.
+
 ### 3.2 Capability Registry (the key abstraction)
+
+Implemented in v0:
+- centralized capability specs in `application/services/agent_runtime/registry.py`
+- per-capability defaults, required inputs, side effects, and state transition mapping
+- runtime + execution entrypoints validate against the same registry contract
 
 Agents must not call raw endpoints. They request named capabilities:
 
@@ -272,6 +290,15 @@ Notes:
   - `prod promotion -> operational publish`.
 
 ### 3.3 Policy-as-code (enforcement stays system-side)
+
+Implemented in v0:
+- centralized `PolicyEnforcer` in `application/services/agent_runtime/policy.py`
+- checks executed before capability execution:
+  - capability allow-list per run
+  - required input presence
+  - action budget (`max_actions`)
+  - variant-run budget (`max_variant_runs`)
+- runtime now fails actions/runs with explicit policy errors when checks fail
 
 Formalize enforcement checks used by both humans and agents:
 - frozen snapshot required for retrieval-backed scoring

@@ -16,7 +16,7 @@ This project is a multi-tenant agentic commerce system for:
 The core moat is not a single score. It is the **feedback loop** that continuously updates decisions using observed evidence.
 
 Planned extension:
-- **Agent operator mode** (a governed backend orchestration layer that can run the lab protocol under policy constraints).
+- **Agent operator mode** (partially implemented): governed backend orchestration with run/action persistence and runtime step controls; policy/registry hardening is in progress.
   See `docs/agentic-layer.md`.
 
 ---
