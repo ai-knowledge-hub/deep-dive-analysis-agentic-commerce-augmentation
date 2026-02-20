@@ -1877,6 +1877,11 @@ input[type="checkbox"]:focus-visible {
   color: var(--text-secondary);
 }
 
+.table__row.is-active {
+  background: rgba(28, 200, 134, 0.08);
+  border-left: 2px solid rgba(28, 200, 134, 0.5);
+}
+
 .table__row:last-child {
   border-bottom: none;
 }
@@ -1942,6 +1947,21 @@ input[type="checkbox"]:focus-visible {
   padding: 6px 10px;
   font-size: 12px;
   border-radius: 10px;
+}
+
+.agent-ops-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.agent-action-detail {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .drawer {

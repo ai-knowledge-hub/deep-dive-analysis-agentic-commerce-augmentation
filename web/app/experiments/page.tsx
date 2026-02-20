@@ -16,6 +16,7 @@ import type {
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
+  AgentRun,
   ValidationSummary,
   QueryBattery,
   QueryBatteryQuery,
@@ -66,6 +67,7 @@ import {
   listAdminProducts,
   listSimulationRuns,
   listCopyRevisions,
+  listAgentRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -240,6 +242,7 @@ export default function ExperimentsPage() {
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
     null,
   );
+  const [latestAgentRun, setLatestAgentRun] = useState<AgentRun | null>(null);
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
@@ -552,6 +555,24 @@ export default function ExperimentsPage() {
       })
       .catch(() => setValidationSummary(null));
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
+
+  useEffect(() => {
+    if (!userId || !selectedExperimentId) {
+      setLatestAgentRun(null);
+      return;
+    }
+    void listAgentRuns(
+      {
+        experiment_id: selectedExperimentId,
+        limit: 1,
+      },
+      userId,
+    )
+      .then((response) => {
+        setLatestAgentRun((response.runs ?? [])[0] ?? null);
+      })
+      .catch(() => setLatestAgentRun(null));
+  }, [selectedExperimentId, userId]);
 
   useEffect(() => {
     if (selectedExperimentId) return;
@@ -2667,6 +2688,59 @@ export default function ExperimentsPage() {
                 )
               }
             />
+          </section>
+          <section className="panel__card panel__card--secondary">
+            <div className="panel__header">
+              <h3>Agent operator mode</h3>
+              <span className="panel__badge panel__badge--secondary">
+                Experimental
+              </span>
+            </div>
+            <p className="panel__subheading">Optional orchestrated path</p>
+            <p className="panel__step-helper">
+              Use governed automation to run approved capabilities on this experiment.
+              The same protocol gates apply (frozen snapshots, baseline-first, approvals).
+            </p>
+            <div className="panel__meta-strip">
+              <div>
+                <strong>Latest agent run</strong>:{" "}
+                {latestAgentRun
+                  ? `${latestAgentRun.status ?? "unknown"} · ${latestAgentRun.state ?? "unknown"}`
+                  : "none yet"}
+              </div>
+              <div>
+                <strong>Run mode</strong>: {latestAgentRun?.run_mode ?? "plan_only"}
+              </div>
+            </div>
+            <div className="panel__actions panel__actions--priority">
+              <button
+                type="button"
+                className="panel__action panel__action--prominent"
+                onClick={() =>
+                  router.push(
+                    selectedExperimentId
+                      ? `/agent-runs?experiment_id=${selectedExperimentId}`
+                      : "/agent-runs",
+                  )
+                }
+                disabled={!selectedExperimentId}
+              >
+                Start in Agent runs
+              </button>
+              <button
+                type="button"
+                className="panel__action panel__action--ghost"
+                onClick={() =>
+                  router.push(
+                    selectedExperimentId
+                      ? `/agent-runs?experiment_id=${selectedExperimentId}`
+                      : "/agent-runs",
+                  )
+                }
+              >
+                View Agent runs
+              </button>
+            </div>
           </section>
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>

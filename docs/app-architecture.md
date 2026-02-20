@@ -189,7 +189,9 @@ Loop maintenance:
 - full backend serverless hardening for Vercel Python runtime
 - **Agent operator mode expansion** (governed orchestration layer is partially implemented):
   - completed: backend `AgentRuntime` controls + run/action persistence + step execution + lock/heartbeat safety
-  - next: centralized capability registry + policy enforcer
-  - next: capability/policy version registry hardening and richer audit explainability
+  - completed: centralized capability registry (`application/services/agent_runtime/registry.py`)
+  - completed: centralized policy enforcer (`application/services/agent_runtime/policy.py`)
+  - completed: operator UI (`/agent-runs`) and experiment entry-point panel
+  - next: capability/policy version registry hardening and richer audit telemetry
   - next: multi-agent role model (planner/variant/validation/policy) using shared capabilities
   - reference: `docs/agentic-layer.md`

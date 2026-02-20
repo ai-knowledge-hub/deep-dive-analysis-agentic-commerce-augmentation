@@ -40,6 +40,64 @@ const AGENT_FLOW_STEPS: { id: AgentRun["state"] | string; label: string }[] = [
   { id: "posterior_updated", label: "Posterior updated" },
 ];
 
+const CAPABILITY_EXPLAIN: Record<
+  string,
+  { summary: string; sideEffects: string[] }
+> = {
+  freeze_retrieval_protocol: {
+    summary: "Freezes retrieval snapshots for stable, fair variant comparison.",
+    sideEffects: ["Writes retrieval snapshots", "Pins snapshot version"],
+  },
+  run_control_baseline: {
+    summary: "Runs control on frozen snapshots to establish baseline gate.",
+    sideEffects: ["Creates run row", "Creates baseline metric row"],
+  },
+  seed_hypotheses: {
+    summary: "Builds hypotheses from baseline gaps and winner-signal deltas.",
+    sideEffects: ["Creates hypothesis rows"],
+  },
+  generate_variants: {
+    summary: "Generates and persists candidate variants from loop/cold-start evidence.",
+    sideEffects: ["Creates variant rows", "Stores generation provenance"],
+  },
+  run_variant: {
+    summary: "Executes candidate variant on frozen snapshots.",
+    sideEffects: ["Creates run row", "Creates metric row with decision fields"],
+  },
+  request_synthetic_validation: {
+    summary: "Requests synthetic validation jobs and optionally auto-runs in-app.",
+    sideEffects: ["Creates validation job", "May create validation result"],
+  },
+  review_validation_readiness: {
+    summary: "Evaluates readiness gates for lab/prod promotion tiers.",
+    sideEffects: ["Reads validation/metrics state", "Returns explicit gate statuses"],
+  },
+  update_posterior_and_decisions: {
+    summary: "Recomputes posterior and decision outputs from latest evidence.",
+    sideEffects: ["Creates decision-refresh metric row"],
+  },
+  recommend_next_action: {
+    summary: "Produces constrained next-step recommendation.",
+    sideEffects: ["Creates recommendation history row"],
+  },
+  promote_variant_lab: {
+    summary: "Promotes variant to lab tier under policy checks.",
+    sideEffects: ["Creates analytics event", "Creates decision event"],
+  },
+  promote_variant_prod: {
+    summary: "Promotes variant to prod tier when observed gates pass.",
+    sideEffects: ["Creates analytics event", "Creates decision event"],
+  },
+  publish_copy_revision: {
+    summary: "Publishes revision to product description after prod promotion.",
+    sideEffects: [
+      "Updates product description",
+      "Marks revision as published",
+      "Creates audit events",
+    ],
+  },
+};
+
 function formatJsonPreview(value: unknown): string {
   try {
     return JSON.stringify(value ?? {}, null, 2);
@@ -63,6 +121,7 @@ export default function AgentRunsPage() {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
 
   const [createForm, setCreateForm] = useState({
     experiment_id: experimentIdParam || "",
@@ -128,6 +187,20 @@ export default function AgentRunsPage() {
     loadSelected();
   }, [loadSelected]);
 
+  useEffect(() => {
+    if (!selectedActionId && actions.length > 0) {
+      setSelectedActionId(actions[0]?.id ?? null);
+      return;
+    }
+    if (
+      selectedActionId &&
+      actions.length > 0 &&
+      !actions.some((item) => item.id === selectedActionId)
+    ) {
+      setSelectedActionId(actions[0]?.id ?? null);
+    }
+  }, [actions, selectedActionId]);
+
   const selectedSummary = useMemo(() => {
     if (!selectedRun) return null;
     return `${selectedRun.status ?? "unknown"} · ${selectedRun.state ?? "unknown"}`;
@@ -150,6 +223,32 @@ export default function AgentRunsPage() {
       return { ...step, status, className };
     });
   }, [selectedRun?.state]);
+
+  const selectedAction = useMemo(
+    () =>
+      (actions ?? []).find((item) => item.id === selectedActionId) ??
+      (actions ?? [])[0] ??
+      null,
+    [actions, selectedActionId],
+  );
+
+  const actionCounters = useMemo(() => {
+    const counts = {
+      proposed: 0,
+      approved: 0,
+      executing: 0,
+      executed: 0,
+      failed: 0,
+      rejected: 0,
+    };
+    (actions ?? []).forEach((action) => {
+      const key = String(action.status || "").toLowerCase();
+      if (key in counts) {
+        counts[key as keyof typeof counts] += 1;
+      }
+    });
+    return counts;
+  }, [actions]);
 
   const handleCreate = useCallback(async () => {
     if (!userId) return;
@@ -420,6 +519,36 @@ export default function AgentRunsPage() {
                       <div>
                         <strong>Mode</strong>: {selectedRun.run_mode || "plan_only"}
                       </div>
+                      <div>
+                        <strong>Budget</strong>: max actions{" "}
+                        {String(
+                          (selectedRun.budgets as Record<string, unknown> | undefined)
+                            ?.max_actions ?? "—",
+                        )}{" "}
+                        · max variant runs{" "}
+                        {String(
+                          (selectedRun.budgets as Record<string, unknown> | undefined)
+                            ?.max_variant_runs ?? "—",
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="agent-ops-summary">
+                      <span className="panel__badge panel__badge--secondary">
+                        Proposed: {actionCounters.proposed}
+                      </span>
+                      <span className="panel__badge panel__badge--secondary">
+                        Approved: {actionCounters.approved}
+                      </span>
+                      <span className="panel__badge panel__badge--secondary">
+                        Executing: {actionCounters.executing}
+                      </span>
+                      <span className="panel__badge panel__badge--secondary">
+                        Executed: {actionCounters.executed}
+                      </span>
+                      <span className="panel__badge panel__badge--secondary">
+                        Failed: {actionCounters.failed}
+                      </span>
                     </div>
 
                     <div className="table">
@@ -431,7 +560,11 @@ export default function AgentRunsPage() {
                         <div>Actions</div>
                       </div>
                       {(actions ?? []).map((a) => (
-                        <div key={a.id} className="table__row">
+                        <div
+                          key={a.id}
+                          className={`table__row ${selectedAction?.id === a.id ? "is-active" : ""}`}
+                          onClick={() => setSelectedActionId(a.id)}
+                        >
                           <div>{a.sequence}</div>
                           <div>
                             <div className="table__strong">{a.capability_name}</div>
@@ -488,6 +621,91 @@ export default function AgentRunsPage() {
                         </div>
                       )}
                     </div>
+                    {selectedAction ? (
+                      <section className="agent-action-detail">
+                        <div className="panel__header">
+                          <h4>Selected action details</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {selectedAction.capability_name}
+                          </span>
+                        </div>
+                        <p className="panel__muted">
+                          {CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
+                            "Capability summary not yet documented."}
+                        </p>
+                        <p className="panel__subheading">What it changes</p>
+                        <ul className="panel__list panel__list--compact">
+                          {(
+                            CAPABILITY_EXPLAIN[selectedAction.capability_name]
+                              ?.sideEffects ?? ["No side-effect metadata yet."]
+                          ).map((effect, index) => (
+                            <li key={`${effect}-${index}`}>{effect}</li>
+                          ))}
+                        </ul>
+                        <p className="panel__subheading">Rationale and confidence</p>
+                        <p className="panel__muted">
+                          {selectedAction.rationale || "No rationale captured."}
+                        </p>
+                        <p className="panel__muted">
+                          Confidence:{" "}
+                          {typeof selectedAction.confidence === "number"
+                            ? selectedAction.confidence.toFixed(2)
+                            : "—"}
+                        </p>
+                        <p className="panel__subheading">Linked artifacts</p>
+                        <div className="panel__actions">
+                          {selectedAction.variant_id ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              onClick={() =>
+                                selectedRun?.experiment_id
+                                  ? router.push(
+                                      `/experiments?experiment_id=${selectedRun.experiment_id}`,
+                                    )
+                                  : null
+                              }
+                            >
+                              Variant: {selectedAction.variant_id.slice(0, 8)}
+                            </button>
+                          ) : null}
+                          {selectedAction.validation_job_id ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              onClick={() => router.push("/validation")}
+                            >
+                              Validation job:{" "}
+                              {selectedAction.validation_job_id.slice(0, 8)}
+                            </button>
+                          ) : null}
+                          {(() => {
+                            const outputs = (selectedAction.outputs ??
+                              {}) as Record<string, unknown>;
+                            const metricId =
+                              typeof outputs.metric_id === "string"
+                                ? outputs.metric_id
+                                : null;
+                            if (!metricId) return null;
+                            return (
+                              <button
+                                type="button"
+                                className="button button--ghost button--sm"
+                                onClick={() =>
+                                  selectedRun?.experiment_id
+                                    ? router.push(
+                                        `/experiments?experiment_id=${selectedRun.experiment_id}`,
+                                      )
+                                    : null
+                                }
+                              >
+                                Metric: {metricId.slice(0, 8)}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      </section>
+                    ) : null}
                   </>
                 )}
               </div>

@@ -236,10 +236,14 @@ Current implementation:
 - v0 defaults to `plan_only`; execution requires `auto_execute_safe`.
 - runtime uses per-run short lease lock + heartbeat refresh.
 - action execution is atomic (`approved -> executing -> executed|failed`).
+- centralized capability specs + defaults are enforced through a registry contract.
+- centralized policy checks enforce allow-list + required inputs + action budgets.
+- `Agent runs` UI includes action explainability (why, side effects, linked artifacts).
+- `Experiments` page includes an Agent operator entry panel with latest run status.
 
 Still in progress:
 - autonomous background scheduler/tick worker
-- broader explainability UI around side effects/budgets
+- richer budget burn telemetry and artifact diff views
 
 See `docs/agentic-layer.md`.
 

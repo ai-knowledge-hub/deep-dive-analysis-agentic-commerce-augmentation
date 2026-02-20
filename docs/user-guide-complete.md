@@ -25,8 +25,10 @@ Sidebar workflow order:
 3. Evidence
 4. Simulation
 5. Experiments
-6. Overview
-7. Admin (separated as operational/onboarding area)
+6. Validation
+7. Overview
+8. Agent runs
+9. Admin (separated as operational/onboarding area)
 
 ---
 
@@ -130,13 +132,24 @@ Implementation note:
 
 Tooltips in UI explain both modes on hover (separately for each toggle).
 
-### Agent operator mode (Planned, not built)
+### Agent operator mode (Current v0)
 
-Planned: an **agent operator mode** that can run the same experiment protocol automatically under strict policy constraints.
+Agent operator mode is available at **Agent runs** in the sidebar.
 
-Key idea:
-- agents propose/queue actions (plan autonomy),
-- the system enforces protocol constraints and can require approvals at defined gates.
+Current behavior:
+- create an agent run scoped to an experiment,
+- queue proposed capability actions,
+- approve/reject actions,
+- execute approved actions stepwise in `auto_execute_safe` mode,
+- keep execution guarded by policy checks and runtime lock/heartbeat safety.
+
+Execution modes:
+- `plan_only` (default): planning + approvals only, no execution side effects.
+- `auto_execute_safe`: approved actions can be executed via `step`.
+
+The Experiments page also includes an **Agent operator mode** panel with:
+- latest agent run status for the selected experiment,
+- direct CTAs to open/start work in Agent runs.
 
 Reference: `docs/agentic-layer.md`.
 
