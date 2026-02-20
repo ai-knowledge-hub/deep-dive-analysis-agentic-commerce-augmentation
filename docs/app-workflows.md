@@ -238,8 +238,6 @@ Current implementation:
 - action execution is atomic (`approved -> executing -> executed|failed`).
 
 Still in progress:
-- centralized `PolicyEnforcer` module
-- formal `CapabilityRegistry` object
 - autonomous background scheduler/tick worker
 - broader explainability UI around side effects/budgets
 

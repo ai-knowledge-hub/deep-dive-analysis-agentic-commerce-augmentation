@@ -12,6 +12,11 @@ from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
     execute_capability,
 )
+from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
+from application.services.agent_runtime.registry import (
+    get_capability_spec,
+    next_state_for_capability,
+)
 
 
 class AgentRuntimeError(ValueError):
@@ -41,17 +46,6 @@ class RuntimeResult:
     message: Optional[str] = None
 
 
-_STATE_BY_CAPABILITY: Dict[str, str] = {
-    "freeze_retrieval_protocol": "retrieval_snapshots_ready",
-    "run_control_baseline": "baseline_scored",
-    "seed_hypotheses": "hypotheses_ready",
-    "generate_variants": "variants_ready",
-    "run_variant": "experiment_run_completed",
-    "request_synthetic_validation": "validation_completed",
-    "update_posterior_and_decisions": "posterior_updated",
-}
-
-
 def _hash_payload(value: Any) -> str:
     try:
         encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode(
@@ -66,6 +60,7 @@ class AgentRuntimeService:
     def __init__(self, *, deps: AppDeps, lock_ttl_seconds: int = 30) -> None:
         self._deps = deps
         self._lock_ttl_seconds = max(5, int(lock_ttl_seconds))
+        self._policy = PolicyEnforcer()
 
     def start_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
@@ -107,9 +102,7 @@ class AgentRuntimeService:
         run = self._require_run(run_id)
         run_mode = str(run.get("run_mode") or "plan_only")
         if run_mode == "plan_only":
-            raise PlanOnlyModeError(
-                "Run is plan-only. Switch mode to execute steps."
-            )
+            raise PlanOnlyModeError("Run is plan-only. Switch mode to execute steps.")
         if str(run.get("status") or "").lower() in {"canceled", "completed"}:
             raise AgentRuntimeError("Run is not executable in its current status")
 
@@ -136,7 +129,20 @@ class AgentRuntimeService:
                 raise NoApprovedActionError("No approved action to execute")
 
             capability_name = str(action.get("capability_name") or "")
-            inputs = action.get("inputs") or {}
+            spec = get_capability_spec(capability_name)
+            if not spec:
+                raise AgentRuntimeError(f"Unsupported capability: {capability_name}")
+            inputs = spec.normalize_inputs(action.get("inputs") or {})
+            all_actions = self._deps.agent_actions.list_agent_actions(
+                agent_run_id=run_id, limit=500
+            )
+            self._policy.validate_action_execution(
+                run=run,
+                action=action,
+                spec=spec,
+                all_actions=all_actions,
+                inputs=inputs,
+            )
             context = CapabilityContext(
                 client_id=str(run.get("client_id") or ""),
                 user_id=user_id,
@@ -148,6 +154,20 @@ class AgentRuntimeService:
                     capability_name=capability_name,
                     inputs=inputs,
                 )
+            except PolicyError as exc:
+                self._deps.agent_actions.update_agent_action_status(
+                    action_id=str(action.get("id") or ""),
+                    status="failed",
+                    outputs={},
+                    outputs_hash=_hash_payload({}),
+                    error=str(exc),
+                )
+                self._deps.agent_runs.update_agent_run(
+                    run_id=run_id,
+                    status="failed",
+                    error=str(exc),
+                )
+                raise AgentRuntimeError(str(exc)) from exc
             except CapabilityExecutionError as exc:
                 self._deps.agent_actions.update_agent_action_status(
                     action_id=str(action.get("id") or ""),
@@ -183,7 +203,7 @@ class AgentRuntimeService:
                 outputs=outputs,
                 outputs_hash=_hash_payload(outputs),
             )
-            next_state = _STATE_BY_CAPABILITY.get(capability_name)
+            next_state = next_state_for_capability(capability_name)
             if next_state:
                 self._deps.agent_runs.update_agent_run(run_id=run_id, state=next_state)
             status = self._compute_next_run_status(run_id=run_id)
@@ -197,7 +217,9 @@ class AgentRuntimeService:
                 lock_token=lock_token,
                 ttl_seconds=self._lock_ttl_seconds,
             )
-            return RuntimeResult(run=updated_run or self._require_run(run_id), action=executed)
+            return RuntimeResult(
+                run=updated_run or self._require_run(run_id), action=executed
+            )
         finally:
             self._deps.agent_runs.release_run_lock(run_id=run_id, lock_token=lock_token)
 
@@ -208,7 +230,9 @@ class AgentRuntimeService:
         return run
 
     def _claim_next_approved_action(self, *, run_id: str) -> Dict[str, Any] | None:
-        actions = self._deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
+        actions = self._deps.agent_actions.list_agent_actions(
+            agent_run_id=run_id, limit=500
+        )
         approved = [item for item in actions if item.get("status") == "approved"]
         for item in approved:
             claimed = self._deps.agent_actions.transition_agent_action_status(
@@ -221,7 +245,9 @@ class AgentRuntimeService:
         return None
 
     def _compute_next_run_status(self, *, run_id: str) -> str:
-        actions = self._deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
+        actions = self._deps.agent_actions.list_agent_actions(
+            agent_run_id=run_id, limit=500
+        )
         statuses = {str(item.get("status") or "").lower() for item in actions}
         if "failed" in statuses:
             return "failed"

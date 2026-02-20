@@ -9,15 +9,11 @@ Implemented now:
 - Runtime step execution service with short lease locking and heartbeat refresh
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
 Still pending:
-- centralized policy-as-code module
-- fully structured capability registry object
-- autonomous background tick worker / scheduler
+- autonomous scheduler/tick worker loop
 
 ---
 
-## 1) Does The Plan Make Sense?
-
-Yes, with two clarifications:
+## 1) Two specific points
 
 1. **Agent autonomy must be plan autonomy, not execution autonomy.**
    - Agents propose and queue actions.
@@ -35,7 +31,7 @@ The goal is scientific reproducibility: the same inputs + same capability versio
 
 ## 2) Separate Layer vs Converting The Whole Lab
 
-Build it as a **separate orchestration layer** that drives the existing lab protocol.
+Build as a **separate orchestration layer** that drives the existing lab protocol.
 
 Reason:
 - The current app is already a protocol engine + UI. Replacing it with agents would regress reliability and debuggability.
@@ -72,6 +68,11 @@ v0 Runtime Core behavior:
 - Route handlers delegate to runtime service instead of duplicating execution logic.
 
 ### 3.2 Capability Registry (the key abstraction)
+
+Implemented in v0:
+- centralized capability specs in `application/services/agent_runtime/registry.py`
+- per-capability defaults, required inputs, side effects, and state transition mapping
+- runtime + execution entrypoints validate against the same registry contract
 
 Agents must not call raw endpoints. They request named capabilities:
 
@@ -289,6 +290,15 @@ Notes:
   - `prod promotion -> operational publish`.
 
 ### 3.3 Policy-as-code (enforcement stays system-side)
+
+Implemented in v0:
+- centralized `PolicyEnforcer` in `application/services/agent_runtime/policy.py`
+- checks executed before capability execution:
+  - capability allow-list per run
+  - required input presence
+  - action budget (`max_actions`)
+  - variant-run budget (`max_variant_runs`)
+- runtime now fails actions/runs with explicit policy errors when checks fail
 
 Formalize enforcement checks used by both humans and agents:
 - frozen snapshot required for retrieval-backed scoring

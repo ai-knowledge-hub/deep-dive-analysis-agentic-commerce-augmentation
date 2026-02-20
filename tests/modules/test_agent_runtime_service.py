@@ -46,14 +46,16 @@ def _create_base_run(*, deps, run_mode: str = "auto_execute_safe") -> dict:
     )
 
 
-def _add_approved_action(*, deps, run_id: str, capability_name: str = "fake_capability"):
+def _add_approved_action(
+    *, deps, run_id: str, capability_name: str = "freeze_retrieval_protocol"
+):
     return deps.agent_actions.create_agent_action(
         agent_run_id=run_id,
         sequence=1,
         status="approved",
         capability_name=capability_name,
         capability_version="v1",
-        inputs={},
+        inputs={"experiment_id": "exp-1"},
         outputs={},
         inputs_hash="in",
         outputs_hash=None,
@@ -79,7 +81,9 @@ def test_step_once_rejects_plan_only_run(tmp_path):
         runtime.step_once(run_id=run["id"], user_id="user-a")
 
 
-def test_step_once_executes_approved_action_and_updates_heartbeat(tmp_path, monkeypatch):
+def test_step_once_executes_approved_action_and_updates_heartbeat(
+    tmp_path, monkeypatch
+):
     db_path = tmp_path / "agent-runtime-step.db"
     set_database_path(db_path)
     init_db()
@@ -88,7 +92,7 @@ def test_step_once_executes_approved_action_and_updates_heartbeat(tmp_path, monk
     action = _add_approved_action(deps=deps, run_id=run["id"])
 
     def _fake_execute_capability(**kwargs):
-        assert kwargs["capability_name"] == "fake_capability"
+        assert kwargs["capability_name"] == "freeze_retrieval_protocol"
         return {"ok": True, "status": "done"}
 
     monkeypatch.setattr(
