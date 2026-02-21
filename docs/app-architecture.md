@@ -21,12 +21,14 @@ Next.js UI
   ├─ Simulation
   ├─ Experiments
   ├─ Validation
+  ├─ Agent Runs (operator workspace)
   └─ Admin (onboarding + operations)
             │
             ▼
 FastAPI Routes
   ├─ conversation / evidence / simulation / experiments / batteries
   ├─ validation / beliefs / loop / calibration / memory
+  ├─ agent-runs (create/list/detail/control/decision)
   └─ admin / analytics / tenants
             │
             ▼
@@ -37,6 +39,7 @@ Application Services
   ├─ experiment/
   ├─ query_battery/
   ├─ loop/
+  ├─ agent_runtime/
   ├─ admin/
   └─ validation_service.py
             │
@@ -58,6 +61,7 @@ Infrastructure
 - `web/app/simulation/page.tsx`: run/optimize/retest workflow.
 - `web/app/experiments/page.tsx`: batteries, variants, runs, metrics.
 - `web/app/validation/page.tsx`: centralized synthetic + observed validation.
+- `web/app/agent-runs/page.tsx`: agent operator workspace (queue approvals + execution controls + explainability).
 - `web/app/admin/page.tsx`: onboarding workspace + model gateway + operations.
 
 Admin onboarding is section-based (collapsible panels):
@@ -76,6 +80,7 @@ Admin onboarding is section-based (collapsible panels):
 - `api/routes/batteries.py`
 - `api/routes/simulation.py`
 - `api/routes/validation.py`
+- `api/routes/agent_runs.py`
 - `api/routes/beliefs.py`
 - `api/routes/loop.py`
 - `api/routes/admin.py`
@@ -87,6 +92,7 @@ Admin onboarding is section-based (collapsible panels):
 - `application/services/experiment/*`
 - `application/services/query_battery/*`
 - `application/services/loop/*`
+- `application/services/agent_runtime/*`
 - `application/services/admin/*`
 - `application/services/validation_service.py`
 
@@ -118,6 +124,7 @@ Core entities in active use:
 - learning loop: world_states, belief_revisions, decision_events, memory_artifacts, calibration_profiles, loop_maintenance_runs
 - intelligence: brand_beliefs, audience_archetypes, analytics_events
 - operations: skills, skills_history, llm_provider_configs
+- agent runtime: agent_runs, agent_actions
 
 Canonical spec fields are stored in:
 - `products.metadata.canonical_intent_spec`
@@ -180,18 +187,64 @@ Loop maintenance:
 
 ---
 
-## 7) Planned (Not Built Yet)
+## 7) Agentic Module Architecture (Current)
+
+The agentic module is implemented as an orchestration layer over the same experiment protocol used by manual workflows.
+
+### Scope and boundaries
+- UI workspace: `web/app/agent-runs/page.tsx`
+- API boundary: `api/routes/agent_runs.py`
+- Runtime boundary: `application/services/agent_runtime/runtime.py`
+- Capability execution boundary: `application/services/agent_runtime/capabilities.py`
+- Capability contract registry: `application/services/agent_runtime/registry.py`
+- Policy checks: `application/services/agent_runtime/policy.py`
+
+### Runtime behavior
+- `run_mode=plan_only` is default (no side-effect execution).
+- `run_mode=auto_execute_safe` allows approved actions to be executed via `step`.
+- Single-lane safety:
+  - per-run lease lock (`lock_token`, `lock_expires_at`)
+  - heartbeat refresh (`last_heartbeat_at`)
+  - atomic action claim (`approved -> executing -> executed|failed`)
+
+### Capability and policy model
+- Capabilities are explicit names with a shared contract:
+  - required inputs
+  - default inputs
+  - side effects (documentation-level effect surface)
+  - optional next-state mapping
+- Policy is enforced before execution:
+  - capability allow-list
+  - required inputs present
+  - action budget (`max_actions`)
+  - variant-run budget (`max_variant_runs`)
+
+### Data model
+- `agent_runs` stores scope, objective, capability allow-list, versions, budgets, approval policy, state/status, and lock/heartbeat metadata.
+- `agent_actions` stores ordered action queue entries with status, rationale, confidence, inputs/outputs hashes, and artifact anchors.
+
+### UX integration points
+- Sidebar includes **Agent runs** as a first-class module.
+- Experiments includes an **Agent operator mode** panel:
+  - latest run status for selected experiment
+  - direct CTAs to open/start in Agent runs.
+- Agent Runs includes:
+  - scope/run selection
+  - execution controls
+  - approvals/audit queue
+  - selected-action explainability panel (summary, side effects, linked artifacts).
+
+---
+
+## 8) Planned (Not Built Yet)
 
 - richer normalization pipeline (spell/synonym/unit + ontology confidence scoring)
 - stronger classifier-based category inference
 - native GA4 connector (current analytics ingestion is generic API-based)
 - confidence-scored simulation lesson promotion beyond current safeguards
 - full backend serverless hardening for Vercel Python runtime
-- **Agent operator mode expansion** (governed orchestration layer is partially implemented):
-  - completed: backend `AgentRuntime` controls + run/action persistence + step execution + lock/heartbeat safety
-  - completed: centralized capability registry (`application/services/agent_runtime/registry.py`)
-  - completed: centralized policy enforcer (`application/services/agent_runtime/policy.py`)
-  - completed: operator UI (`/agent-runs`) and experiment entry-point panel
-  - next: capability/policy version registry hardening and richer audit telemetry
-  - next: multi-agent role model (planner/variant/validation/policy) using shared capabilities
+- **Agent operator mode expansion**:
+  - autonomous scheduler/tick worker (beyond manual `step`)
+  - capability/policy version registry hardening and richer audit telemetry
+  - multi-agent role model (planner/variant/validation/policy) using shared capabilities
   - reference: `docs/agentic-layer.md`

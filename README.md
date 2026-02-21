@@ -274,6 +274,7 @@ Architecture checks are part of CI and enforce layer boundaries.
 
 ## Documentation
 
+- `docs/agentic-layer.md`
 - `docs/app-architecture.md`
 - `docs/app-workflows.md`
 - `docs/experiment-flow-detailed.md`
