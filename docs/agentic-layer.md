@@ -10,8 +10,8 @@ Implemented now:
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
 - Operator UX in `/agent-runs` with queue approvals and action explainability
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
-Still pending:
-- autonomous scheduler/tick worker loop
+- Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution
+- Autonomous scheduler service (`AgentRuntimeSchedulerService`) for interval-based continuous orchestration
 
 ---
 
@@ -69,6 +69,14 @@ v0 Runtime Core behavior:
 - Action claim is atomic (`approved -> executing -> executed|failed`).
 - Route handlers delegate to runtime service instead of duplicating execution logic.
 - UI exposes action rationale, side effects summary, and linked artifacts for selected actions.
+- Worker tick (`POST /agent-runs/tick`) processes runnable `auto_execute_safe` runs in bounded loops.
+
+Worker/ops entry points:
+- API: `POST /agent-runs/tick`
+- CLI: `python -m scripts.run_agent_runtime_worker`
+- Make target: `make agent-runtime-tick`
+- Scheduler CLI: `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`
+- Scheduler Make target: `make agent-runtime-scheduler`
 
 ### 3.2 Capability Registry (the key abstraction)
 

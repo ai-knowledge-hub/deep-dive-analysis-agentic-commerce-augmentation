@@ -144,3 +144,20 @@ For a new product:
 5. Run candidates on same snapshot version.
 6. Validate synthetic + observed.
 7. Use posterior decision action to promote, iterate, or reject.
+
+## 12) Agent Operator Overlay (Current v0)
+
+The agentic module does not replace this protocol. It orchestrates the same stages under policy controls.
+
+Current behavior:
+- Agent runs are created in `plan_only` by default.
+- Actions are proposed and can be approved/rejected in the Agent Runs workspace.
+- In `auto_execute_safe`, approved actions execute stepwise via runtime controls.
+- Runtime safety includes:
+  - per-run lease lock (prevents concurrent execution),
+  - heartbeat refresh during execution,
+  - atomic action transitions (`approved -> executing -> executed|failed`).
+
+Implication:
+- Manual and agent modes share the same experiment artifacts (`snapshot_version`, `hypothesis_id`, metrics, validation evidence).
+- Governance and reproducibility are preserved while enabling operator-assisted automation.

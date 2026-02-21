@@ -21,12 +21,14 @@ from application.services.agent_runtime.runtime import (
     RunBusyError,
     RunNotFoundError,
 )
+from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
 
 DEPS = default_deps()
 RUNTIME = AgentRuntimeService(deps=DEPS)
+WORKER = AgentRuntimeWorkerService(deps=DEPS)
 
 
 class AgentRunCreateRequest(BaseModel):
@@ -66,6 +68,13 @@ class AgentActionDecisionRequest(BaseModel):
 class AgentRunControlRequest(BaseModel):
     user_id: Optional[str] = None
     client_id: Optional[str] = None
+
+
+class AgentRunTickRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    max_runs: int = 10
+    max_steps_per_run: int = 5
 
 
 def _hash_payload(value: Any) -> str:
@@ -183,6 +192,18 @@ def step_agent_run(
     except AgentRuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"run": result.run, "action": result.action}
+
+
+@router.post("/tick")
+def tick_agent_runs(payload: AgentRunTickRequest) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    summary = WORKER.tick_client(
+        client_id=client_id,
+        user_id=payload.user_id,
+        max_runs=max(1, min(100, int(payload.max_runs))),
+        max_steps_per_run=max(1, min(50, int(payload.max_steps_per_run))),
+    )
+    return summary
 
 
 @router.get("")
