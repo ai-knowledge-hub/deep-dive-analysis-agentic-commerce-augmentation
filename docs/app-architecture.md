@@ -195,6 +195,7 @@ The agentic module is implemented as an orchestration layer over the same experi
 - UI workspace: `web/app/agent-runs/page.tsx`
 - API boundary: `api/routes/agent_runs.py`
 - Runtime boundary: `application/services/agent_runtime/runtime.py`
+- Worker boundary: `application/services/agent_runtime/worker.py`
 - Capability execution boundary: `application/services/agent_runtime/capabilities.py`
 - Capability contract registry: `application/services/agent_runtime/registry.py`
 - Policy checks: `application/services/agent_runtime/policy.py`
@@ -206,6 +207,10 @@ The agentic module is implemented as an orchestration layer over the same experi
   - per-run lease lock (`lock_token`, `lock_expires_at`)
   - heartbeat refresh (`last_heartbeat_at`)
   - atomic action claim (`approved -> executing -> executed|failed`)
+- Bounded autonomous execution:
+  - worker tick endpoint `POST /agent-runs/tick`
+  - CLI runner `scripts/run_agent_runtime_worker.py`
+  - Make target `make agent-runtime-tick`
 
 ### Capability and policy model
 - Capabilities are explicit names with a shared contract:
@@ -244,7 +249,7 @@ The agentic module is implemented as an orchestration layer over the same experi
 - confidence-scored simulation lesson promotion beyond current safeguards
 - full backend serverless hardening for Vercel Python runtime
 - **Agent operator mode expansion**:
-  - autonomous scheduler/tick worker (beyond manual `step`)
+  - always-on scheduler/queue workers (beyond bounded tick execution)
   - capability/policy version registry hardening and richer audit telemetry
   - multi-agent role model (planner/variant/validation/policy) using shared capabilities
   - reference: `docs/agentic-layer.md`

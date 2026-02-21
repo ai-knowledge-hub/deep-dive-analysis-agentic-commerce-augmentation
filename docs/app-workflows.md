@@ -232,6 +232,8 @@ Key principles:
 
 Current implementation:
 - `AgentRuntime` service is wired to `/agent-runs` controls (`start`, `pause`, `cancel`, `step`).
+- `AgentRuntimeWorkerService` supports bounded autonomous execution via `POST /agent-runs/tick`.
+- `AgentRuntimeSchedulerService` supports interval-based continuous orchestration across clients.
 - `agent_runs` + `agent_actions` persistence is active.
 - v0 defaults to `plan_only`; execution requires `auto_execute_safe`.
 - runtime uses per-run short lease lock + heartbeat refresh.
@@ -242,7 +244,6 @@ Current implementation:
 - `Experiments` page includes an Agent operator entry panel with latest run status.
 
 Still in progress:
-- autonomous background scheduler/tick worker
 - richer budget burn telemetry and artifact diff views
 
 See `docs/agentic-layer.md`.
@@ -320,4 +321,3 @@ Operational controls:
 - Gemini function-call provider run execution (mode is scaffolded, backend runtime not yet enabled)
 - deeper automatic promotion logic for simulation lessons
 - full backend serverless hardening for Vercel Python runtime
-- full autonomous agent tick scheduling (runtime worker loop beyond manual `step`)

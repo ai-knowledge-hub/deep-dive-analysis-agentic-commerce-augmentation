@@ -155,6 +155,38 @@ def list_agent_runs(
     return [_row(r) for r in rows]
 
 
+def list_runnable_agent_runs(
+    *,
+    client_id: str,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    ensure_client(client_id)
+    rows = (
+        get_connection()
+        .execute(
+            """
+            SELECT *
+            FROM agent_runs
+            WHERE client_id = ?
+              AND run_mode = 'auto_execute_safe'
+              AND status IN ('planned', 'running')
+              AND (
+                  lock_token IS NULL
+                  OR lock_expires_at IS NULL
+                  OR lock_expires_at <= datetime('now')
+              )
+            ORDER BY
+              CASE status WHEN 'running' THEN 0 ELSE 1 END,
+              updated_at ASC
+            LIMIT ?
+            """,
+            (client_id, limit),
+        )
+        .fetchall()
+    )
+    return [_row(r) for r in rows]
+
+
 def acquire_run_lock(*, run_id: str, lock_token: str, ttl_seconds: int = 30) -> bool:
     conn = get_connection()
     cursor = conn.execute(
@@ -251,6 +283,7 @@ __all__ = [
     "update_agent_run",
     "get_agent_run",
     "list_agent_runs",
+    "list_runnable_agent_runs",
     "acquire_run_lock",
     "heartbeat_run_lock",
     "release_run_lock",

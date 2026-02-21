@@ -122,6 +122,11 @@ Agent operator APIs:
 - `POST /agent-runs/{run_id}/cancel`
 - `POST /agent-runs/{run_id}/step`
 - `POST /agent-runs/actions/{action_id}/decision`
+- `POST /agent-runs/tick` (bounded autonomous worker tick)
+
+Agent runtime worker/scheduler:
+- one-off tick: `make agent-runtime-tick`
+- interval scheduler: `make agent-runtime-scheduler` (or `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`)
 
 ---
 
@@ -198,6 +203,8 @@ Useful helpers:
 make db-path
 make db-reset
 make loop-maintenance
+make agent-runtime-tick
+make agent-runtime-scheduler
 ```
 
 ---

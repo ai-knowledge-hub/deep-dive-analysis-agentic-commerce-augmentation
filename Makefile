@@ -149,3 +149,19 @@ loop-maintenance:
 	else \
 		$(PYTHON) -m scripts.run_learning_loop_maintenance; \
 	fi
+
+.PHONY: agent-runtime-tick
+agent-runtime-tick:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.run_agent_runtime_worker; \
+	else \
+		$(PYTHON) -m scripts.run_agent_runtime_worker; \
+	fi
+
+.PHONY: agent-runtime-scheduler
+agent-runtime-scheduler:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.run_agent_runtime_scheduler; \
+	else \
+		$(PYTHON) -m scripts.run_agent_runtime_scheduler; \
+	fi
