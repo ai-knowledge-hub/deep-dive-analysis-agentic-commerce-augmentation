@@ -98,6 +98,16 @@ class PolicyEnforcer:
                         f"max_variant_runs={max_variant_runs}"
                     )
 
+        max_cost_usd = _safe_float(budgets.get("max_cost_usd"))
+        if max_cost_usd is not None:
+            consumed_cost = _sum_consumed_cost_usd(all_actions)
+            if consumed_cost >= max_cost_usd:
+                raise PolicyError(
+                    "Cost budget exceeded: "
+                    f"consumed_cost_usd={consumed_cost:.4f}, "
+                    f"max_cost_usd={max_cost_usd:.4f}"
+                )
+
 
 def _safe_int(value: Any) -> int | None:
     try:
@@ -105,6 +115,45 @@ def _safe_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed >= 0 else None
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _sum_consumed_cost_usd(all_actions: list[Mapping[str, Any]]) -> float:
+    cost_keys = {
+        "cost_usd",
+        "total_cost_usd",
+        "validation_cost_usd",
+        "estimated_cost_usd",
+    }
+    total = 0.0
+    for action in all_actions:
+        if str(action.get("status") or "").lower() != "executed":
+            continue
+        outputs = action.get("outputs") or {}
+        total += _sum_numeric_fields(outputs, cost_keys)
+    return total
+
+
+def _sum_numeric_fields(value: Any, keys: set[str]) -> float:
+    if isinstance(value, list):
+        return sum(_sum_numeric_fields(item, keys) for item in value)
+    if not isinstance(value, Mapping):
+        return 0.0
+    subtotal = 0.0
+    for key, nested in value.items():
+        if key in keys:
+            number = _safe_float(nested)
+            if number is not None:
+                subtotal += number
+        subtotal += _sum_numeric_fields(nested, keys)
+    return subtotal
 
 
 __all__ = ["PolicyEnforcer", "PolicyError"]
