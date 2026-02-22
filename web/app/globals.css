@@ -2097,6 +2097,12 @@ input[type="checkbox"]:focus-visible {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.agent-timeline__item.is-focused {
+  border-color: rgba(28, 200, 134, 0.42);
+  box-shadow: 0 0 0 1px rgba(28, 200, 134, 0.18) inset;
+  background: rgba(28, 200, 134, 0.06);
+}
+
 .agent-timeline__meta {
   display: flex;
   flex-wrap: wrap;

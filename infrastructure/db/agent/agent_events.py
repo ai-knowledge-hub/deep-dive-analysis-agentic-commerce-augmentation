@@ -70,7 +70,13 @@ def list_agent_events(
     *,
     agent_run_id: str,
     event_type: Optional[str] = None,
+    status: Optional[str] = None,
+    capability_name: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
     limit: int = 500,
+    before: Optional[Dict[str, str]] = None,
+    after: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     filters = ["agent_run_id = ?"]
     params: list[Any] = [agent_run_id]
@@ -80,6 +86,33 @@ def list_agent_events(
         elif event_type in {"failed", "executed"}:
             filters.append("status = ?")
             params.append(event_type)
+    if status and status not in {"all", ""}:
+        filters.append("status = ?")
+        params.append(status)
+    if capability_name and capability_name not in {"all", ""}:
+        filters.append("capability_name = ?")
+        params.append(capability_name)
+    if since:
+        filters.append("datetime(created_at) >= datetime(?)")
+        params.append(since)
+    if until:
+        filters.append("datetime(created_at) <= datetime(?)")
+        params.append(until)
+    if before and before.get("created_at") and before.get("id"):
+        filters.append("(created_at < ? OR (created_at = ? AND id < ?))")
+        params.extend([before["created_at"], before["created_at"], before["id"]])
+        order_clause = "ORDER BY created_at DESC, id DESC"
+        should_reverse = True
+    elif after and after.get("created_at") and after.get("id"):
+        filters.append("(created_at > ? OR (created_at = ? AND id > ?))")
+        params.extend([after["created_at"], after["created_at"], after["id"]])
+        order_clause = "ORDER BY created_at ASC, id ASC"
+        should_reverse = False
+    else:
+        # Default: latest slice for timeline bootstrap.
+        order_clause = "ORDER BY created_at DESC, id DESC"
+        should_reverse = True
+
     where_clause = " AND ".join(filters)
     rows = (
         get_connection()
@@ -87,14 +120,15 @@ def list_agent_events(
             f"""
             SELECT * FROM agent_events
             WHERE {where_clause}
-            ORDER BY created_at ASC, sequence ASC
+            {order_clause}
             LIMIT ?
             """,
             (*params, int(limit)),
         )
         .fetchall()
     )
-    return [_row(row) for row in rows]
+    mapped = [_row(row) for row in rows]
+    return list(reversed(mapped)) if should_reverse else mapped
 
 
 def _row(row) -> Dict[str, Any]:
