@@ -718,6 +718,19 @@ export default function AgentRunsPage() {
     return `${selectedRun.status ?? "unknown"} · ${selectedRun.state ?? "unknown"}`;
   }, [selectedRun]);
 
+  const runCounters = useMemo(() => {
+    const counters = { total: 0, running: 0, planned: 0, failed: 0, completed: 0 };
+    (runs ?? []).forEach((run) => {
+      counters.total += 1;
+      const status = String(run.status ?? "").toLowerCase();
+      if (status === "running") counters.running += 1;
+      if (status === "planned") counters.planned += 1;
+      if (status === "failed") counters.failed += 1;
+      if (status === "completed") counters.completed += 1;
+    });
+    return counters;
+  }, [runs]);
+
   const flowSteps = useMemo(() => {
     const currentIndex = AGENT_FLOW_STEPS.findIndex(
       (step) => step.id === (selectedRun?.state ?? null),
@@ -1189,30 +1202,14 @@ export default function AgentRunsPage() {
               </div>
             </div>
           </div>
-          <p className="panel__subheading">Step 1 · Select scope and run</p>
-          <p className="panel__step-helper">
-            Define the run scope, create a run when needed, then select the run you want to operate.
-          </p>
 
           {error && <div className="panel__error">{error}</div>}
 
-          <div className="detail__grid">
-            <section className="panel__card panel__card--secondary">
-              <p className="panel__subheading">Step 1 · Scope and run selection</p>
-              <p className="panel__step-helper">
-                Use recent runs to inspect history and continue from the current state.
-              </p>
+          <div className="agent-workspace">
+            <section className="panel__card panel__card--secondary agent-workspace__rail">
               <div className="panel__card">
                 <div className="panel__header">
-                  <h3>Recent</h3>
-                  <button
-                    type="button"
-                    className="button button--primary-subtle"
-                    onClick={() => setDrawerOpen(true)}
-                    disabled={!userId || loading}
-                  >
-                    New run
-                  </button>
+                  <h3>Run selection</h3>
                 </div>
                 <div className="list">
                   {(runs ?? []).map((run) => {
@@ -1242,36 +1239,71 @@ export default function AgentRunsPage() {
                   )}
                 </div>
               </div>
+              <div className="panel__card">
+                <div className="panel__header">
+                  <h4>Run stats</h4>
+                </div>
+                <div className="agent-ops-summary">
+                  <span className="panel__badge panel__badge--secondary">
+                    Total: {runCounters.total}
+                  </span>
+                  <span className="panel__badge panel__badge--secondary">
+                    Running: {runCounters.running}
+                  </span>
+                  <span className="panel__badge panel__badge--secondary">
+                    Planned: {runCounters.planned}
+                  </span>
+                  <span className="panel__badge panel__badge--secondary">
+                    Completed: {runCounters.completed}
+                  </span>
+                  <span className="panel__badge panel__badge--secondary">
+                    Failed: {runCounters.failed}
+                  </span>
+                </div>
+              </div>
             </section>
 
-            <section className="panel__card panel__card--secondary">
-              <p className="panel__subheading">Step 2 · Control execution</p>
-              <p className="panel__step-helper">
-                Start, pause, or refresh the selected run while keeping policy and budgets enforced.
-              </p>
+            <section className="panel__card panel__card--secondary agent-workspace__main">
               {selectedRun ? (
-                <div className="flow-rail">
-                  <div className="flow-rail__header">
-                    <h4>Execution flow</h4>
-                    <span className="flow-rail__status">
+                <div className="agent-run-summary">
+                  <div className="panel__header">
+                    <h4>Execution controls</h4>
+                    <span className="panel__badge panel__badge--secondary">
                       Current: {selectedRun.state ?? "unknown"}
                     </span>
                   </div>
-                  <div className="flow-rail__steps">
-                    {flowSteps.map((step, index) => (
-                      <div key={step.id} className={`flow-rail__step ${step.className}`}>
-                        <span className="flow-rail__index">{index + 1}</span>
-                        <span className="flow-rail__label">{step.label}</span>
-                        <span className="flow-rail__status">{step.status}</span>
-                      </div>
-                    ))}
+                  <div className="agent-run-summary__chips">
+                    <span className="panel__badge panel__badge--secondary">
+                      Status: {selectedRun.status ?? "unknown"}
+                    </span>
+                    <span className="panel__badge panel__badge--secondary">
+                      Approval:{" "}
+                      {selectedRun.requires_approval ? "required" : "auto-execute safe"}
+                    </span>
+                    <span className="panel__badge panel__badge--secondary">
+                      Mode: {selectedRun.run_mode || "plan_only"}
+                    </span>
                   </div>
+                  <details className="agent-flow-details">
+                    <summary>View full execution flow</summary>
+                    <div className="flow-rail">
+                      <div className="flow-rail__steps">
+                        {flowSteps.map((step, index) => (
+                          <div key={step.id} className={`flow-rail__step ${step.className}`}>
+                            <span className="flow-rail__index">{index + 1}</span>
+                            <span className="flow-rail__label">{step.label}</span>
+                            <span className="flow-rail__status">{step.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
                 </div>
               ) : null}
               <div className="panel__card">
                 <div className="panel__header">
                   <h3>Action queue</h3>
-                  <div className="panel__meta">
+                  <div className="panel__meta agent-queue-controls">
                     {selectedRun?.experiment_id && (
                       <button
                         type="button"
@@ -1328,10 +1360,6 @@ export default function AgentRunsPage() {
 
                 {selectedRun && (
                   <>
-                    <p className="panel__subheading">Step 3 · Review approvals and audit</p>
-                    <p className="panel__step-helper">
-                      Approve or reject proposed actions and inspect rationale plus I/O for traceability.
-                    </p>
                     <div className="panel__meta-strip">
                       <div>
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}

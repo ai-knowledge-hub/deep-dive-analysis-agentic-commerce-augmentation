@@ -1975,6 +1975,57 @@ input[type="checkbox"]:focus-visible {
   margin: 8px 0 12px;
 }
 
+.agent-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.agent-workspace__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-workspace__main {
+  min-width: 0;
+}
+
+.agent-workspace__rail .panel__card {
+  min-height: 240px;
+}
+
+.agent-run-summary {
+  margin-bottom: 10px;
+}
+
+.agent-run-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.agent-flow-details {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 10px;
+}
+
+.agent-flow-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.agent-queue-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .agent-action-detail {
   margin-top: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2172,6 +2223,15 @@ input[type="checkbox"]:focus-visible {
 
 .agent-timeline__note.is-policy {
   color: #fde68a;
+}
+
+@media (max-width: 1360px) {
+  .agent-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agent-workspace__rail .panel__card {
+    min-height: 0;
+  }
 }
 
 .agent-diff-detail-grid {
