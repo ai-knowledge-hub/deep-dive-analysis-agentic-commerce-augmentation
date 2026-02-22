@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import type { AgentAction, AgentRun } from "../../lib/types";
+import type { AgentAction, AgentRun, Experiment } from "../../lib/types";
 import {
   controlAgentRun,
   createAgentRun,
   decideAgentAction,
   getAgentRun,
+  listExperiments,
   listAgentRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
@@ -106,6 +107,68 @@ function formatJsonPreview(value: unknown): string {
   }
 }
 
+function formatDateCompact(value?: string | null): string {
+  if (!value) return "unknown date";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "unknown date";
+  return parsed.toLocaleDateString();
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function collectNumericValues(value: unknown, keys: Set<string>): number[] {
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectNumericValues(item, keys));
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries.flatMap(([key, nested]) => {
+    const direct = keys.has(key) ? toFiniteNumber(nested) : null;
+    return [...(direct == null ? [] : [direct]), ...collectNumericValues(nested, keys)];
+  });
+}
+
+function keyDiffSummary(
+  current: Record<string, unknown>,
+  previous: Record<string, unknown>,
+): { added: string[]; changed: string[]; removed: string[] } {
+  const currentKeys = new Set(Object.keys(current));
+  const previousKeys = new Set(Object.keys(previous));
+  const added = [...currentKeys].filter((key) => !previousKeys.has(key));
+  const removed = [...previousKeys].filter((key) => !currentKeys.has(key));
+  const changed = [...currentKeys].filter((key) => {
+    if (!previousKeys.has(key)) return false;
+    const nextValue = formatJsonPreview(current[key]);
+    const prevValue = formatJsonPreview(previous[key]);
+    return nextValue !== prevValue;
+  });
+  return { added, changed, removed };
+}
+
+function shortKeyList(keys: string[], max = 6): string {
+  if (keys.length === 0) return "None";
+  const sliced = keys.slice(0, max);
+  return keys.length > max ? `${sliced.join(", ")} +${keys.length - max} more` : sliced.join(", ");
+}
+
+function budgetSeverity(
+  used: number,
+  limit: number | null,
+  percent: number | null,
+): "ok" | "warn" | "danger" {
+  if (limit == null) return "ok";
+  if (used >= limit) return "danger";
+  if ((percent ?? 0) >= 80) return "warn";
+  return "ok";
+}
+
 export default function AgentRunsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,6 +178,7 @@ export default function AgentRunsPage() {
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -164,6 +228,16 @@ export default function AgentRunsPage() {
     }
   }, [experimentIdParam, selectedRunId, userId]);
 
+  const loadExperiments = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const response = await listExperiments(userId);
+      setExperiments(response.experiments ?? []);
+    } catch {
+      setExperiments([]);
+    }
+  }, [userId]);
+
   const loadSelected = useCallback(async () => {
     if (!userId || !selectedRunId) return;
     setLoading(true);
@@ -182,6 +256,10 @@ export default function AgentRunsPage() {
   useEffect(() => {
     loadRuns();
   }, [loadRuns]);
+
+  useEffect(() => {
+    loadExperiments();
+  }, [loadExperiments]);
 
   useEffect(() => {
     loadSelected();
@@ -249,6 +327,130 @@ export default function AgentRunsPage() {
     });
     return counts;
   }, [actions]);
+
+  const budgetTelemetry = useMemo(() => {
+    const budgets = (selectedRun?.budgets as Record<string, unknown> | undefined) ?? {};
+    const maxActions = toFiniteNumber(budgets.max_actions);
+    const maxVariantRuns = toFiniteNumber(budgets.max_variant_runs);
+    const maxCostUsd = toFiniteNumber(budgets.max_cost_usd);
+
+    const executedActions = (actions ?? []).filter((item) =>
+      ["executed", "failed"].includes(String(item.status || "").toLowerCase()),
+    ).length;
+    const executedVariantRuns = (actions ?? []).filter((item) => {
+      const status = String(item.status || "").toLowerCase();
+      return status === "executed" && item.capability_name === "run_variant";
+    }).length;
+
+    const costKeys = new Set([
+      "cost_usd",
+      "total_cost_usd",
+      "validation_cost_usd",
+      "estimated_cost_usd",
+    ]);
+    const costs = (actions ?? []).flatMap((item) => collectNumericValues(item.outputs, costKeys));
+    const totalCostUsd = costs.reduce((sum, value) => sum + value, 0);
+
+    const actionPct = maxActions && maxActions > 0 ? Math.min(100, (executedActions / maxActions) * 100) : null;
+    const variantPct =
+      maxVariantRuns && maxVariantRuns > 0
+        ? Math.min(100, (executedVariantRuns / maxVariantRuns) * 100)
+        : null;
+    const costPct = maxCostUsd && maxCostUsd > 0 ? Math.min(100, (totalCostUsd / maxCostUsd) * 100) : null;
+
+    return {
+      maxActions,
+      maxVariantRuns,
+      maxCostUsd,
+      executedActions,
+      executedVariantRuns,
+      totalCostUsd,
+      actionPct,
+      variantPct,
+      costPct,
+    };
+  }, [actions, selectedRun?.budgets]);
+
+  const budgetState = useMemo(() => {
+    const actionSeverity = budgetSeverity(
+      budgetTelemetry.executedActions,
+      budgetTelemetry.maxActions,
+      budgetTelemetry.actionPct,
+    );
+    const variantSeverity = budgetSeverity(
+      budgetTelemetry.executedVariantRuns,
+      budgetTelemetry.maxVariantRuns,
+      budgetTelemetry.variantPct,
+    );
+    const costSeverity = budgetSeverity(
+      budgetTelemetry.totalCostUsd,
+      budgetTelemetry.maxCostUsd,
+      budgetTelemetry.costPct,
+    );
+    return {
+      actionSeverity,
+      variantSeverity,
+      costSeverity,
+      actionBlocked:
+        budgetTelemetry.maxActions != null &&
+        budgetTelemetry.executedActions >= budgetTelemetry.maxActions,
+      variantBlocked:
+        budgetTelemetry.maxVariantRuns != null &&
+        budgetTelemetry.executedVariantRuns >= budgetTelemetry.maxVariantRuns,
+    };
+  }, [budgetTelemetry]);
+
+  const actionDiffs = useMemo(() => {
+    if (!selectedAction) return null;
+    const all = actions ?? [];
+    const selectedIndex = all.findIndex((item) => item.id === selectedAction.id);
+    const previousAction = selectedIndex > 0 ? all[selectedIndex - 1] : null;
+    const previousSameCapability = selectedIndex > 0
+      ? [...all.slice(0, selectedIndex)]
+          .reverse()
+          .find((item) => item.capability_name === selectedAction.capability_name) ?? null
+      : null;
+    const currentOutputs = (selectedAction.outputs ?? {}) as Record<string, unknown>;
+    const previousOutputs = ((previousAction?.outputs ?? {}) as Record<string, unknown>) ?? {};
+    const previousCapabilityOutputs = ((previousSameCapability?.outputs ?? {}) as Record<string, unknown>) ?? {};
+
+    return {
+      previousAction,
+      previousSameCapability,
+      vsPreviousAction: keyDiffSummary(currentOutputs, previousOutputs),
+      vsPreviousCapability: keyDiffSummary(currentOutputs, previousCapabilityOutputs),
+    };
+  }, [actions, selectedAction]);
+
+  const getBudgetRiskForAction = useCallback(
+    (
+      action: AgentAction,
+    ): {
+      risky: boolean;
+      reason: string | null;
+    } => {
+      if (String(action.status || "").toLowerCase() !== "proposed") {
+        return { risky: false, reason: null };
+      }
+      if (budgetState.actionBlocked) {
+        return {
+          risky: true,
+          reason: "Action budget reached. Increase budget or execute fewer actions.",
+        };
+      }
+      if (
+        action.capability_name === "run_variant" &&
+        budgetState.variantBlocked
+      ) {
+        return {
+          risky: true,
+          reason: "Variant run budget reached. Increase budget or review completed runs.",
+        };
+      }
+      return { risky: false, reason: null };
+    },
+    [budgetState.actionBlocked, budgetState.variantBlocked],
+  );
 
   const handleCreate = useCallback(async () => {
     if (!userId) return;
@@ -347,7 +549,7 @@ export default function AgentRunsPage() {
           actions={
             <button
               type="button"
-              className="button button--primary"
+              className="button button--ghost"
               onClick={() => setDrawerOpen(true)}
               disabled={!userId || loading}
             >
@@ -532,6 +734,103 @@ export default function AgentRunsPage() {
                         )}
                       </div>
                     </div>
+                    <div className="agent-budget-grid">
+                      <div
+                        className={`agent-budget-card ${
+                          budgetState.actionSeverity === "warn"
+                            ? "is-warn"
+                            : budgetState.actionSeverity === "danger"
+                              ? "is-danger"
+                              : ""
+                        }`}
+                      >
+                        <div className="agent-budget-card__header">
+                          <strong>Action budget</strong>
+                          <span>
+                            {budgetTelemetry.executedActions}/
+                            {budgetTelemetry.maxActions ?? "—"}
+                          </span>
+                        </div>
+                        <div className="agent-budget-card__bar">
+                          <div
+                            className="agent-budget-card__fill"
+                            style={{
+                              width:
+                                budgetTelemetry.actionPct == null
+                                  ? "0%"
+                                  : `${budgetTelemetry.actionPct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        className={`agent-budget-card ${
+                          budgetState.variantSeverity === "warn"
+                            ? "is-warn"
+                            : budgetState.variantSeverity === "danger"
+                              ? "is-danger"
+                              : ""
+                        }`}
+                      >
+                        <div className="agent-budget-card__header">
+                          <strong>Variant run budget</strong>
+                          <span>
+                            {budgetTelemetry.executedVariantRuns}/
+                            {budgetTelemetry.maxVariantRuns ?? "—"}
+                          </span>
+                        </div>
+                        <div className="agent-budget-card__bar">
+                          <div
+                            className="agent-budget-card__fill"
+                            style={{
+                              width:
+                                budgetTelemetry.variantPct == null
+                                  ? "0%"
+                                  : `${budgetTelemetry.variantPct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        className={`agent-budget-card ${
+                          budgetState.costSeverity === "warn"
+                            ? "is-warn"
+                            : budgetState.costSeverity === "danger"
+                              ? "is-danger"
+                              : ""
+                        }`}
+                      >
+                        <div className="agent-budget-card__header">
+                          <strong>Estimated spend</strong>
+                          <span>
+                            ${budgetTelemetry.totalCostUsd.toFixed(2)}
+                            {budgetTelemetry.maxCostUsd != null
+                              ? ` / $${budgetTelemetry.maxCostUsd.toFixed(2)}`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="agent-budget-card__bar">
+                          <div
+                            className="agent-budget-card__fill"
+                            style={{
+                              width:
+                                budgetTelemetry.costPct == null
+                                  ? "0%"
+                                  : `${budgetTelemetry.costPct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {budgetState.actionBlocked || budgetState.variantBlocked ? (
+                      <div className="panel__notice panel__notice--warning">
+                        Budget guardrail active:{" "}
+                        {budgetState.actionBlocked
+                          ? "max actions reached."
+                          : "max variant runs reached for run_variant."}{" "}
+                        Proposed risky approvals are disabled until budget changes.
+                      </div>
+                    ) : null}
 
                     <div className="agent-ops-summary">
                       <span className="panel__badge panel__badge--secondary">
@@ -553,40 +852,55 @@ export default function AgentRunsPage() {
 
                     <div className="table">
                       <div className="table__header">
-                        <div>#</div>
-                        <div>Capability</div>
-                        <div>Status</div>
-                        <div>Rationale</div>
-                        <div>Actions</div>
+                        <div className="table__cell">#</div>
+                        <div className="table__cell">Capability</div>
+                        <div className="table__cell">Status</div>
+                        <div className="table__cell">Rationale</div>
+                        <div className="table__cell">Actions</div>
                       </div>
-                      {(actions ?? []).map((a) => (
+                      {(actions ?? []).map((a) => {
+                        const budgetRisk = getBudgetRiskForAction(a);
+                        return (
                         <div
                           key={a.id}
                           className={`table__row ${selectedAction?.id === a.id ? "is-active" : ""}`}
                           onClick={() => setSelectedActionId(a.id)}
                         >
-                          <div>{a.sequence}</div>
-                          <div>
+                          <div className="table__cell" data-label="#">
+                            {a.sequence}
+                          </div>
+                          <div className="table__cell" data-label="Capability">
                             <div className="table__strong">{a.capability_name}</div>
                             {a.capability_version && (
                               <div className="table__muted">{a.capability_version}</div>
                             )}
                           </div>
-                          <div>{a.status}</div>
-                          <div className="table__muted">
+                          <div className="table__cell" data-label="Status">
+                            {a.status}
+                          </div>
+                          <div
+                            className="table__cell table__cell--rationale table__muted"
+                            data-label="Rationale"
+                          >
                             {a.rationale || (a.error ? `Error: ${a.error}` : "—")}
                           </div>
-                          <div className="table__actions">
+                          <div className="table__cell table__actions" data-label="Actions">
                             {a.status === "proposed" ? (
                               <>
                                 <button
                                   type="button"
-                                  className="button button--primary button--sm"
+                                  className="button button--ghost button--sm"
                                   onClick={() => handleDecision(a.id, "approve")}
-                                  disabled={loading}
+                                  disabled={loading || budgetRisk.risky}
+                                  title={budgetRisk.reason || undefined}
                                 >
                                   Approve
                                 </button>
+                                {budgetRisk.risky && budgetRisk.reason ? (
+                                  <span className="panel__badge panel__badge--warning">
+                                    {budgetRisk.reason}
+                                  </span>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="button button--ghost button--sm"
@@ -614,7 +928,8 @@ export default function AgentRunsPage() {
                             )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       {actions.length === 0 && (
                         <div className="panel__muted">
                           No actions recorded yet. Next: we’ll add plan generation and execution ticks.
@@ -704,6 +1019,53 @@ export default function AgentRunsPage() {
                             );
                           })()}
                         </div>
+                        <p className="panel__subheading">Artifact diff preview</p>
+                        <div className="agent-diff-grid">
+                          <div className="agent-diff-card">
+                            <div className="agent-diff-card__title">
+                              vs previous action
+                              {actionDiffs?.previousAction
+                                ? ` #${actionDiffs.previousAction.sequence}`
+                                : ""}
+                            </div>
+                            <div className="agent-diff-card__meta">
+                              Added:{" "}
+                              {shortKeyList(actionDiffs?.vsPreviousAction.added ?? [])}
+                            </div>
+                            <div className="agent-diff-card__meta">
+                              Changed:{" "}
+                              {shortKeyList(actionDiffs?.vsPreviousAction.changed ?? [])}
+                            </div>
+                            <div className="agent-diff-card__meta">
+                              Removed:{" "}
+                              {shortKeyList(actionDiffs?.vsPreviousAction.removed ?? [])}
+                            </div>
+                          </div>
+                          <div className="agent-diff-card">
+                            <div className="agent-diff-card__title">
+                              vs previous same capability
+                              {actionDiffs?.previousSameCapability
+                                ? ` #${actionDiffs.previousSameCapability.sequence}`
+                                : ""}
+                            </div>
+                            <div className="agent-diff-card__meta">
+                              Added:{" "}
+                              {shortKeyList(actionDiffs?.vsPreviousCapability.added ?? [])}
+                            </div>
+                            <div className="agent-diff-card__meta">
+                              Changed:{" "}
+                              {shortKeyList(actionDiffs?.vsPreviousCapability.changed ?? [])}
+                            </div>
+                            <div className="agent-diff-card__meta">
+                              Removed:{" "}
+                              {shortKeyList(actionDiffs?.vsPreviousCapability.removed ?? [])}
+                            </div>
+                          </div>
+                        </div>
+                        <p className="panel__muted">
+                          Diff compares output payload keys, so operators can audit what changed
+                          before approving downstream actions.
+                        </p>
                       </section>
                     ) : null}
                   </>
@@ -726,16 +1088,43 @@ export default function AgentRunsPage() {
               </div>
               <div className="drawer__body">
                 <label className="field">
-                  <span className="field__label">Experiment id (optional)</span>
-                  <input
+                  <span className="field__label">Experiment (optional)</span>
+                  <select
                     className="field__input"
                     value={createForm.experiment_id}
                     onChange={(e) =>
                       setCreateForm((p) => ({ ...p, experiment_id: e.target.value }))
                     }
-                    placeholder="experiment uuid"
-                  />
+                  >
+                    <option value="">None (global agent run)</option>
+                    {experiments.map((experiment) => (
+                      <option key={experiment.id} value={experiment.id}>
+                        {experiment.name || "Untitled"} · {experiment.id.slice(0, 8)} ·{" "}
+                        {formatDateCompact(experiment.updated_at || experiment.created_at)}
+                      </option>
+                    ))}
+                  </select>
+                  {experiments.length === 0 ? (
+                    <div className="panel__muted">
+                      No experiments found in current scope. You can still create a global run.
+                    </div>
+                  ) : null}
                 </label>
+
+                <details className="admin-advanced-defaults">
+                  <summary>Manual experiment id (advanced)</summary>
+                  <label className="field">
+                    <span className="field__label">Override with UUID</span>
+                    <input
+                      className="field__input"
+                      value={createForm.experiment_id}
+                      onChange={(e) =>
+                        setCreateForm((p) => ({ ...p, experiment_id: e.target.value.trim() }))
+                      }
+                      placeholder="paste experiment uuid"
+                    />
+                  </label>
+                </details>
 
                 <label className="field field--row">
                   <span className="field__label">Requires approval</span>
@@ -842,7 +1231,7 @@ export default function AgentRunsPage() {
                   Cancel
                 </button>
                 <button
-                  className="button button--primary"
+                  className="button button--ghost"
                   onClick={() => handleCreate()}
                   disabled={!userId || loading}
                 >
