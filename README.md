@@ -106,7 +106,8 @@ Layer rule enforced by architecture checks:
   - approved action execution in `auto_execute_safe`,
   - runtime safety with run lock + heartbeat refresh,
   - centralized capability specs + policy checks,
-  - operator UI in `Agent runs` with approvals, timeline deep-links, and action explainability.
+  - operator UI in `Agent runs` with approvals, timeline deep-links, and action explainability,
+  - immutable run event history (`agent_events`) for audit/replay.
 
 Experiment protocol transparency APIs:
 - `GET /experiments/{experiment_id}/execution-state`

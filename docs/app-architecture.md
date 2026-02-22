@@ -230,6 +230,7 @@ The agentic module is implemented as an orchestration layer over the same experi
 ### Data model
 - `agent_runs` stores scope, objective, capability allow-list, versions, budgets, approval policy, state/status, and lock/heartbeat metadata.
 - `agent_actions` stores ordered action queue entries with status, rationale, confidence, inputs/outputs hashes, and artifact anchors.
+- `agent_events` stores immutable lifecycle events for audit/replay (`proposed/approved/rejected/executing/executed/failed` + run control events).
 
 ### UX integration points
 - Sidebar includes **Agent runs** as a first-class module.
@@ -254,6 +255,8 @@ The agentic module is implemented as an orchestration layer over the same experi
   - action sequence/status/capability/timestamp
   - policy flag and note
   - anchors (`experiment_id`, `variant_id`, `validation_job_id`, `hypothesis_id`, `snapshot_version`, `metric_id`)
+- Source of truth:
+  - events are read from persisted `agent_events` rows (not derived on-the-fly from `agent_actions`).
 
 ---
 

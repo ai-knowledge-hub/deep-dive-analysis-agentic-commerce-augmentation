@@ -385,6 +385,14 @@ class AgentActionsStore(Protocol):
     def list_agent_actions(self, **kwargs: Any) -> list[dict]: ...
 
 
+class AgentEventsStore(Protocol):
+    def create_agent_event(self, **kwargs: Any) -> dict: ...
+
+    def get_agent_event(self, **kwargs: Any) -> dict | None: ...
+
+    def list_agent_events(self, **kwargs: Any) -> list[dict]: ...
+
+
 class SemanticMemory(Protocol):
     def get(self, key: str) -> list[str]: ...
 
@@ -433,6 +441,7 @@ class AppDeps:
     llm_provider_configs: LLMProviderConfigsStore
     agent_runs: AgentRunsStore
     agent_actions: AgentActionsStore
+    agent_events: AgentEventsStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

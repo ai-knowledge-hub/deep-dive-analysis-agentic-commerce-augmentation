@@ -5,6 +5,7 @@ This document describes the **agent operator mode**: a governed orchestration la
 Status: **Partially implemented (v0 Runtime Core complete; end-to-end autonomy still in progress)**.
 Implemented now:
 - Agent run and action persistence (`agent_runs`, `agent_actions`)
+- Immutable event persistence (`agent_events`) for runtime + operator lifecycle events
 - Plan-first run creation + approval workflow
 - Runtime step execution service with short lease locking and heartbeat refresh
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
@@ -69,6 +70,7 @@ v0 Runtime Core behavior:
 - Heartbeat is refreshed during execution (`last_heartbeat_at`).
 - Action claim is atomic (`approved -> executing -> executed|failed`).
 - Route handlers delegate to runtime service instead of duplicating execution logic.
+- Runtime and operator transitions emit immutable events (`action_proposed`, `action_approved`, `action_rejected`, `action_executing`, `action_executed`, `action_failed`, `run_started`, `run_paused`, `run_canceled`).
 - UI exposes action rationale, side effects summary, and linked artifacts for selected actions.
 - UI includes:
   - budget telemetry cards with warning/danger states
@@ -328,9 +330,9 @@ Formalize enforcement checks used by both humans and agents:
   - promotion to “prod tier”
   - publishing copy revisions
 
-### 3.4 Audit Log (`agent_actions`)
+### 3.4 Audit Log (`agent_actions` + `agent_events`)
 
-Make actions event-like and queryable:
+Actions remain the mutable execution queue; events are immutable lifecycle records for replay/audit:
 - `agent_id`, `agent_run_id`
 - `capability_name`, `capability_version`
 - `inputs_hash`, `outputs_hash`
@@ -338,6 +340,10 @@ Make actions event-like and queryable:
 - protocol anchors: `snapshot_version`, `hypothesis_id`, `variant_id`
 - `rationale`, `confidence`
 - status: `proposed | approved | executed | rejected | failed`
+
+Event stream is exposed via:
+- `GET /agent-runs/{run_id}/events`
+- filters: `event_type=all|failed|policy|executed`
 
 ### 3.5 Version Registry (scientific reproducibility)
 

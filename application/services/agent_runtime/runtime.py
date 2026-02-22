@@ -82,11 +82,25 @@ class AgentRuntimeService:
         updated = self._deps.agent_runs.update_agent_run(
             run_id=run_id, status="running", error=None
         )
+        self._record_run_event(
+            run_id=run_id,
+            sequence=0,
+            event_type="run_started",
+            status="running",
+            note="Run started",
+        )
         return RuntimeResult(run=updated or run)
 
     def pause_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
         updated = self._deps.agent_runs.update_agent_run(run_id=run_id, status="paused")
+        self._record_run_event(
+            run_id=run_id,
+            sequence=0,
+            event_type="run_paused",
+            status="paused",
+            note="Run paused",
+        )
         return RuntimeResult(run=updated or run)
 
     def cancel_run(self, *, run_id: str) -> RuntimeResult:
@@ -95,6 +109,13 @@ class AgentRuntimeService:
             run_id=run_id,
             status="canceled",
             error=None,
+        )
+        self._record_run_event(
+            run_id=run_id,
+            sequence=0,
+            event_type="run_canceled",
+            status="canceled",
+            note="Run canceled",
         )
         return RuntimeResult(run=updated or run)
 
@@ -127,6 +148,13 @@ class AgentRuntimeService:
             action = self._claim_next_approved_action(run_id=run_id)
             if not action:
                 raise NoApprovedActionError("No approved action to execute")
+            self._record_action_event(
+                run_id=run_id,
+                action=action,
+                event_type="action_executing",
+                status="executing",
+                note=action.get("rationale"),
+            )
 
             capability_name = str(action.get("capability_name") or "")
             spec = get_capability_spec(capability_name)
@@ -167,6 +195,14 @@ class AgentRuntimeService:
                     status="failed",
                     error=str(exc),
                 )
+                self._record_action_event(
+                    run_id=run_id,
+                    action=action,
+                    event_type="action_failed",
+                    status="failed",
+                    note=str(exc),
+                    is_policy_event=True,
+                )
                 raise AgentRuntimeError(str(exc)) from exc
             except CapabilityExecutionError as exc:
                 self._deps.agent_actions.update_agent_action_status(
@@ -180,6 +216,14 @@ class AgentRuntimeService:
                     run_id=run_id,
                     status="failed",
                     error=str(exc),
+                )
+                self._record_action_event(
+                    run_id=run_id,
+                    action=action,
+                    event_type="action_failed",
+                    status="failed",
+                    note=str(exc),
+                    is_policy_event=False,
                 )
                 raise
             except ValueError as exc:
@@ -195,6 +239,14 @@ class AgentRuntimeService:
                     status="failed",
                     error=str(exc),
                 )
+                self._record_action_event(
+                    run_id=run_id,
+                    action=action,
+                    event_type="action_failed",
+                    status="failed",
+                    note=str(exc),
+                    is_policy_event=False,
+                )
                 raise CapabilityExecutionError(str(exc)) from exc
 
             executed = self._deps.agent_actions.update_agent_action_status(
@@ -202,6 +254,13 @@ class AgentRuntimeService:
                 status="executed",
                 outputs=outputs,
                 outputs_hash=_hash_payload(outputs),
+            )
+            self._record_action_event(
+                run_id=run_id,
+                action=executed or action,
+                event_type="action_executed",
+                status="executed",
+                note=(executed or action).get("rationale"),
             )
             next_state = next_state_for_capability(capability_name)
             if next_state:
@@ -268,6 +327,67 @@ class AgentRuntimeService:
         if statuses and statuses.issubset({"executed", "rejected"}):
             return "completed"
         return "running"
+
+    def _record_run_event(
+        self,
+        *,
+        run_id: str,
+        sequence: int,
+        event_type: str,
+        status: str,
+        note: Optional[str],
+    ) -> None:
+        self._deps.agent_events.create_agent_event(
+            agent_run_id=run_id,
+            action_id=None,
+            sequence=sequence,
+            event_type=event_type,
+            status=status,
+            capability_name=None,
+            capability_version=None,
+            note=note,
+            is_policy_event=False,
+            anchors={},
+        )
+
+    def _record_action_event(
+        self,
+        *,
+        run_id: str,
+        action: Dict[str, Any],
+        event_type: str,
+        status: str,
+        note: Optional[str],
+        is_policy_event: bool = False,
+    ) -> None:
+        run = self._deps.agent_runs.get_agent_run(run_id=run_id) or {}
+        outputs = action.get("outputs") or {}
+        metric_id = None
+        if isinstance(outputs, dict):
+            metric_id = (
+                outputs.get("metric_id")
+                or outputs.get("new_metric_id")
+                or outputs.get("source_metric_id")
+            )
+        self._deps.agent_events.create_agent_event(
+            agent_run_id=run_id,
+            action_id=str(action.get("id") or "") or None,
+            sequence=int(action.get("sequence") or 0),
+            event_type=event_type,
+            status=status,
+            capability_name=str(action.get("capability_name") or "") or None,
+            capability_version=str(action.get("capability_version") or "") or None,
+            note=str(note) if note is not None else None,
+            is_policy_event=is_policy_event,
+            anchors={
+                "experiment_id": run.get("experiment_id"),
+                "variant_id": action.get("variant_id"),
+                "validation_job_id": action.get("validation_job_id"),
+                "hypothesis_id": action.get("hypothesis_id"),
+                "snapshot_version": action.get("snapshot_version"),
+                "metric_id": metric_id,
+            },
+        )
 
 
 __all__ = [

@@ -58,6 +58,25 @@ def test_list_agent_run_events_maps_action_anchors_and_policy_flags(tmp_path):
         validation_job_id=None,
         error="Action budget exceeded",
     )
+    deps.agent_events.create_agent_event(
+        agent_run_id=run["id"],
+        action_id=action["id"],
+        sequence=2,
+        event_type="action_failed",
+        status="failed",
+        capability_name="run_variant",
+        capability_version="v1",
+        note="Action budget exceeded",
+        is_policy_event=True,
+        anchors={
+            "experiment_id": None,
+            "variant_id": None,
+            "validation_job_id": None,
+            "hypothesis_id": None,
+            "snapshot_version": 3,
+            "metric_id": "metric-123",
+        },
+    )
 
     events = list_agent_run_events(deps=deps, run_id=run["id"], limit=20)
     assert len(events) == 1
@@ -95,7 +114,7 @@ def test_list_agent_run_events_supports_event_type_filters(tmp_path):
         state="hypotheses_ready",
         status="running",
     )
-    deps.agent_actions.create_agent_action(
+    action_executed = deps.agent_actions.create_agent_action(
         agent_run_id=run["id"],
         sequence=1,
         status="executed",
@@ -112,7 +131,7 @@ def test_list_agent_run_events_supports_event_type_filters(tmp_path):
         variant_id=None,
         validation_job_id=None,
     )
-    deps.agent_actions.create_agent_action(
+    action_failed = deps.agent_actions.create_agent_action(
         agent_run_id=run["id"],
         sequence=2,
         status="failed",
@@ -129,6 +148,30 @@ def test_list_agent_run_events_supports_event_type_filters(tmp_path):
         variant_id=None,
         validation_job_id=None,
         error="Policy guardrail triggered",
+    )
+    deps.agent_events.create_agent_event(
+        agent_run_id=run["id"],
+        action_id=action_executed["id"],
+        sequence=1,
+        event_type="action_executed",
+        status="executed",
+        capability_name="seed_hypotheses",
+        capability_version="v1",
+        note="ok",
+        is_policy_event=False,
+        anchors={},
+    )
+    deps.agent_events.create_agent_event(
+        agent_run_id=run["id"],
+        action_id=action_failed["id"],
+        sequence=2,
+        event_type="action_failed",
+        status="failed",
+        capability_name="seed_hypotheses",
+        capability_version="v1",
+        note="Policy guardrail triggered",
+        is_policy_event=True,
+        anchors={},
     )
 
     all_events = list_agent_run_events(deps=deps, run_id=run["id"], event_type="all")

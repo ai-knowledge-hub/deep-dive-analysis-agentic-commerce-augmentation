@@ -118,7 +118,7 @@ def create_agent_run(payload: AgentRunCreateRequest) -> Dict[str, Any]:
         capability_versions=payload.capability_versions or {},
     )
     for idx, action in enumerate(plan, start=1):
-        DEPS.agent_actions.create_agent_action(
+        created_action = DEPS.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
             status="proposed",
@@ -134,6 +134,25 @@ def create_agent_run(payload: AgentRunCreateRequest) -> Dict[str, Any]:
             hypothesis_id=None,
             variant_id=None,
             validation_job_id=None,
+        )
+        DEPS.agent_events.create_agent_event(
+            agent_run_id=run.get("id"),
+            action_id=created_action.get("id"),
+            sequence=idx,
+            event_type="action_proposed",
+            status="proposed",
+            capability_name=action.capability_name,
+            capability_version=action.capability_version,
+            note=action.rationale,
+            is_policy_event=False,
+            anchors={
+                "experiment_id": run.get("experiment_id"),
+                "variant_id": None,
+                "validation_job_id": None,
+                "hypothesis_id": None,
+                "snapshot_version": None,
+                "metric_id": None,
+            },
         )
     return {"run": run}
 
@@ -282,5 +301,28 @@ def decide_action(
     updated = DEPS.agent_actions.update_agent_action_status(
         action_id=action_id,
         status="approved" if decision == "approve" else "rejected",
+    )
+    current = updated or action
+    run_row = DEPS.agent_runs.get_agent_run(
+        run_id=str(current.get("agent_run_id") or "")
+    )
+    DEPS.agent_events.create_agent_event(
+        agent_run_id=str(current.get("agent_run_id") or ""),
+        action_id=str(current.get("id") or action_id),
+        sequence=int(current.get("sequence") or 0),
+        event_type=f"action_{'approved' if decision == 'approve' else 'rejected'}",
+        status="approved" if decision == "approve" else "rejected",
+        capability_name=str(current.get("capability_name") or "") or None,
+        capability_version=str(current.get("capability_version") or "") or None,
+        note=f"Action {decision} by operator",
+        is_policy_event=False,
+        anchors={
+            "experiment_id": run_row.get("experiment_id") if run_row else None,
+            "variant_id": current.get("variant_id"),
+            "validation_job_id": current.get("validation_job_id"),
+            "hypothesis_id": current.get("hypothesis_id"),
+            "snapshot_version": current.get("snapshot_version"),
+            "metric_id": None,
+        },
     )
     return {"action": updated or action}
