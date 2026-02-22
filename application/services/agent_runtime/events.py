@@ -178,4 +178,9 @@ def _decode_cursor(cursor: Optional[str]) -> Optional[Dict[str, str]]:
         return None
 
 
-__all__ = ["list_agent_run_events", "list_agent_run_events_page", "AgentRunEvent", "AgentRunEventPage"]
+__all__ = [
+    "list_agent_run_events",
+    "list_agent_run_events_page",
+    "AgentRunEvent",
+    "AgentRunEventPage",
+]
