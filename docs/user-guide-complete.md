@@ -142,10 +142,18 @@ Current behavior:
 - approve/reject actions,
 - execute approved actions stepwise in `auto_execute_safe` mode,
 - keep execution guarded by policy checks and runtime lock/heartbeat safety.
+- monitor budgets in-run (actions, variant-runs, cost) with warning states.
+- inspect artifact diffs in detail (including copy diff mode).
+- use timeline deep-links to jump to action, experiment, and validation contexts.
 
 Execution modes:
 - `plan_only` (default): planning + approvals only, no execution side effects.
 - `auto_execute_safe`: approved actions can be executed via `step`.
+
+Guardrails enforced before execution:
+- `max_actions`
+- `max_variant_runs`
+- `max_cost_usd`
 
 The Experiments page also includes an **Agent operator mode** panel with:
 - latest agent run status for the selected experiment,

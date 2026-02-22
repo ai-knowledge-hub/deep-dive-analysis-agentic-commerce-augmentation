@@ -196,6 +196,7 @@ The agentic module is implemented as an orchestration layer over the same experi
 - API boundary: `api/routes/agent_runs.py`
 - Runtime boundary: `application/services/agent_runtime/runtime.py`
 - Worker boundary: `application/services/agent_runtime/worker.py`
+- Event mapping boundary: `application/services/agent_runtime/events.py`
 - Capability execution boundary: `application/services/agent_runtime/capabilities.py`
 - Capability contract registry: `application/services/agent_runtime/registry.py`
 - Policy checks: `application/services/agent_runtime/policy.py`
@@ -211,6 +212,7 @@ The agentic module is implemented as an orchestration layer over the same experi
   - worker tick endpoint `POST /agent-runs/tick`
   - CLI runner `scripts/run_agent_runtime_worker.py`
   - Make target `make agent-runtime-tick`
+  - scheduler loop `scripts/run_agent_runtime_scheduler.py` / `make agent-runtime-scheduler`
 
 ### Capability and policy model
 - Capabilities are explicit names with a shared contract:
@@ -223,6 +225,7 @@ The agentic module is implemented as an orchestration layer over the same experi
   - required inputs present
   - action budget (`max_actions`)
   - variant-run budget (`max_variant_runs`)
+  - cost budget (`max_cost_usd`)
 
 ### Data model
 - `agent_runs` stores scope, objective, capability allow-list, versions, budgets, approval policy, state/status, and lock/heartbeat metadata.
@@ -237,7 +240,20 @@ The agentic module is implemented as an orchestration layer over the same experi
   - scope/run selection
   - execution controls
   - approvals/audit queue
-  - selected-action explainability panel (summary, side effects, linked artifacts).
+  - selected-action explainability panel (summary, side effects, linked artifacts)
+  - budget telemetry cards with warn/danger states
+  - detailed artifact diff drawer + copy diff mode
+  - execution timeline with deep-links.
+
+### Agent run events API
+- `GET /agent-runs/{run_id}/events`
+- Query params:
+  - `event_type=all|failed|policy|executed`
+  - `limit`
+- Event shape includes:
+  - action sequence/status/capability/timestamp
+  - policy flag and note
+  - anchors (`experiment_id`, `variant_id`, `validation_job_id`, `hypothesis_id`, `snapshot_version`, `metric_id`)
 
 ---
 
@@ -249,7 +265,6 @@ The agentic module is implemented as an orchestration layer over the same experi
 - confidence-scored simulation lesson promotion beyond current safeguards
 - full backend serverless hardening for Vercel Python runtime
 - **Agent operator mode expansion**:
-  - always-on scheduler/queue workers (beyond bounded tick execution)
   - capability/policy version registry hardening and richer audit telemetry
   - multi-agent role model (planner/variant/validation/policy) using shared capabilities
   - reference: `docs/agentic-layer.md`

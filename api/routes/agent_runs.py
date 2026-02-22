@@ -12,6 +12,7 @@ from api.utils.tenancy import require_client_id
 from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
 )
+from application.services.agent_runtime.events import list_agent_run_events
 from application.services.agent_runtime.planner import build_initial_plan
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
@@ -57,6 +58,10 @@ class AgentRunListResponse(BaseModel):
 class AgentRunDetailResponse(BaseModel):
     run: Dict[str, Any]
     actions: List[Dict[str, Any]]
+
+
+class AgentRunEventListResponse(BaseModel):
+    events: List[Dict[str, Any]]
 
 
 class AgentActionDecisionRequest(BaseModel):
@@ -239,6 +244,27 @@ def get_agent_run(
         raise HTTPException(status_code=404, detail="Agent run not found")
     actions = DEPS.agent_actions.list_agent_actions(agent_run_id=run_id, limit=limit)
     return AgentRunDetailResponse(run=run, actions=actions)
+
+
+@router.get("/{run_id}/events")
+def get_agent_run_events(
+    run_id: str,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 500,
+    event_type: Optional[str] = None,
+) -> AgentRunEventListResponse:
+    require_client_id(client_id, user_id)
+    try:
+        events = list_agent_run_events(
+            deps=DEPS,
+            run_id=run_id,
+            limit=max(1, min(int(limit), 2000)),
+            event_type=event_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return AgentRunEventListResponse(events=events)
 
 
 @router.post("/actions/{action_id}/decision")

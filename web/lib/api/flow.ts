@@ -2,6 +2,7 @@ import {
   AdminLLMConfigResponse,
   AdminProduct,
   AgentAction,
+  AgentRunEventListResponse,
   AgentRunControlResponse,
   AgentRunCreateResponse,
   AgentRunDetailResponse,
@@ -548,6 +549,22 @@ export async function getAgentRun(
   if (payload.limit) params.set("limit", String(payload.limit));
   return request<AgentRunDetailResponse>(
     `/agent-runs/${runId}${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function getAgentRunEvents(
+  runId: string,
+  payload: { limit?: number; event_type?: "all" | "failed" | "policy" | "executed" } = {},
+  userId?: string | null,
+): Promise<AgentRunEventListResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  if (payload.event_type) params.set("event_type", payload.event_type);
+  return request<AgentRunEventListResponse>(
+    `/agent-runs/${runId}/events${params.toString() ? `?${params.toString()}` : ""}`,
   );
 }
 

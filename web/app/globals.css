@@ -2150,6 +2150,13 @@ input[type="checkbox"]:focus-visible {
   margin-left: auto;
 }
 
+.agent-timeline__actions {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .agent-timeline__note {
   margin: 6px 0 0;
   font-size: 11px;
