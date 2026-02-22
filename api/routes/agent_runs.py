@@ -12,7 +12,7 @@ from api.utils.tenancy import require_client_id
 from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
 )
-from application.services.agent_runtime.events import list_agent_run_events
+from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime.planner import build_initial_plan
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
@@ -62,6 +62,7 @@ class AgentRunDetailResponse(BaseModel):
 
 class AgentRunEventListResponse(BaseModel):
     events: List[Dict[str, Any]]
+    page: Dict[str, Any]
 
 
 class AgentActionDecisionRequest(BaseModel):
@@ -272,18 +273,31 @@ def get_agent_run_events(
     user_id: Optional[str] = None,
     limit: int = 500,
     event_type: Optional[str] = None,
+    status: Optional[str] = None,
+    capability_name: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    before: Optional[str] = None,
+    after: Optional[str] = None,
 ) -> AgentRunEventListResponse:
     require_client_id(client_id, user_id)
     try:
-        events = list_agent_run_events(
+        page = list_agent_run_events_page(
             deps=DEPS,
             run_id=run_id,
             limit=max(1, min(int(limit), 2000)),
             event_type=event_type,
+            status=status,
+            capability_name=capability_name,
+            since=since,
+            until=until,
+            before=before,
+            after=after,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return AgentRunEventListResponse(events=events)
+    payload = page.to_dict()
+    return AgentRunEventListResponse(events=payload["events"], page=payload["page"])
 
 
 @router.post("/actions/{action_id}/decision")

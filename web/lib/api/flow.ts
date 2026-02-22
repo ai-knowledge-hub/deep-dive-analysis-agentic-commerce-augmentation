@@ -554,7 +554,16 @@ export async function getAgentRun(
 
 export async function getAgentRunEvents(
   runId: string,
-  payload: { limit?: number; event_type?: "all" | "failed" | "policy" | "executed" } = {},
+  payload: {
+    limit?: number;
+    event_type?: "all" | "failed" | "policy" | "executed";
+    status?: "all" | "proposed" | "approved" | "executing" | "executed" | "failed" | "rejected";
+    capability_name?: string | null;
+    since?: string | null;
+    until?: string | null;
+    before?: string | null;
+    after?: string | null;
+  } = {},
   userId?: string | null,
 ): Promise<AgentRunEventListResponse> {
   const params = new URLSearchParams();
@@ -563,6 +572,12 @@ export async function getAgentRunEvents(
   if (userId) params.set("user_id", userId);
   if (payload.limit) params.set("limit", String(payload.limit));
   if (payload.event_type) params.set("event_type", payload.event_type);
+  if (payload.status) params.set("status", payload.status);
+  if (payload.capability_name) params.set("capability_name", payload.capability_name);
+  if (payload.since) params.set("since", payload.since);
+  if (payload.until) params.set("until", payload.until);
+  if (payload.before) params.set("before", payload.before);
+  if (payload.after) params.set("after", payload.after);
   return request<AgentRunEventListResponse>(
     `/agent-runs/${runId}/events${params.toString() ? `?${params.toString()}` : ""}`,
   );

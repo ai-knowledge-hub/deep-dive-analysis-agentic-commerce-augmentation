@@ -100,6 +100,85 @@ const CAPABILITY_EXPLAIN: Record<
   },
 };
 
+const TIMELINE_PRESET_STORAGE_KEY = "agent_runs.timeline_preset.v1";
+
+type TimelineStatusFilter =
+  | "all"
+  | "proposed"
+  | "approved"
+  | "executing"
+  | "executed"
+  | "failed"
+  | "rejected";
+type TimelineWindowFilter = "all" | "24h" | "7d";
+type TimelinePresetId =
+  | "all_activity"
+  | "policy_failures_24h"
+  | "variant_execution_7d"
+  | "validation_focus_7d"
+  | "custom";
+
+const TIMELINE_EVENT_TYPES = new Set(["all", "failed", "policy", "executed"]);
+const TIMELINE_STATUS_TYPES = new Set([
+  "all",
+  "proposed",
+  "approved",
+  "executing",
+  "executed",
+  "failed",
+  "rejected",
+]);
+const TIMELINE_WINDOWS = new Set(["all", "24h", "7d"]);
+const TIMELINE_PRESET_IDS = new Set([
+  "all_activity",
+  "policy_failures_24h",
+  "variant_execution_7d",
+  "validation_focus_7d",
+  "custom",
+]);
+
+const TIMELINE_PRESETS: Array<{
+  id: Exclude<TimelinePresetId, "custom">;
+  label: string;
+  eventType: "all" | "failed" | "policy" | "executed";
+  status: TimelineStatusFilter;
+  capabilityName: string;
+  timeWindow: TimelineWindowFilter;
+}> = [
+  {
+    id: "all_activity",
+    label: "All activity",
+    eventType: "all",
+    status: "all",
+    capabilityName: "all",
+    timeWindow: "all",
+  },
+  {
+    id: "policy_failures_24h",
+    label: "Policy failures (24h)",
+    eventType: "policy",
+    status: "failed",
+    capabilityName: "all",
+    timeWindow: "24h",
+  },
+  {
+    id: "variant_execution_7d",
+    label: "Variant execution (7d)",
+    eventType: "executed",
+    status: "executed",
+    capabilityName: "run_variant",
+    timeWindow: "7d",
+  },
+  {
+    id: "validation_focus_7d",
+    label: "Validation focus (7d)",
+    eventType: "all",
+    status: "all",
+    capabilityName: "request_synthetic_validation",
+    timeWindow: "7d",
+  },
+];
+
 function formatJsonPreview(value: unknown): string {
   try {
     return JSON.stringify(value ?? {}, null, 2);
@@ -276,6 +355,13 @@ function budgetSeverity(
   return "ok";
 }
 
+function resolveSinceForWindow(windowId: "all" | "24h" | "7d"): string | null {
+  if (windowId === "all") return null;
+  const now = Date.now();
+  const deltaMs = windowId === "24h" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+  return new Date(now - deltaMs).toISOString();
+}
+
 export default function AgentRunsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -283,12 +369,47 @@ export default function AgentRunsPage() {
   const userId = user?.id ?? null;
 
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
+  const runIdParam = searchParams.get("run_id")?.trim() || "";
+  const timelinePresetParam = searchParams.get("timeline_preset")?.trim() || "";
+  const timelineEventTypeParam = searchParams.get("timeline_event_type")?.trim() || "";
+  const timelineStatusParam = searchParams.get("timeline_status")?.trim() || "";
+  const timelineCapabilityParam = searchParams.get("timeline_capability")?.trim() || "";
+  const timelineWindowParam = searchParams.get("timeline_window")?.trim() || "";
+  const eventIdParam = searchParams.get("event_id")?.trim() || "";
+  const initialTimelineFilter = (TIMELINE_EVENT_TYPES.has(timelineEventTypeParam)
+    ? timelineEventTypeParam
+    : "all") as "all" | "failed" | "policy" | "executed";
+  const initialTimelineStatus = (TIMELINE_STATUS_TYPES.has(timelineStatusParam)
+    ? timelineStatusParam
+    : "all") as TimelineStatusFilter;
+  const initialTimelineWindow = (TIMELINE_WINDOWS.has(timelineWindowParam)
+    ? timelineWindowParam
+    : "all") as TimelineWindowFilter;
+  const initialTimelinePreset = (TIMELINE_PRESET_IDS.has(timelinePresetParam)
+    ? timelinePresetParam
+    : "all_activity") as TimelinePresetId;
+  const hasTimelineQuerySeed = Boolean(
+    timelinePresetParam ||
+      timelineEventTypeParam ||
+      timelineStatusParam ||
+      timelineCapabilityParam ||
+      timelineWindowParam,
+  );
+
   const [runs, setRuns] = useState<AgentRun[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(runIdParam || null);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
+  const [eventsPage, setEventsPage] = useState<{
+    before_cursor?: string | null;
+    after_cursor?: string | null;
+    has_more_before?: boolean;
+    has_more_after?: boolean;
+  } | null>(null);
+  const [loadingOlderEvents, setLoadingOlderEvents] = useState(false);
+  const [livePollingActive, setLivePollingActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -296,9 +417,22 @@ export default function AgentRunsPage() {
   const [hideUnchangedDiffLines, setHideUnchangedDiffLines] = useState(true);
   const [timelineFilter, setTimelineFilter] = useState<
     "all" | "failed" | "policy" | "executed"
-  >("all");
+  >(initialTimelineFilter);
+  const [timelineStatusFilter, setTimelineStatusFilter] =
+    useState<TimelineStatusFilter>(initialTimelineStatus);
+  const [timelineCapabilityFilter, setTimelineCapabilityFilter] = useState<string>(
+    timelineCapabilityParam || "all",
+  );
+  const [timelineTimeWindow, setTimelineTimeWindow] =
+    useState<TimelineWindowFilter>(initialTimelineWindow);
+  const [timelinePreset, setTimelinePreset] = useState<TimelinePresetId>(initialTimelinePreset);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(eventIdParam || null);
+  const [copyLinkNotice, setCopyLinkNotice] = useState<{
+    type: "info" | "error";
+    text: string;
+  } | null>(null);
 
   const [createForm, setCreateForm] = useState({
     experiment_id: experimentIdParam || "",
@@ -320,6 +454,11 @@ export default function AgentRunsPage() {
     } as Record<string, unknown>,
   });
 
+  const timelineSince = useMemo(
+    () => resolveSinceForWindow(timelineTimeWindow),
+    [timelineTimeWindow],
+  );
+
   const loadRuns = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -331,15 +470,24 @@ export default function AgentRunsPage() {
       );
       const nextRuns = response.runs ?? [];
       setRuns(nextRuns);
-      if (!selectedRunId && nextRuns.length > 0) {
-        setSelectedRunId(nextRuns[0].id);
+      if (nextRuns.length > 0) {
+        if (runIdParam) {
+          const match = nextRuns.find((item) => item.id === runIdParam);
+          if (match && selectedRunId !== runIdParam) {
+            setSelectedRunId(runIdParam);
+            return;
+          }
+        }
+        if (!selectedRunId) {
+          setSelectedRunId(nextRuns[0].id);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load agent runs.");
     } finally {
       setLoading(false);
     }
-  }, [experimentIdParam, selectedRunId, userId]);
+  }, [experimentIdParam, runIdParam, selectedRunId, userId]);
 
   const loadExperiments = useCallback(async () => {
     if (!userId) return;
@@ -361,8 +509,12 @@ export default function AgentRunsPage() {
         getAgentRunEvents(
           selectedRunId,
           {
-            limit: 500,
+            limit: 200,
             event_type: timelineFilter,
+            status: timelineStatusFilter,
+            capability_name:
+              timelineCapabilityFilter !== "all" ? timelineCapabilityFilter : null,
+            since: timelineSince,
           },
           userId,
         ),
@@ -370,12 +522,138 @@ export default function AgentRunsPage() {
       setSelectedRun(response.run ?? null);
       setActions(response.actions ?? []);
       setRunEvents(eventsResponse.events ?? []);
+      setEventsPage(eventsResponse.page ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load agent run.");
     } finally {
       setLoading(false);
     }
-  }, [selectedRunId, timelineFilter, userId]);
+  }, [
+    selectedRunId,
+    timelineCapabilityFilter,
+    timelineFilter,
+    timelineSince,
+    timelineStatusFilter,
+    userId,
+  ]);
+
+  const loadOlderEvents = useCallback(async () => {
+    if (!userId || !selectedRunId || !eventsPage?.before_cursor) return;
+    setLoadingOlderEvents(true);
+    setError(null);
+    try {
+      const response = await getAgentRunEvents(
+        selectedRunId,
+        {
+          limit: 200,
+          event_type: timelineFilter,
+          status: timelineStatusFilter,
+          capability_name:
+            timelineCapabilityFilter !== "all" ? timelineCapabilityFilter : null,
+          since: timelineSince,
+          before: eventsPage.before_cursor,
+        },
+        userId,
+      );
+      const older = response.events ?? [];
+      setRunEvents((current) => [...older, ...current]);
+      setEventsPage((current) => ({
+        before_cursor: response.page?.before_cursor ?? current?.before_cursor ?? null,
+        after_cursor: current?.after_cursor ?? response.page?.after_cursor ?? null,
+        has_more_before: Boolean(response.page?.has_more_before),
+        has_more_after: current?.has_more_after ?? response.page?.has_more_after ?? false,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load older timeline events.");
+    } finally {
+      setLoadingOlderEvents(false);
+    }
+  }, [
+    eventsPage?.before_cursor,
+    selectedRunId,
+    timelineCapabilityFilter,
+    timelineFilter,
+    timelineSince,
+    timelineStatusFilter,
+    userId,
+  ]);
+
+  const loadNewerEvents = useCallback(async () => {
+    if (!userId || !selectedRunId) return;
+    try {
+      if (!eventsPage?.after_cursor) {
+        const bootstrap = await getAgentRunEvents(
+          selectedRunId,
+          {
+            limit: 100,
+            event_type: timelineFilter,
+            status: timelineStatusFilter,
+            capability_name:
+              timelineCapabilityFilter !== "all" ? timelineCapabilityFilter : null,
+            since: timelineSince,
+          },
+          userId,
+        );
+        const incoming = bootstrap.events ?? [];
+        setRunEvents((current) => {
+          if (current.length === 0) return incoming;
+          const seen = new Set(current.map((item) => item.id));
+          const merged = [...current];
+          incoming.forEach((item) => {
+            if (!seen.has(item.id)) merged.push(item);
+          });
+          return merged;
+        });
+        setEventsPage(bootstrap.page ?? null);
+        return;
+      }
+      const response = await getAgentRunEvents(
+        selectedRunId,
+        {
+          limit: 100,
+          event_type: timelineFilter,
+          status: timelineStatusFilter,
+          capability_name:
+            timelineCapabilityFilter !== "all" ? timelineCapabilityFilter : null,
+          since: timelineSince,
+          after: eventsPage.after_cursor,
+        },
+        userId,
+      );
+      const newer = response.events ?? [];
+      if (newer.length === 0) {
+        setEventsPage((current) => ({
+          ...(current ?? {}),
+          has_more_after: Boolean(response.page?.has_more_after),
+        }));
+        return;
+      }
+      setRunEvents((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        const merged = [...current];
+        newer.forEach((item) => {
+          if (!seen.has(item.id)) merged.push(item);
+        });
+        return merged;
+      });
+      setEventsPage((current) => ({
+        before_cursor: current?.before_cursor ?? response.page?.before_cursor ?? null,
+        after_cursor: response.page?.after_cursor ?? current?.after_cursor ?? null,
+        has_more_before: current?.has_more_before ?? response.page?.has_more_before ?? false,
+        has_more_after: Boolean(response.page?.has_more_after),
+      }));
+    } catch {
+      // Keep polling resilient; explicit errors still surface through manual refresh actions.
+    }
+  }, [
+    eventsPage?.after_cursor,
+    selectedRunId,
+    timelineCapabilityFilter,
+    timelineFilter,
+    timelineSince,
+    timelineStatusFilter,
+    userId,
+  ]);
 
   useEffect(() => {
     loadRuns();
@@ -390,6 +668,27 @@ export default function AgentRunsPage() {
   }, [loadSelected]);
 
   useEffect(() => {
+    if (!selectedRunId || !userId) {
+      setLivePollingActive(false);
+      return;
+    }
+    let mounted = true;
+    const interval = window.setInterval(() => {
+      if (document.hidden) {
+        if (mounted) setLivePollingActive(false);
+        return;
+      }
+      if (mounted) setLivePollingActive(true);
+      void loadNewerEvents();
+    }, 5000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+      setLivePollingActive(false);
+    };
+  }, [loadNewerEvents, selectedRunId, userId]);
+
+  useEffect(() => {
     if (!selectedActionId && actions.length > 0) {
       setSelectedActionId(actions[0]?.id ?? null);
       return;
@@ -402,6 +701,17 @@ export default function AgentRunsPage() {
       setSelectedActionId(actions[0]?.id ?? null);
     }
   }, [actions, selectedActionId]);
+
+  useEffect(() => {
+    if (!eventIdParam) return;
+    setSelectedEventId((current) => (current === eventIdParam ? current : eventIdParam));
+  }, [eventIdParam]);
+
+  useEffect(() => {
+    if (!copyLinkNotice) return;
+    const timeout = window.setTimeout(() => setCopyLinkNotice(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [copyLinkNotice]);
 
   const selectedSummary = useMemo(() => {
     if (!selectedRun) return null;
@@ -465,6 +775,124 @@ export default function AgentRunsPage() {
       anchors: event.anchors ?? {},
     }));
   }, [runEvents]);
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+    const node = document.getElementById(`agent-event-${selectedEventId}`);
+    if (!node) return;
+    node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedEventId, timelineEvents.length]);
+
+  const timelineCapabilityOptions = useMemo(() => {
+    const all = new Set<string>();
+    if (timelineCapabilityFilter && timelineCapabilityFilter !== "all") {
+      all.add(timelineCapabilityFilter);
+    }
+    (actions ?? []).forEach((item) => {
+      const name = String(item.capability_name ?? "").trim();
+      if (name) all.add(name);
+    });
+    (runEvents ?? []).forEach((item) => {
+      const name = String(item.capability_name ?? "").trim();
+      if (name) all.add(name);
+    });
+    return ["all", ...Array.from(all).sort()];
+  }, [actions, runEvents, timelineCapabilityFilter]);
+
+  const applyTimelinePreset = useCallback(
+    (presetId: Exclude<TimelinePresetId, "custom">) => {
+      const preset = TIMELINE_PRESETS.find((item) => item.id === presetId);
+      if (!preset) return;
+      setTimelinePreset(preset.id);
+      setTimelineFilter(preset.eventType);
+      setTimelineStatusFilter(preset.status);
+      setTimelineCapabilityFilter(preset.capabilityName);
+      setTimelineTimeWindow(preset.timeWindow);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hasTimelineQuerySeed) return;
+    const persisted = window.localStorage.getItem(TIMELINE_PRESET_STORAGE_KEY);
+    const preset = TIMELINE_PRESETS.find((item) => item.id === persisted);
+    if (preset) {
+      applyTimelinePreset(preset.id);
+    }
+  }, [applyTimelinePreset, hasTimelineQuerySeed]);
+
+  useEffect(() => {
+    const matchedPreset = TIMELINE_PRESETS.find(
+      (item) =>
+        item.eventType === timelineFilter &&
+        item.status === timelineStatusFilter &&
+        item.capabilityName === timelineCapabilityFilter &&
+        item.timeWindow === timelineTimeWindow,
+    );
+    const nextPreset: TimelinePresetId = matchedPreset ? matchedPreset.id : "custom";
+    setTimelinePreset((current) => (current === nextPreset ? current : nextPreset));
+  }, [timelineCapabilityFilter, timelineFilter, timelineStatusFilter, timelineTimeWindow]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (timelinePreset === "custom") return;
+    window.localStorage.setItem(TIMELINE_PRESET_STORAGE_KEY, timelinePreset);
+  }, [timelinePreset]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (selectedRunId) {
+      params.set("run_id", selectedRunId);
+    } else {
+      params.delete("run_id");
+    }
+    if (timelinePreset !== "all_activity") {
+      params.set("timeline_preset", timelinePreset);
+    } else {
+      params.delete("timeline_preset");
+    }
+    if (timelineFilter !== "all") {
+      params.set("timeline_event_type", timelineFilter);
+    } else {
+      params.delete("timeline_event_type");
+    }
+    if (timelineStatusFilter !== "all") {
+      params.set("timeline_status", timelineStatusFilter);
+    } else {
+      params.delete("timeline_status");
+    }
+    if (timelineCapabilityFilter !== "all") {
+      params.set("timeline_capability", timelineCapabilityFilter);
+    } else {
+      params.delete("timeline_capability");
+    }
+    if (timelineTimeWindow !== "all") {
+      params.set("timeline_window", timelineTimeWindow);
+    } else {
+      params.delete("timeline_window");
+    }
+    if (selectedEventId) {
+      params.set("event_id", selectedEventId);
+    } else {
+      params.delete("event_id");
+    }
+
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery === currentQuery) return;
+    router.replace(`/agent-runs${nextQuery ? `?${nextQuery}` : ""}`, { scroll: false });
+  }, [
+    router,
+    searchParams,
+    selectedEventId,
+    selectedRunId,
+    timelineCapabilityFilter,
+    timelineFilter,
+    timelinePreset,
+    timelineStatusFilter,
+    timelineTimeWindow,
+  ]);
 
   const budgetTelemetry = useMemo(() => {
     const budgets = (selectedRun?.budgets as Record<string, unknown> | undefined) ?? {};
@@ -669,6 +1097,7 @@ export default function AgentRunsPage() {
       await loadRuns();
       if (run?.id) {
         setSelectedRunId(run.id);
+        setSelectedEventId(null);
         router.replace(
           run.experiment_id ? `/agent-runs?experiment_id=${run.experiment_id}` : "/agent-runs",
         );
@@ -796,7 +1225,10 @@ export default function AgentRunsPage() {
                         key={run.id}
                         type="button"
                         className={`list__row ${active ? "is-active" : ""}`}
-                        onClick={() => setSelectedRunId(run.id)}
+                        onClick={() => {
+                          setSelectedRunId(run.id);
+                          setSelectedEventId(null);
+                        }}
                       >
                         <div className="list__title">{label}</div>
                         <div className="list__meta">
@@ -1136,10 +1568,53 @@ export default function AgentRunsPage() {
                     <section className="agent-timeline">
                       <div className="panel__header">
                         <h4>Execution timeline</h4>
-                        <span className="panel__badge panel__badge--secondary">
-                          {timelineEvents.length}/{actions.length} events
-                        </span>
+                        <div className="panel__row panel__row--compact">
+                          <span className="panel__badge panel__badge--secondary">
+                            {timelineEvents.length}/{actions.length} events
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Live: {livePollingActive ? "on" : "paused"}
+                          </span>
+                          {eventsPage?.has_more_before ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              onClick={loadOlderEvents}
+                              disabled={loadingOlderEvents || loading}
+                            >
+                              {loadingOlderEvents ? "Loading..." : "Load older events"}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
+                      <div className="agent-timeline__filters">
+                        {TIMELINE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={`button button--ghost button--sm ${
+                              timelinePreset === preset.id ? "is-active" : ""
+                            }`}
+                            onClick={() => applyTimelinePreset(preset.id)}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                        {timelinePreset === "custom" ? (
+                          <span className="panel__badge panel__badge--secondary">Custom view</span>
+                        ) : null}
+                      </div>
+                      {copyLinkNotice ? (
+                        <div
+                          className={`panel__notice ${
+                            copyLinkNotice.type === "error"
+                              ? "panel__notice--error"
+                              : "panel__notice--info"
+                          }`}
+                        >
+                          {copyLinkNotice.text}
+                        </div>
+                      ) : null}
                       <div className="agent-timeline__filters">
                         <button
                           type="button"
@@ -1177,13 +1652,60 @@ export default function AgentRunsPage() {
                         >
                           Executed
                         </button>
+                        <select
+                          className="input"
+                          style={{ minWidth: 170 }}
+                          value={timelineStatusFilter}
+                          onChange={(event) =>
+                            setTimelineStatusFilter(event.target.value as TimelineStatusFilter)
+                          }
+                        >
+                          <option value="all">All statuses</option>
+                          <option value="proposed">Proposed</option>
+                          <option value="approved">Approved</option>
+                          <option value="executing">Executing</option>
+                          <option value="executed">Executed</option>
+                          <option value="failed">Failed</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                        <select
+                          className="input"
+                          style={{ minWidth: 220 }}
+                          value={timelineCapabilityFilter}
+                          onChange={(event) => setTimelineCapabilityFilter(event.target.value)}
+                        >
+                          {timelineCapabilityOptions.map((item) => (
+                            <option key={item} value={item}>
+                              {item === "all" ? "All capabilities" : item}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="input"
+                          style={{ minWidth: 160 }}
+                          value={timelineTimeWindow}
+                          onChange={(event) =>
+                            setTimelineTimeWindow(event.target.value as TimelineWindowFilter)
+                          }
+                        >
+                          <option value="all">All time</option>
+                          <option value="24h">Last 24h</option>
+                          <option value="7d">Last 7d</option>
+                        </select>
                       </div>
                       {timelineEvents.length === 0 ? (
                         <p className="panel__muted">No timeline events yet.</p>
                       ) : (
                         <div className="agent-timeline__list">
                           {timelineEvents.map((event) => (
-                            <div key={event.id} className="agent-timeline__item">
+                            <div
+                              key={event.id}
+                              id={`agent-event-${event.id}`}
+                              className={`agent-timeline__item ${
+                                selectedEventId === event.id ? "is-focused" : ""
+                              }`}
+                              onClick={() => setSelectedEventId(event.id)}
+                            >
                               <div className="agent-timeline__meta">
                                 <span className="agent-timeline__seq">#{event.sequence}</span>
                                 <span className="agent-timeline__cap">{event.capability}</span>
@@ -1203,7 +1725,9 @@ export default function AgentRunsPage() {
                                   <button
                                     type="button"
                                     className="button button--ghost button--sm"
-                                    onClick={() => {
+                                    onClick={(clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      setSelectedEventId(event.id);
                                       setSelectedActionId(event.actionId);
                                       setDiffDrawerOpen(false);
                                     }}
@@ -1215,14 +1739,16 @@ export default function AgentRunsPage() {
                                   <button
                                     type="button"
                                     className="button button--ghost button--sm"
-                                    onClick={() =>
+                                    onClick={(clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      setSelectedEventId(event.id);
                                       router.push(
                                         `/experiments?experiment_id=${
                                           event.anchors?.experiment_id ||
                                           selectedRun?.experiment_id
                                         }`,
                                       )
-                                    }
+                                    }}
                                   >
                                     Open experiment
                                   </button>
@@ -1231,11 +1757,47 @@ export default function AgentRunsPage() {
                                   <button
                                     type="button"
                                     className="button button--ghost button--sm"
-                                    onClick={() => router.push("/validation")}
+                                    onClick={(clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      setSelectedEventId(event.id);
+                                      router.push("/validation");
+                                    }}
                                   >
                                     Open validation
                                   </button>
                                 ) : null}
+                                <button
+                                  type="button"
+                                  className="button button--ghost button--sm"
+                                  onClick={async (clickEvent) => {
+                                    clickEvent.stopPropagation();
+                                    setSelectedEventId(event.id);
+                                    if (typeof window === "undefined") return;
+                                    const params = new URLSearchParams(searchParams.toString());
+                                    params.set("event_id", event.id);
+                                    if (selectedRunId) params.set("run_id", selectedRunId);
+                                    const target = `${window.location.origin}/agent-runs${
+                                      params.toString() ? `?${params.toString()}` : ""
+                                    }`;
+                                    try {
+                                      if (!window.navigator.clipboard?.writeText) {
+                                        throw new Error("Clipboard unavailable");
+                                      }
+                                      await window.navigator.clipboard.writeText(target);
+                                      setCopyLinkNotice({
+                                        type: "info",
+                                        text: "Event deep link copied.",
+                                      });
+                                    } catch {
+                                      setCopyLinkNotice({
+                                        type: "error",
+                                        text: "Could not copy link. Copy from browser URL instead.",
+                                      });
+                                    }
+                                  }}
+                                >
+                                  Copy link
+                                </button>
                               </div>
                               {event.note ? (
                                 <p

@@ -1043,6 +1043,12 @@ export type AgentRunEvent = {
 
 export type AgentRunEventListResponse = {
   events: AgentRunEvent[];
+  page?: {
+    before_cursor?: string | null;
+    after_cursor?: string | null;
+    has_more_before?: boolean;
+    has_more_after?: boolean;
+  };
 };
 
 export type ValidationJobListResponse = {
