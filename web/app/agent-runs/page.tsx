@@ -158,6 +158,112 @@ function shortKeyList(keys: string[], max = 6): string {
   return keys.length > max ? `${sliced.join(", ")} +${keys.length - max} more` : sliced.join(", ");
 }
 
+function safeRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function buildDetailedDiffEntries(
+  current: Record<string, unknown>,
+  previous: Record<string, unknown>,
+): {
+  added: { key: string; current: string }[];
+  changed: { key: string; current: string; previous: string }[];
+  removed: { key: string; previous: string }[];
+} {
+  const currentKeys = new Set(Object.keys(current));
+  const previousKeys = new Set(Object.keys(previous));
+  const added = [...currentKeys]
+    .filter((key) => !previousKeys.has(key))
+    .map((key) => ({
+      key,
+      current: formatJsonPreview(current[key]),
+    }));
+  const removed = [...previousKeys]
+    .filter((key) => !currentKeys.has(key))
+    .map((key) => ({
+      key,
+      previous: formatJsonPreview(previous[key]),
+    }));
+  const changed = [...currentKeys]
+    .filter((key) => previousKeys.has(key))
+    .map((key) => ({
+      key,
+      current: formatJsonPreview(current[key]),
+      previous: formatJsonPreview(previous[key]),
+    }))
+    .filter((entry) => entry.current !== entry.previous);
+  return { added, changed, removed };
+}
+
+type TextDiffLine = { kind: "same" | "added" | "removed"; text: string };
+
+function buildTextDiffLines(previousText: string, currentText: string): TextDiffLine[] {
+  const before = previousText.split("\n");
+  const after = currentText.split("\n");
+  const rows: TextDiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < before.length && j < after.length) {
+    if (before[i] === after[j]) {
+      rows.push({ kind: "same", text: after[j] });
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (i + 1 < before.length && before[i + 1] === after[j]) {
+      rows.push({ kind: "removed", text: before[i] });
+      i += 1;
+      continue;
+    }
+    if (j + 1 < after.length && before[i] === after[j + 1]) {
+      rows.push({ kind: "added", text: after[j] });
+      j += 1;
+      continue;
+    }
+    rows.push({ kind: "removed", text: before[i] });
+    rows.push({ kind: "added", text: after[j] });
+    i += 1;
+    j += 1;
+  }
+  while (i < before.length) {
+    rows.push({ kind: "removed", text: before[i] });
+    i += 1;
+  }
+  while (j < after.length) {
+    rows.push({ kind: "added", text: after[j] });
+    j += 1;
+  }
+  return rows;
+}
+
+function getStringDiffCandidates(
+  current: Record<string, unknown>,
+  previous: Record<string, unknown>,
+): { key: string; current: string; previous: string; lines: TextDiffLine[] }[] {
+  const keys = Object.keys(current).filter((key) => key in previous);
+  return keys
+    .map((key) => {
+      const next = current[key];
+      const prev = previous[key];
+      if (typeof next !== "string" || typeof prev !== "string") return null;
+      if (next === prev) return null;
+      const isCopyLike =
+        next.length >= 40 ||
+        prev.length >= 40 ||
+        next.includes("\n") ||
+        prev.includes("\n");
+      if (!isCopyLike) return null;
+      return {
+        key,
+        current: next,
+        previous: prev,
+        lines: buildTextDiffLines(prev, next),
+      };
+    })
+    .filter(Boolean) as { key: string; current: string; previous: string; lines: TextDiffLine[] }[];
+}
+
 function budgetSeverity(
   used: number,
   limit: number | null,
@@ -184,6 +290,9 @@ export default function AgentRunsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [diffDrawerOpen, setDiffDrawerOpen] = useState(false);
+  const [hideUnchangedDiffLines, setHideUnchangedDiffLines] = useState(true);
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "failed" | "policy">("all");
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
 
@@ -328,6 +437,42 @@ export default function AgentRunsPage() {
     return counts;
   }, [actions]);
 
+  const timelineEvents = useMemo(() => {
+    const parseTime = (value?: string | null) => {
+      if (!value) return 0;
+      const parsed = new Date(value).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    return [...(actions ?? [])]
+      .map((action) => {
+        const updatedAt = action.updated_at || action.created_at || null;
+        return {
+          id: action.id,
+          sequence: action.sequence,
+          capability: action.capability_name,
+          status: String(action.status || "unknown").toLowerCase(),
+          when: updatedAt,
+          timeMs: parseTime(updatedAt),
+          note: action.error || action.rationale || null,
+          isPolicy: typeof action.error === "string" && /budget|policy|required|allowed/i.test(action.error),
+        };
+      })
+      .sort((a, b) => {
+        if (a.timeMs === b.timeMs) return a.sequence - b.sequence;
+        return a.timeMs - b.timeMs;
+      });
+  }, [actions]);
+
+  const filteredTimelineEvents = useMemo(() => {
+    if (timelineFilter === "failed") {
+      return timelineEvents.filter((item) => item.status === "failed");
+    }
+    if (timelineFilter === "policy") {
+      return timelineEvents.filter((item) => item.isPolicy);
+    }
+    return timelineEvents;
+  }, [timelineEvents, timelineFilter]);
+
   const budgetTelemetry = useMemo(() => {
     const budgets = (selectedRun?.budgets as Record<string, unknown> | undefined) ?? {};
     const maxActions = toFiniteNumber(budgets.max_actions);
@@ -397,6 +542,9 @@ export default function AgentRunsPage() {
       variantBlocked:
         budgetTelemetry.maxVariantRuns != null &&
         budgetTelemetry.executedVariantRuns >= budgetTelemetry.maxVariantRuns,
+      costBlocked:
+        budgetTelemetry.maxCostUsd != null &&
+        budgetTelemetry.totalCostUsd >= budgetTelemetry.maxCostUsd,
     };
   }, [budgetTelemetry]);
 
@@ -421,6 +569,52 @@ export default function AgentRunsPage() {
       vsPreviousCapability: keyDiffSummary(currentOutputs, previousCapabilityOutputs),
     };
   }, [actions, selectedAction]);
+
+  const selectedActionDeepDiff = useMemo(() => {
+    if (!selectedAction || !actionDiffs) return null;
+    const currentOutputs = safeRecord(selectedAction.outputs);
+    const currentInputs = safeRecord(selectedAction.inputs);
+    const previousOutputs = safeRecord(actionDiffs.previousAction?.outputs);
+    const previousInputs = safeRecord(actionDiffs.previousAction?.inputs);
+    const previousCapabilityOutputs = safeRecord(
+      actionDiffs.previousSameCapability?.outputs,
+    );
+    const previousCapabilityInputs = safeRecord(
+      actionDiffs.previousSameCapability?.inputs,
+    );
+    return {
+      outputsVsPreviousAction: buildDetailedDiffEntries(
+        currentOutputs,
+        previousOutputs,
+      ),
+      outputsVsPreviousCapability: buildDetailedDiffEntries(
+        currentOutputs,
+        previousCapabilityOutputs,
+      ),
+      inputsVsPreviousAction: buildDetailedDiffEntries(
+        currentInputs,
+        previousInputs,
+      ),
+      inputsVsPreviousCapability: buildDetailedDiffEntries(
+        currentInputs,
+        previousCapabilityInputs,
+      ),
+      currentOutputs,
+      currentInputs,
+      previousOutputs,
+      previousInputs,
+      previousCapabilityOutputs,
+      previousCapabilityInputs,
+      copyDiffVsPreviousAction: getStringDiffCandidates(
+        currentOutputs,
+        previousOutputs,
+      ),
+      copyDiffVsPreviousCapability: getStringDiffCandidates(
+        currentOutputs,
+        previousCapabilityOutputs,
+      ),
+    };
+  }, [actionDiffs, selectedAction]);
 
   const getBudgetRiskForAction = useCallback(
     (
@@ -447,9 +641,15 @@ export default function AgentRunsPage() {
           reason: "Variant run budget reached. Increase budget or review completed runs.",
         };
       }
+      if (budgetState.costBlocked) {
+        return {
+          risky: true,
+          reason: "Cost budget reached. Increase max_cost_usd before approving new actions.",
+        };
+      }
       return { risky: false, reason: null };
     },
-    [budgetState.actionBlocked, budgetState.variantBlocked],
+    [budgetState.actionBlocked, budgetState.variantBlocked, budgetState.costBlocked],
   );
 
   const handleCreate = useCallback(async () => {
@@ -822,12 +1022,16 @@ export default function AgentRunsPage() {
                         </div>
                       </div>
                     </div>
-                    {budgetState.actionBlocked || budgetState.variantBlocked ? (
+                    {budgetState.actionBlocked ||
+                    budgetState.variantBlocked ||
+                    budgetState.costBlocked ? (
                       <div className="panel__notice panel__notice--warning">
                         Budget guardrail active:{" "}
                         {budgetState.actionBlocked
                           ? "max actions reached."
-                          : "max variant runs reached for run_variant."}{" "}
+                          : budgetState.variantBlocked
+                            ? "max variant runs reached for run_variant."
+                            : "max cost reached."}{" "}
                         Proposed risky approvals are disabled until budget changes.
                       </div>
                     ) : null}
@@ -936,6 +1140,76 @@ export default function AgentRunsPage() {
                         </div>
                       )}
                     </div>
+                    <section className="agent-timeline">
+                      <div className="panel__header">
+                        <h4>Execution timeline</h4>
+                        <span className="panel__badge panel__badge--secondary">
+                          {filteredTimelineEvents.length}/{timelineEvents.length} events
+                        </span>
+                      </div>
+                      <div className="agent-timeline__filters">
+                        <button
+                          type="button"
+                          className={`button button--ghost button--sm ${
+                            timelineFilter === "all" ? "is-active" : ""
+                          }`}
+                          onClick={() => setTimelineFilter("all")}
+                        >
+                          All
+                        </button>
+                        <button
+                          type="button"
+                          className={`button button--ghost button--sm ${
+                            timelineFilter === "failed" ? "is-active" : ""
+                          }`}
+                          onClick={() => setTimelineFilter("failed")}
+                        >
+                          Failed
+                        </button>
+                        <button
+                          type="button"
+                          className={`button button--ghost button--sm ${
+                            timelineFilter === "policy" ? "is-active" : ""
+                          }`}
+                          onClick={() => setTimelineFilter("policy")}
+                        >
+                          Policy
+                        </button>
+                      </div>
+                      {filteredTimelineEvents.length === 0 ? (
+                        <p className="panel__muted">No timeline events yet.</p>
+                      ) : (
+                        <div className="agent-timeline__list">
+                          {filteredTimelineEvents.map((event) => (
+                            <div key={event.id} className="agent-timeline__item">
+                              <div className="agent-timeline__meta">
+                                <span className="agent-timeline__seq">#{event.sequence}</span>
+                                <span className="agent-timeline__cap">{event.capability}</span>
+                                <span
+                                  className={`agent-timeline__status is-${event.status}`}
+                                >
+                                  {event.status}
+                                </span>
+                                <span className="agent-timeline__time">
+                                  {event.when
+                                    ? new Date(event.when).toLocaleString()
+                                    : "time unavailable"}
+                                </span>
+                              </div>
+                              {event.note ? (
+                                <p
+                                  className={`agent-timeline__note ${
+                                    event.isPolicy ? "is-policy" : ""
+                                  }`}
+                                >
+                                  {event.note}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
                     {selectedAction ? (
                       <section className="agent-action-detail">
                         <div className="panel__header">
@@ -1066,6 +1340,15 @@ export default function AgentRunsPage() {
                           Diff compares output payload keys, so operators can audit what changed
                           before approving downstream actions.
                         </p>
+                        <div className="panel__actions">
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            onClick={() => setDiffDrawerOpen(true)}
+                          >
+                            Open detailed diff
+                          </button>
+                        </div>
                       </section>
                     ) : null}
                   </>
@@ -1236,6 +1519,208 @@ export default function AgentRunsPage() {
                   disabled={!userId || loading}
                 >
                   Create run
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {diffDrawerOpen && selectedAction && selectedActionDeepDiff && (
+          <div className="drawer">
+            <div className="drawer__overlay" onClick={() => setDiffDrawerOpen(false)} />
+            <div className="drawer__panel">
+              <div className="drawer__header">
+                <h2 className="drawer__title">Artifact diff details</h2>
+                <button className="drawer__close" onClick={() => setDiffDrawerOpen(false)}>
+                  ×
+                </button>
+              </div>
+              <div className="drawer__body">
+                <p className="panel__muted">
+                  Action #{selectedAction.sequence} · {selectedAction.capability_name}
+                </p>
+
+                <p className="panel__subheading">Output changes vs previous action</p>
+                <div className="agent-diff-detail-grid">
+                  <div>
+                    <strong>Added</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(selectedActionDeepDiff.outputsVsPreviousAction.added)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Changed</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(selectedActionDeepDiff.outputsVsPreviousAction.changed)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Removed</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(selectedActionDeepDiff.outputsVsPreviousAction.removed)}
+                    </pre>
+                  </div>
+                </div>
+
+                <p className="panel__subheading">Output changes vs previous same capability</p>
+                <div className="agent-diff-detail-grid">
+                  <div>
+                    <strong>Added</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(
+                        selectedActionDeepDiff.outputsVsPreviousCapability.added,
+                      )}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Changed</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(
+                        selectedActionDeepDiff.outputsVsPreviousCapability.changed,
+                      )}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Removed</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(
+                        selectedActionDeepDiff.outputsVsPreviousCapability.removed,
+                      )}
+                    </pre>
+                  </div>
+                </div>
+
+                <p className="panel__subheading">Input changes (traceability)</p>
+                <div className="agent-diff-detail-grid">
+                  <div>
+                    <strong>vs previous action</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(
+                        selectedActionDeepDiff.inputsVsPreviousAction.changed,
+                      )}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>vs previous same capability</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(
+                        selectedActionDeepDiff.inputsVsPreviousCapability.changed,
+                      )}
+                    </pre>
+                  </div>
+                </div>
+
+                <p className="panel__subheading">Snapshot payloads</p>
+                <div className="agent-diff-detail-grid">
+                  <div>
+                    <strong>Current inputs</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(selectedActionDeepDiff.currentInputs)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Current outputs</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(selectedActionDeepDiff.currentOutputs)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Previous action outputs</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(selectedActionDeepDiff.previousOutputs)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Previous same-capability outputs</strong>
+                    <pre className="panel__pre">
+                      {formatJsonPreview(
+                        selectedActionDeepDiff.previousCapabilityOutputs,
+                      )}
+                    </pre>
+                  </div>
+                </div>
+
+                <p className="panel__subheading">Copy diff mode (string-heavy fields)</p>
+                <label className="panel__toggle">
+                  <input
+                    type="checkbox"
+                    checked={hideUnchangedDiffLines}
+                    onChange={(event) => setHideUnchangedDiffLines(event.target.checked)}
+                  />
+                  Hide unchanged lines
+                </label>
+                {(selectedActionDeepDiff.copyDiffVsPreviousAction.length === 0 &&
+                  selectedActionDeepDiff.copyDiffVsPreviousCapability.length === 0) ? (
+                  <p className="panel__muted">
+                    No string-heavy output fields changed for this action.
+                  </p>
+                ) : null}
+                {selectedActionDeepDiff.copyDiffVsPreviousAction.length > 0 ? (
+                  <div className="agent-copy-diff-block">
+                    <strong>vs previous action</strong>
+                    {selectedActionDeepDiff.copyDiffVsPreviousAction.map((entry) => (
+                      <details key={`prev-${entry.key}`} className="agent-copy-diff">
+                        <summary>{entry.key}</summary>
+                        <div className="agent-copy-diff__lines">
+                          {entry.lines
+                            .filter((line) =>
+                              hideUnchangedDiffLines ? line.kind !== "same" : true,
+                            )
+                            .map((line, index) => (
+                            <div
+                              key={`${entry.key}-${index}`}
+                              className={`agent-copy-diff__line is-${line.kind}`}
+                            >
+                              <span className="agent-copy-diff__prefix">
+                                {line.kind === "added"
+                                  ? "+"
+                                  : line.kind === "removed"
+                                    ? "-"
+                                    : " "}
+                              </span>
+                              <span className="agent-copy-diff__text">{line.text || " "}</span>
+                            </div>
+                            ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : null}
+                {selectedActionDeepDiff.copyDiffVsPreviousCapability.length > 0 ? (
+                  <div className="agent-copy-diff-block">
+                    <strong>vs previous same capability</strong>
+                    {selectedActionDeepDiff.copyDiffVsPreviousCapability.map((entry) => (
+                      <details key={`cap-${entry.key}`} className="agent-copy-diff">
+                        <summary>{entry.key}</summary>
+                        <div className="agent-copy-diff__lines">
+                          {entry.lines
+                            .filter((line) =>
+                              hideUnchangedDiffLines ? line.kind !== "same" : true,
+                            )
+                            .map((line, index) => (
+                            <div
+                              key={`${entry.key}-cap-${index}`}
+                              className={`agent-copy-diff__line is-${line.kind}`}
+                            >
+                              <span className="agent-copy-diff__prefix">
+                                {line.kind === "added"
+                                  ? "+"
+                                  : line.kind === "removed"
+                                    ? "-"
+                                    : " "}
+                              </span>
+                              <span className="agent-copy-diff__text">{line.text || " "}</span>
+                            </div>
+                            ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="drawer__footer">
+                <button className="button button--ghost" onClick={() => setDiffDrawerOpen(false)}>
+                  Close
                 </button>
               </div>
             </div>
