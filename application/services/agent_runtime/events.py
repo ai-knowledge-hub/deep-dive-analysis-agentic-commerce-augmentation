@@ -60,9 +60,8 @@ def list_agent_run_events(
             status=status,
             capability_name=str(action.get("capability_name") or "") or None,
             capability_version=str(action.get("capability_version") or "") or None,
-            timestamp=(action.get("updated_at") or action.get("created_at")) and str(
-                action.get("updated_at") or action.get("created_at")
-            ),
+            timestamp=(action.get("updated_at") or action.get("created_at"))
+            and str(action.get("updated_at") or action.get("created_at")),
             note=note,
             is_policy_event=_is_policy_text(note),
             anchors={
