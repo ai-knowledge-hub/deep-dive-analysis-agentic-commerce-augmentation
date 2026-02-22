@@ -126,7 +126,12 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _sum_consumed_cost_usd(all_actions: list[Mapping[str, Any]]) -> float:
-    cost_keys = {"cost_usd", "total_cost_usd", "validation_cost_usd", "estimated_cost_usd"}
+    cost_keys = {
+        "cost_usd",
+        "total_cost_usd",
+        "validation_cost_usd",
+        "estimated_cost_usd",
+    }
     total = 0.0
     for action in all_actions:
         if str(action.get("status") or "").lower() != "executed":
