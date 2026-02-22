@@ -16,6 +16,7 @@ from pathlib import Path
 from application.ports.deps import AppDeps
 from infrastructure.alignment import goal_alignment_gateway
 import infrastructure.db.agent.agent_actions as agent_actions_repo
+import infrastructure.db.agent.agent_events as agent_events_repo
 import infrastructure.db.agent.agent_runs as agent_runs_repo
 import infrastructure.db.catalog.audience_archetypes as audience_archetypes_repo
 import infrastructure.db.catalog.brand_beliefs as brand_beliefs_repo
@@ -101,6 +102,7 @@ def default_deps() -> AppDeps:
         llm_provider_configs=llm_provider_configs_repo,
         agent_runs=agent_runs_repo,
         agent_actions=agent_actions_repo,
+        agent_events=agent_events_repo,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),

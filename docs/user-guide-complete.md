@@ -145,6 +145,7 @@ Current behavior:
 - monitor budgets in-run (actions, variant-runs, cost) with warning states.
 - inspect artifact diffs in detail (including copy diff mode).
 - use timeline deep-links to jump to action, experiment, and validation contexts.
+- timeline history is backed by immutable run events for reliable audit/replay.
 
 Execution modes:
 - `plan_only` (default): planning + approvals only, no execution side effects.

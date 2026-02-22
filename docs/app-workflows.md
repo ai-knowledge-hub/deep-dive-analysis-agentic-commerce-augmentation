@@ -235,7 +235,7 @@ Current implementation:
 - `AgentRuntimeWorkerService` supports bounded autonomous execution via `POST /agent-runs/tick`.
 - `AgentRuntimeSchedulerService` supports interval-based continuous orchestration across clients.
 - Run-level event feed API is available via `GET /agent-runs/{run_id}/events`.
-- `agent_runs` + `agent_actions` persistence is active.
+- `agent_runs` + `agent_actions` + immutable `agent_events` persistence is active.
 - v0 defaults to `plan_only`; execution requires `auto_execute_safe`.
 - runtime uses per-run short lease lock + heartbeat refresh.
 - action execution is atomic (`approved -> executing -> executed|failed`).
@@ -246,6 +246,7 @@ Current implementation:
   - budget telemetry + warning states,
   - detailed artifact diff drawer + copy diff mode,
   - execution timeline with deep-links and server-side filters (`all/failed/policy/executed`).
+  - timeline reads persisted event history (`agent_events`) for stable audit/replay semantics.
 - `Experiments` page includes an Agent operator entry panel with latest run status.
 
 Still in progress:
