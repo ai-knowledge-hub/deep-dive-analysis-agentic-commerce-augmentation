@@ -1050,41 +1050,63 @@ export default function AgentRunsPage() {
     };
   }, [actionDiffs, selectedAction]);
 
-  const getBudgetRiskForAction = useCallback(
-    (
-      action: AgentAction,
-    ): {
-      risky: boolean;
-      reason: string | null;
-    } => {
+  const getGuardrailReasonsForAction = useCallback(
+    (action: AgentAction): string[] => {
       if (String(action.status || "").toLowerCase() !== "proposed") {
-        return { risky: false, reason: null };
+        return [];
+      }
+      const reasons: string[] = [];
+      const runStatus = String(selectedRun?.status || "").toLowerCase();
+      if (runStatus === "failed" || runStatus === "completed" || runStatus === "canceled") {
+        reasons.push(`Run is ${runStatus}. Start a new run or move to a healthy run state.`);
       }
       if (budgetState.actionBlocked) {
-        return {
-          risky: true,
-          reason: "Action budget reached. Increase budget or execute fewer actions.",
-        };
+        reasons.push("Action budget reached. Increase budget or execute fewer actions.");
       }
-      if (
-        action.capability_name === "run_variant" &&
-        budgetState.variantBlocked
-      ) {
-        return {
-          risky: true,
-          reason: "Variant run budget reached. Increase budget or review completed runs.",
-        };
+      if (action.capability_name === "run_variant" && budgetState.variantBlocked) {
+        reasons.push("Variant run budget reached. Increase budget or review completed runs.");
       }
       if (budgetState.costBlocked) {
-        return {
-          risky: true,
-          reason: "Cost budget reached. Increase max_cost_usd before approving new actions.",
-        };
+        reasons.push("Cost budget reached. Increase max_cost_usd before approving new actions.");
       }
-      return { risky: false, reason: null };
+      return reasons;
     },
-    [budgetState.actionBlocked, budgetState.variantBlocked, budgetState.costBlocked],
+    [
+      budgetState.actionBlocked,
+      budgetState.costBlocked,
+      budgetState.variantBlocked,
+      selectedRun?.status,
+    ],
   );
+
+  const nextRecommendedAction = useMemo(() => {
+    const proposed = (actions ?? [])
+      .filter((item) => String(item.status || "").toLowerCase() === "proposed")
+      .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const next = proposed[0] ?? null;
+    if (!next) {
+      const approved = (actions ?? []).filter(
+        (item) => String(item.status || "").toLowerCase() === "approved",
+      ).length;
+      return {
+        action: null as AgentAction | null,
+        guardrails: [] as string[],
+        hint:
+          approved > 0
+            ? "No proposed actions left. Use Start/Step to execute approved queue."
+            : "No proposed actions. Refresh to sync runtime proposals.",
+      };
+    }
+    const guardrails = getGuardrailReasonsForAction(next);
+    return {
+      action: next,
+      guardrails,
+      hint:
+        guardrails.length > 0
+          ? "Review the blocked reasons before approval."
+          : "Ready to approve and continue execution.",
+    };
+  }, [actions, getGuardrailReasonsForAction]);
 
   const handleCreate = useCallback(async () => {
     if (!userId) return;
@@ -1360,6 +1382,31 @@ export default function AgentRunsPage() {
 
                 {selectedRun && (
                   <>
+                    <section className="agent-next-action">
+                      <div className="panel__header">
+                        <h4>Next recommended action</h4>
+                        {nextRecommendedAction.action ? (
+                          <span className="panel__badge panel__badge--secondary">
+                            #{nextRecommendedAction.action.sequence} ·{" "}
+                            {nextRecommendedAction.action.capability_name}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="panel__muted">{nextRecommendedAction.hint}</p>
+                      {nextRecommendedAction.action?.rationale ? (
+                        <p className="panel__muted">{nextRecommendedAction.action.rationale}</p>
+                      ) : null}
+                      {nextRecommendedAction.guardrails.length > 0 ? (
+                        <ul className="panel__list panel__list--compact">
+                          {nextRecommendedAction.guardrails.map((reason) => (
+                            <li key={reason} className="agent-guardrail-reason">
+                              {reason}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </section>
+
                     <div className="panel__meta-strip">
                       <div>
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}
@@ -1516,7 +1563,8 @@ export default function AgentRunsPage() {
                         <div className="table__cell">Actions</div>
                       </div>
                       {(actions ?? []).map((a) => {
-                        const budgetRisk = getBudgetRiskForAction(a);
+                        const guardrailReasons = getGuardrailReasonsForAction(a);
+                        const hasGuardrailBlock = guardrailReasons.length > 0;
                         return (
                         <div
                           key={a.id}
@@ -1548,16 +1596,11 @@ export default function AgentRunsPage() {
                                   type="button"
                                   className="button button--ghost button--sm"
                                   onClick={() => handleDecision(a.id, "approve")}
-                                  disabled={loading || budgetRisk.risky}
-                                  title={budgetRisk.reason || undefined}
+                                  disabled={loading || hasGuardrailBlock}
+                                  title={guardrailReasons[0] || undefined}
                                 >
                                   Approve
                                 </button>
-                                {budgetRisk.risky && budgetRisk.reason ? (
-                                  <span className="panel__badge panel__badge--warning">
-                                    {budgetRisk.reason}
-                                  </span>
-                                ) : null}
                                 <button
                                   type="button"
                                   className="button button--ghost button--sm"
@@ -1583,6 +1626,15 @@ export default function AgentRunsPage() {
                                 Copy I/O
                               </button>
                             )}
+                            {hasGuardrailBlock ? (
+                              <div className="agent-guardrail-list">
+                                {guardrailReasons.map((reason) => (
+                                  <span key={`${a.id}-${reason}`} className="panel__badge panel__badge--warning">
+                                    {reason}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         );

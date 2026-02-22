@@ -2034,6 +2034,25 @@ input[type="checkbox"]:focus-visible {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.agent-next-action {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.agent-guardrail-reason {
+  color: #fde68a;
+}
+
+.agent-guardrail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .agent-budget-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
