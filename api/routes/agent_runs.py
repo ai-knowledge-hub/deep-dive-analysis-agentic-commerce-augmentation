@@ -303,7 +303,9 @@ def decide_action(
         status="approved" if decision == "approve" else "rejected",
     )
     current = updated or action
-    run_row = DEPS.agent_runs.get_agent_run(run_id=str(current.get("agent_run_id") or ""))
+    run_row = DEPS.agent_runs.get_agent_run(
+        run_id=str(current.get("agent_run_id") or "")
+    )
     DEPS.agent_events.create_agent_event(
         agent_run_id=str(current.get("agent_run_id") or ""),
         action_id=str(current.get("id") or action_id),
