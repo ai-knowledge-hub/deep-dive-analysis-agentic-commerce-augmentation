@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import type { AgentAction, AgentRun, Experiment } from "../../lib/types";
+import type { AgentAction, AgentRun, AgentRunEvent, Experiment } from "../../lib/types";
 import {
   controlAgentRun,
   createAgentRun,
   decideAgentAction,
   getAgentRun,
+  getAgentRunEvents,
   listExperiments,
   listAgentRuns,
 } from "../../lib/api";
@@ -287,12 +288,15 @@ export default function AgentRunsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
+  const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [diffDrawerOpen, setDiffDrawerOpen] = useState(false);
   const [hideUnchangedDiffLines, setHideUnchangedDiffLines] = useState(true);
-  const [timelineFilter, setTimelineFilter] = useState<"all" | "failed" | "policy">("all");
+  const [timelineFilter, setTimelineFilter] = useState<
+    "all" | "failed" | "policy" | "executed"
+  >("all");
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
 
@@ -352,15 +356,26 @@ export default function AgentRunsPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await getAgentRun(selectedRunId, { limit: 200 }, userId);
+      const [response, eventsResponse] = await Promise.all([
+        getAgentRun(selectedRunId, { limit: 200 }, userId),
+        getAgentRunEvents(
+          selectedRunId,
+          {
+            limit: 500,
+            event_type: timelineFilter,
+          },
+          userId,
+        ),
+      ]);
       setSelectedRun(response.run ?? null);
       setActions(response.actions ?? []);
+      setRunEvents(eventsResponse.events ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load agent run.");
     } finally {
       setLoading(false);
     }
-  }, [selectedRunId, userId]);
+  }, [selectedRunId, timelineFilter, userId]);
 
   useEffect(() => {
     loadRuns();
@@ -438,40 +453,18 @@ export default function AgentRunsPage() {
   }, [actions]);
 
   const timelineEvents = useMemo(() => {
-    const parseTime = (value?: string | null) => {
-      if (!value) return 0;
-      const parsed = new Date(value).getTime();
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-    return [...(actions ?? [])]
-      .map((action) => {
-        const updatedAt = action.updated_at || action.created_at || null;
-        return {
-          id: action.id,
-          sequence: action.sequence,
-          capability: action.capability_name,
-          status: String(action.status || "unknown").toLowerCase(),
-          when: updatedAt,
-          timeMs: parseTime(updatedAt),
-          note: action.error || action.rationale || null,
-          isPolicy: typeof action.error === "string" && /budget|policy|required|allowed/i.test(action.error),
-        };
-      })
-      .sort((a, b) => {
-        if (a.timeMs === b.timeMs) return a.sequence - b.sequence;
-        return a.timeMs - b.timeMs;
-      });
-  }, [actions]);
-
-  const filteredTimelineEvents = useMemo(() => {
-    if (timelineFilter === "failed") {
-      return timelineEvents.filter((item) => item.status === "failed");
-    }
-    if (timelineFilter === "policy") {
-      return timelineEvents.filter((item) => item.isPolicy);
-    }
-    return timelineEvents;
-  }, [timelineEvents, timelineFilter]);
+    return (runEvents ?? []).map((event) => ({
+      id: event.id,
+      actionId: event.action_id ?? null,
+      sequence: event.sequence,
+      capability: event.capability_name ?? "unknown",
+      status: String(event.status || "unknown").toLowerCase(),
+      when: event.timestamp ?? null,
+      note: event.note ?? null,
+      isPolicy: Boolean(event.is_policy_event),
+      anchors: event.anchors ?? {},
+    }));
+  }, [runEvents]);
 
   const budgetTelemetry = useMemo(() => {
     const budgets = (selectedRun?.budgets as Record<string, unknown> | undefined) ?? {};
@@ -1144,7 +1137,7 @@ export default function AgentRunsPage() {
                       <div className="panel__header">
                         <h4>Execution timeline</h4>
                         <span className="panel__badge panel__badge--secondary">
-                          {filteredTimelineEvents.length}/{timelineEvents.length} events
+                          {timelineEvents.length}/{actions.length} events
                         </span>
                       </div>
                       <div className="agent-timeline__filters">
@@ -1175,12 +1168,21 @@ export default function AgentRunsPage() {
                         >
                           Policy
                         </button>
+                        <button
+                          type="button"
+                          className={`button button--ghost button--sm ${
+                            timelineFilter === "executed" ? "is-active" : ""
+                          }`}
+                          onClick={() => setTimelineFilter("executed")}
+                        >
+                          Executed
+                        </button>
                       </div>
-                      {filteredTimelineEvents.length === 0 ? (
+                      {timelineEvents.length === 0 ? (
                         <p className="panel__muted">No timeline events yet.</p>
                       ) : (
                         <div className="agent-timeline__list">
-                          {filteredTimelineEvents.map((event) => (
+                          {timelineEvents.map((event) => (
                             <div key={event.id} className="agent-timeline__item">
                               <div className="agent-timeline__meta">
                                 <span className="agent-timeline__seq">#{event.sequence}</span>
@@ -1195,6 +1197,45 @@ export default function AgentRunsPage() {
                                     ? new Date(event.when).toLocaleString()
                                     : "time unavailable"}
                                 </span>
+                              </div>
+                              <div className="agent-timeline__actions">
+                                {event.actionId ? (
+                                  <button
+                                    type="button"
+                                    className="button button--ghost button--sm"
+                                    onClick={() => {
+                                      setSelectedActionId(event.actionId);
+                                      setDiffDrawerOpen(false);
+                                    }}
+                                  >
+                                    Focus action
+                                  </button>
+                                ) : null}
+                                {selectedRun?.experiment_id || event.anchors?.experiment_id ? (
+                                  <button
+                                    type="button"
+                                    className="button button--ghost button--sm"
+                                    onClick={() =>
+                                      router.push(
+                                        `/experiments?experiment_id=${
+                                          event.anchors?.experiment_id ||
+                                          selectedRun?.experiment_id
+                                        }`,
+                                      )
+                                    }
+                                  >
+                                    Open experiment
+                                  </button>
+                                ) : null}
+                                {event.anchors?.validation_job_id ? (
+                                  <button
+                                    type="button"
+                                    className="button button--ghost button--sm"
+                                    onClick={() => router.push("/validation")}
+                                  >
+                                    Open validation
+                                  </button>
+                                ) : null}
                               </div>
                               {event.note ? (
                                 <p

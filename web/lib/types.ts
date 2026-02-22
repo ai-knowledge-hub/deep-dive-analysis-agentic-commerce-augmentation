@@ -1019,6 +1019,32 @@ export type AgentRunControlResponse = {
   message?: string;
 };
 
+export type AgentRunEvent = {
+  id: string;
+  run_id: string;
+  action_id?: string | null;
+  sequence: number;
+  event_type: string;
+  status: string;
+  capability_name?: string | null;
+  capability_version?: string | null;
+  timestamp?: string | null;
+  note?: string | null;
+  is_policy_event?: boolean;
+  anchors?: {
+    experiment_id?: string | null;
+    variant_id?: string | null;
+    validation_job_id?: string | null;
+    hypothesis_id?: string | null;
+    snapshot_version?: number | null;
+    metric_id?: string | null;
+  };
+};
+
+export type AgentRunEventListResponse = {
+  events: AgentRunEvent[];
+};
+
 export type ValidationJobListResponse = {
   jobs: ValidationJob[];
 };

@@ -234,17 +234,22 @@ Current implementation:
 - `AgentRuntime` service is wired to `/agent-runs` controls (`start`, `pause`, `cancel`, `step`).
 - `AgentRuntimeWorkerService` supports bounded autonomous execution via `POST /agent-runs/tick`.
 - `AgentRuntimeSchedulerService` supports interval-based continuous orchestration across clients.
+- Run-level event feed API is available via `GET /agent-runs/{run_id}/events`.
 - `agent_runs` + `agent_actions` persistence is active.
 - v0 defaults to `plan_only`; execution requires `auto_execute_safe`.
 - runtime uses per-run short lease lock + heartbeat refresh.
 - action execution is atomic (`approved -> executing -> executed|failed`).
 - centralized capability specs + defaults are enforced through a registry contract.
-- centralized policy checks enforce allow-list + required inputs + action budgets.
-- `Agent runs` UI includes action explainability (why, side effects, linked artifacts).
+- centralized policy checks enforce allow-list + required inputs + budgets (`max_actions`, `max_variant_runs`, `max_cost_usd`).
+- `Agent runs` UI includes:
+  - action explainability (why, side effects, linked artifacts),
+  - budget telemetry + warning states,
+  - detailed artifact diff drawer + copy diff mode,
+  - execution timeline with deep-links and server-side filters (`all/failed/policy/executed`).
 - `Experiments` page includes an Agent operator entry panel with latest run status.
 
 Still in progress:
-- richer budget burn telemetry and artifact diff views
+- richer budget burn telemetry (historical trend/burn-rate visualization) and expanded artifact diff ergonomics
 
 See `docs/agentic-layer.md`.
 

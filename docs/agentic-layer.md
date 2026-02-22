@@ -9,6 +9,7 @@ Implemented now:
 - Runtime step execution service with short lease locking and heartbeat refresh
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
 - Operator UX in `/agent-runs` with queue approvals and action explainability
+- Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution
 - Autonomous scheduler service (`AgentRuntimeSchedulerService`) for interval-based continuous orchestration
@@ -69,10 +70,16 @@ v0 Runtime Core behavior:
 - Action claim is atomic (`approved -> executing -> executed|failed`).
 - Route handlers delegate to runtime service instead of duplicating execution logic.
 - UI exposes action rationale, side effects summary, and linked artifacts for selected actions.
+- UI includes:
+  - budget telemetry cards with warning/danger states
+  - proactive risky-approval disable (action/variant/cost budgets)
+  - detailed artifact diff drawer (including copy diff mode with hide-unchanged toggle)
+  - execution timeline with deep-links and server-side filters.
 - Worker tick (`POST /agent-runs/tick`) processes runnable `auto_execute_safe` runs in bounded loops.
 
 Worker/ops entry points:
 - API: `POST /agent-runs/tick`
+- API: `GET /agent-runs/{run_id}/events?event_type=all|failed|policy|executed`
 - CLI: `python -m scripts.run_agent_runtime_worker`
 - Make target: `make agent-runtime-tick`
 - Scheduler CLI: `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`
@@ -315,6 +322,7 @@ Formalize enforcement checks used by both humans and agents:
 - frozen snapshot required for retrieval-backed scoring
 - baseline-first gating
 - spend / run / query budget caps per cycle
+- cost budget cap (`max_cost_usd`) before execution
 - stop conditions (drift too high, validation disagreement, low support size)
 - approval gates (optional):
   - promotion to “prod tier”
