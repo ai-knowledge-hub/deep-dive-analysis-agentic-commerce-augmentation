@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
@@ -83,40 +84,83 @@ def list_agent_run_events_page(
     until: Optional[str] = None,
     before: Optional[str] = None,
     after: Optional[str] = None,
+    event_id: Optional[str] = None,
+    around: int = 120,
 ) -> AgentRunEventPage:
     run = deps.agent_runs.get_agent_run(run_id=run_id)
     if not run:
         raise ValueError("Agent run not found")
-    before_anchor = _decode_cursor(before)
-    after_anchor = _decode_cursor(after)
-    rows = deps.agent_events.list_agent_events(
-        agent_run_id=run_id,
-        event_type=event_type,
-        status=status,
-        capability_name=capability_name,
-        since=since,
-        until=until,
-        limit=limit,
-        before=before_anchor,
-        after=after_anchor,
-    )
-    events = [
-        AgentRunEvent(
-            id=str(item.get("id") or ""),
-            run_id=str(item.get("run_id") or run_id),
-            action_id=item.get("action_id"),
-            sequence=int(item.get("sequence") or 0),
-            event_type=str(item.get("event_type") or ""),
-            status=str(item.get("status") or "unknown"),
-            capability_name=item.get("capability_name"),
-            capability_version=item.get("capability_version"),
-            timestamp=item.get("timestamp"),
-            note=item.get("note"),
-            is_policy_event=bool(item.get("is_policy_event")),
-            anchors=dict(item.get("anchors") or {}),
+    if event_id:
+        anchor_row = deps.agent_events.get_agent_event(event_id=event_id)
+        if not anchor_row or str(anchor_row.get("run_id") or "") != run_id:
+            raise ValueError("Agent event not found")
+        anchor_event = _to_event(anchor_row, run_id=run_id)
+        if not _matches_filters(
+            anchor_event,
+            event_type=event_type,
+            status=status,
+            capability_name=capability_name,
+            since=since,
+            until=until,
+        ):
+            raise ValueError("Agent event not found in current filters")
+        around_limit = max(1, min(int(around), 2000))
+        before_limit = (around_limit - 1) // 2
+        after_limit = (around_limit - 1) - before_limit
+        older_rows = (
+            deps.agent_events.list_agent_events(
+                agent_run_id=run_id,
+                event_type=event_type,
+                status=status,
+                capability_name=capability_name,
+                since=since,
+                until=until,
+                limit=before_limit,
+                before={
+                    "created_at": anchor_event.timestamp or "",
+                    "id": anchor_event.id,
+                },
+            )
+            if before_limit > 0
+            else []
         )
-        for item in rows
-    ]
+        newer_rows = (
+            deps.agent_events.list_agent_events(
+                agent_run_id=run_id,
+                event_type=event_type,
+                status=status,
+                capability_name=capability_name,
+                since=since,
+                until=until,
+                limit=after_limit,
+                after={
+                    "created_at": anchor_event.timestamp or "",
+                    "id": anchor_event.id,
+                },
+            )
+            if after_limit > 0
+            else []
+        )
+        events = [
+            *[_to_event(item, run_id=run_id) for item in older_rows],
+            anchor_event,
+            *[_to_event(item, run_id=run_id) for item in newer_rows],
+        ]
+    else:
+        before_anchor = _decode_cursor(before)
+        after_anchor = _decode_cursor(after)
+        rows = deps.agent_events.list_agent_events(
+            agent_run_id=run_id,
+            event_type=event_type,
+            status=status,
+            capability_name=capability_name,
+            since=since,
+            until=until,
+            limit=limit,
+            before=before_anchor,
+            after=after_anchor,
+        )
+        events = [_to_event(item, run_id=run_id) for item in rows]
     before_cursor = _encode_cursor(events[0]) if events else None
     after_cursor = _encode_cursor(events[-1]) if events else None
 
@@ -176,6 +220,64 @@ def _decode_cursor(cursor: Optional[str]) -> Optional[Dict[str, str]]:
         return {"created_at": created_at, "id": event_id}
     except Exception:
         return None
+
+
+def _to_event(item: Dict[str, Any], *, run_id: str) -> AgentRunEvent:
+    return AgentRunEvent(
+        id=str(item.get("id") or ""),
+        run_id=str(item.get("run_id") or run_id),
+        action_id=item.get("action_id"),
+        sequence=int(item.get("sequence") or 0),
+        event_type=str(item.get("event_type") or ""),
+        status=str(item.get("status") or "unknown"),
+        capability_name=item.get("capability_name"),
+        capability_version=item.get("capability_version"),
+        timestamp=item.get("timestamp"),
+        note=item.get("note"),
+        is_policy_event=bool(item.get("is_policy_event")),
+        anchors=dict(item.get("anchors") or {}),
+    )
+
+
+def _to_dt(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _matches_filters(
+    event: AgentRunEvent,
+    *,
+    event_type: Optional[str],
+    status: Optional[str],
+    capability_name: Optional[str],
+    since: Optional[str],
+    until: Optional[str],
+) -> bool:
+    if event_type and event_type not in {"all", ""}:
+        if event_type == "policy" and not event.is_policy_event:
+            return False
+        if event_type in {"failed", "executed"} and event.status != event_type:
+            return False
+    if status and status not in {"all", ""} and event.status != status:
+        return False
+    if (
+        capability_name
+        and capability_name not in {"all", ""}
+        and (event.capability_name or "") != capability_name
+    ):
+        return False
+    event_dt = _to_dt(event.timestamp)
+    since_dt = _to_dt(since)
+    until_dt = _to_dt(until)
+    if since_dt and event_dt and event_dt < since_dt:
+        return False
+    if until_dt and event_dt and event_dt > until_dt:
+        return False
+    return True
 
 
 __all__ = [

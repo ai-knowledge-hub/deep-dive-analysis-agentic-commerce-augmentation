@@ -51,7 +51,7 @@ Target state:
 
 ---
 
-## 3) Architectural Additions (Concrete)
+## 3) Architectural Additions
 
 ### 3.1 AgentRuntime (backend boundary)
 
@@ -73,15 +73,27 @@ v0 Runtime Core behavior:
 - Runtime and operator transitions emit immutable events (`action_proposed`, `action_approved`, `action_rejected`, `action_executing`, `action_executed`, `action_failed`, `run_started`, `run_paused`, `run_canceled`).
 - UI exposes action rationale, side effects summary, and linked artifacts for selected actions.
 - UI includes:
+  - left-rail + main workspace operator layout
   - budget telemetry cards with warning/danger states
+  - next recommended action panel
   - proactive risky-approval disable (action/variant/cost budgets)
+  - inline guardrail explainability on blocked approvals
   - detailed artifact diff drawer (including copy diff mode with hide-unchanged toggle)
-  - execution timeline with deep-links and server-side filters.
+  - execution timeline with presets, server-side filters, and deep-links.
+  - timeline pagination (`before/after`), load-older UX, and live polling.
+  - deep-link recovery when `event_id` is outside the current page window.
 - Worker tick (`POST /agent-runs/tick`) processes runnable `auto_execute_safe` runs in bounded loops.
 
 Worker/ops entry points:
 - API: `POST /agent-runs/tick`
-- API: `GET /agent-runs/{run_id}/events?event_type=all|failed|policy|executed`
+- API: `GET /agent-runs/{run_id}/events`
+  - query params:
+    - `event_type=all|failed|policy|executed`
+    - `status=all|proposed|approved|executing|executed|failed|rejected`
+    - `capability_name`
+    - `since`, `until`
+    - `before`, `after`
+    - `event_id`, `around`
 - CLI: `python -m scripts.run_agent_runtime_worker`
 - Make target: `make agent-runtime-tick`
 - Scheduler CLI: `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`
@@ -343,7 +355,13 @@ Actions remain the mutable execution queue; events are immutable lifecycle recor
 
 Event stream is exposed via:
 - `GET /agent-runs/{run_id}/events`
-- filters: `event_type=all|failed|policy|executed`
+- filters:
+  - `event_type=all|failed|policy|executed`
+  - `status=all|proposed|approved|executing|executed|failed|rejected`
+  - `capability_name`
+  - `since`, `until`
+  - `before`, `after`
+  - `event_id`, `around`
 
 ### 3.5 Version Registry (scientific reproducibility)
 
