@@ -399,3 +399,70 @@ def test_list_agent_run_events_supports_capability_status_and_time_filters(tmp_p
     assert by_capability[0]["capability_name"] == "run_variant"
     assert len(by_since_future) == 0
     assert len(by_until_past) == 0
+
+
+def test_list_agent_run_events_page_can_center_by_event_id(tmp_path):
+    db_path = tmp_path / "agent-run-events-center.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    deps.clients.create_client(client_id="client-a", name="Client A")
+    run = deps.agent_runs.create_agent_run(
+        client_id="client-a",
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["freeze_retrieval_protocol"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="battery_ready",
+        status="running",
+    )
+    event_ids: list[str] = []
+    for idx in range(1, 8):
+        action = deps.agent_actions.create_agent_action(
+            agent_run_id=run["id"],
+            sequence=idx,
+            status="executed",
+            capability_name="freeze_retrieval_protocol",
+            capability_version="v1",
+            inputs={},
+            outputs={},
+            inputs_hash=f"in-{idx}",
+            outputs_hash=f"out-{idx}",
+            rationale=f"e{idx}",
+            confidence=0.5,
+            snapshot_version=None,
+            hypothesis_id=None,
+            variant_id=None,
+            validation_job_id=None,
+        )
+        event = deps.agent_events.create_agent_event(
+            agent_run_id=run["id"],
+            action_id=action["id"],
+            sequence=idx,
+            event_type="action_executed",
+            status="executed",
+            capability_name="freeze_retrieval_protocol",
+            capability_version="v1",
+            note=f"event {idx}",
+            is_policy_event=False,
+            anchors={},
+        )
+        event_ids.append(str(event["id"]))
+
+    anchor_id = event_ids[3]
+    centered = list_agent_run_events_page(
+        deps=deps,
+        run_id=run["id"],
+        event_type="all",
+        event_id=anchor_id,
+        around=5,
+    )
+    centered_ids = [event.id for event in centered.events]
+    assert anchor_id in centered_ids
+    assert len(centered_ids) <= 5

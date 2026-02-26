@@ -243,9 +243,17 @@ Current implementation:
 - centralized policy checks enforce allow-list + required inputs + budgets (`max_actions`, `max_variant_runs`, `max_cost_usd`).
 - `Agent runs` UI includes:
   - action explainability (why, side effects, linked artifacts),
+  - next recommended action panel for operator focus,
   - budget telemetry + warning states,
+  - inline guardrail explainability on blocked approvals,
   - detailed artifact diff drawer + copy diff mode,
-  - execution timeline with deep-links and server-side filters (`all/failed/policy/executed`).
+  - execution timeline with:
+    - deep-links and URL-synced state (`run_id`, filters, `event_id`),
+    - presets (`All activity`, `Policy failures (24h)`, `Variant execution (7d)`, `Validation focus (7d)`),
+    - server-side filters (`event_type`, `status`, `capability_name`, `since/until`),
+    - pagination (`before/after`) and load-older UX,
+    - live polling for newer events (paused when tab is hidden),
+    - event recovery (`event_id + around`) when deep-linked event is outside current page window.
   - timeline reads persisted event history (`agent_events`) for stable audit/replay semantics.
 - `Experiments` page includes an Agent operator entry panel with latest run status.
 
@@ -253,6 +261,10 @@ Still in progress:
 - richer budget burn telemetry (historical trend/burn-rate visualization) and expanded artifact diff ergonomics
 
 See `docs/agentic-layer.md`.
+
+Test coverage now includes:
+- service-layer event paging/filtering and event-centering tests (`tests/modules/test_agent_run_events_service.py`)
+- API-layer events endpoint filter/cursor/centering tests (`tests/test_agent_runs_api.py`)
 
 Maintenance endpoints:
 - `POST /admin/ops/loop-maintenance`

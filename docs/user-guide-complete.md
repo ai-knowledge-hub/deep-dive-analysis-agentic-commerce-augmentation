@@ -137,14 +137,21 @@ Tooltips in UI explain both modes on hover (separately for each toggle).
 Agent operator mode is available at **Agent runs** in the sidebar.
 
 Current behavior:
+- use a compact **Run selection rail** on the left and the operator workspace on the right.
+- create new runs from the header-level `New agent run` action (single primary CTA).
 - create an agent run scoped to an experiment,
 - queue proposed capability actions,
 - approve/reject actions,
 - execute approved actions stepwise in `auto_execute_safe` mode,
 - keep execution guarded by policy checks and runtime lock/heartbeat safety.
+- use the **Next recommended action** panel to follow suggested sequence.
 - monitor budgets in-run (actions, variant-runs, cost) with warning states.
+- review explicit guardrail reasons inline when approvals are blocked.
 - inspect artifact diffs in detail (including copy diff mode).
+- use timeline presets and filters to narrow noisy runs quickly.
 - use timeline deep-links to jump to action, experiment, and validation contexts.
+- copy per-event deep links directly from timeline rows.
+- open shared deep links with `event_id`: timeline auto-recovers and centers the target event even if not in the initial page slice.
 - timeline history is backed by immutable run events for reliable audit/replay.
 
 Execution modes:
@@ -155,6 +162,15 @@ Guardrails enforced before execution:
 - `max_actions`
 - `max_variant_runs`
 - `max_cost_usd`
+
+Timeline URL/deep-link state:
+- `run_id`
+- `timeline_preset`
+- `timeline_event_type`
+- `timeline_status`
+- `timeline_capability`
+- `timeline_window`
+- `event_id`
 
 The Experiments page also includes an **Agent operator mode** panel with:
 - latest agent run status for the selected experiment,

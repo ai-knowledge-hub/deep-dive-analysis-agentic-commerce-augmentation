@@ -118,13 +118,29 @@ Agent operator APIs:
 - `POST /agent-runs`
 - `GET /agent-runs`
 - `GET /agent-runs/{run_id}`
-- `GET /agent-runs/{run_id}/events` (run-level event feed; supports `event_type=all|failed|policy|executed`)
+- `GET /agent-runs/{run_id}/events`
+  - run-level event feed with keyset pagination and deep-link recovery
+  - supports:
+    - `event_type=all|failed|policy|executed`
+    - `status=all|proposed|approved|executing|executed|failed|rejected`
+    - `capability_name`
+    - `since`, `until`
+    - `before`, `after`
+    - `event_id`, `around` (center timeline around a specific event)
 - `POST /agent-runs/{run_id}/start`
 - `POST /agent-runs/{run_id}/pause`
 - `POST /agent-runs/{run_id}/cancel`
 - `POST /agent-runs/{run_id}/step`
 - `POST /agent-runs/actions/{action_id}/decision`
 - `POST /agent-runs/tick` (bounded autonomous worker tick)
+
+Agent Runs operator UX (current):
+- compact left-rail + main workspace layout
+- next recommended action panel
+- inline guardrail reasons on blocked approvals
+- timeline presets (`All activity`, `Policy failures (24h)`, `Variant execution (7d)`, `Validation focus (7d)`)
+- timeline deep-link state in URL (`run_id`, filters, `event_id`)
+- per-event deep-link copy with feedback and automatic deep-link recovery when event is outside current page window
 
 Agent runtime worker/scheduler:
 - one-off tick: `make agent-runtime-tick`
@@ -173,6 +189,16 @@ cp ../.env.example .env.local
 pnpm install
 pnpm dev
 ```
+
+Frontend tests:
+
+```bash
+cd web
+pnpm install
+pnpm test
+```
+
+If `pnpm test` fails with `vitest: command not found`, run `pnpm install` again in `web/` to pull the new test dependencies.
 
 Open:
 - App: `http://localhost:3000`

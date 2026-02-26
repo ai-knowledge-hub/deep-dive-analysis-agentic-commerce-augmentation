@@ -279,6 +279,8 @@ def get_agent_run_events(
     until: Optional[str] = None,
     before: Optional[str] = None,
     after: Optional[str] = None,
+    event_id: Optional[str] = None,
+    around: int = 120,
 ) -> AgentRunEventListResponse:
     require_client_id(client_id, user_id)
     try:
@@ -293,6 +295,8 @@ def get_agent_run_events(
             until=until,
             before=before,
             after=after,
+            event_id=event_id,
+            around=max(1, min(int(around), 2000)),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

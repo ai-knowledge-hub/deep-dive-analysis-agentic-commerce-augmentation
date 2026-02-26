@@ -563,6 +563,8 @@ export async function getAgentRunEvents(
     until?: string | null;
     before?: string | null;
     after?: string | null;
+    event_id?: string | null;
+    around?: number;
   } = {},
   userId?: string | null,
 ): Promise<AgentRunEventListResponse> {
@@ -578,6 +580,8 @@ export async function getAgentRunEvents(
   if (payload.until) params.set("until", payload.until);
   if (payload.before) params.set("before", payload.before);
   if (payload.after) params.set("after", payload.after);
+  if (payload.event_id) params.set("event_id", payload.event_id);
+  if (payload.around) params.set("around", String(payload.around));
   return request<AgentRunEventListResponse>(
     `/agent-runs/${runId}/events${params.toString() ? `?${params.toString()}` : ""}`,
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type { AgentAction, AgentRun, AgentRunEvent, Experiment } from "../../lib/types";
@@ -655,6 +655,42 @@ export default function AgentRunsPage() {
     userId,
   ]);
 
+  const recoverDeepLinkedEvent = useCallback(async () => {
+    if (!userId || !selectedRunId || !eventIdParam) return;
+    if ((runEvents ?? []).some((item) => item.id === eventIdParam)) return;
+    try {
+      const response = await getAgentRunEvents(
+        selectedRunId,
+        {
+          limit: 240,
+          event_type: timelineFilter,
+          status: timelineStatusFilter,
+          capability_name:
+            timelineCapabilityFilter !== "all" ? timelineCapabilityFilter : null,
+          since: timelineSince,
+          event_id: eventIdParam,
+          around: 240,
+        },
+        userId,
+      );
+      const recovered = response.events ?? [];
+      if (recovered.length === 0) return;
+      setRunEvents(recovered);
+      setEventsPage(response.page ?? null);
+    } catch {
+      // Deep-link recovery is best-effort; keep current list if recovery is unavailable.
+    }
+  }, [
+    eventIdParam,
+    runEvents,
+    selectedRunId,
+    timelineCapabilityFilter,
+    timelineFilter,
+    timelineSince,
+    timelineStatusFilter,
+    userId,
+  ]);
+
   useEffect(() => {
     loadRuns();
   }, [loadRuns]);
@@ -687,6 +723,10 @@ export default function AgentRunsPage() {
       setLivePollingActive(false);
     };
   }, [loadNewerEvents, selectedRunId, userId]);
+
+  useEffect(() => {
+    void recoverDeepLinkedEvent();
+  }, [recoverDeepLinkedEvent]);
 
   useEffect(() => {
     if (!selectedActionId && actions.length > 0) {

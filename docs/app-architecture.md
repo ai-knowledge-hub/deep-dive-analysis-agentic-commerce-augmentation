@@ -238,18 +238,25 @@ The agentic module is implemented as an orchestration layer over the same experi
   - latest run status for selected experiment
   - direct CTAs to open/start in Agent runs.
 - Agent Runs includes:
-  - scope/run selection
+  - run selection rail + operator workspace
   - execution controls
+  - next recommended action panel
   - approvals/audit queue
+  - inline guardrail block reasons
   - selected-action explainability panel (summary, side effects, linked artifacts)
   - budget telemetry cards with warn/danger states
   - detailed artifact diff drawer + copy diff mode
-  - execution timeline with deep-links.
+  - execution timeline with presets, filters, deep-links, and deep-link recovery.
 
 ### Agent run events API
 - `GET /agent-runs/{run_id}/events`
 - Query params:
   - `event_type=all|failed|policy|executed`
+  - `status=all|proposed|approved|executing|executed|failed|rejected`
+  - `capability_name`
+  - `since`, `until`
+  - `before`, `after` (keyset pagination cursors)
+  - `event_id`, `around` (return a centered event window for deep-link recovery)
   - `limit`
 - Event shape includes:
   - action sequence/status/capability/timestamp
