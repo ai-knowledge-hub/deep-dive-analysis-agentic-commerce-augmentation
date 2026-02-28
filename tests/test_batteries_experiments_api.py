@@ -19,6 +19,7 @@ def client(tmp_path):
     set_database_path(db_path)
     init_db()
     clients_repo.create_client(client_id=CLIENT_ID, name="Client Test")
+    clients_repo.create_client(client_id="client-other", name="Client Other")
     clients_repo.create_brand(brand_id=BRAND_ID, client_id=CLIENT_ID, name="Brand Test")
     clients_repo.create_product(
         product_id=PRODUCT_ID, brand_id=BRAND_ID, name="Product Test"
@@ -254,3 +255,33 @@ def test_experiments_and_variants(client: TestClient):
     )
     assert accuracy_response.status_code == 200
     assert "summary" in accuracy_response.json()
+
+
+def test_variant_routes_enforce_experiment_client_scope(client: TestClient):
+    create_experiment = client.post(
+        "/experiments",
+        json={
+            "client_id": CLIENT_ID,
+            "brand_id": BRAND_ID,
+            "product_id": PRODUCT_ID,
+            "name": "Scoped Experiment",
+        },
+    )
+    assert create_experiment.status_code == 200
+    experiment_id = create_experiment.json()["experiment"]["id"]
+
+    wrong_scope_add = client.post(
+        f"/experiments/{experiment_id}/variants",
+        json={
+            "client_id": "client-other",
+            "label": "X",
+            "type": "copy",
+            "payload": {"description": "Cross-tenant variant"},
+        },
+    )
+    assert wrong_scope_add.status_code == 404
+
+    wrong_scope_list = client.get(
+        f"/experiments/{experiment_id}/variants?client_id=client-other"
+    )
+    assert wrong_scope_list.status_code == 404

@@ -96,6 +96,7 @@ class ExperimentService:
         self,
         *,
         experiment_id: str,
+        client_id: Optional[str] = None,
         label: str,
         variant_type: str,
         payload: Optional[Dict[str, Any]] = None,
@@ -104,6 +105,7 @@ class ExperimentService:
     ) -> Dict[str, Any]:
         return self._repo.add_variant(
             experiment_id=experiment_id,
+            client_id=client_id,
             label=label,
             variant_type=variant_type,
             payload=payload,
@@ -111,8 +113,12 @@ class ExperimentService:
             provenance=provenance,
         )
 
-    def list_variants(self, *, experiment_id: str) -> list[Dict[str, Any]]:
-        return self._repo.list_variants(experiment_id=experiment_id)
+    def list_variants(
+        self, *, experiment_id: str, client_id: Optional[str] = None
+    ) -> list[Dict[str, Any]]:
+        return self._repo.list_variants(
+            experiment_id=experiment_id, client_id=client_id
+        )
 
 
 __all__ = ["ExperimentService"]

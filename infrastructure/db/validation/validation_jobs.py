@@ -78,6 +78,7 @@ def update_job_status(
     *,
     job_id: str,
     status: str,
+    client_id: Optional[str] = None,
     model: Optional[str] = None,
     provider_run_id: Optional[str] = None,
     callback_verified: Optional[bool] = None,
@@ -96,24 +97,34 @@ def update_job_status(
         params.append(1 if callback_verified else 0)
     updates.append("updated_at = datetime('now')")
     params.append(job_id)
+    where_clause = "WHERE id = ?"
+    if client_id:
+        where_clause += " AND client_id = ?"
+        params.append(client_id)
     conn.execute(
         f"""
         UPDATE validation_jobs
         SET {", ".join(updates)}
-        WHERE id = ?
+        {where_clause}
         """,
         params,
     )
     conn.commit()
-    return get_job(job_id)
+    return get_job(job_id, client_id=client_id)
 
 
-def get_job(job_id: str) -> Dict[str, Any] | None:
-    row = (
-        get_connection()
-        .execute("SELECT * FROM validation_jobs WHERE id = ?", (job_id,))
-        .fetchone()
-    )
+def get_job(job_id: str, *, client_id: Optional[str] = None) -> Dict[str, Any] | None:
+    conn = get_connection()
+    if client_id:
+        row = conn.execute(
+            "SELECT * FROM validation_jobs WHERE id = ? AND client_id = ?",
+            (job_id, client_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM validation_jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
     return _row(row) if row else None
 
 

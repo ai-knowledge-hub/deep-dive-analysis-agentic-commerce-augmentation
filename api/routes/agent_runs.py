@@ -32,6 +32,13 @@ RUNTIME = AgentRuntimeService(deps=DEPS)
 WORKER = AgentRuntimeWorkerService(deps=DEPS)
 
 
+def _require_scoped_run(*, run_id: str, client_id: str) -> Dict[str, Any]:
+    run = DEPS.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
 class AgentRunCreateRequest(BaseModel):
     user_id: Optional[str] = None
     client_id: Optional[str] = None
@@ -163,7 +170,8 @@ def start_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
     try:
         result = RUNTIME.start_run(run_id=run_id)
     except RunNotFoundError as exc:
@@ -176,7 +184,8 @@ def pause_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
     try:
         result = RUNTIME.pause_run(run_id=run_id)
     except RunNotFoundError as exc:
@@ -189,7 +198,8 @@ def cancel_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
     try:
         result = RUNTIME.cancel_run(run_id=run_id)
     except RunNotFoundError as exc:
@@ -202,7 +212,8 @@ def step_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
     try:
         result = RUNTIME.step_once(
             run_id=run_id,
@@ -258,10 +269,8 @@ def get_agent_run(
     user_id: Optional[str] = None,
     limit: int = 200,
 ) -> AgentRunDetailResponse:
-    require_client_id(client_id, user_id)
-    run = DEPS.agent_runs.get_agent_run(run_id=run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Agent run not found")
+    scoped_client_id = require_client_id(client_id, user_id)
+    run = _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
     actions = DEPS.agent_actions.list_agent_actions(agent_run_id=run_id, limit=limit)
     return AgentRunDetailResponse(run=run, actions=actions)
 
@@ -282,11 +291,13 @@ def get_agent_run_events(
     event_id: Optional[str] = None,
     around: int = 120,
 ) -> AgentRunEventListResponse:
-    require_client_id(client_id, user_id)
+    scoped_client_id = require_client_id(client_id, user_id)
+    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
     try:
         page = list_agent_run_events_page(
             deps=DEPS,
             run_id=run_id,
+            client_id=scoped_client_id,
             limit=max(1, min(int(limit), 2000)),
             event_type=event_type,
             status=status,
@@ -309,8 +320,10 @@ def decide_action(
     action_id: str,
     payload: AgentActionDecisionRequest,
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
-    action = DEPS.agent_actions.get_agent_action(action_id=action_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    action = DEPS.agent_actions.get_agent_action(
+        action_id=action_id, client_id=scoped_client_id
+    )
     if not action:
         raise HTTPException(status_code=404, detail="Agent action not found")
     decision = str(payload.decision or "").strip().lower()
@@ -322,7 +335,7 @@ def decide_action(
     )
     current = updated or action
     run_row = DEPS.agent_runs.get_agent_run(
-        run_id=str(current.get("agent_run_id") or "")
+        run_id=str(current.get("agent_run_id") or ""), client_id=scoped_client_id
     )
     DEPS.agent_events.create_agent_event(
         agent_run_id=str(current.get("agent_run_id") or ""),

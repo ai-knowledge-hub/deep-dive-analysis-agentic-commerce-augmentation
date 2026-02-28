@@ -40,6 +40,7 @@ def client_flag_off(tmp_path, monkeypatch):
     set_database_path(db_path)
     init_db()
     clients_repo.create_client(client_id="client-a", name="Client A")
+    clients_repo.create_client(client_id="client-b", name="Client B")
     _reset_validation_service()
     return TestClient(app)
 
@@ -56,6 +57,7 @@ def client_flag_on(tmp_path, monkeypatch):
     set_database_path(db_path)
     init_db()
     clients_repo.create_client(client_id="client-a", name="Client A")
+    clients_repo.create_client(client_id="client-b", name="Client B")
     _reset_validation_service()
     return TestClient(app)
 
@@ -134,3 +136,19 @@ def test_provider_endpoints_success_with_flag_enabled(client_flag_on: TestClient
     assert callback.status_code == 200
     result = callback.json()["result"]
     assert result["source"] == "provider_openai_mcp"
+
+
+def test_provider_job_routes_enforce_client_scope(client_flag_on: TestClient):
+    job_id = _create_provider_job(client_flag_on)
+
+    wrong_scope_start = client_flag_on.post(
+        f"/validation/jobs/{job_id}/start-provider-run",
+        json={"client_id": "client-b"},
+    )
+    assert wrong_scope_start.status_code == 404
+
+    wrong_scope_get = client_flag_on.get(
+        f"/validation/jobs/{job_id}",
+        params={"client_id": "client-b"},
+    )
+    assert wrong_scope_get.status_code == 404

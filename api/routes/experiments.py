@@ -149,6 +149,8 @@ def get_experiment(
     experiment = SERVICE.get_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
     return {"experiment": experiment}
 
 
@@ -183,12 +185,18 @@ def delete_experiment(
 
 @router.post("/{experiment_id}/variants")
 def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    experiment = SERVICE.get_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
     inferred_hypothesis_id = payload.hypothesis_id
     if not inferred_hypothesis_id and isinstance(payload.payload, dict):
         inferred_hypothesis_id = str(payload.payload.get("hypothesis_id") or "") or None
     variant = SERVICE.add_variant(
         experiment_id=experiment_id,
+        client_id=scoped_client_id,
         label=payload.label,
         variant_type=payload.type,
         payload=payload.payload,
@@ -196,7 +204,6 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
         provenance=payload.provenance,
     )
     try:
-        experiment = SERVICE.get_experiment(experiment_id=experiment_id)
         candidate_description = ""
         if isinstance(payload.payload, dict):
             candidate_description = str(
@@ -238,8 +245,15 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
 def list_variants(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    require_client_id(client_id, user_id)
-    variants = SERVICE.list_variants(experiment_id=experiment_id)
+    scoped_client_id = require_client_id(client_id, user_id)
+    experiment = SERVICE.get_experiment(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    variants = SERVICE.list_variants(
+        experiment_id=experiment_id, client_id=scoped_client_id
+    )
     return {"variants": variants}
 
 
