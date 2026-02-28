@@ -32,6 +32,7 @@ def client(tmp_path):
     init_db()
     deps = default_deps()
     deps.clients.create_client(client_id=CLIENT_ID, name="Client A")
+    deps.clients.create_client(client_id="client-b", name="Client B")
     return TestClient(app)
 
 
@@ -173,3 +174,26 @@ def test_agent_run_events_endpoint_returns_404_when_event_not_in_filter(
         },
     )
     assert response.status_code == 404
+
+
+def test_agent_run_routes_enforce_client_scope(client: TestClient):
+    run, events = _seed_run_with_events()
+    action_id = events[0]["action_id"]
+
+    wrong_scope_run = client.get(
+        f"/agent-runs/{run['id']}",
+        params={"client_id": "client-b", "user_id": USER_ID},
+    )
+    assert wrong_scope_run.status_code == 404
+
+    wrong_scope_events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": "client-b", "user_id": USER_ID},
+    )
+    assert wrong_scope_events.status_code == 404
+
+    wrong_scope_decision = client.post(
+        f"/agent-runs/actions/{action_id}/decision",
+        json={"client_id": "client-b", "user_id": USER_ID, "decision": "approve"},
+    )
+    assert wrong_scope_decision.status_code == 404

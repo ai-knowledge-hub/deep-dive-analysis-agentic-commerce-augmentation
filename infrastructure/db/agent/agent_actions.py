@@ -130,12 +130,22 @@ def transition_agent_action_status(
     return get_agent_action(action_id)
 
 
-def get_agent_action(action_id: str) -> Dict[str, Any] | None:
-    row = (
-        get_connection()
-        .execute("SELECT * FROM agent_actions WHERE id = ?", (action_id,))
-        .fetchone()
-    )
+def get_agent_action(
+    action_id: str, *, client_id: Optional[str] = None
+) -> Dict[str, Any] | None:
+    conn = get_connection()
+    if client_id:
+        row = conn.execute(
+            """
+            SELECT a.*
+            FROM agent_actions a
+            JOIN agent_runs r ON r.id = a.agent_run_id
+            WHERE a.id = ? AND r.client_id = ?
+            """,
+            (action_id, client_id),
+        ).fetchone()
+    else:
+        row = conn.execute("SELECT * FROM agent_actions WHERE id = ?", (action_id,)).fetchone()
     return _row(row) if row else None
 
 

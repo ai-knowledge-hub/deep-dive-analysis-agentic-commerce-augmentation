@@ -79,9 +79,9 @@ def create_job(payload: ValidationJobRequest) -> Dict[str, Any]:
 def run_job(
     job_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ):
-    require_client_id(client_id, user_id)
+    scoped_client_id = require_client_id(client_id, user_id)
     try:
-        result = SERVICE.run_job(job_id=job_id)
+        result = SERVICE.run_job_scoped(job_id=job_id, client_id=scoped_client_id)
     except HTTPException:
         raise
     return result
@@ -91,9 +91,10 @@ def run_job(
 def submit_external(
     job_id: str, payload: ValidationExternalResultRequest
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
     result = SERVICE.submit_external_result(
         job_id=job_id,
+        client_id=scoped_client_id,
         structured_result=payload.structured_result,
         raw_response=payload.raw_response,
         provider=payload.provider,
@@ -106,9 +107,10 @@ def submit_external(
 def start_provider_run(
     job_id: str, payload: ValidationProviderRunRequest
 ) -> Dict[str, Any]:
-    require_client_id(payload.client_id, payload.user_id)
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
     return SERVICE.start_provider_run(
         job_id=job_id,
+        client_id=scoped_client_id,
         callback_url=payload.callback_url,
         return_url=payload.return_url,
     )
@@ -136,8 +138,8 @@ def submit_provider_callback(
 def get_job(
     job_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ):
-    require_client_id(client_id, user_id)
-    return SERVICE.get_job(job_id=job_id)
+    scoped_client_id = require_client_id(client_id, user_id)
+    return SERVICE.get_job(job_id=job_id, client_id=scoped_client_id)
 
 
 @router.get("/jobs")

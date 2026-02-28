@@ -109,12 +109,15 @@ def update_agent_run(
     return get_agent_run(run_id)
 
 
-def get_agent_run(run_id: str) -> Dict[str, Any] | None:
-    row = (
-        get_connection()
-        .execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,))
-        .fetchone()
-    )
+def get_agent_run(run_id: str, *, client_id: Optional[str] = None) -> Dict[str, Any] | None:
+    conn = get_connection()
+    if client_id:
+        row = conn.execute(
+            "SELECT * FROM agent_runs WHERE id = ? AND client_id = ?",
+            (run_id, client_id),
+        ).fetchone()
+    else:
+        row = conn.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
     return _row(row) if row else None
 
 

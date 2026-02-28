@@ -164,12 +164,15 @@ def update_experiment(
 def add_variant(
     *,
     experiment_id: str,
+    client_id: Optional[str] = None,
     label: str,
     variant_type: str,
     payload: Optional[Dict[str, Any]] = None,
     hypothesis_id: Optional[str] = None,
     provenance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    if client_id and not get_experiment(experiment_id, client_id=client_id):
+        return {}
     variant_id = str(uuid.uuid4())
     conn = get_connection()
     conn.execute(
@@ -201,19 +204,35 @@ def get_variant(variant_id: str) -> Dict[str, Any] | None:
     return _variant_row(row) if row else None
 
 
-def list_variants(experiment_id: str) -> List[Dict[str, Any]]:
-    rows = (
-        get_connection()
-        .execute(
-            """
-            SELECT * FROM experiment_variants
-            WHERE experiment_id = ?
-            ORDER BY created_at ASC
-            """,
-            (experiment_id,),
+def list_variants(experiment_id: str, *, client_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    if client_id:
+        rows = (
+            get_connection()
+            .execute(
+                """
+                SELECT v.*
+                FROM experiment_variants v
+                JOIN experiments e ON e.id = v.experiment_id
+                WHERE v.experiment_id = ? AND e.client_id = ?
+                ORDER BY v.created_at ASC
+                """,
+                (experiment_id, client_id),
+            )
+            .fetchall()
         )
-        .fetchall()
-    )
+    else:
+        rows = (
+            get_connection()
+            .execute(
+                """
+                SELECT * FROM experiment_variants
+                WHERE experiment_id = ?
+                ORDER BY created_at ASC
+                """,
+                (experiment_id,),
+            )
+            .fetchall()
+        )
     return [_variant_row(row) for row in rows]
 
 

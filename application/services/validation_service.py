@@ -93,10 +93,11 @@ class ValidationService:
         self,
         *,
         job_id: str,
+        client_id: str,
         callback_url: Optional[str] = None,
         return_url: Optional[str] = None,
     ) -> Dict[str, Any]:
-        job = self._deps.validation_jobs.get_job(job_id=job_id)
+        job = self._deps.validation_jobs.get_job(job_id=job_id, client_id=client_id)
         if not job:
             raise HTTPException(status_code=404, detail="Validation job not found")
         mode = _normalize_validation_mode(job.get("mode"))
@@ -128,6 +129,7 @@ class ValidationService:
         )
         updated = self._deps.validation_jobs.update_job_status(
             job_id=job_id,
+            client_id=client_id,
             status="awaiting_provider_run",
             provider_run_id=provider_run_id,
             callback_verified=False,
@@ -257,13 +259,20 @@ class ValidationService:
         return {"job": updated_job, "result": result}
 
     def run_job(self, *, job_id: str) -> Dict[str, Any]:
-        job = self._deps.validation_jobs.get_job(job_id=job_id)
+        return self.run_job_scoped(job_id=job_id, client_id=None)
+
+    def run_job_scoped(
+        self, *, job_id: str, client_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        job = self._deps.validation_jobs.get_job(job_id=job_id, client_id=client_id)
         if not job:
             raise HTTPException(status_code=404, detail="Validation job not found")
         mode = _normalize_validation_mode(job.get("mode"))
         if mode != "in_app_byok":
             raise HTTPException(status_code=400, detail="Job is external-only")
-        self._deps.validation_jobs.update_job_status(job_id=job_id, status="running")
+        self._deps.validation_jobs.update_job_status(
+            job_id=job_id, client_id=client_id, status="running"
+        )
         provider = _normalize_provider(job.get("provider"))
         prompt = build_validation_prompt(
             input_payload=job.get("input_payload") or {},
@@ -275,7 +284,9 @@ class ValidationService:
                 prompt=prompt, provider=provider, model=job.get("model")
             )
         except Exception as exc:  # pragma: no cover - provider failures
-            self._deps.validation_jobs.update_job_status(job_id=job_id, status="failed")
+            self._deps.validation_jobs.update_job_status(
+                job_id=job_id, client_id=client_id, status="failed"
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         latency_ms = int((time.perf_counter() - start) * 1000)
         structured = _parse_json_response(response)
@@ -298,7 +309,9 @@ class ValidationService:
             source="synthetic",
             callback_verified=False,
         )
-        self._deps.validation_jobs.update_job_status(job_id=job_id, status="completed")
+        self._deps.validation_jobs.update_job_status(
+            job_id=job_id, client_id=client_id, status="completed"
+        )
         self._record_learning_loop(job=job, result=result, source="synthetic")
         return {"job": job, "result": result}
 
@@ -306,12 +319,13 @@ class ValidationService:
         self,
         *,
         job_id: str,
+        client_id: Optional[str] = None,
         structured_result: Dict[str, Any],
         raw_response: Optional[str] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
     ) -> Dict[str, Any]:
-        job = self._deps.validation_jobs.get_job(job_id=job_id)
+        job = self._deps.validation_jobs.get_job(job_id=job_id, client_id=client_id)
         if not job:
             raise HTTPException(status_code=404, detail="Validation job not found")
         mode = _normalize_validation_mode(job.get("mode"))
@@ -337,13 +351,18 @@ class ValidationService:
             callback_verified=False,
         )
         self._deps.validation_jobs.update_job_status(
-            job_id=job_id, status="completed", model=model or job.get("model")
+            job_id=job_id,
+            client_id=client_id,
+            status="completed",
+            model=model or job.get("model"),
         )
         self._record_learning_loop(job=job, result=result, source="external_synthetic")
         return {"job": job, "result": result}
 
-    def get_job(self, *, job_id: str) -> Dict[str, Any]:
-        job = self._deps.validation_jobs.get_job(job_id=job_id)
+    def get_job(
+        self, *, job_id: str, client_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        job = self._deps.validation_jobs.get_job(job_id=job_id, client_id=client_id)
         if not job:
             raise HTTPException(status_code=404, detail="Validation job not found")
         result = self._deps.validation_results.get_latest_for_job(job_id=job_id)
@@ -643,6 +662,16 @@ def _validate_structured_result(
         raise HTTPException(
             status_code=400, detail="evidence_strength must be weak/moderate/strong"
         )
+    for field in ("score", "confidence"):
+        value = _safe_float(result.get(field))
+        if value is None:
+            raise HTTPException(
+                status_code=400, detail=f"{field} must be a numeric value"
+            )
+        if not (0.0 <= value <= 1.0):
+            raise HTTPException(
+                status_code=400, detail=f"{field} must be within [0, 1]"
+            )
     if (
         entity_type == "copy_revision"
         or (input_payload or {}).get("type") == "copy_revision"

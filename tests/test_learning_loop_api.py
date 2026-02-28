@@ -175,3 +175,34 @@ def test_loop_step_and_calibration_profile_routes(client: TestClient):
     assert "acceptance_rate" in metrics_payload["loop_health"]
     assert "regeneration_rate" in metrics_payload["loop_health"]
     assert "observed_vs_synthetic_agreement" in metrics_payload["loop_health"]
+
+
+def test_validation_external_rejects_out_of_range_score(client: TestClient):
+    create_job = client.post(
+        "/validation/jobs",
+        json={
+            "client_id": "client-a",
+            "entity_type": "experiment_run",
+            "entity_id": "exp-bounds",
+            "provider": "openrouter",
+            "mode": "external",
+            "input_payload": {"type": "experiment"},
+        },
+    )
+    assert create_job.status_code == 200
+    job_id = create_job.json()["job"]["id"]
+
+    submit_external = client.post(
+        f"/validation/jobs/{job_id}/external",
+        json={
+            "client_id": "client-a",
+            "structured_result": {
+                "winner_id": "variant-a",
+                "score": 1.4,
+                "confidence": 0.81,
+                "evidence_strength": "moderate",
+            },
+        },
+    )
+    assert submit_external.status_code == 400
+    assert "score" in submit_external.json()["detail"].lower()

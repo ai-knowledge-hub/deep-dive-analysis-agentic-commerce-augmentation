@@ -76,6 +76,7 @@ def list_agent_run_events_page(
     *,
     deps: AppDeps,
     run_id: str,
+    client_id: Optional[str] = None,
     limit: int = 500,
     event_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -87,7 +88,7 @@ def list_agent_run_events_page(
     event_id: Optional[str] = None,
     around: int = 120,
 ) -> AgentRunEventPage:
-    run = deps.agent_runs.get_agent_run(run_id=run_id)
+    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
     if not run:
         raise ValueError("Agent run not found")
     if event_id:

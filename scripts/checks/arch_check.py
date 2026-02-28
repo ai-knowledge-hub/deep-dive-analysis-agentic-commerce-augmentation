@@ -33,27 +33,28 @@ def _iter_py_files(root: Path) -> list[Path]:
     return files
 
 
-def _top_level_module(node: ast.AST) -> str | None:
+def _top_level_modules(node: ast.AST) -> set[str]:
+    tops: set[str] = set()
     if isinstance(node, ast.Import):
         for alias in node.names:
             name = alias.name.split(".", 1)[0]
-            return name
+            tops.add(name)
+        return tops
     if isinstance(node, ast.ImportFrom):
         if node.level and node.level > 0:
-            return None
+            return tops
         if not node.module:
-            return None
-        return node.module.split(".", 1)[0]
-    return None
+            return tops
+        tops.add(node.module.split(".", 1)[0])
+        return tops
+    return tops
 
 
 def _collect_imports(tree: ast.AST) -> set[str]:
     imports: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            top = _top_level_module(node)
-            if top:
-                imports.add(top)
+            imports.update(_top_level_modules(node))
     return imports
 
 

@@ -1,3 +1,12 @@
+ifneq ($(wildcard ./venv/bin/python),)
+PYTHON := ./venv/bin/python
+PIP := ./venv/bin/pip
+RUFF := ./venv/bin/ruff
+else ifneq ($(wildcard ./.venv/bin/python),)
+PYTHON := ./.venv/bin/python
+PIP := ./.venv/bin/pip
+RUFF := ./.venv/bin/ruff
+else
 UV_AVAILABLE := $(shell command -v uv >/dev/null 2>&1 && echo yes || echo no)
 ifeq ($(UV_AVAILABLE),yes)
 UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
@@ -9,18 +18,15 @@ else
 PYTHON := python3
 PIP := pip install
 endif
+endif
 
 .PHONY: install
 install:
-	$(PIP) -r requirements.txt
+	$(PIP) install -r requirements.txt
 
 .PHONY: test
 test:
-	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m pytest; \
-	else \
-		$(PYTHON) -m pytest; \
-	fi
+	$(PYTHON) -m pytest
 
 .PHONY: run-backend
 run-backend:
@@ -40,8 +46,8 @@ web-test:
 
 .PHONY: lint
 lint:
-	@if [ -x ./.venv/bin/ruff ]; then \
-		./.venv/bin/ruff check . --force-exclude; \
+	@if [ -n "$(RUFF)" ] && [ -x "$(RUFF)" ]; then \
+		$(RUFF) check . --force-exclude; \
 	elif command -v ruff >/dev/null 2>&1; then \
 		ruff check . --force-exclude; \
 	else \
@@ -67,8 +73,8 @@ bloat-check:
 
 .PHONY: format
 format:
-	@if [ -x ./.venv/bin/ruff ]; then \
-		./.venv/bin/ruff format . --force-exclude; \
+	@if [ -n "$(RUFF)" ] && [ -x "$(RUFF)" ]; then \
+		$(RUFF) format . --force-exclude; \
 	elif command -v ruff >/dev/null 2>&1; then \
 		ruff format . --force-exclude; \
 	else \
