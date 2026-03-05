@@ -87,9 +87,11 @@ def _explain_agent() -> ExplainAgent:
 
 
 def _commerce_agent(*, deps: AppDeps, alignment: AlignmentService) -> CommerceAgent:
-    search = lambda q, client_id, brand_id: _search_products(
-        deps=deps, query=q, client_id=client_id, brand_id=brand_id
-    )
+    def search(q, client_id, brand_id):
+        return _search_products(
+            deps=deps, query=q, client_id=client_id, brand_id=brand_id
+        )
+
     return CommerceAgent(
         builder=CommercePlanBuilder(
             search_fn=search,
