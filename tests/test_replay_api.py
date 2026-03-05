@@ -32,6 +32,45 @@ CLIENT_ID = "test-client"
 USER_ID = "user-abc"
 
 
+def _fake_embed_batch(texts: list[str]) -> list[list[float]]:
+    vectors: list[list[float]] = []
+    for text in texts:
+        seed = sum(ord(ch) for ch in str(text))
+        vectors.append([((seed + i * 31) % 1000) / 1000.0 for i in range(16)])
+    return vectors
+
+
+@pytest.fixture(autouse=True)
+def _fast_llm_and_embeddings(monkeypatch):
+    monkeypatch.setattr(
+        "api.composition.generate",
+        lambda prompt, system_instruction=None, provider=None: "stubbed llm response",
+    )
+    monkeypatch.setattr(
+        "api.composition.classify_intent",
+        lambda query, **kwargs: {
+            "primary_goal": "shopping",
+            "secondary_goals": ["compare products"],
+            "confidence": 0.9,
+            "source": "stub",
+        },
+    )
+    monkeypatch.setattr(
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch",
+        _fake_embed_batch,
+    )
+    monkeypatch.setattr(
+        "infrastructure.alignment.goal_alignment_gateway._embedding_provider_name",
+        lambda: "stub",
+    )
+    monkeypatch.setattr(
+        "infrastructure.simulation.gap_analysis.embedding_available",
+        lambda: False,
+    )
+    monkeypatch.setattr("api.composition.validate_ucp_candidate", lambda *args, **kwargs: [])
+    monkeypatch.setattr("api.composition.validate_acp_candidate", lambda *args, **kwargs: [])
+
+
 @pytest.fixture
 def client(tmp_path):
     db_path = tmp_path / "replay.db"

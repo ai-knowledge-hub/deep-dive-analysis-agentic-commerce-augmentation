@@ -6,21 +6,25 @@ from fastapi import APIRouter
 
 from api.composition import default_deps
 from api.utils.tenancy import is_admin
+from application.ports.deps import AppDeps
 from application.services.admin.service import AdminService
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
-deps = default_deps()
-admin_service = AdminService(
-    clients_repo=deps.clients,
-    platform_profiles_repo=deps.platform_profiles,
-    skills_repo=deps.skills,
-    llm_provider_configs_repo=deps.llm_provider_configs,
-)
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 @router.get("/config")
 def get_llm_config(user_id: Optional[str] = None):
+    deps = _deps()
+    admin_service = AdminService(
+        clients_repo=deps.clients,
+        platform_profiles_repo=deps.platform_profiles,
+        skills_repo=deps.skills,
+        llm_provider_configs_repo=deps.llm_provider_configs,
+    )
     summary = admin_service.get_llm_provider_summary()
     return {
         "can_manage": is_admin(user_id),

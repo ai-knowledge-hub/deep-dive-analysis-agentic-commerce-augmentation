@@ -16,12 +16,25 @@ from application.agents.layer1_agent import Layer1Agent, Layer1RunConfig
 from application.agents.orchestrator_agent import OrchestratorAgent, OrchestratorConfig
 from application.agents.layer2_agent import Layer2Agent
 
+
+def _deps():
+    return default_deps()
+
+
+def _layer1_agent() -> Layer1Agent:
+    return Layer1Agent(evidence_service=EvidenceService(deps=_deps()))
+
+
+def _layer2_agent() -> Layer2Agent:
+    return Layer2Agent(deps=_deps())
+
+
+def _orchestrator() -> OrchestratorAgent:
+    return OrchestratorAgent(layer1=_layer1_agent(), layer2=_layer2_agent())
+
+
 if APIRouter:
     router = APIRouter(prefix="/agents", tags=["agents"])
-    deps = default_deps()
-    layer1_agent = Layer1Agent(evidence_service=EvidenceService(deps=deps))
-    layer2_agent = Layer2Agent(deps=deps)
-    orchestrator = OrchestratorAgent(layer1=layer1_agent, layer2=layer2_agent)
 
     class Layer1RunRequest(BaseModel):
         query: str = Field(..., min_length=1)
@@ -36,7 +49,7 @@ if APIRouter:
     @router.post("/layer1/run")
     def run_layer1(payload: Layer1RunRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return layer1_agent.run(
+        return _layer1_agent().run(
             query=payload.query,
             tone=payload.tone,
             config=Layer1RunConfig(
@@ -64,7 +77,7 @@ if APIRouter:
     @router.post("/query")
     def run_orchestrator(payload: OrchestratorRunRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return orchestrator.run(
+        return _orchestrator().run(
             query=payload.query,
             products=payload.products or None,
             tone=payload.tone,
@@ -88,7 +101,7 @@ if APIRouter:
     @router.post("/layer2/candidates")
     def layer2_candidates(payload: Layer2CandidatesRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        protocol = layer2_agent.discover_protocol_candidates(
+        protocol = _layer2_agent().discover_protocol_candidates(
             client_id=client_scope, query=payload.query, limit=payload.limit
         )
         return {"protocol": protocol}

@@ -14,16 +14,23 @@ from application.services.experiment.validation_service import (
 )
 
 
+def _deps():
+    return default_deps()
+
+
+def _validation_service() -> ExperimentValidationService:
+    return ExperimentValidationService(deps=_deps())
+
+
 if APIRouter:
     router = APIRouter(prefix="/brands", tags=["brands"])
-    VALIDATIONS = ExperimentValidationService(deps=default_deps())
 
     @router.get("/{brand_id}")
     def get_brand(
         brand_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
-        brand = default_deps().clients.get_brand(brand_id=brand_id)
+        brand = _deps().clients.get_brand(brand_id=brand_id)
         if not brand or brand.get("client_id") != client_scope:
             return {"error": "brand not found"}
         return {"brand": brand}
@@ -33,7 +40,9 @@ if APIRouter:
         brand_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
-        summary = VALIDATIONS.brand_summary(brand_id=brand_id, client_id=client_scope)
+        summary = _validation_service().brand_summary(
+            brand_id=brand_id, client_id=client_scope
+        )
         return {"summary": summary.to_dict()}
 else:  # pragma: no cover
     router = None

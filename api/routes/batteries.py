@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
+from application.ports.deps import AppDeps
 from application.services.query_battery.service import QueryBatteryService
 from application.services.query_battery.builder import QueryBatteryBuilder
 from application.services.admin.canonical_intent_spec_service import (
@@ -17,18 +18,26 @@ from application.services.admin.canonical_intent_spec_service import (
 
 router = APIRouter(prefix="/batteries", tags=["batteries"])
 
-DEPS = default_deps()
-SERVICE = QueryBatteryService(repo=DEPS.query_batteries)
-BUILDER = QueryBatteryBuilder(
-    batteries_repo=DEPS.query_batteries,
-    clients_repo=DEPS.clients,
-    generate_fn=DEPS.generate,
-    beliefs_repo=DEPS.brand_beliefs,
-    simulation_runs_repo=DEPS.simulation_runs,
-    archetypes_repo=DEPS.audience_archetypes,
-    analytics_events_repo=DEPS.analytics_events,
-    memory_artifacts_repo=DEPS.memory_artifacts,
-)
+
+def _deps() -> AppDeps:
+    return default_deps()
+
+
+def _service(*, deps: AppDeps) -> QueryBatteryService:
+    return QueryBatteryService(repo=deps.query_batteries)
+
+
+def _builder(*, deps: AppDeps) -> QueryBatteryBuilder:
+    return QueryBatteryBuilder(
+        batteries_repo=deps.query_batteries,
+        clients_repo=deps.clients,
+        generate_fn=deps.generate,
+        beliefs_repo=deps.brand_beliefs,
+        simulation_runs_repo=deps.simulation_runs,
+        archetypes_repo=deps.audience_archetypes,
+        analytics_events_repo=deps.analytics_events,
+        memory_artifacts_repo=deps.memory_artifacts,
+    )
 
 
 class BatteryCreateRequest(BaseModel):
@@ -93,8 +102,10 @@ class BatteryAudienceSegmentUpdateRequest(BaseModel):
 
 @router.post("")
 def create_battery(payload: BatteryCreateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    battery = SERVICE.create_battery(
+    battery = service.create_battery(
         client_id=client_id,
         product_id=payload.product_id,
         brand_id=payload.brand_id,
@@ -115,8 +126,10 @@ def list_batteries(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    batteries = SERVICE.list_batteries(
+    batteries = service.list_batteries(
         client_id=scoped_client_id,
         product_id=product_id,
         brand_id=brand_id,
@@ -130,15 +143,19 @@ def list_batteries(
 def get_battery(
     battery_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    battery = service.get_battery(battery_id=battery_id, client_id=scoped_client_id)
     return {"battery": battery}
 
 
 @router.patch("/{battery_id}")
 def update_battery(battery_id: str, payload: BatteryUpdateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    battery = SERVICE.update_battery(
+    battery = service.update_battery(
         battery_id=battery_id,
         client_id=client_id,
         name=payload.name,
@@ -151,8 +168,10 @@ def update_battery(battery_id: str, payload: BatteryUpdateRequest) -> Dict[str, 
 
 @router.post("/{battery_id}/queries")
 def add_query(battery_id: str, payload: BatteryQueryCreateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     require_client_id(payload.client_id, payload.user_id)
-    query = SERVICE.add_query(
+    query = service.add_query(
         battery_id=battery_id,
         query_text=payload.query_text,
         query_type=payload.query_type,
@@ -168,8 +187,10 @@ def add_query(battery_id: str, payload: BatteryQueryCreateRequest) -> Dict[str, 
 def list_queries(
     battery_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     require_client_id(client_id, user_id)
-    queries = SERVICE.list_queries(battery_id=battery_id)
+    queries = service.list_queries(battery_id=battery_id)
     return {"queries": queries}
 
 
@@ -177,8 +198,10 @@ def list_queries(
 def update_query(
     battery_id: str, query_id: str, payload: BatteryQueryUpdateRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     require_client_id(payload.client_id, payload.user_id)
-    query = SERVICE.update_query(
+    query = service.update_query(
         query_id=query_id,
         query_text=payload.query_text,
         query_type=payload.query_type,
@@ -197,8 +220,10 @@ def delete_query(
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     require_client_id(client_id, user_id)
-    deleted = SERVICE.delete_query(query_id=query_id)
+    deleted = service.delete_query(query_id=query_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="query not found")
     return {"status": "deleted"}
@@ -208,9 +233,11 @@ def delete_query(
 def generate_queries(
     battery_id: str, payload: BatteryGenerateRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    builder = _builder(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        created, report = BUILDER.generate_with_report(
+        created, report = builder.generate_with_report(
             battery_id=battery_id,
             client_id=client_id,
             source=payload.source,
@@ -232,8 +259,10 @@ def generate_queries(
 def get_metrics(
     battery_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     require_client_id(client_id, user_id)
-    metrics = SERVICE.get_metrics(battery_id=battery_id)
+    metrics = service.get_metrics(battery_id=battery_id)
     return {"metrics": metrics}
 
 
@@ -241,12 +270,14 @@ def get_metrics(
 def get_eval_summary(
     battery_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    battery = service.get_battery(battery_id=battery_id, client_id=scoped_client_id)
     if not battery:
         raise HTTPException(status_code=404, detail="battery not found")
 
-    events = DEPS.analytics_events.list_events(
+    events = deps.analytics_events.list_events(
         client_id=scoped_client_id,
         product_id=battery.get("product_id"),
         limit=500,
@@ -279,7 +310,7 @@ def get_eval_summary(
         clarification_events / len(generation_events) if generation_events else 0.0
     )
 
-    experiments = DEPS.experiments.list_experiments(
+    experiments = deps.experiments.list_experiments(
         client_id=scoped_client_id,
         battery_id=battery_id,
         limit=200,
@@ -287,7 +318,7 @@ def get_eval_summary(
     robust_win_rates: list[float] = []
     evidence_strength_breakdown: Dict[str, int] = {}
     for experiment in experiments:
-        metrics = DEPS.experiment_runs.list_metrics(
+        metrics = deps.experiment_runs.list_metrics(
             experiment_id=experiment.get("id"),
             limit=200,
         )
@@ -302,7 +333,7 @@ def get_eval_summary(
                     evidence_strength_breakdown.get(evidence, 0) + 1
                 )
 
-    validation_summary = DEPS.experiment_validations.accuracy_summary(
+    validation_summary = deps.experiment_validations.accuracy_summary(
         client_id=scoped_client_id,
         brand_id=battery.get("brand_id"),
     )
@@ -331,11 +362,13 @@ def get_eval_summary(
 def get_ontology_updates(
     battery_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    battery = service.get_battery(battery_id=battery_id, client_id=scoped_client_id)
     if not battery:
         raise HTTPException(status_code=404, detail="battery not found")
-    events = DEPS.analytics_events.list_events(
+    events = deps.analytics_events.list_events(
         client_id=scoped_client_id,
         product_id=battery.get("product_id"),
         limit=500,
@@ -394,11 +427,13 @@ def list_battery_audience_segments(
     user_id: Optional[str] = None,
     active_only: bool = False,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    battery = service.get_battery(battery_id=battery_id, client_id=scoped_client_id)
     if not battery:
         raise HTTPException(status_code=404, detail="battery not found")
-    rows = DEPS.audience_archetypes.list_archetypes(
+    rows = deps.audience_archetypes.list_archetypes(
         client_id=scoped_client_id,
         brand_id=battery.get("brand_id"),
         limit=200,
@@ -442,11 +477,13 @@ def update_battery_audience_segment(
     segment_id: str,
     payload: BatteryAudienceSegmentUpdateRequest,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    battery = SERVICE.get_battery(battery_id=battery_id, client_id=scoped_client_id)
+    battery = service.get_battery(battery_id=battery_id, client_id=scoped_client_id)
     if not battery:
         raise HTTPException(status_code=404, detail="battery not found")
-    current = DEPS.audience_archetypes.get_archetype(
+    current = deps.audience_archetypes.get_archetype(
         segment_id,
         client_id=scoped_client_id,
     )
@@ -461,7 +498,7 @@ def update_battery_audience_segment(
         raise HTTPException(
             status_code=400, detail="segment does not belong to this battery"
         )
-    updated = DEPS.audience_archetypes.update_archetype(
+    updated = deps.audience_archetypes.update_archetype(
         archetype_id=segment_id,
         client_id=scoped_client_id,
         metadata={"active": bool(payload.active)},

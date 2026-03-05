@@ -31,12 +31,21 @@ class HybridIntentClassifier:
 
 
 product_search = SimpleNamespace(search=search_products_for_client)
-ALIGNMENT = AlignmentService(default_deps())
+ALIGNMENT = None
+
+
+def _deps():
+    return default_deps()
+
+
+def _alignment_service() -> AlignmentService:
+    # Keep module-level override seam for tests while defaulting to request scope.
+    return ALIGNMENT or AlignmentService(_deps())
 
 
 def _search_products(query: str, *, client_id: str, brand_id: str | None = None):
     return product_search.search(
-        deps=default_deps(), query=query, client_id=client_id, brand_id=brand_id
+        deps=_deps(), query=query, client_id=client_id, brand_id=brand_id
     )
 
 
@@ -84,13 +93,13 @@ if APIRouter:
         user_id: str | None = None,
     ):
         require_client_id(client_id, user_id)
-        products = default_deps().clients.list_products(brand_id=brand_id)
+        products = _deps().clients.list_products(brand_id=brand_id)
         return {"products": products}
 
     @router.post("/update-copy")
     def update_product_copy(payload: UpdateCopyRequest):
         require_client_id(payload.client_id, payload.user_id)
-        deps = default_deps()
+        deps = _deps()
         product = deps.clients.get_product_for_client(
             client_id=payload.client_id, product_id=payload.product_id
         )
@@ -135,11 +144,14 @@ if APIRouter:
                 candidates.extend(_search_products(pid, client_id=payload.client_id))
         else:
             candidates = _search_products(query, client_id=payload.client_id)
-        alignment = ALIGNMENT.assess(goal_signals, candidates)
-        baseline = ALIGNMENT.assess(goal_signals, candidates, use_semantic=False)
+        alignment_service = _alignment_service()
+        alignment = alignment_service.assess(goal_signals, candidates)
+        baseline = alignment_service.assess(
+            goal_signals, candidates, use_semantic=False
+        )
         per_product = [
             score.__dict__
-            for score in ALIGNMENT.score_products(goal_signals, candidates)
+            for score in alignment_service.score_products(goal_signals, candidates)
         ]
         alignment_payload = alignment.__dict__
         alignment_payload["baseline_score"] = baseline.score
@@ -162,13 +174,16 @@ if APIRouter:
             classifier = HybridIntentClassifier()
             intent = classifier.classify(query).to_dict()
             goal_signals = _intent_goals(intent)
-            alignment = ALIGNMENT.assess(goal_signals, [product])
-            baseline = ALIGNMENT.assess(goal_signals, [product], use_semantic=False)
+            alignment_service = _alignment_service()
+            alignment = alignment_service.assess(goal_signals, [product])
+            baseline = alignment_service.assess(
+                goal_signals, [product], use_semantic=False
+            )
             alignment = alignment.__dict__
             alignment["baseline_score"] = baseline.score
             alignment["per_product"] = [
                 score.__dict__
-                for score in ALIGNMENT.score_products(goal_signals, [product])
+                for score in alignment_service.score_products(goal_signals, [product])
             ]
         return {
             "product": product.__dict__,
@@ -183,14 +198,14 @@ if APIRouter:
         user_id: str | None = None,
     ) -> Dict[str, Any]:
         require_client_id(client_id, user_id)
-        deps = default_deps()
+        deps = _deps()
         product = deps.clients.get_product_for_client(
             client_id=client_id, product_id=product_id
         )
         if not product:
             return {"error": "product not found"}
         flat = _flatten_product(product)
-        agent = Layer2Agent()
+        agent = Layer2Agent(deps=deps)
         analysis = agent.analyze_products([flat])
         issues = analysis.get("schema_checks", [])[0].get("issues", [])
         score = _schema_score(issues)
@@ -203,7 +218,7 @@ if APIRouter:
         user_id: str | None = None,
     ) -> Dict[str, Any]:
         require_client_id(client_id, user_id)
-        deps = default_deps()
+        deps = _deps()
         product = deps.clients.get_product_for_client(
             client_id=client_id, product_id=product_id
         )

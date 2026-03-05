@@ -17,18 +17,10 @@ if "google" not in sys.modules:
     sys.modules["google.genai"] = genai_pkg
     sys.modules["google.genai.types"] = genai_types_pkg
 
-from api.composition import default_deps
 from api.main import app
-from application.services.validation_service import ValidationService
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
 import infrastructure.db.catalog.clients as clients_repo
-
-
-def _reset_validation_service() -> None:
-    import api.routes.validation as validation_route
-
-    validation_route.SERVICE = ValidationService(deps=default_deps())
 
 
 @pytest.fixture
@@ -41,7 +33,6 @@ def client_flag_off(tmp_path, monkeypatch):
     init_db()
     clients_repo.create_client(client_id="client-a", name="Client A")
     clients_repo.create_client(client_id="client-b", name="Client B")
-    _reset_validation_service()
     return TestClient(app)
 
 
@@ -58,7 +49,6 @@ def client_flag_on(tmp_path, monkeypatch):
     init_db()
     clients_repo.create_client(client_id="client-a", name="Client A")
     clients_repo.create_client(client_id="client-b", name="Client B")
-    _reset_validation_service()
     return TestClient(app)
 
 

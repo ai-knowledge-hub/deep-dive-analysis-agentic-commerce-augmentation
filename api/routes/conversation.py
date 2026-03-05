@@ -33,48 +33,78 @@ from domain.commerce.compare import compare as compare_products
 from application.services.evidence.intentionality_profiler import build_profile
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
+from application.ports.deps import AppDeps
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
-DEPS = default_deps()
-ALIGNMENT = AlignmentService(DEPS)
+# Optional test override hooks (preserve compatibility with existing monkeypatch tests).
+GOAL_AGENT: Any = None
+INTENT_AGENT: Any = None
+COMMERCE_AGENT: Any = None
+EXPLAIN_AGENT: Any = None
 
 
-def build_profile_with_llm(product: Any) -> Any:
-    return build_profile(product, generate_fn=DEPS.generate)
+def _deps() -> AppDeps:
+    return default_deps()
 
 
-INTENT_AGENT = IntentAgent(
-    classifier=build_intent_classifier(),
-    context_for_fn=context_for,
-    log_replay_fn=log_intent_replay,
-)
+def _alignment(deps: AppDeps) -> AlignmentService:
+    return AlignmentService(deps)
 
 
-def _search_products(query: str, client_id: str | None, brand_id: str | None):
+def _build_profile_with_llm(product: Any, *, deps: AppDeps) -> Any:
+    return build_profile(product, generate_fn=deps.generate)
+
+
+def _search_products(
+    *,
+    deps: AppDeps,
+    query: str,
+    client_id: str | None,
+    brand_id: str | None,
+):
     if not client_id:
         return []
     return search_products_for_client(
-        deps=DEPS, query=query, client_id=client_id, brand_id=brand_id
+        deps=deps, query=query, client_id=client_id, brand_id=brand_id
     )
 
 
-COMMERCE_AGENT = CommerceAgent(
-    builder=CommercePlanBuilder(
-        search_fn=_search_products,
-        compare_fn=compare_products,
-        build_profile_fn=build_profile,
-    ),
-    reason_fn=reason_about_products_default,
-    assess_fn=ALIGNMENT.assess,
-    score_fn=ALIGNMENT.score_products,
-    search_fn=_search_products,
-)
-EXPLAIN_AGENT = ExplainAgent()
-GOAL_AGENT = GoalClarificationAgent(
-    chat_fn=chat, prompt_template=VALUES_CLARIFICATION_PROMPT
-)
-SERVICE = ConversationService(deps=DEPS)
+def _intent_agent() -> IntentAgent:
+    return IntentAgent(
+        classifier=build_intent_classifier(),
+        context_for_fn=context_for,
+        log_replay_fn=log_intent_replay,
+    )
+
+
+def _goal_agent() -> GoalClarificationAgent:
+    return GoalClarificationAgent(chat_fn=chat, prompt_template=VALUES_CLARIFICATION_PROMPT)
+
+
+def _explain_agent() -> ExplainAgent:
+    return ExplainAgent()
+
+
+def _commerce_agent(*, deps: AppDeps, alignment: AlignmentService) -> CommerceAgent:
+    search = lambda q, client_id, brand_id: _search_products(
+        deps=deps, query=q, client_id=client_id, brand_id=brand_id
+    )
+    return CommerceAgent(
+        builder=CommercePlanBuilder(
+            search_fn=search,
+            compare_fn=compare_products,
+            build_profile_fn=build_profile,
+        ),
+        reason_fn=reason_about_products_default,
+        assess_fn=alignment.assess,
+        score_fn=alignment.score_products,
+        search_fn=search,
+    )
+
+
+def _service(*, deps: AppDeps) -> ConversationService:
+    return ConversationService(deps=deps)
 
 
 class ClarifiedGoal(BaseModel):
@@ -129,21 +159,30 @@ def _chunk_text(text: str, size: int = 24) -> List[str]:
 
 @router.post("/start")
 def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
+    deps = _deps()
+    alignment = _alignment(deps)
+    service = _service(deps=deps)
+    goal_agent = GOAL_AGENT or _goal_agent()
+    intent_agent = INTENT_AGENT or _intent_agent()
+    commerce_agent = COMMERCE_AGENT or _commerce_agent(deps=deps, alignment=alignment)
+    explain_agent = EXPLAIN_AGENT or _explain_agent()
     client_id = require_client_id(request.client_id, request.user_id)
-    return SERVICE.start(
+    return service.start(
         user_id=request.user_id,
         client_id=client_id,
         brand_id=request.brand_id,
         opening_message=request.opening_message,
         metadata=request.metadata,
         clarified_goals=request.clarified_goals,
-        goal_agent=GOAL_AGENT,
-        intent_agent=INTENT_AGENT,
-        commerce_agent=COMMERCE_AGENT,
-        explain_agent=EXPLAIN_AGENT,
+        goal_agent=goal_agent,
+        intent_agent=intent_agent,
+        commerce_agent=commerce_agent,
+        explain_agent=explain_agent,
         run_research_fn=run_research,
-        score_alignment_fn=ALIGNMENT.score_products,
-        build_profile_with_llm_fn=build_profile_with_llm,
+        score_alignment_fn=alignment.score_products,
+        build_profile_with_llm_fn=lambda product: _build_profile_with_llm(
+            product, deps=deps
+        ),
     )
 
 
@@ -151,24 +190,33 @@ def start_conversation(request: ConversationStartRequest) -> Dict[str, Any]:
 def start_conversation_stream(
     request: ConversationStartRequest,
 ) -> StreamingResponse:
+    deps = _deps()
+    alignment = _alignment(deps)
+    service = _service(deps=deps)
+    goal_agent = GOAL_AGENT or _goal_agent()
+    intent_agent = INTENT_AGENT or _intent_agent()
+    commerce_agent = COMMERCE_AGENT or _commerce_agent(deps=deps, alignment=alignment)
+    explain_agent = EXPLAIN_AGENT or _explain_agent()
     client_id = require_client_id(request.client_id, request.user_id)
 
     def event_stream():
         yield _sse_event({"phase": "processing"}, event="status")
-        payload = SERVICE.start(
+        payload = service.start(
             user_id=request.user_id,
             client_id=client_id,
             brand_id=request.brand_id,
             opening_message=request.opening_message,
             metadata=request.metadata,
             clarified_goals=request.clarified_goals,
-            goal_agent=GOAL_AGENT,
-            intent_agent=INTENT_AGENT,
-            commerce_agent=COMMERCE_AGENT,
-            explain_agent=EXPLAIN_AGENT,
+            goal_agent=goal_agent,
+            intent_agent=intent_agent,
+            commerce_agent=commerce_agent,
+            explain_agent=explain_agent,
             run_research_fn=run_research,
-            score_alignment_fn=ALIGNMENT.score_products,
-            build_profile_with_llm_fn=build_profile_with_llm,
+            score_alignment_fn=alignment.score_products,
+            build_profile_with_llm_fn=lambda product: _build_profile_with_llm(
+                product, deps=deps
+            ),
         )
         explanation = payload.get("explanation") or ""
         for chunk in _chunk_text(str(explanation)):
@@ -181,8 +229,15 @@ def start_conversation_stream(
 
 @router.post("/{session_id}/message")
 def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str, Any]:
+    deps = _deps()
+    alignment = _alignment(deps)
+    service = _service(deps=deps)
+    goal_agent = GOAL_AGENT or _goal_agent()
+    intent_agent = INTENT_AGENT or _intent_agent()
+    commerce_agent = COMMERCE_AGENT or _commerce_agent(deps=deps, alignment=alignment)
+    explain_agent = EXPLAIN_AGENT or _explain_agent()
     client_id = require_client_id(request.client_id, request.user_id)
-    return SERVICE.continue_message(
+    return service.continue_message(
         session_id=session_id,
         user_id=request.user_id,
         client_id=client_id,
@@ -190,13 +245,15 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
         message=request.message,
         metadata=request.metadata,
         clarified_goals=request.clarified_goals,
-        goal_agent=GOAL_AGENT,
-        intent_agent=INTENT_AGENT,
-        commerce_agent=COMMERCE_AGENT,
-        explain_agent=EXPLAIN_AGENT,
+        goal_agent=goal_agent,
+        intent_agent=intent_agent,
+        commerce_agent=commerce_agent,
+        explain_agent=explain_agent,
         run_research_fn=run_research,
-        score_alignment_fn=ALIGNMENT.score_products,
-        build_profile_with_llm_fn=build_profile_with_llm,
+        score_alignment_fn=alignment.score_products,
+        build_profile_with_llm_fn=lambda product: _build_profile_with_llm(
+            product, deps=deps
+        ),
     )
 
 
@@ -204,11 +261,18 @@ def continue_conversation(session_id: str, request: MessageRequest) -> Dict[str,
 def continue_conversation_stream(
     session_id: str, request: MessageRequest
 ) -> StreamingResponse:
+    deps = _deps()
+    alignment = _alignment(deps)
+    service = _service(deps=deps)
+    goal_agent = GOAL_AGENT or _goal_agent()
+    intent_agent = INTENT_AGENT or _intent_agent()
+    commerce_agent = COMMERCE_AGENT or _commerce_agent(deps=deps, alignment=alignment)
+    explain_agent = EXPLAIN_AGENT or _explain_agent()
     client_id = require_client_id(request.client_id, request.user_id)
 
     def event_stream():
         yield _sse_event({"phase": "processing"}, event="status")
-        payload = SERVICE.continue_message(
+        payload = service.continue_message(
             session_id=session_id,
             user_id=request.user_id,
             client_id=client_id,
@@ -216,13 +280,15 @@ def continue_conversation_stream(
             message=request.message,
             metadata=request.metadata,
             clarified_goals=request.clarified_goals,
-            goal_agent=GOAL_AGENT,
-            intent_agent=INTENT_AGENT,
-            commerce_agent=COMMERCE_AGENT,
-            explain_agent=EXPLAIN_AGENT,
+            goal_agent=goal_agent,
+            intent_agent=intent_agent,
+            commerce_agent=commerce_agent,
+            explain_agent=explain_agent,
             run_research_fn=run_research,
-            score_alignment_fn=ALIGNMENT.score_products,
-            build_profile_with_llm_fn=build_profile_with_llm,
+            score_alignment_fn=alignment.score_products,
+            build_profile_with_llm_fn=lambda product: _build_profile_with_llm(
+                product, deps=deps
+            ),
         )
         explanation = payload.get("explanation") or ""
         for chunk in _chunk_text(str(explanation)):
@@ -239,16 +305,20 @@ def list_sessions(
     limit: int = 20,
     client_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     client_scope = require_client_id(client_id, user_id)
-    return SERVICE.list_sessions(user_id=user_id, limit=limit, client_id=client_scope)
+    return service.list_sessions(user_id=user_id, limit=limit, client_id=client_scope)
 
 
 @router.get("/{session_id}")
 def get_session_snapshot(
     session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     client_scope = require_client_id(client_id, user_id)
-    return SERVICE.get_snapshot(
+    return service.get_snapshot(
         session_id=session_id, user_id=user_id, client_id=client_scope
     )
 
@@ -257,8 +327,10 @@ def get_session_snapshot(
 def delete_session(
     session_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None
 ) -> Dict[str, str]:
+    deps = _deps()
+    service = _service(deps=deps)
     client_scope = require_client_id(client_id, user_id)
-    return SERVICE.delete_session(
+    return service.delete_session(
         session_id=session_id, user_id=user_id, client_id=client_scope
     )
 
@@ -267,8 +339,10 @@ def delete_session(
 def ingest_clarified_goals(
     session_id: str, request: ClarifiedGoalsRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = _service(deps=deps)
     client_id = require_client_id(request.client_id, request.user_id)
-    return SERVICE.ingest_goals(
+    return service.ingest_goals(
         session_id=session_id,
         user_id=request.user_id,
         client_id=client_id,
@@ -279,12 +353,15 @@ def ingest_clarified_goals(
 
 @router.post("/{session_id}/research")
 def refresh_research(session_id: str, request: ResearchRequest) -> Dict[str, Any]:
+    deps = _deps()
+    alignment = _alignment(deps)
+    service = _service(deps=deps)
     client_id = require_client_id(request.client_id, request.user_id)
-    return SERVICE.refresh_research(
+    return service.refresh_research(
         session_id=session_id,
         user_id=request.user_id,
         client_id=client_id,
         query=request.query,
         run_research_fn=run_research,
-        score_alignment_fn=ALIGNMENT.score_products,
+        score_alignment_fn=alignment.score_products,
     )
