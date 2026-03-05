@@ -4,11 +4,12 @@ import hashlib
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
+from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
 )
@@ -27,13 +28,21 @@ from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
 
-DEPS = default_deps()
-RUNTIME = AgentRuntimeService(deps=DEPS)
-WORKER = AgentRuntimeWorkerService(deps=DEPS)
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
-def _require_scoped_run(*, run_id: str, client_id: str) -> Dict[str, Any]:
-    run = DEPS.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
+def _runtime(deps: AppDeps = Depends(_deps)) -> AgentRuntimeService:
+    return AgentRuntimeService(deps=deps)
+
+
+def _worker(deps: AppDeps = Depends(_deps)) -> AgentRuntimeWorkerService:
+    return AgentRuntimeWorkerService(deps=deps)
+
+
+def _require_scoped_run(*, deps: AppDeps, run_id: str, client_id: str) -> Dict[str, Any]:
+    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
@@ -101,9 +110,11 @@ def _hash_payload(value: Any) -> str:
 
 
 @router.post("")
-def create_agent_run(payload: AgentRunCreateRequest) -> Dict[str, Any]:
+def create_agent_run(
+    payload: AgentRunCreateRequest, deps: AppDeps = Depends(_deps)
+) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
-    run = DEPS.agent_runs.create_agent_run(
+    run = deps.agent_runs.create_agent_run(
         client_id=client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,
@@ -126,7 +137,7 @@ def create_agent_run(payload: AgentRunCreateRequest) -> Dict[str, Any]:
         capability_versions=payload.capability_versions or {},
     )
     for idx, action in enumerate(plan, start=1):
-        created_action = DEPS.agent_actions.create_agent_action(
+        created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
             status="proposed",
@@ -143,7 +154,7 @@ def create_agent_run(payload: AgentRunCreateRequest) -> Dict[str, Any]:
             variant_id=None,
             validation_job_id=None,
         )
-        DEPS.agent_events.create_agent_event(
+        deps.agent_events.create_agent_event(
             agent_run_id=run.get("id"),
             action_id=created_action.get("id"),
             sequence=idx,
@@ -169,11 +180,13 @@ def create_agent_run(payload: AgentRunCreateRequest) -> Dict[str, Any]:
 def start_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    runtime: AgentRuntimeService = Depends(_runtime),
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
+    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
     try:
-        result = RUNTIME.start_run(run_id=run_id)
+        result = runtime.start_run(run_id=run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"run": result.run, "message": result.message}
@@ -183,11 +196,13 @@ def start_agent_run(
 def pause_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    runtime: AgentRuntimeService = Depends(_runtime),
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
+    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
     try:
-        result = RUNTIME.pause_run(run_id=run_id)
+        result = runtime.pause_run(run_id=run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"run": result.run}
@@ -197,11 +212,13 @@ def pause_agent_run(
 def cancel_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    runtime: AgentRuntimeService = Depends(_runtime),
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
+    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
     try:
-        result = RUNTIME.cancel_run(run_id=run_id)
+        result = runtime.cancel_run(run_id=run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"run": result.run}
@@ -211,11 +228,13 @@ def cancel_agent_run(
 def step_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    runtime: AgentRuntimeService = Depends(_runtime),
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
+    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
     try:
-        result = RUNTIME.step_once(
+        result = runtime.step_once(
             run_id=run_id,
             user_id=payload.user_id,
         )
@@ -231,9 +250,11 @@ def step_agent_run(
 
 
 @router.post("/tick")
-def tick_agent_runs(payload: AgentRunTickRequest) -> Dict[str, Any]:
+def tick_agent_runs(
+    payload: AgentRunTickRequest, worker: AgentRuntimeWorkerService = Depends(_worker)
+) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
-    summary = WORKER.tick_client(
+    summary = worker.tick_client(
         client_id=client_id,
         user_id=payload.user_id,
         max_runs=max(1, min(100, int(payload.max_runs))),
@@ -250,9 +271,10 @@ def list_agent_runs(
     product_id: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
+    deps: AppDeps = Depends(_deps),
 ) -> AgentRunListResponse:
     resolved = require_client_id(client_id, user_id)
-    runs = DEPS.agent_runs.list_agent_runs(
+    runs = deps.agent_runs.list_agent_runs(
         client_id=resolved,
         experiment_id=experiment_id,
         product_id=product_id,
@@ -268,10 +290,11 @@ def get_agent_run(
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
     limit: int = 200,
+    deps: AppDeps = Depends(_deps),
 ) -> AgentRunDetailResponse:
     scoped_client_id = require_client_id(client_id, user_id)
-    run = _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
-    actions = DEPS.agent_actions.list_agent_actions(agent_run_id=run_id, limit=limit)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=limit)
     return AgentRunDetailResponse(run=run, actions=actions)
 
 
@@ -290,12 +313,13 @@ def get_agent_run_events(
     after: Optional[str] = None,
     event_id: Optional[str] = None,
     around: int = 120,
+    deps: AppDeps = Depends(_deps),
 ) -> AgentRunEventListResponse:
     scoped_client_id = require_client_id(client_id, user_id)
-    _require_scoped_run(run_id=run_id, client_id=scoped_client_id)
+    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
     try:
         page = list_agent_run_events_page(
-            deps=DEPS,
+            deps=deps,
             run_id=run_id,
             client_id=scoped_client_id,
             limit=max(1, min(int(limit), 2000)),
@@ -319,9 +343,10 @@ def get_agent_run_events(
 def decide_action(
     action_id: str,
     payload: AgentActionDecisionRequest,
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    action = DEPS.agent_actions.get_agent_action(
+    action = deps.agent_actions.get_agent_action(
         action_id=action_id, client_id=scoped_client_id
     )
     if not action:
@@ -329,15 +354,15 @@ def decide_action(
     decision = str(payload.decision or "").strip().lower()
     if decision not in {"approve", "reject"}:
         raise HTTPException(status_code=400, detail="Invalid decision")
-    updated = DEPS.agent_actions.update_agent_action_status(
+    updated = deps.agent_actions.update_agent_action_status(
         action_id=action_id,
         status="approved" if decision == "approve" else "rejected",
     )
     current = updated or action
-    run_row = DEPS.agent_runs.get_agent_run(
+    run_row = deps.agent_runs.get_agent_run(
         run_id=str(current.get("agent_run_id") or ""), client_id=scoped_client_id
     )
-    DEPS.agent_events.create_agent_event(
+    deps.agent_events.create_agent_event(
         agent_run_id=str(current.get("agent_run_id") or ""),
         action_id=str(current.get("id") or action_id),
         sequence=int(current.get("sequence") or 0),

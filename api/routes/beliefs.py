@@ -7,15 +7,16 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
+from application.ports.deps import AppDeps
 from application.services.loop.belief_update_service import BeliefUpdateService
 from application.services.experiment.brand_belief_service import BrandBeliefService
 
 
 router = APIRouter(prefix="/beliefs", tags=["beliefs"])
 
-DEPS = default_deps()
-SERVICE = BrandBeliefService(repo=DEPS.brand_beliefs)
-BELIEF_UPDATE_SERVICE = BeliefUpdateService(deps=DEPS)
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 class BeliefCreateRequest(BaseModel):
@@ -43,8 +44,10 @@ class BeliefUpdateRequest(BaseModel):
 
 @router.post("")
 def create_belief(payload: BeliefCreateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = BrandBeliefService(repo=deps.brand_beliefs)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    belief = SERVICE.create_belief(
+    belief = service.create_belief(
         client_id=client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,
@@ -59,8 +62,10 @@ def create_belief(payload: BeliefCreateRequest) -> Dict[str, Any]:
 
 @router.post("/update")
 def update_belief(payload: BeliefUpdateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    belief_update_service = BeliefUpdateService(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    revision = BELIEF_UPDATE_SERVICE.update(
+    revision = belief_update_service.update(
         client_id=client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,
@@ -79,8 +84,10 @@ def list_beliefs(
     user_id: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = BrandBeliefService(repo=deps.brand_beliefs)
     scoped_client_id = require_client_id(client_id, user_id)
-    beliefs = SERVICE.list_beliefs(
+    beliefs = service.list_beliefs(
         client_id=scoped_client_id, brand_id=brand_id, limit=limit
     )
     return {"beliefs": beliefs}
@@ -92,8 +99,10 @@ def latest_belief(
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = BrandBeliefService(repo=deps.brand_beliefs)
     scoped_client_id = require_client_id(client_id, user_id)
-    belief = SERVICE.latest_belief(client_id=scoped_client_id, brand_id=brand_id)
+    belief = service.latest_belief(client_id=scoped_client_id, brand_id=brand_id)
     return {"belief": belief}
 
 
@@ -106,8 +115,9 @@ def list_belief_revisions(
     hypothesis_key: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
+    deps = _deps()
     scoped_client_id = require_client_id(client_id, user_id)
-    revisions = DEPS.belief_revisions.list_belief_revisions(
+    revisions = deps.belief_revisions.list_belief_revisions(
         client_id=scoped_client_id,
         brand_id=brand_id,
         product_id=product_id,

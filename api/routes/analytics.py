@@ -7,9 +7,13 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
+from application.ports.deps import AppDeps
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
-DEPS = default_deps()
+
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 class AnalyticsEventRequest(BaseModel):
@@ -27,8 +31,9 @@ class AnalyticsEventRequest(BaseModel):
 
 @router.post("/events")
 def create_event(payload: AnalyticsEventRequest) -> Dict[str, Any]:
+    deps = _deps()
     client_id = require_client_id(payload.client_id, payload.user_id)
-    event = DEPS.analytics_events.create_event(
+    event = deps.analytics_events.create_event(
         client_id=client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,

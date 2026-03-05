@@ -14,10 +14,12 @@ from infrastructure.db.catalog.platform_profiles import (
 )
 
 try:
-    from jsonschema import Draft202012Validator, RefResolver
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
 except Exception:  # pragma: no cover - optional dependency for local validation
     Draft202012Validator = None
-    RefResolver = None
+    Registry = None
+    Resource = None
 
 PINNED_UCP_VERSION = "2026-01-11"
 REQUIRED_CAPABILITIES: Set[Tuple[str, str]] = {
@@ -72,13 +74,13 @@ def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
             )
         )
 
-    if Draft202012Validator is None or RefResolver is None:
+    if Draft202012Validator is None or Registry is None or Resource is None:
         issues.append(
             ProtocolReadinessIssue(
                 field="ucp_profile",
                 severity="warning",
-                message="jsonschema not installed; skipping schema validation.",
-                fix="Install jsonschema>=4.18 to enable UCP profile validation.",
+                message="jsonschema/referencing not installed; skipping schema validation.",
+                fix="Install jsonschema>=4.18 and referencing to enable UCP profile validation.",
             )
         )
     elif not store:
@@ -93,8 +95,15 @@ def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
     else:
         schema = store.get(PROFILE_SCHEMA_ID)
         if schema:
-            resolver = RefResolver.from_schema(schema, store=store)
-            validator = Draft202012Validator(schema, resolver=resolver)
+            registry = Registry()
+            for schema_id, schema_doc in store.items():
+                try:
+                    registry = registry.with_resource(
+                        schema_id, Resource.from_contents(schema_doc)
+                    )
+                except Exception:
+                    continue
+            validator = Draft202012Validator(schema, registry=registry)
             for err in validator.iter_errors(profile):
                 path = ".".join(str(p) for p in err.path) or "$"
                 if (

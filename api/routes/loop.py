@@ -8,15 +8,16 @@ from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
+from application.ports.deps import AppDeps
 from application.services.loop.policy_service import PolicyService
 from application.services.loop.state_service import StateService
 from infrastructure.db.core.connection import get_connection
 
 router = APIRouter(prefix="/loop", tags=["loop"])
 
-DEPS = default_deps()
-STATE_SERVICE = StateService(deps=DEPS)
-POLICY_SERVICE = PolicyService(deps=DEPS)
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 class LoopStepRequest(BaseModel):
@@ -36,16 +37,19 @@ def get_loop_state(
     brand_id: Optional[str] = None,
     product_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    state_service = StateService(deps=deps)
+    policy_service = PolicyService(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    state = STATE_SERVICE.latest(
+    state = state_service.latest(
         client_id=scoped_client_id, brand_id=brand_id, product_id=product_id
     )
-    belief = DEPS.belief_revisions.get_latest_belief_revision(
+    belief = deps.belief_revisions.get_latest_belief_revision(
         client_id=scoped_client_id,
         brand_id=brand_id,
         product_id=product_id,
     )
-    decision = POLICY_SERVICE.latest_decision(
+    decision = policy_service.latest_decision(
         client_id=scoped_client_id, brand_id=brand_id, product_id=product_id
     )
     return {
@@ -58,8 +62,10 @@ def get_loop_state(
 
 @router.post("/step")
 def loop_step(payload: LoopStepRequest) -> Dict[str, Any]:
+    deps = _deps()
+    policy_service = PolicyService(deps=deps)
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    chosen = POLICY_SERVICE.choose_action(
+    chosen = policy_service.choose_action(
         client_id=scoped_client_id,
         provider=payload.provider,
         brand_id=payload.brand_id,
@@ -67,7 +73,7 @@ def loop_step(payload: LoopStepRequest) -> Dict[str, Any]:
         uncertainty=payload.uncertainty,
         expected_gain=payload.expected_gain,
     )
-    decision = POLICY_SERVICE.record_decision(
+    decision = policy_service.record_decision(
         client_id=scoped_client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,
@@ -91,11 +97,12 @@ def get_loop_metrics(
     product_id: Optional[str] = None,
     range_days: int = 30,
 ) -> Dict[str, Any]:
+    deps = _deps()
     scoped_client_id = require_client_id(client_id, user_id)
     lookback_days = max(1, min(365, int(range_days)))
     cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
 
-    revisions = DEPS.belief_revisions.list_belief_revisions(
+    revisions = deps.belief_revisions.list_belief_revisions(
         client_id=scoped_client_id,
         brand_id=brand_id,
         product_id=product_id,
@@ -111,7 +118,7 @@ def get_loop_metrics(
         else 0.0
     )
 
-    decisions = DEPS.decision_events.list_decision_events(
+    decisions = deps.decision_events.list_decision_events(
         client_id=scoped_client_id,
         brand_id=brand_id,
         product_id=product_id,
@@ -125,7 +132,7 @@ def get_loop_metrics(
         action = str(item.get("policy_action") or "unknown")
         action_distribution[action] = action_distribution.get(action, 0) + 1
 
-    events = DEPS.analytics_events.list_events(
+    events = deps.analytics_events.list_events(
         client_id=scoped_client_id,
         brand_id=brand_id,
         product_id=product_id,
@@ -204,7 +211,7 @@ def get_loop_metrics(
         sum(agreement_scores) / len(agreement_scores) if agreement_scores else 0.0
     )
 
-    profiles = DEPS.calibration_profiles.list_calibration_profiles(
+    profiles = deps.calibration_profiles.list_calibration_profiles(
         client_id=scoped_client_id,
         brand_id=brand_id,
         limit=100,

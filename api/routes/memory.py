@@ -7,12 +7,14 @@ from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
+from application.ports.deps import AppDeps
 from application.services.loop.memory_service import MemoryService
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
-DEPS = default_deps()
-SERVICE = MemoryService(deps=DEPS)
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 class MemoryDistillRequest(BaseModel):
@@ -30,8 +32,10 @@ class MemoryDistillRequest(BaseModel):
 
 @router.post("/distill")
 def distill(payload: MemoryDistillRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = MemoryService(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    artifact = SERVICE.distill(
+    artifact = service.distill(
         client_id=client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,
@@ -57,8 +61,10 @@ def list_artifacts(
     freshness_days: int = 180,
     limit: int = 20,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = MemoryService(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    artifacts = SERVICE.retrieve(
+    artifacts = service.retrieve(
         client_id=scoped_client_id,
         artifact_type=artifact_type,
         brand_id=brand_id,

@@ -7,10 +7,13 @@ from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id
+from application.ports.deps import AppDeps
 
 router = APIRouter(prefix="/copy-revisions", tags=["copy-revisions"])
 
-DEPS = default_deps()
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 class CreateRevisionRequest(BaseModel):
@@ -35,8 +38,9 @@ class PublishRevisionRequest(BaseModel):
 
 @router.post("")
 def create_revision(payload: CreateRevisionRequest) -> Dict[str, Any]:
+    deps = _deps()
     client_id = require_client_id(payload.client_id, payload.user_id)
-    revision = DEPS.copy_revisions.create_revision(
+    revision = deps.copy_revisions.create_revision(
         client_id=client_id,
         brand_id=payload.brand_id,
         product_id=payload.product_id,
@@ -61,8 +65,9 @@ def list_revisions(
     status: Optional[str] = None,
     limit: int = 100,
 ) -> Dict[str, Any]:
+    deps = _deps()
     scoped_client_id = require_client_id(client_id, user_id)
-    revisions = DEPS.copy_revisions.list_revisions(
+    revisions = deps.copy_revisions.list_revisions(
         client_id=scoped_client_id,
         product_id=product_id,
         source_type=source_type,
@@ -78,8 +83,9 @@ def get_revision(
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    deps = _deps()
     scoped_client_id = require_client_id(client_id, user_id)
-    revision = DEPS.copy_revisions.get_revision(revision_id=revision_id)
+    revision = deps.copy_revisions.get_revision(revision_id=revision_id)
     if not revision or revision.get("client_id") != scoped_client_id:
         raise HTTPException(status_code=404, detail="Copy revision not found")
     return {"revision": revision}
@@ -90,12 +96,13 @@ def publish_revision(
     revision_id: str,
     payload: PublishRevisionRequest,
 ) -> Dict[str, Any]:
+    deps = _deps()
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    revision = DEPS.copy_revisions.get_revision(revision_id=revision_id)
+    revision = deps.copy_revisions.get_revision(revision_id=revision_id)
     if not revision or revision.get("client_id") != scoped_client_id:
         raise HTTPException(status_code=404, detail="Copy revision not found")
 
-    product = DEPS.clients.get_product_for_client(
+    product = deps.clients.get_product_for_client(
         client_id=scoped_client_id, product_id=revision["product_id"]
     )
     if not product:
@@ -112,12 +119,12 @@ def publish_revision(
     )
     metadata["copy_revision"] = copy_meta
 
-    updated_product = DEPS.clients.update_product(
+    updated_product = deps.clients.update_product(
         product_id=revision["product_id"],
         description=revision["candidate_description"],
         metadata=metadata,
     )
-    updated_revision = DEPS.copy_revisions.update_revision_status(
+    updated_revision = deps.copy_revisions.update_revision_status(
         revision_id=revision_id,
         status="published",
         approved_by=payload.user_id,

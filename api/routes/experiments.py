@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
+from application.ports.deps import AppDeps
 from application.services.experiment.service import ExperimentService
 from application.services.experiment.runner import ExperimentRunner
 from application.services.experiment.scheduler import ExperimentScheduler
@@ -21,14 +22,9 @@ from application.services.experiment.execution_state_service import (
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
-DEPS = default_deps()
-SERVICE = ExperimentService(repo=DEPS.experiments)
-RUNNER = ExperimentRunner(deps=DEPS)
-SCHEDULER = ExperimentScheduler(deps=DEPS)
-ORCHESTRATOR = ExperimentOrchestrator(deps=DEPS)
-VALIDATIONS = ExperimentValidationService(deps=DEPS)
-VARIANT_GENERATOR = ExperimentVariantGenerator(deps=DEPS)
-EXECUTION_STATE = ExperimentExecutionStateService(deps=DEPS)
+
+def _deps() -> AppDeps:
+    return default_deps()
 
 
 class ExperimentCreateRequest(BaseModel):
@@ -105,8 +101,10 @@ class LoopVariantGenerateRequest(BaseModel):
 
 @router.post("")
 def create_experiment(payload: ExperimentCreateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    experiment = SERVICE.create_experiment(
+    experiment = service.create_experiment(
         client_id=client_id,
         product_id=payload.product_id,
         name=payload.name,
@@ -129,8 +127,10 @@ def list_experiments(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    experiments = SERVICE.list_experiments(
+    experiments = service.list_experiments(
         client_id=scoped_client_id,
         product_id=product_id,
         brand_id=brand_id,
@@ -145,8 +145,10 @@ def list_experiments(
 def get_experiment(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    experiment = SERVICE.get_experiment(
+    experiment = service.get_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     if not experiment:
@@ -158,8 +160,10 @@ def get_experiment(
 def update_experiment(
     experiment_id: str, payload: ExperimentUpdateRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     client_id = require_client_id(payload.client_id, payload.user_id)
-    experiment = SERVICE.update_experiment(
+    experiment = service.update_experiment(
         experiment_id=experiment_id,
         client_id=client_id,
         name=payload.name,
@@ -174,8 +178,10 @@ def update_experiment(
 def delete_experiment(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    deleted = SERVICE.delete_experiment(
+    deleted = service.delete_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     if not deleted:
@@ -185,8 +191,10 @@ def delete_experiment(
 
 @router.post("/{experiment_id}/variants")
 def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    experiment = SERVICE.get_experiment(
+    experiment = service.get_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     if not experiment:
@@ -194,7 +202,7 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
     inferred_hypothesis_id = payload.hypothesis_id
     if not inferred_hypothesis_id and isinstance(payload.payload, dict):
         inferred_hypothesis_id = str(payload.payload.get("hypothesis_id") or "") or None
-    variant = SERVICE.add_variant(
+    variant = service.add_variant(
         experiment_id=experiment_id,
         client_id=scoped_client_id,
         label=payload.label,
@@ -210,7 +218,7 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
                 payload.payload.get("description") or ""
             ).strip()
         if experiment and candidate_description:
-            product = DEPS.clients.get_product_for_client(
+            product = deps.clients.get_product_for_client(
                 client_id=experiment["client_id"], product_id=experiment["product_id"]
             )
             base_description = str(
@@ -219,7 +227,7 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
                 or "base copy"
             ).strip()
             if base_description and candidate_description != base_description:
-                DEPS.copy_revisions.create_revision(
+                deps.copy_revisions.create_revision(
                     client_id=experiment["client_id"],
                     brand_id=experiment.get("brand_id"),
                     product_id=experiment["product_id"],
@@ -245,13 +253,15 @@ def add_variant(experiment_id: str, payload: VariantCreateRequest) -> Dict[str, 
 def list_variants(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    experiment = SERVICE.get_experiment(
+    experiment = service.get_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     if not experiment:
         raise HTTPException(status_code=404, detail="Experiment not found")
-    variants = SERVICE.list_variants(
+    variants = service.list_variants(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     return {"variants": variants}
@@ -259,9 +269,11 @@ def list_variants(
 
 @router.post("/{experiment_id}/run")
 def run_experiment(experiment_id: str, payload: ExperimentRunRequest) -> Dict[str, Any]:
+    deps = _deps()
+    runner = ExperimentRunner(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        result = RUNNER.run_experiment(
+        result = runner.run_experiment(
             experiment_id=experiment_id,
             variant_id=payload.variant_id,
             client_id=client_id,
@@ -283,9 +295,11 @@ def run_experiment(experiment_id: str, payload: ExperimentRunRequest) -> Dict[st
 def update_schedule(
     experiment_id: str, payload: ExperimentScheduleRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    scheduler = ExperimentScheduler(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        result = SCHEDULER.update_schedule(
+        result = scheduler.update_schedule(
             experiment_id=experiment_id,
             client_id=client_id,
             enabled=payload.enabled,
@@ -300,9 +314,11 @@ def update_schedule(
 def backfill_experiment(
     experiment_id: str, payload: ExperimentBackfillRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    scheduler = ExperimentScheduler(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        result = SCHEDULER.run_backfill(
+        result = scheduler.run_backfill(
             experiment_id=experiment_id,
             client_id=client_id,
             user_id=payload.user_id,
@@ -321,11 +337,13 @@ def backfill_experiment(
 def next_test(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    orchestrator = ExperimentOrchestrator(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    recommendation = ORCHESTRATOR.suggest_next_test(
+    recommendation = orchestrator.suggest_next_test(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
-    DEPS.experiment_recommendations.create_recommendation(
+    deps.experiment_recommendations.create_recommendation(
         experiment_id=experiment_id,
         recommendation=recommendation.to_dict(),
     )
@@ -340,8 +358,9 @@ def list_runs(
     variant_id: Optional[str] = None,
     limit: int = 200,
 ) -> Dict[str, Any]:
+    deps = _deps()
     require_client_id(client_id, user_id)
-    runs = DEPS.experiment_runs.list_runs(
+    runs = deps.experiment_runs.list_runs(
         experiment_id=experiment_id, variant_id=variant_id, limit=limit
     )
     return {"runs": runs}
@@ -355,13 +374,15 @@ def list_retrieval_snapshots(
     snapshot_version: Optional[int] = None,
     limit: int = 500,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    experiment = SERVICE.get_experiment(
+    experiment = service.get_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     if not experiment:
         raise HTTPException(status_code=404, detail="Experiment not found")
-    rows = DEPS.experiment_retrieval_snapshots.list_snapshots(
+    rows = deps.experiment_retrieval_snapshots.list_snapshots(
         experiment_id=experiment_id,
         snapshot_version=snapshot_version,
         limit=limit,
@@ -378,13 +399,15 @@ def list_hypotheses(
     status: Optional[str] = None,
     limit: int = 200,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    experiment = SERVICE.get_experiment(
+    experiment = service.get_experiment(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     if not experiment:
         raise HTTPException(status_code=404, detail="Experiment not found")
-    rows = DEPS.experiment_hypotheses.list_hypotheses(
+    rows = deps.experiment_hypotheses.list_hypotheses(
         experiment_id=experiment_id,
         snapshot_version=snapshot_version,
         status=status,
@@ -400,12 +423,14 @@ def delete_run(
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    service = ExperimentService(repo=deps.experiments)
     scoped_client_id = require_client_id(client_id, user_id)
-    run = DEPS.experiment_runs.get_run(run_id)
+    run = deps.experiment_runs.get_run(run_id)
     if not run or run.get("experiment_id") != experiment_id:
         raise HTTPException(status_code=404, detail="Run not found")
-    SERVICE.get_experiment(experiment_id=experiment_id, client_id=scoped_client_id)
-    deleted = DEPS.experiment_runs.delete_run(run_id)
+    service.get_experiment(experiment_id=experiment_id, client_id=scoped_client_id)
+    deleted = deps.experiment_runs.delete_run(run_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Run not found")
     return {"deleted": True, "run_id": run_id}
@@ -419,8 +444,9 @@ def list_metrics(
     variant_id: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
+    deps = _deps()
     require_client_id(client_id, user_id)
-    metrics = DEPS.experiment_runs.list_metrics(
+    metrics = deps.experiment_runs.list_metrics(
         experiment_id=experiment_id, variant_id=variant_id, limit=limit
     )
     return {"metrics": metrics}
@@ -430,9 +456,11 @@ def list_metrics(
 def log_validation(
     experiment_id: str, payload: ExperimentValidationRequest
 ) -> Dict[str, Any]:
+    deps = _deps()
+    validations = ExperimentValidationService(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        validation = VALIDATIONS.log_validation(
+        validation = validations.log_validation(
             experiment_id=experiment_id,
             variant_id=payload.variant_id,
             client_id=client_id,
@@ -446,7 +474,7 @@ def log_validation(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    summary = VALIDATIONS.experiment_summary(
+    summary = validations.experiment_summary(
         experiment_id=experiment_id, client_id=client_id
     )
     return {"validation": validation, "summary": summary.to_dict()}
@@ -456,8 +484,10 @@ def log_validation(
 def validation_summary(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    validations = ExperimentValidationService(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
-    summary = VALIDATIONS.experiment_summary(
+    summary = validations.experiment_summary(
         experiment_id=experiment_id, client_id=scoped_client_id
     )
     return {"summary": summary.to_dict()}
@@ -467,9 +497,11 @@ def validation_summary(
 def execution_state(
     experiment_id: str, client_id: Optional[str] = None, user_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    deps = _deps()
+    execution_state_service = ExperimentExecutionStateService(deps=deps)
     scoped_client_id = require_client_id(client_id, user_id)
     try:
-        state = EXECUTION_STATE.get_state(
+        state = execution_state_service.get_state(
             experiment_id=experiment_id,
             client_id=scoped_client_id,
         )
@@ -485,8 +517,9 @@ def list_recommendations(
     user_id: Optional[str] = None,
     limit: int = 25,
 ) -> Dict[str, Any]:
+    deps = _deps()
     require_client_id(client_id, user_id)
-    recommendations = DEPS.experiment_recommendations.list_recommendations(
+    recommendations = deps.experiment_recommendations.list_recommendations(
         experiment_id=experiment_id, limit=limit
     )
     return {"recommendations": recommendations}
@@ -497,9 +530,11 @@ def generate_variant_from_loop_evidence(
     experiment_id: str,
     payload: LoopVariantGenerateRequest,
 ) -> Dict[str, Any]:
+    deps = _deps()
+    variant_generator = ExperimentVariantGenerator(deps=deps)
     client_id = require_client_id(payload.client_id, payload.user_id)
     try:
-        result = VARIANT_GENERATOR.generate_variants(
+        result = variant_generator.generate_variants(
             experiment_id=experiment_id,
             client_id=client_id,
             max_candidates=payload.max_candidates,

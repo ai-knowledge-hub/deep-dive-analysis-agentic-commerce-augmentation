@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 from fastapi.testclient import TestClient
+
+if "google" not in sys.modules:
+    google_pkg = types.ModuleType("google")
+    genai_pkg = types.ModuleType("google.genai")
+    genai_types_pkg = types.ModuleType("google.genai.types")
+    genai_pkg.Client = lambda *args, **kwargs: None
+    genai_pkg.types = genai_types_pkg
+    google_pkg.genai = genai_pkg
+    sys.modules["google"] = google_pkg
+    sys.modules["google.genai"] = genai_pkg
+    sys.modules["google.genai.types"] = genai_types_pkg
 
 from shared.db.connection import init_db, set_database_path
 from api.main import app

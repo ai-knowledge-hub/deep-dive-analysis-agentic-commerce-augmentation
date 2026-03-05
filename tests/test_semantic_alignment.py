@@ -5,7 +5,7 @@ understands semantic relationships between goals and products.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from domain.commerce.types import Product
 from infrastructure.alignment.goal_alignment_gateway import (
@@ -100,6 +100,19 @@ def sample_products(ergonomic_chair, standing_desk, python_course, running_shoes
     return [ergonomic_chair, standing_desk, python_course, running_shoes]
 
 
+def _fake_embed_batch(texts):
+    embeddings = []
+    for text in texts:
+        lowered = str(text).lower()
+        if "back pain" in lowered or "back pain relief" in lowered:
+            embeddings.append([1.0, 0.0, 0.0])
+        elif "python" in lowered or "programming" in lowered:
+            embeddings.append([0.0, 1.0, 0.0])
+        else:
+            embeddings.append([0.0, 0.0, 1.0])
+    return embeddings
+
+
 # -----------------------------------------------------------------------------
 # Test Product Semantic Text Building
 # -----------------------------------------------------------------------------
@@ -162,64 +175,33 @@ def test_keyword_assess_no_match(sample_products):
 
 def test_assess_uses_semantic_by_default(sample_products):
     """Test that assess() attempts semantic alignment first."""
-    # Create mock embedding provider
-    mock_provider = MagicMock()
-    mock_provider.provider_name = "mock"
-
-    # Create embeddings that put "back pain" goal close to ergonomic chair
-    # and far from other products
-    def mock_embed_batch(texts):
-        embeddings = []
-        for text in texts:
-            if "back pain" in text.lower() or "back pain relief" in text.lower():
-                embeddings.append([1.0, 0.0, 0.0])  # Back pain cluster
-            elif "python" in text.lower() or "programming" in text.lower():
-                embeddings.append([0.0, 1.0, 0.0])  # Programming cluster
-            else:
-                embeddings.append([0.0, 0.0, 1.0])  # Other cluster
-        return embeddings
-
-    mock_provider.embed_batch = MagicMock(side_effect=mock_embed_batch)
-
-    # Patch at the source module where it's imported from
     with patch(
-        "shared.llm.embeddings.get_embedding_provider", return_value=mock_provider
-    ):
-        with patch("shared.llm.embeddings.cosine_similarity") as mock_cosine:
-            # Simulate high similarity for matching concepts
-            def cosine_impl(a, b):
-                import numpy as np
-
-                a = np.array(a)
-                b = np.array(b)
-                return float(
-                    np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10)
-                )
-
-            mock_cosine.side_effect = cosine_impl
-
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch",
+        side_effect=_fake_embed_batch,
+    ) as mock_embed:
+        with patch(
+            "infrastructure.alignment.goal_alignment_gateway._embedding_provider_name",
+            return_value="stub",
+        ):
             goals = ["reduce back pain from sitting"]
             result = assess(goals, sample_products, use_semantic=True)
 
-            # Should have called the embedding provider
-            mock_provider.embed_batch.assert_called_once()
-
-            # Check result structure
-            assert "alignment_method" in result.confidence_summary
-            assert result.confidence_summary["alignment_method"] == "semantic"
+    mock_embed.assert_called_once()
+    assert "alignment_method" in result.confidence_summary
+    assert result.confidence_summary["alignment_method"] == "semantic"
 
 
 def test_assess_falls_back_to_keyword_on_error(sample_products):
     """Test that assess() falls back to keywords when semantic fails."""
-    # Patch at the source module
-    with patch("shared.llm.embeddings.get_embedding_provider") as mock:
+    with patch(
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch"
+    ) as mock:
         mock.side_effect = Exception("Embedding service unavailable")
-
         goals = ["office"]
         result = assess(goals, sample_products, use_semantic=True)
 
-        # Should have fallen back to keyword matching
-        assert result.confidence_summary.get("alignment_method") == "keyword"
+    # Should have fallen back to keyword matching
+    assert result.confidence_summary.get("alignment_method") == "keyword"
 
 
 def test_assess_keyword_mode(sample_products):
@@ -237,7 +219,15 @@ def test_assess_keyword_mode(sample_products):
 
 def test_assess_empty_goals(sample_products):
     """Test handling of empty goals list."""
-    result = assess([], sample_products)
+    with patch(
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch",
+        side_effect=_fake_embed_batch,
+    ):
+        with patch(
+            "infrastructure.alignment.goal_alignment_gateway._embedding_provider_name",
+            return_value="stub",
+        ):
+            result = assess([], sample_products)
     assert result.score == 0.0
     assert result.aligned_goals == []
     assert result.misaligned_goals == []
@@ -246,14 +236,30 @@ def test_assess_empty_goals(sample_products):
 def test_assess_empty_products():
     """Test handling of empty products list."""
     goals = ["reduce back pain"]
-    result = assess(goals, [])
+    with patch(
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch",
+        side_effect=_fake_embed_batch,
+    ):
+        with patch(
+            "infrastructure.alignment.goal_alignment_gateway._embedding_provider_name",
+            return_value="stub",
+        ):
+            result = assess(goals, [])
     assert result.score == 0.0
     assert result.misaligned_goals == goals
 
 
 def test_assess_both_empty():
     """Test handling when both goals and products are empty."""
-    result = assess([], [])
+    with patch(
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch",
+        side_effect=_fake_embed_batch,
+    ):
+        with patch(
+            "infrastructure.alignment.goal_alignment_gateway._embedding_provider_name",
+            return_value="stub",
+        ):
+            result = assess([], [])
     assert result.score == 0.0
 
 

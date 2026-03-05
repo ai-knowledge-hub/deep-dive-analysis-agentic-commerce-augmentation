@@ -14,9 +14,21 @@ from application.services.simulation.service import SimulationService
 from api.utils.tenancy import require_client_id
 from api.composition import default_deps
 
+
+def _deps():
+    return default_deps()
+
+
+SIMULATION_SERVICE = None
+
+
+def _simulation_service() -> SimulationService:
+    # Keep optional override seam for tests while defaulting to request scope.
+    return SIMULATION_SERVICE or SimulationService(deps=_deps())
+
+
 if APIRouter:
     router = APIRouter(prefix="/simulation", tags=["simulation"])
-    simulation_service = SimulationService(deps=default_deps())
 
     class SimulationProductPayload(BaseModel):
         id: str
@@ -82,7 +94,7 @@ if APIRouter:
         client_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
-        return simulation_service.list_runs(
+        return _simulation_service().list_runs(
             client_id=client_scope, user_id=user_id, limit=limit
         )
 
@@ -93,7 +105,7 @@ if APIRouter:
         client_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
-        return simulation_service.get_run(
+        return _simulation_service().get_run(
             run_id=run_id, client_id=client_scope, user_id=user_id
         )
 
@@ -104,7 +116,7 @@ if APIRouter:
         client_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
-        return simulation_service.delete_run(
+        return _simulation_service().delete_run(
             run_id=run_id, client_id=client_scope, user_id=user_id
         )
 
@@ -115,7 +127,7 @@ if APIRouter:
         client_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         client_scope = require_client_id(client_id, user_id)
-        return simulation_service.list_lessons(
+        return _simulation_service().list_lessons(
             client_id=client_scope, user_id=user_id, limit=limit
         )
 
@@ -123,7 +135,7 @@ if APIRouter:
     def run(payload: SimulationRunRequest):
         products = [_to_simulation_product(item) for item in payload.products]
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return simulation_service.run(
+        return _simulation_service().run(
             query=payload.query,
             products=products,
             client_id=client_scope,
@@ -131,7 +143,7 @@ if APIRouter:
             session_id=payload.session_id,
             brand_id=payload.brand_id,
             product_id=payload.product_id,
-            raw_products=[item.dict() for item in payload.products],
+            raw_products=[item.model_dump() for item in payload.products],
             auto_competitors=payload.auto_competitors,
             competitor_client_ids=payload.competitor_client_ids,
         )
@@ -139,7 +151,7 @@ if APIRouter:
     @router.post("/optimize")
     def optimize(payload: SimulationOptimizeRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return simulation_service.optimize(
+        return _simulation_service().optimize(
             run_id=payload.run_id,
             product_id=payload.product_id,
             client_id=client_scope,
@@ -151,7 +163,7 @@ if APIRouter:
     def retest(payload: SimulationRetestRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
         products = [_to_simulation_product(item) for item in payload.optimized_products]
-        return simulation_service.retest(
+        return _simulation_service().retest(
             run_id=payload.run_id,
             optimized_products=products,
             client_id=client_scope,
@@ -161,7 +173,7 @@ if APIRouter:
     @router.post("/tone")
     def update_tone(payload: SimulationToneRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return simulation_service.update_tone(
+        return _simulation_service().update_tone(
             run_id=payload.run_id,
             client_id=client_scope,
             user_id=payload.user_id,
@@ -170,9 +182,8 @@ if APIRouter:
 
     @router.post("/tone/from-brand")
     def tone_from_brand(payload: SimulationToneFromBrandRequest):
-        require_client_id(payload.client_id, payload.user_id)
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return simulation_service.tone_from_brand(
+        return _simulation_service().tone_from_brand(
             client_id=client_scope,
             run_id=payload.run_id,
             user_id=payload.user_id,
@@ -181,7 +192,7 @@ if APIRouter:
     @router.post("/attach")
     def attach(payload: SimulationAttachRequest):
         client_scope = require_client_id(payload.client_id, payload.user_id)
-        return simulation_service.attach(
+        return _simulation_service().attach(
             run_id=payload.run_id,
             client_id=client_scope,
             product_id=payload.product_id,

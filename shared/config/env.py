@@ -8,7 +8,7 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import AliasChoices, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _load_dotenv_files() -> None:
@@ -19,6 +19,8 @@ def _load_dotenv_files() -> None:
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
     app_env: Literal["local", "dev", "prod"] = Field(
         default="local", validation_alias=AliasChoices("APP_ENV")
     )
@@ -144,10 +146,6 @@ class Settings(BaseSettings):
     admin_user_ids: str = Field(
         default="", validation_alias=AliasChoices("ADMIN_USER_IDS")
     )
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 
 _load_dotenv_files()

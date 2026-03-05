@@ -61,6 +61,26 @@ if "google" not in sys.modules:
     sys.modules["google.genai.types"] = genai_types_pkg
 
 
+def _fake_embed_batch(texts: list[str]) -> list[list[float]]:
+    vectors: list[list[float]] = []
+    for text in texts:
+        seed = sum(ord(ch) for ch in str(text))
+        vectors.append([((seed + i * 31) % 1000) / 1000.0 for i in range(16)])
+    return vectors
+
+
+@pytest.fixture(autouse=True)
+def _fast_alignment(monkeypatch):
+    monkeypatch.setattr(
+        "infrastructure.alignment.goal_alignment_gateway.embeddings_provider.embed_batch",
+        _fake_embed_batch,
+    )
+    monkeypatch.setattr(
+        "infrastructure.alignment.goal_alignment_gateway._embedding_provider_name",
+        lambda: "stub",
+    )
+
+
 @pytest.fixture
 def fake_reasoner():
     def _fake_reasoner(goals, products, context=None):

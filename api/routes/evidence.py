@@ -110,11 +110,11 @@ if APIRouter:
     @router.post("/signals")
     def extract_signals(payload: EvidenceSignalRequest):
         require_client_id(payload.client_id, payload.user_id)
-        winner_payload = payload.winner.dict() if payload.winner else None
+        winner_payload = payload.winner.model_dump() if payload.winner else None
         return {
             "signals": evidence_service.extract_signals(
                 goal=payload.goal,
-                product=payload.product.dict(),
+                product=payload.product.model_dump(),
                 winner=winner_payload,
             )
         }
