@@ -23,6 +23,15 @@ def create_agent_run(
     run_mode: str,
     state: str,
     status: str,
+    principal_type: Optional[str] = None,
+    principal_id: Optional[str] = None,
+    agent_profile_id: Optional[str] = None,
+    harness_id: Optional[str] = None,
+    policy_profile_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    root_run_id: Optional[str] = None,
+    parent_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     ensure_client(client_id)
@@ -43,9 +52,18 @@ def create_agent_run(
             requires_approval,
             run_mode,
             state,
-            status
+            status,
+            principal_type,
+            principal_id,
+            agent_profile_id,
+            harness_id,
+            policy_profile_id,
+            idempotency_key,
+            trace_id,
+            root_run_id,
+            parent_run_id
         )
-        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -62,6 +80,15 @@ def create_agent_run(
             run_mode,
             state,
             status,
+            principal_type,
+            principal_id,
+            agent_profile_id,
+            harness_id,
+            policy_profile_id,
+            idempotency_key,
+            trace_id,
+            root_run_id,
+            parent_run_id,
         ),
     )
     conn.commit()
@@ -76,6 +103,7 @@ def update_agent_run(
     run_mode: Optional[str] = None,
     error: Optional[str] = None,
     last_heartbeat_at: Optional[str] = None,
+    policy_profile_id: Optional[str] = None,
 ) -> Dict[str, Any] | None:
     conn = get_connection()
     updates: list[str] = []
@@ -95,6 +123,9 @@ def update_agent_run(
     if last_heartbeat_at is not None:
         updates.append("last_heartbeat_at = ?")
         params.append(last_heartbeat_at)
+    if policy_profile_id is not None:
+        updates.append("policy_profile_id = ?")
+        params.append(policy_profile_id)
     updates.append("updated_at = datetime('now')")
     params.append(run_id)
     conn.execute(
@@ -267,6 +298,25 @@ def _row(row) -> Dict[str, Any]:
         "run_mode": row["run_mode"] if "run_mode" in row.keys() else "plan_only",
         "state": row["state"],
         "status": row["status"],
+        "principal_type": row["principal_type"]
+        if "principal_type" in row.keys()
+        else None,
+        "principal_id": row["principal_id"] if "principal_id" in row.keys() else None,
+        "agent_profile_id": row["agent_profile_id"]
+        if "agent_profile_id" in row.keys()
+        else None,
+        "harness_id": row["harness_id"] if "harness_id" in row.keys() else None,
+        "policy_profile_id": row["policy_profile_id"]
+        if "policy_profile_id" in row.keys()
+        else None,
+        "idempotency_key": row["idempotency_key"]
+        if "idempotency_key" in row.keys()
+        else None,
+        "trace_id": row["trace_id"] if "trace_id" in row.keys() else None,
+        "root_run_id": row["root_run_id"] if "root_run_id" in row.keys() else None,
+        "parent_run_id": row["parent_run_id"]
+        if "parent_run_id" in row.keys()
+        else None,
         "error": row["error_text"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],

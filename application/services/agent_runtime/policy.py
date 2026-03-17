@@ -20,6 +20,11 @@ class PolicyEnforcer:
         inputs: Mapping[str, Any],
     ) -> None:
         self._assert_capability_allowed(run=run, capability_name=spec.name)
+        self._assert_effect_class_allowed(
+            run=run,
+            action=action,
+            effect_class=spec.effect_class,
+        )
         self._assert_required_inputs(spec=spec, inputs=inputs)
         self._assert_budgets(
             run=run,
@@ -41,6 +46,22 @@ class PolicyEnforcer:
         if capability_name not in allowed:
             raise PolicyError(
                 f"Capability '{capability_name}' is not allowed for this run"
+            )
+
+    def _assert_effect_class_allowed(
+        self,
+        *,
+        run: Mapping[str, Any],
+        action: Mapping[str, Any],
+        effect_class: str,
+    ) -> None:
+        profile = str(run.get("policy_profile_id") or "").strip().lower()
+        if not profile:
+            return
+        if profile == "observe" and effect_class not in {"read", "recommend"}:
+            tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
+            raise PolicyError(
+                f"Policy profile '{profile}' forbids effect class '{effect_class}' for tool '{tool_id}'"
             )
 
     def _assert_required_inputs(

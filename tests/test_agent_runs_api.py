@@ -19,6 +19,7 @@ if "google" not in sys.modules:
 
 from api.composition import default_deps
 from api.main import app
+from application.services.agent_runtime.agent_first import list_skill_specs
 from shared.db.connection import init_db, set_database_path
 
 CLIENT_ID = "client-a"
@@ -197,3 +198,47 @@ def test_agent_run_routes_enforce_client_scope(client: TestClient):
         json={"client_id": "client-b", "user_id": USER_ID, "decision": "approve"},
     )
     assert wrong_scope_decision.status_code == 404
+
+
+def test_create_agent_run_persists_principal_policy_and_trace_fields(client: TestClient):
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "principal_type": "external_agent",
+            "principal_id": "principal-ext-1",
+            "agent_profile_id": "external-buyer-assistant",
+            "harness_id": "safe_autonomy_b2b",
+            "policy_profile_id": "safe_auto",
+            "idempotency_key": "req-123",
+            "allowed_capabilities": ["run_variant"],
+            "run_mode": "auto_execute_safe",
+        },
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["principal_type"] == "external_agent"
+    assert run["principal_id"] == "principal-ext-1"
+    assert run["agent_profile_id"] == "external-buyer-assistant"
+    assert run["harness_id"] == "safe_autonomy_b2b"
+    assert run["policy_profile_id"] == "safe_auto"
+    assert run["idempotency_key"] == "req-123"
+    assert str(run["trace_id"]).startswith("trace_")
+
+    detail = client.get(
+        f"/agent-runs/{run['id']}",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["run"]["trace_id"] == run["trace_id"]
+    assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
+    assert payload["actions"][0]["effect_class"] == "write_low_risk"
+
+
+def test_seed_skill_specs_are_available():
+    skills = {skill.id for skill in list_skill_specs()}
+    assert "discover-protocol-candidates" in skills
+    assert "optimize-product-representation" in skills
+    assert "request-validation-and-ingest-result" in skills

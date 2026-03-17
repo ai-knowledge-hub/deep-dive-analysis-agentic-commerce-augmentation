@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+
+
+_CAPABILITY_TO_TOOL: dict[str, str] = {
+    "freeze_retrieval_protocol": "retrieval.freeze_protocol",
+    "run_control_baseline": "experiment.run_control_baseline",
+    "seed_hypotheses": "hypothesis.seed",
+    "generate_variants": "variant.generate",
+    "run_variant": "experiment.run_variant",
+    "request_synthetic_validation": "validation.request_synthetic",
+    "review_validation_readiness": "validation.review_readiness",
+    "update_posterior_and_decisions": "learning.update_posterior_and_decisions",
+    "recommend_next_action": "policy.recommend_next_action",
+    "promote_variant_lab": "promotion.promote_lab",
+    "promote_variant_prod": "promotion.promote_prod",
+    "publish_copy_revision": "copy.publish_revision",
+}
+
+_TOOL_EFFECT_CLASS: dict[str, str] = {
+    "retrieval.freeze_protocol": "write_low_risk",
+    "experiment.run_control_baseline": "write_low_risk",
+    "hypothesis.seed": "write_low_risk",
+    "variant.generate": "write_low_risk",
+    "experiment.run_variant": "write_low_risk",
+    "validation.request_synthetic": "external_side_effect",
+    "validation.review_readiness": "read",
+    "learning.update_posterior_and_decisions": "write_low_risk",
+    "policy.recommend_next_action": "recommend",
+    "promotion.promote_lab": "write_high_risk",
+    "promotion.promote_prod": "write_high_risk",
+    "copy.publish_revision": "write_high_risk",
+}
+
+_RUN_MODE_TO_POLICY_PROFILE = {
+    "plan_only": "human_approval_required",
+    "auto_execute_safe": "safe_auto",
+}
+
+
+def capability_to_tool_id(capability_name: str | None) -> str | None:
+    key = str(capability_name or "").strip()
+    if not key:
+        return None
+    return _CAPABILITY_TO_TOOL.get(key, f"legacy.{key}")
+
+
+def tool_effect_class(tool_id: str | None) -> str | None:
+    key = str(tool_id or "").strip()
+    if not key:
+        return None
+    return _TOOL_EFFECT_CLASS.get(key, "write_low_risk")
+
+
+def policy_profile_for_run_mode(run_mode: str | None) -> str:
+    key = str(run_mode or "plan_only").strip().lower()
+    return _RUN_MODE_TO_POLICY_PROFILE.get(key, "human_approval_required")
+
+
+def new_trace_id() -> str:
+    return f"trace_{uuid.uuid4().hex}"
+
+
+@dataclass(frozen=True)
+class SkillSpec:
+    id: str
+    name: str
+    description: str
+    version: str
+    tool_ids: tuple[str, ...]
+    risk_class: str
+
+
+_SKILL_SPECS: tuple[SkillSpec, ...] = (
+    SkillSpec(
+        id="discover-protocol-candidates",
+        name="Discover Protocol Candidates",
+        description="Find protocol-ready candidates or surface missing protocol fields.",
+        version="v1",
+        tool_ids=(
+            "catalog.search",
+            "protocol.acp.search",
+            "protocol.ucp.search",
+            "product.read",
+        ),
+        risk_class="read",
+    ),
+    SkillSpec(
+        id="optimize-product-representation",
+        name="Optimize Product Representation",
+        description="Improve product representation for discoverability and retrieval.",
+        version="v1",
+        tool_ids=(
+            "product.read",
+            "brand.read",
+            "representation.optimize",
+            "copy.revise_draft",
+        ),
+        risk_class="write_low_risk",
+    ),
+    SkillSpec(
+        id="request-validation-and-ingest-result",
+        name="Request Validation And Ingest Result",
+        description="Request validation, await a result, and ingest it into learning flows.",
+        version="v1",
+        tool_ids=(
+            "validation.request",
+            "validation.result.read",
+            "evidence.ingest",
+        ),
+        risk_class="external_side_effect",
+    ),
+    SkillSpec(
+        id="triage-failed-run",
+        name="Triage Failed Run",
+        description="Inspect a failed run and recommend the safest recovery path.",
+        version="v1",
+        tool_ids=("run.read", "event.read", "policy.inspect", "run.retry_safe"),
+        risk_class="recommend",
+    ),
+    SkillSpec(
+        id="run-safe-browser-fallback-check",
+        name="Run Safe Browser Fallback Check",
+        description="Verify platform state through a tightly governed browser fallback.",
+        version="v1",
+        tool_ids=("browser.open", "browser.extract", "browser.assert"),
+        risk_class="external_side_effect",
+    ),
+)
+
+
+def list_skill_specs() -> list[SkillSpec]:
+    return list(_SKILL_SPECS)
+
+
+__all__ = [
+    "SkillSpec",
+    "capability_to_tool_id",
+    "list_skill_specs",
+    "new_trace_id",
+    "policy_profile_for_run_mode",
+    "tool_effect_class",
+]
