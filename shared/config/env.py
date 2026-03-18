@@ -143,6 +143,10 @@ class Settings(BaseSettings):
     clerk_webhook_secret: str | None = Field(
         default=None, validation_alias=AliasChoices("CLERK_WEBHOOK_SECRET")
     )
+    agent_principal_signing_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AGENT_PRINCIPAL_SIGNING_SECRET"),
+    )
     admin_user_ids: str = Field(
         default="", validation_alias=AliasChoices("ADMIN_USER_IDS")
     )

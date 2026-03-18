@@ -4,14 +4,21 @@ import hashlib
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
+from api.utils.principals import resolve_principal_context
 from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
+)
+from application.services.agent_runtime.agent_first import (
+    capability_to_tool_id,
+    new_trace_id,
+    policy_profile_for_run_mode,
+    tool_effect_class,
 )
 from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime.planner import build_initial_plan
@@ -54,6 +61,12 @@ class AgentRunCreateRequest(BaseModel):
     brand_id: Optional[str] = None
     product_id: Optional[str] = None
     experiment_id: Optional[str] = None
+    principal_type: Optional[str] = None
+    principal_id: Optional[str] = None
+    agent_profile_id: Optional[str] = None
+    harness_id: Optional[str] = None
+    policy_profile_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
 
     objective: Dict[str, Any] = Field(default_factory=dict)
     allowed_capabilities: List[str] = Field(default_factory=list)
@@ -111,9 +124,22 @@ def _hash_payload(value: Any) -> str:
 
 @router.post("")
 def create_agent_run(
-    payload: AgentRunCreateRequest, deps: AppDeps = Depends(_deps)
+    payload: AgentRunCreateRequest,
+    request: Request,
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
-    client_id = require_client_id(payload.client_id, payload.user_id)
+    principal = resolve_principal_context(
+        request=request,
+        client_id=payload.client_id,
+        user_id=payload.user_id,
+        principal_type=payload.principal_type,
+        principal_id=payload.principal_id,
+        agent_profile_id=payload.agent_profile_id,
+    )
+    client_id = principal.client_id
+    run_mode = str(payload.run_mode or "plan_only").strip().lower()
+    policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(run_mode)
+    trace_id = new_trace_id()
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,
         brand_id=payload.brand_id,
@@ -125,9 +151,16 @@ def create_agent_run(
         budgets=payload.budgets or {},
         approval_policy=payload.approval_policy or {},
         requires_approval=bool(payload.requires_approval),
-        run_mode=str(payload.run_mode or "plan_only").strip().lower(),
+        run_mode=run_mode,
         state=str(payload.state or "battery_ready"),
         status=str(payload.status or "planned"),
+        principal_type=principal.principal_type,
+        principal_id=principal.principal_id,
+        agent_profile_id=principal.agent_profile_id,
+        harness_id=payload.harness_id,
+        policy_profile_id=policy_profile_id,
+        idempotency_key=payload.idempotency_key,
+        trace_id=trace_id,
     )
 
     # v0 behavior: seed a human-reviewable plan as proposed actions.
@@ -137,6 +170,7 @@ def create_agent_run(
         capability_versions=payload.capability_versions or {},
     )
     for idx, action in enumerate(plan, start=1):
+        tool_id = capability_to_tool_id(action.capability_name)
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
@@ -153,6 +187,8 @@ def create_agent_run(
             hypothesis_id=None,
             variant_id=None,
             validation_job_id=None,
+            tool_id=tool_id,
+            effect_class=tool_effect_class(tool_id),
         )
         deps.agent_events.create_agent_event(
             agent_run_id=run.get("id"),
@@ -162,6 +198,12 @@ def create_agent_run(
             status="proposed",
             capability_name=action.capability_name,
             capability_version=action.capability_version,
+            principal_type=run.get("principal_type"),
+            principal_id=run.get("principal_id"),
+            tool_id=created_action.get("tool_id"),
+            skill_id=created_action.get("skill_id"),
+            effect_class=created_action.get("effect_class"),
+            trace_id=run.get("trace_id"),
             note=action.rationale,
             is_policy_event=False,
             anchors={
@@ -370,6 +412,15 @@ def decide_action(
         status="approved" if decision == "approve" else "rejected",
         capability_name=str(current.get("capability_name") or "") or None,
         capability_version=str(current.get("capability_version") or "") or None,
+        principal_type=run_row.get("principal_type") if run_row else "human",
+        principal_id=run_row.get("principal_id") if run_row else (payload.user_id or None),
+        tool_id=current.get("tool_id") or capability_to_tool_id(current.get("capability_name")),
+        skill_id=current.get("skill_id"),
+        effect_class=current.get("effect_class")
+        or tool_effect_class(
+            current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
+        ),
+        trace_id=run_row.get("trace_id") if run_row else None,
         note=f"Action {decision} by operator",
         is_policy_event=False,
         anchors={

@@ -24,6 +24,12 @@ def create_agent_action(
     hypothesis_id: Optional[str],
     variant_id: Optional[str],
     validation_job_id: Optional[str],
+    tool_id: Optional[str] = None,
+    skill_id: Optional[str] = None,
+    effect_class: Optional[str] = None,
+    receipt_id: Optional[str] = None,
+    retry_count: int = 0,
+    dedupe_key: Optional[str] = None,
     error: Optional[str] = None,
 ) -> Dict[str, Any]:
     action_id = str(uuid.uuid4())
@@ -47,9 +53,15 @@ def create_agent_action(
             hypothesis_id,
             variant_id,
             validation_job_id,
+            tool_id,
+            skill_id,
+            effect_class,
+            receipt_id,
+            retry_count,
+            dedupe_key,
             error_text
         )
-        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             action_id,
@@ -68,6 +80,12 @@ def create_agent_action(
             hypothesis_id,
             variant_id,
             validation_job_id,
+            tool_id,
+            skill_id,
+            effect_class,
+            receipt_id,
+            int(retry_count),
+            dedupe_key,
             error,
         ),
     )
@@ -197,6 +215,14 @@ def _row(row) -> Dict[str, Any]:
         "hypothesis_id": row["hypothesis_id"],
         "variant_id": row["variant_id"],
         "validation_job_id": row["validation_job_id"],
+        "tool_id": row["tool_id"] if "tool_id" in row.keys() else None,
+        "skill_id": row["skill_id"] if "skill_id" in row.keys() else None,
+        "effect_class": row["effect_class"] if "effect_class" in row.keys() else None,
+        "receipt_id": row["receipt_id"] if "receipt_id" in row.keys() else None,
+        "retry_count": int(row["retry_count"] or 0)
+        if "retry_count" in row.keys()
+        else 0,
+        "dedupe_key": row["dedupe_key"] if "dedupe_key" in row.keys() else None,
         "error": row["error_text"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],

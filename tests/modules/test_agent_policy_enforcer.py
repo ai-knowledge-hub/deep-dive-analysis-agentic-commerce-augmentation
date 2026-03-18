@@ -97,3 +97,21 @@ def test_policy_enforces_max_cost_budget():
             ],
             inputs={"experiment_id": "exp-1"},
         )
+
+
+def test_observe_policy_rejects_side_effecting_tool():
+    enforcer = PolicyEnforcer()
+    spec = get_capability_spec("run_variant")
+    assert spec is not None
+    with pytest.raises(PolicyError):
+        enforcer.validate_action_execution(
+            run={
+                "allowed_capabilities": ["run_variant"],
+                "policy_profile_id": "observe",
+                "budgets": {},
+            },
+            action={"id": "a3", "tool_id": spec.tool_id},
+            spec=spec,
+            all_actions=[],
+            inputs={"experiment_id": "exp-1"},
+        )
