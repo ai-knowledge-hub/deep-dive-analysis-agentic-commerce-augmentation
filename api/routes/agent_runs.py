@@ -4,10 +4,11 @@ import hashlib
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
+from api.utils.principals import resolve_principal_context
 from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities import (
@@ -123,12 +124,20 @@ def _hash_payload(value: Any) -> str:
 
 @router.post("")
 def create_agent_run(
-    payload: AgentRunCreateRequest, deps: AppDeps = Depends(_deps)
+    payload: AgentRunCreateRequest,
+    request: Request,
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
-    client_id = require_client_id(payload.client_id, payload.user_id)
+    principal = resolve_principal_context(
+        request=request,
+        client_id=payload.client_id,
+        user_id=payload.user_id,
+        principal_type=payload.principal_type,
+        principal_id=payload.principal_id,
+        agent_profile_id=payload.agent_profile_id,
+    )
+    client_id = principal.client_id
     run_mode = str(payload.run_mode or "plan_only").strip().lower()
-    principal_type = str(payload.principal_type or "human").strip().lower()
-    principal_id = payload.principal_id or payload.user_id
     policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(run_mode)
     trace_id = new_trace_id()
     run = deps.agent_runs.create_agent_run(
@@ -145,9 +154,9 @@ def create_agent_run(
         run_mode=run_mode,
         state=str(payload.state or "battery_ready"),
         status=str(payload.status or "planned"),
-        principal_type=principal_type,
-        principal_id=principal_id,
-        agent_profile_id=payload.agent_profile_id,
+        principal_type=principal.principal_type,
+        principal_id=principal.principal_id,
+        agent_profile_id=principal.agent_profile_id,
         harness_id=payload.harness_id,
         policy_profile_id=policy_profile_id,
         idempotency_key=payload.idempotency_key,

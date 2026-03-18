@@ -19,7 +19,10 @@ if "google" not in sys.modules:
 
 from api.composition import default_deps
 from api.main import app
+from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
+from shared.config.env import get_settings
+from shared.db.connection import get_connection
 from shared.db.connection import init_db, set_database_path
 
 CLIENT_ID = "client-a"
@@ -27,7 +30,9 @@ USER_ID = "user-a"
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_PRINCIPAL_SIGNING_SECRET", "test-agent-secret")
+    get_settings.cache_clear()
     db_path = tmp_path / "agent-runs-api.db"
     set_database_path(db_path)
     init_db()
@@ -242,3 +247,71 @@ def test_seed_skill_specs_are_available():
     assert "discover-protocol-candidates" in skills
     assert "optimize-product-representation" in skills
     assert "request-validation-and-ingest-result" in skills
+
+
+def test_create_agent_run_resolves_machine_principal_from_bearer_token(
+    client: TestClient,
+):
+    token = build_agent_principal_token(
+        principal_id="principal-ext-2",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="external-buyer-assistant",
+        scopes=["agent_runs:write"],
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "allowed_capabilities": ["seed_hypotheses"],
+            "run_mode": "plan_only",
+        },
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["principal_type"] == "external_agent"
+    assert run["principal_id"] == "principal-ext-2"
+    assert run["agent_profile_id"] == "external-buyer-assistant"
+    assert run["client_id"] == CLIENT_ID
+
+    principal_row = get_connection().execute(
+        "SELECT * FROM principals WHERE id = ?",
+        ("principal-ext-2",),
+    ).fetchone()
+    assert principal_row is not None
+    assert principal_row["principal_type"] == "external_agent"
+    assert principal_row["tenant_id"] == CLIENT_ID
+
+
+def test_create_agent_run_rejects_client_scope_mismatch_for_machine_principal(
+    client: TestClient,
+):
+    token = build_agent_principal_token(
+        principal_id="principal-ext-3",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "client_id": "client-b",
+            "allowed_capabilities": ["seed_hypotheses"],
+        },
+    )
+    assert response.status_code == 403
+
+
+def test_create_agent_run_human_path_uses_namespaced_principal_id(client: TestClient):
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["seed_hypotheses"],
+        },
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["principal_type"] == "human"
+    assert run["principal_id"] == f"human:{USER_ID}"
