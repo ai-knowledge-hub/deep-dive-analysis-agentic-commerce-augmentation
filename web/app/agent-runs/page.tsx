@@ -15,6 +15,9 @@ import {
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
+import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
+
+const RUNS_ROUTE = "/runs";
 
 const DEFAULT_ALLOWED_CAPABILITIES = [
   "freeze_retrieval_protocol",
@@ -934,7 +937,7 @@ export default function AgentRunsPage() {
     const nextQuery = params.toString();
     const currentQuery = searchParams.toString();
     if (nextQuery === currentQuery) return;
-    router.replace(`/agent-runs${nextQuery ? `?${nextQuery}` : ""}`, { scroll: false });
+    router.replace(`${RUNS_ROUTE}${nextQuery ? `?${nextQuery}` : ""}`, { scroll: false });
   }, [
     router,
     searchParams,
@@ -1174,7 +1177,7 @@ export default function AgentRunsPage() {
         setSelectedRunId(run.id);
         setSelectedEventId(null);
         router.replace(
-          run.experiment_id ? `/agent-runs?experiment_id=${run.experiment_id}` : "/agent-runs",
+          run.experiment_id ? `${RUNS_ROUTE}?experiment_id=${run.experiment_id}` : RUNS_ROUTE,
         );
       }
     } catch (err) {
@@ -1239,7 +1242,7 @@ export default function AgentRunsPage() {
       <main className="main main--detail">
         <div className="detail">
         <DetailHeader
-          title="Agent runs"
+          title="Runs"
           subtitle={selectedSummary || "Governed lab automation (planned)"}
           onMenu={() => setSidebarOpen(true)}
           onBack={() => router.push("/experiments")}
@@ -1258,9 +1261,9 @@ export default function AgentRunsPage() {
         <section className="panel__card panel__card--secondary panel__card--full-row">
           <div className="panel__header">
             <div className="panel__meta panel__meta--stack">
-              <h3>Agent operator workspace</h3>
+              <h3>Operator workspace</h3>
               <div className="panel__subtitle">
-                Agents propose actions. Guardrails and approvals are enforced by the platform.
+                Agents propose actions. Guardrails and approvals are enforced by the platform, and chat helps explain the execution state.
               </div>
             </div>
           </div>
@@ -1323,6 +1326,23 @@ export default function AgentRunsPage() {
                   </span>
                 </div>
               </div>
+              <OperatorConsoleChat
+                run={selectedRun}
+                actions={actions}
+                events={runEvents}
+                selectedAction={selectedAction}
+                nextRecommendedAction={nextRecommendedAction}
+                onOpenExperiment={() => {
+                  if (selectedRun?.experiment_id) {
+                    router.push(`/experiments?experiment_id=${selectedRun.experiment_id}`);
+                  }
+                }}
+                onOpenValidation={() => router.push("/validation")}
+                onFocusFailures={() => {
+                  setTimelineFilter("failed");
+                  setTimelineStatusFilter("failed");
+                }}
+              />
             </section>
 
             <section className="panel__card panel__card--secondary agent-workspace__main">
@@ -1896,7 +1916,7 @@ export default function AgentRunsPage() {
                                     const params = new URLSearchParams(searchParams.toString());
                                     params.set("event_id", event.id);
                                     if (selectedRunId) params.set("run_id", selectedRunId);
-                                    const target = `${window.location.origin}/agent-runs${
+                                    const target = `${window.location.origin}${RUNS_ROUTE}${
                                       params.toString() ? `?${params.toString()}` : ""
                                     }`;
                                     try {
