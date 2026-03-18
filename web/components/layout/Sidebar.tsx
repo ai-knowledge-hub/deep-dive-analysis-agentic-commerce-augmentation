@@ -61,7 +61,118 @@ export function Sidebar({
   const classNames = ["sidebar"];
   if (collapsed) classNames.push("sidebar--collapsed");
   if (mobileOpen) classNames.push("sidebar--open");
+  const primaryItems = [
+    {
+      href: "/inbox",
+      label: "Inbox",
+      shortLabel: "I",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm2 3v2h12V8H6zm0 5v2h7v-2H6z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
+    {
+      href: "/runs",
+      label: "Runs",
+      shortLabel: "R",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect
+            x="4.5"
+            y="6.5"
+            width="15"
+            height="12"
+            rx="3"
+            ry="3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.3"
+          />
+          <line
+            x1="12"
+            y1="6.5"
+            x2="12"
+            y2="3.8"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+          />
+          <circle cx="12" cy="2.6" r="1.25" fill="currentColor" />
+          <line
+            x1="4.5"
+            y1="11.5"
+            x2="3"
+            y2="11.5"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+          />
+          <line
+            x1="19.5"
+            y1="11.5"
+            x2="21"
+            y2="11.5"
+            stroke="currentColor"
+            strokeWidth="2.3"
+            strokeLinecap="round"
+          />
+          <circle cx="9.1" cy="11.2" r="1.3" fill="currentColor" />
+          <circle cx="14.9" cy="11.2" r="1.3" fill="currentColor" />
+          <path
+            d="M8.8 14.8c.9.9 2 1.3 3.2 1.3s2.3-.5 3.2-1.3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+      ),
+    },
+    {
+      href: "/interventions",
+      label: "Interventions",
+      shortLabel: "IN",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 3l8 4v5c0 5.1-3.4 8.6-8 10-4.6-1.4-8-4.9-8-10V7l8-4zm-1 6v5h2V9h-2zm0 7v2h2v-2h-2z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
+    {
+      href: "/learnings",
+      label: "Learnings",
+      shortLabel: "L",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 4l7 4v8l-7 4-7-4V8l7-4zm0 3.2L8 9.4v5.2l4 2.2 4-2.2V9.4L12 7.2z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
+  ];
   const workflowItems = [
+    {
+      href: "/lab",
+      label: "Lab",
+      shortLabel: "L",
+      icon: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M5 4h14a2 2 0 0 1 2 2v2H3V6a2 2 0 0 1 2-2zm-2 6h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm6 2v4h2v-4H9zm4 0v4h2v-4h-2z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+    },
     {
       href: "/alignment",
       label: "Alignment",
@@ -136,63 +247,6 @@ export function Sidebar({
           <path
             d="M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 6v-9h7v9h-7z"
             fill="currentColor"
-          />
-        </svg>
-      ),
-    },
-    {
-      href: "/agent-runs",
-      label: "Agent runs",
-      shortLabel: "AR",
-      icon: (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect
-            x="4.5"
-            y="6.5"
-            width="15"
-            height="12"
-            rx="3"
-            ry="3"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.3"
-          />
-          <line
-            x1="12"
-            y1="6.5"
-            x2="12"
-            y2="3.8"
-            stroke="currentColor"
-            strokeWidth="2.3"
-            strokeLinecap="round"
-          />
-          <circle cx="12" cy="2.6" r="1.25" fill="currentColor" />
-          <line
-            x1="4.5"
-            y1="11.5"
-            x2="3"
-            y2="11.5"
-            stroke="currentColor"
-            strokeWidth="2.3"
-            strokeLinecap="round"
-          />
-          <line
-            x1="19.5"
-            y1="11.5"
-            x2="21"
-            y2="11.5"
-            stroke="currentColor"
-            strokeWidth="2.3"
-            strokeLinecap="round"
-          />
-          <circle cx="9.1" cy="11.2" r="1.3" fill="currentColor" />
-          <circle cx="14.9" cy="11.2" r="1.3" fill="currentColor" />
-          <path
-            d="M8.8 14.8c.9.9 2 1.3 3.2 1.3s2.3-.5 3.2-1.3"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
           />
         </svg>
       ),
@@ -362,7 +416,31 @@ export function Sidebar({
         <div className="sidebar__nav-scroll">
           <div className="sidebar__nav-section">
             {!collapsed && (
-              <div className="sidebar__section-label">Workflow</div>
+              <div className="sidebar__section-label">Control Plane</div>
+            )}
+            {primaryItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`sidebar__item ${
+                  pathname === item.href ? "sidebar__item--active" : ""
+                }`}
+                onClick={() => {
+                  if (mobileOpen) onMobileClose();
+                }}
+                title={collapsed ? item.label : undefined}
+              >
+                <span className="sidebar__icon" aria-hidden="true">
+                  {item.icon}
+                </span>
+                {!collapsed && <span className="sidebar__label">{item.label}</span>}
+              </Link>
+            ))}
+          </div>
+          <div className="sidebar__nav-section">
+            <div className="sidebar__divider" aria-hidden="true" />
+            {!collapsed && (
+              <div className="sidebar__section-label">Lab</div>
             )}
             {workflowItems.map((item) => (
               <Link

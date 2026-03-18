@@ -2719,13 +2719,13 @@ export default function ExperimentsPage() {
                 onClick={() =>
                   router.push(
                     selectedExperimentId
-                      ? `/agent-runs?experiment_id=${selectedExperimentId}`
-                      : "/agent-runs",
+                      ? `/runs?experiment_id=${selectedExperimentId}`
+                      : "/runs",
                   )
                 }
                 disabled={!selectedExperimentId}
               >
-                Start in Agent runs
+                Start in Runs
               </button>
               <button
                 type="button"
@@ -2733,12 +2733,12 @@ export default function ExperimentsPage() {
                 onClick={() =>
                   router.push(
                     selectedExperimentId
-                      ? `/agent-runs?experiment_id=${selectedExperimentId}`
-                      : "/agent-runs",
+                      ? `/runs?experiment_id=${selectedExperimentId}`
+                      : "/runs",
                   )
                 }
               >
-                View Agent runs
+                View Runs
               </button>
             </div>
           </section>

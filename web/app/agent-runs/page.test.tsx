@@ -17,6 +17,13 @@ const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
 
+const localStorageMock = {
+  getItem: vi.fn(() => null),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, replace: replaceMock }),
   useSearchParams: () => new URLSearchParams(searchParamsValue),
@@ -57,6 +64,14 @@ vi.mock("../../lib/api", () => ({
 
 describe("AgentRunsPage timeline presets", () => {
   beforeEach(() => {
+    Object.defineProperty(window, "localStorage", {
+      value: localStorageMock,
+      configurable: true,
+    });
+    localStorageMock.getItem.mockReset();
+    localStorageMock.setItem.mockReset();
+    localStorageMock.removeItem.mockReset();
+    localStorageMock.clear.mockReset();
     pushMock.mockReset();
     replaceMock.mockReset();
     listAgentRunsMock.mockReset();
@@ -112,6 +127,7 @@ describe("AgentRunsPage timeline presets", () => {
   it("applies Policy failures preset to event query payload", async () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Policy failures \(24h\)/i });
 
     getAgentRunEventsMock.mockClear();
     await userEvent.click(screen.getByRole("button", { name: /Policy failures \(24h\)/i }));
@@ -128,6 +144,7 @@ describe("AgentRunsPage timeline presets", () => {
   it("shows custom view badge when filters diverge from presets", async () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Policy failures \(24h\)/i });
 
     await userEvent.click(screen.getByRole("button", { name: /Policy failures \(24h\)/i }));
     const filters = screen.getAllByRole("combobox");
@@ -141,6 +158,7 @@ describe("AgentRunsPage timeline presets", () => {
   it("syncs timeline preset state into URL query params", async () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Policy failures \(24h\)/i });
 
     replaceMock.mockClear();
     await userEvent.click(screen.getByRole("button", { name: /Policy failures \(24h\)/i }));

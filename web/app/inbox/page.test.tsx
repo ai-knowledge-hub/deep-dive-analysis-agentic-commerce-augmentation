@@ -1,0 +1,126 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import React, { type ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import InboxPage from "./page";
+
+const pushMock = vi.fn();
+const listAgentRunsMock = vi.fn();
+const getAgentRunMock = vi.fn();
+const getAgentRunEventsMock = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
+
+vi.mock("@clerk/nextjs", () => ({
+  useUser: () => ({ user: { id: "user-a" } }),
+}));
+
+vi.mock("../../components/layout/Sidebar", () => ({
+  Sidebar: () => null,
+}));
+
+vi.mock("../../components/layout/DetailHeader", () => ({
+  DetailHeader: ({
+    title,
+    actions,
+  }: {
+    title: string;
+    actions?: ReactNode;
+  }) => (
+    <header>
+      <h1>{title}</h1>
+      {actions}
+    </header>
+  ),
+}));
+
+vi.mock("../../lib/api", () => ({
+  listAgentRuns: (...args: unknown[]) => listAgentRunsMock(...args),
+  getAgentRun: (...args: unknown[]) => getAgentRunMock(...args),
+  getAgentRunEvents: (...args: unknown[]) => getAgentRunEventsMock(...args),
+}));
+
+describe("InboxPage", () => {
+  beforeEach(() => {
+    pushMock.mockReset();
+    listAgentRunsMock.mockReset();
+    getAgentRunMock.mockReset();
+    getAgentRunEventsMock.mockReset();
+
+    listAgentRunsMock.mockResolvedValue({
+      runs: [
+        {
+          id: "run-1",
+          experiment_id: "exp-1",
+          status: "failed",
+          state: "validation_completed",
+        },
+        {
+          id: "run-2",
+          experiment_id: "exp-2",
+          status: "planned",
+          state: "variants_ready",
+        },
+      ],
+    });
+
+    getAgentRunMock.mockImplementation(async (runId: string) => {
+      if (runId === "run-1") {
+        return { run: { id: "run-1" }, actions: [] };
+      }
+      return {
+        run: { id: "run-2" },
+        actions: [
+          {
+            id: "act-1",
+            sequence: 1,
+            status: "proposed",
+            capability_name: "run_variant",
+            rationale: "Needs review before execution.",
+          },
+        ],
+      };
+    });
+
+    getAgentRunEventsMock.mockImplementation(async (runId: string) => {
+      if (runId === "run-1") {
+        return {
+          events: [
+            {
+              id: "evt-1",
+              status: "failed",
+              note: "Validation provider failed.",
+              timestamp: "2026-03-18T10:00:00Z",
+            },
+          ],
+        };
+      }
+      return {
+        events: [
+          {
+            id: "evt-2",
+            status: "failed",
+            is_policy_event: true,
+            note: "Policy blocked promotion.",
+            timestamp: "2026-03-18T11:00:00Z",
+          },
+        ],
+      };
+    });
+  });
+
+  it("renders failed, policy, and approval sections from run data", async () => {
+    render(<InboxPage />);
+
+    await waitFor(() => expect(listAgentRunsMock).toHaveBeenCalled());
+
+    expect(await screen.findByText(/Experiment exp-1 failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Validation provider failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Policy blocked promotion/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Experiment exp-2 needs approval/i),
+    ).toBeInTheDocument();
+  });
+});
