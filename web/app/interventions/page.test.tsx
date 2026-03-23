@@ -1,0 +1,221 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import React, { type ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import InterventionsPage from "./page";
+
+const pushMock = vi.fn();
+const listAgentRunsMock = vi.fn();
+const getAgentRunMock = vi.fn();
+const getAgentRunEventsMock = vi.fn();
+const decideAgentActionMock = vi.fn();
+const controlAgentRunMock = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
+
+vi.mock("@clerk/nextjs", () => ({
+  useUser: () => ({ user: { id: "user-a" } }),
+}));
+
+vi.mock("../../components/layout/Sidebar", () => ({
+  Sidebar: () => null,
+}));
+
+vi.mock("../../components/layout/DetailHeader", () => ({
+  DetailHeader: ({
+    title,
+    actions,
+  }: {
+    title: string;
+    actions?: ReactNode;
+  }) => (
+    <header>
+      <h1>{title}</h1>
+      {actions}
+    </header>
+  ),
+}));
+
+vi.mock("../../lib/api", () => ({
+  listAgentRuns: (...args: unknown[]) => listAgentRunsMock(...args),
+  getAgentRun: (...args: unknown[]) => getAgentRunMock(...args),
+  getAgentRunEvents: (...args: unknown[]) => getAgentRunEventsMock(...args),
+  decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
+  controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
+}));
+
+describe("InterventionsPage", () => {
+  beforeEach(() => {
+    pushMock.mockReset();
+    listAgentRunsMock.mockReset();
+    getAgentRunMock.mockReset();
+    getAgentRunEventsMock.mockReset();
+    decideAgentActionMock.mockReset();
+    controlAgentRunMock.mockReset();
+
+    listAgentRunsMock.mockResolvedValue({
+      runs: [
+        {
+          id: "run-1",
+          experiment_id: "exp-failed",
+          status: "failed",
+          state: "validation_completed",
+        },
+        {
+          id: "run-2",
+          experiment_id: "exp-approve",
+          status: "planned",
+          state: "variants_ready",
+        },
+        {
+          id: "run-3",
+          experiment_id: "exp-retry",
+          status: "planned",
+          state: "variants_ready",
+        },
+        {
+          id: "run-4",
+          experiment_id: "exp-active",
+          status: "running",
+          state: "experiment_run_completed",
+        },
+      ],
+    });
+
+    getAgentRunMock.mockImplementation(async (runId: string) => {
+      if (runId === "run-2") {
+        return {
+          run: { id: runId },
+          actions: [
+            {
+              id: "act-approve",
+              sequence: 1,
+              status: "proposed",
+              capability_name: "publish_copy_revision",
+              rationale: "Publish the winning revision.",
+            },
+          ],
+        };
+      }
+      if (runId === "run-3") {
+        return {
+          run: { id: runId },
+          actions: [
+            {
+              id: "act-approved",
+              sequence: 1,
+              status: "approved",
+              capability_name: "run_variant",
+              rationale: "Ready for the next run step.",
+            },
+          ],
+        };
+      }
+      return { run: { id: runId }, actions: [] };
+    });
+
+    getAgentRunEventsMock.mockImplementation(async (runId: string) => {
+      if (runId === "run-1") {
+        return {
+          events: [
+            {
+              id: "evt-failed",
+              status: "failed",
+              note: "Validation provider failed.",
+              timestamp: "2026-03-18T10:00:00Z",
+            },
+          ],
+        };
+      }
+      if (runId === "run-2") {
+        return {
+          events: [
+            {
+              id: "evt-policy",
+              status: "failed",
+              is_policy_event: true,
+              note: "Policy blocked publishing without review.",
+              timestamp: "2026-03-18T11:00:00Z",
+            },
+          ],
+        };
+      }
+      if (runId === "run-4") {
+        return {
+          events: [
+            {
+              id: "evt-running",
+              status: "executing",
+              note: "Executing active step.",
+              timestamp: "2026-03-18T12:00:00Z",
+            },
+          ],
+        };
+      }
+      return { events: [] };
+    });
+
+    decideAgentActionMock.mockResolvedValue({
+      action: { id: "act-approve", status: "approved" },
+    });
+    controlAgentRunMock.mockResolvedValue({
+      run: { id: "run-3" },
+      message: "Queued control action.",
+    });
+  });
+
+  it("renders escalation, approval, retry, and pause queues", async () => {
+    render(<InterventionsPage />);
+
+    await waitFor(() => expect(listAgentRunsMock).toHaveBeenCalled());
+
+    expect(
+      await screen.findByText(/Experiment exp-fail needs manual recovery/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/approve publish_copy_revision/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Experiment exp-retr is ready to resume/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Experiment exp-acti is executing/i),
+    ).toBeInTheDocument();
+  });
+
+  it("approves queued actions from the interventions queue", async () => {
+    const user = userEvent.setup();
+    render(<InterventionsPage />);
+
+    await screen.findByText(/approve publish_copy_revision/i);
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => {
+      expect(decideAgentActionMock).toHaveBeenCalledWith(
+        "act-approve",
+        { decision: "approve" },
+        "user-a",
+      );
+    });
+  });
+
+  it("runs resume and pause controls from the interventions queue", async () => {
+    const user = userEvent.setup();
+    render(<InterventionsPage />);
+
+    await screen.findByText(/Experiment exp-retr is ready to resume/i);
+
+    await user.click(screen.getByRole("button", { name: "Resume run" }));
+    await waitFor(() => {
+      expect(controlAgentRunMock).toHaveBeenCalledWith("run-3", "start", "user-a");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Pause run" }));
+    await waitFor(() => {
+      expect(controlAgentRunMock).toHaveBeenCalledWith("run-4", "pause", "user-a");
+    });
+  });
+});
