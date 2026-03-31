@@ -14,6 +14,7 @@ import {
   listAgentRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
+import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
 
@@ -1230,7 +1231,7 @@ export default function AgentRunsPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}
@@ -1241,34 +1242,44 @@ export default function AgentRunsPage() {
 
       <main className="main main--detail">
         <div className="detail">
-        <DetailHeader
-          title="Runs"
-          subtitle={selectedSummary || "Governed lab automation (planned)"}
-          onMenu={() => setSidebarOpen(true)}
-          onBack={() => router.push("/experiments")}
-          actions={
-            <button
-              type="button"
-              className="button button--ghost"
-              onClick={() => setDrawerOpen(true)}
-              disabled={!userId || loading}
-            >
-              New agent run
-            </button>
-          }
-        />
+          <DetailHeader
+            title="Runs"
+            subtitle={selectedSummary || "Governed execution workspace"}
+            onMenu={() => setSidebarOpen(true)}
+            onBack={() => router.push("/experiments")}
+            actions={
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => setDrawerOpen(true)}
+                disabled={!userId || loading}
+              >
+                New agent run
+              </button>
+            }
+          />
 
-        <section className="panel__card panel__card--secondary panel__card--full-row">
-          <div className="panel__header">
-            <div className="panel__meta panel__meta--stack">
-              <h3>Operator workspace</h3>
-              <div className="panel__subtitle">
-                Agents propose actions. Guardrails and approvals are enforced by the platform, and chat helps explain the execution state.
-              </div>
-            </div>
-          </div>
-
-          {error && <div className="panel__error">{error}</div>}
+          <ControlPlaneBriefing
+            label="Execution"
+            title="Runs briefing"
+            subtitle="Agents propose actions, guardrails shape what can execute, and operator chat explains the current state."
+            summary={
+              selectedRun
+                ? `Selected run is ${selectedRun.status ?? "unknown"} at ${selectedRun.state ?? "unknown"} state. Use the queue, timeline, and chat together before changing execution posture.`
+                : "Select a run to inspect its queue, timeline, and policy posture. This workspace is the primary place to understand why the runtime is doing what it is doing."
+            }
+            metrics={[
+              { label: "Total", value: runCounters.total },
+              { label: "Running", value: runCounters.running },
+              { label: "Planned", value: runCounters.planned },
+              {
+                label: "Failed",
+                value: runCounters.failed,
+                tone: runCounters.failed > 0 ? "warning" : "default",
+              },
+            ]}
+            error={error}
+          />
 
           <div className="agent-workspace">
             <section className="panel__card panel__card--secondary agent-workspace__rail">
@@ -2099,7 +2110,6 @@ export default function AgentRunsPage() {
               </div>
             </section>
           </div>
-        </section>
         </div>
 
         {drawerOpen && (

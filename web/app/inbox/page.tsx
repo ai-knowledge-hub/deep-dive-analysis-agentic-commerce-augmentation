@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
+import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import {
@@ -210,7 +211,7 @@ export default function InboxPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}
@@ -239,18 +240,18 @@ export default function InboxPage() {
             }
           />
 
-          <section className="panel__card panel__card--secondary panel__card--full-row">
-            <div className="panel__header">
-              <div className="panel__meta panel__meta--stack">
-                <h3>Agent briefing</h3>
-                <div className="panel__subtitle">
-                  The inbox prioritizes execution issues that need operator judgment.
-                </div>
-              </div>
-            </div>
-            <div className="panel__notice panel__notice--info">{briefing}</div>
-            {error ? <div className="panel__notice panel__notice--error">{error}</div> : null}
-          </section>
+          <ControlPlaneBriefing
+            label="Attention"
+            title="Inbox briefing"
+            subtitle="The inbox is the control-plane triage layer. It should answer what needs attention now, not just what happened."
+            summary={briefing}
+            metrics={[
+              { label: "Failed", value: failedItems.length, tone: failedItems.length > 0 ? "warning" : "default" },
+              { label: "Policy", value: policyItems.length },
+              { label: "Approval", value: approvalItems.length },
+            ]}
+            error={error}
+          />
 
           <section className="agent-workspace inbox-workspace">
             <section className="panel__card panel__card--secondary">

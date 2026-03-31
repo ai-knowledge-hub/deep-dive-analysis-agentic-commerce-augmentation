@@ -354,7 +354,7 @@ export default function EvidencePage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(sessionId) => router.push(`/?session=${sessionId}`)}
@@ -429,7 +429,7 @@ export default function EvidencePage() {
             title="Evidence Discovery"
             subtitle="Review the latest evidence analysis and optimized representation."
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/")}
+            onBack={() => router.push("/lab")}
           />
           <EvidencePanel
             analysis={analysis}

@@ -1114,7 +1114,7 @@ export default function SimulationPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(sessionId) => router.push(`/?session=${sessionId}`)}
@@ -1188,7 +1188,7 @@ export default function SimulationPage() {
           <DetailHeader
             title="Simulation Sandbox"
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/")}
+            onBack={() => router.push("/lab")}
           />
           <section className="panel__notice panel__notice--info">
             <strong>Lab signal:</strong> Simulation scores are directional and
