@@ -905,7 +905,7 @@ export default function ValidationPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}

@@ -217,7 +217,7 @@ export default function OverviewPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(sessionId) => router.push(`/?session=${sessionId}`)}
@@ -292,7 +292,7 @@ export default function OverviewPage() {
             title="Overview"
             subtitle="A compact dashboard of the latest simulation, evidence, and alignment signals."
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/")}
+            onBack={() => router.push("/lab")}
             backLabel="Back to chat"
           />
           <div className="overview__controls">

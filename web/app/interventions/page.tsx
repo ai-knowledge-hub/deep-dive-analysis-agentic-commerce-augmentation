@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
+import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { Sidebar } from "../../components/layout/Sidebar";
 import {
@@ -445,7 +446,7 @@ export default function InterventionsPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}
@@ -474,19 +475,20 @@ export default function InterventionsPage() {
             }
           />
 
-          <section className="panel__card panel__card--secondary panel__card--full-row">
-            <div className="panel__header">
-              <div className="panel__meta panel__meta--stack">
-                <h3>Operator briefing</h3>
-                <div className="panel__subtitle">
-                  Use interventions when the runtime needs an explicit human decision, not just observation.
-                </div>
-              </div>
-            </div>
-            <div className="panel__notice panel__notice--info">{briefing}</div>
-            {statusMessage ? <div className="panel__notice panel__notice--info">{statusMessage}</div> : null}
-            {error ? <div className="panel__notice panel__notice--error">{error}</div> : null}
-          </section>
+          <ControlPlaneBriefing
+            label="Decision"
+            title="Intervention briefing"
+            subtitle="Use interventions when the runtime needs an explicit human decision, not just observation."
+            summary={briefing}
+            metrics={[
+              { label: "Escalations", value: escalations.length, tone: escalations.length > 0 ? "warning" : "default" },
+              { label: "Approvals", value: approvals.length },
+              { label: "Retries", value: retries.length },
+              { label: "Pauses", value: pauses.length },
+            ]}
+            status={statusMessage}
+            error={error}
+          />
 
           <section className="agent-workspace inbox-workspace">
             <section className="panel__card panel__card--secondary">

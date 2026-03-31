@@ -2491,7 +2491,7 @@ export default function ExperimentsPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(id) => router.push(`/?session=${id}`)}
@@ -2532,7 +2532,7 @@ export default function ExperimentsPage() {
                 : "Track query batteries, variants, and outcomes."
             }
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/")}
+            onBack={() => router.push("/lab")}
             actions={
               <div className="summary-card__toggle">
                 <button

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
+import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { Sidebar } from "../../components/layout/Sidebar";
 import {
@@ -215,7 +216,7 @@ export default function LearningsPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}
@@ -244,18 +245,17 @@ export default function LearningsPage() {
             }
           />
 
-          <section className="panel__card panel__card--secondary panel__card--full-row">
-            <div className="panel__header">
-              <div className="panel__meta panel__meta--stack">
-                <h3>Agent briefing</h3>
-                <div className="panel__subtitle">
-                  Learnings compress recent platform behavior into operator-readable takeaways.
-                </div>
-              </div>
-            </div>
-            <div className="panel__notice panel__notice--info">{briefing}</div>
-            {error ? <div className="panel__notice panel__notice--error">{error}</div> : null}
-          </section>
+          <ControlPlaneBriefing
+            label="Review"
+            title="Learning briefing"
+            subtitle="Learnings compress recent platform behavior into operator-readable takeaways."
+            summary={briefing}
+            metrics={[
+              { label: "Signals", value: signals.length },
+              { label: "Follow-ups", value: recommendations.length },
+            ]}
+            error={error}
+          />
 
           <section className="agent-workspace inbox-workspace">
             <section className="panel__card panel__card--secondary">

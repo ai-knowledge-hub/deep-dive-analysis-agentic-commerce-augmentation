@@ -1149,7 +1149,7 @@ export default function AdminPage() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/")}
+        onNewConversation={() => router.push("/lab")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(sessionId) => router.push(`/?session=${sessionId}`)}
@@ -1206,7 +1206,7 @@ export default function AdminPage() {
       />
       <main className="main main--detail">
         <div className="detail admin">
-          <DetailHeader title="Admin" onMenu={() => setSidebarOpen(true)} onBack={() => router.push("/")} />
+          <DetailHeader title="Admin" onMenu={() => setSidebarOpen(true)} onBack={() => router.push("/lab")} />
           {!userId && (
             <div className="panel__card admin__panel">
               <h3>Sign in required</h3>
