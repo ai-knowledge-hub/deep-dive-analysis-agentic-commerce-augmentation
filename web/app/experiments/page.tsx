@@ -104,6 +104,7 @@ export default function ExperimentsPage() {
     () => buildTenantStorageKey("experiments_draft", userId, storageClientId),
     [storageClientId, userId],
   );
+  const runIdParam = searchParams.get("run_id")?.trim() || "";
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
@@ -510,6 +511,30 @@ export default function ExperimentsPage() {
     () => experiments.find((item) => item.id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
   );
+
+  const runsWorkspaceHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedExperimentId) {
+      params.set("experiment_id", selectedExperimentId);
+    }
+    if (runIdParam) {
+      params.set("run_id", runIdParam);
+    }
+    const query = params.toString();
+    return query ? `/runs?${query}` : "/runs";
+  }, [runIdParam, selectedExperimentId]);
+
+  const experimentBackHref = useMemo(() => {
+    if (!runIdParam) {
+      return "/lab";
+    }
+    const params = new URLSearchParams();
+    params.set("run_id", runIdParam);
+    if (selectedExperimentId) {
+      params.set("experiment_id", selectedExperimentId);
+    }
+    return `/runs?${params.toString()}`;
+  }, [runIdParam, selectedExperimentId]);
 
   useEffect(() => {
     if (!selectedExperimentId) {
@@ -2532,7 +2557,7 @@ export default function ExperimentsPage() {
                 : "Track query batteries, variants, and outcomes."
             }
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/lab")}
+            onBack={() => router.push(experimentBackHref)}
             actions={
               <div className="summary-card__toggle">
                 <button
@@ -2565,6 +2590,21 @@ export default function ExperimentsPage() {
             }
           />
           <div className="detail__stack">
+            {runIdParam ? (
+              <section className="panel__notice panel__notice--info">
+                <strong>Run context preserved:</strong> this experiment view was opened from run{" "}
+                <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="panel__action panel__action--ghost"
+                    onClick={() => router.push(experimentBackHref)}
+                  >
+                    Return to run
+                  </button>
+                </div>
+              </section>
+            ) : null}
             <section className="panel__notice panel__notice--info">
               <strong>Lab signals only:</strong> Experiment results are screening
               signals from simulated judges. Use them to prioritize what to test
@@ -2717,11 +2757,7 @@ export default function ExperimentsPage() {
                 type="button"
                 className="panel__action panel__action--prominent"
                 onClick={() =>
-                  router.push(
-                    selectedExperimentId
-                      ? `/runs?experiment_id=${selectedExperimentId}`
-                      : "/runs",
-                  )
+                  router.push(runsWorkspaceHref)
                 }
                 disabled={!selectedExperimentId}
               >
@@ -2730,13 +2766,7 @@ export default function ExperimentsPage() {
               <button
                 type="button"
                 className="panel__action panel__action--ghost"
-                onClick={() =>
-                  router.push(
-                    selectedExperimentId
-                      ? `/runs?experiment_id=${selectedExperimentId}`
-                      : "/runs",
-                  )
-                }
+                onClick={() => router.push(runsWorkspaceHref)}
               >
                 View Runs
               </button>

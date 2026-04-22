@@ -11,9 +11,11 @@ const getAgentRunMock = vi.fn();
 const getAgentRunEventsMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
+let searchParamsValue = "";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams(searchParamsValue),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -27,13 +29,18 @@ vi.mock("../../components/layout/Sidebar", () => ({
 vi.mock("../../components/layout/DetailHeader", () => ({
   DetailHeader: ({
     title,
+    backLabel,
+    onBack,
     actions,
   }: {
     title: string;
+    backLabel?: string;
+    onBack?: () => void;
     actions?: ReactNode;
   }) => (
     <header>
       <h1>{title}</h1>
+      {backLabel && onBack ? <button onClick={onBack}>{backLabel}</button> : null}
       {actions}
     </header>
   ),
@@ -55,6 +62,7 @@ describe("InterventionsPage", () => {
     getAgentRunEventsMock.mockReset();
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
+    searchParamsValue = "";
 
     listAgentRunsMock.mockResolvedValue({
       runs: [
@@ -217,5 +225,20 @@ describe("InterventionsPage", () => {
     await waitFor(() => {
       expect(controlAgentRunMock).toHaveBeenCalledWith("run-4", "pause", "user-a");
     });
+  });
+
+  it("scopes interventions to the selected run when run_id is provided", async () => {
+    searchParamsValue = "run_id=run-2";
+    const user = userEvent.setup();
+    render(<InterventionsPage />);
+
+    expect(await screen.findByText(/Run-scoped view/i)).toBeInTheDocument();
+    expect(screen.getByText(/approve publish_copy_revision/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Experiment exp-fail needs manual recovery/i),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Back to selected run/i }));
+    expect(pushMock).toHaveBeenCalledWith("/runs?run_id=run-2");
   });
 });
