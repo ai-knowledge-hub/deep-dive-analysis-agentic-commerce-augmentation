@@ -1343,15 +1343,62 @@ export default function AgentRunsPage() {
                 events={runEvents}
                 selectedAction={selectedAction}
                 nextRecommendedAction={nextRecommendedAction}
+                onJumpToNextAction={() => {
+                  if (nextRecommendedAction.action?.id) {
+                    setSelectedActionId(nextRecommendedAction.action.id);
+                  }
+                }}
                 onOpenExperiment={() => {
                   if (selectedRun?.experiment_id) {
-                    router.push(`/experiments?experiment_id=${selectedRun.experiment_id}`);
+                    const params = new URLSearchParams();
+                    params.set("experiment_id", selectedRun.experiment_id);
+                    params.set("run_id", selectedRun.id);
+                    router.push(`/experiments?${params.toString()}`);
                   }
                 }}
                 onOpenValidation={() => router.push("/validation")}
+                onOpenInterventionsForRun={() => {
+                  if (!selectedRun?.id) return;
+                  router.push(`/interventions?run_id=${selectedRun.id}`);
+                }}
                 onFocusFailures={() => {
                   setTimelineFilter("failed");
                   setTimelineStatusFilter("failed");
+                  setTimelineCapabilityFilter("all");
+                  setTimelinePreset("custom");
+                }}
+                onFocusApprovals={() => {
+                  setTimelineFilter("all");
+                  setTimelineStatusFilter("proposed");
+                  setTimelineCapabilityFilter("all");
+                  setTimelineTimeWindow("all");
+                  setTimelinePreset("custom");
+                  if (nextRecommendedAction.action?.id) {
+                    setSelectedActionId(nextRecommendedAction.action.id);
+                  }
+                }}
+                onFocusPolicy={() => {
+                  setTimelineFilter("policy");
+                  setTimelineStatusFilter("failed");
+                  setTimelineCapabilityFilter("all");
+                  setTimelineTimeWindow("24h");
+                  setTimelinePreset("custom");
+                }}
+                onFocusValidationLinked={() => {
+                  const validationAction =
+                    actions.find((item) => Boolean(item.validation_job_id)) ??
+                    actions.find(
+                      (item) => item.capability_name === "request_synthetic_validation",
+                    ) ??
+                    null;
+                  setTimelineFilter("all");
+                  setTimelineStatusFilter("all");
+                  setTimelineCapabilityFilter("request_synthetic_validation");
+                  setTimelineTimeWindow("7d");
+                  setTimelinePreset("custom");
+                  if (validationAction?.id) {
+                    setSelectedActionId(validationAction.id);
+                  }
                 }}
               />
             </section>
