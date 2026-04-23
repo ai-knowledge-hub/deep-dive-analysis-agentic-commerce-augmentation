@@ -14,6 +14,7 @@ import {
   getAgentRunEvents,
   listAgentRuns,
 } from "../../lib/api";
+import { buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
 type Priority = "critical" | "high" | "medium" | "low";
@@ -475,7 +476,7 @@ export default function InterventionsPage() {
   }
 
   function openRun(runId: string) {
-    router.push(`/runs?run_id=${runId}`);
+    router.push(buildRunsHref({ runId }));
   }
 
   return (
@@ -498,7 +499,7 @@ export default function InterventionsPage() {
             title="Interventions"
             subtitle="Decision queue for approvals, retries, pauses, and manual escalation."
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push(runIdParam ? `/runs?run_id=${runIdParam}` : "/runs")}
+            onBack={() => router.push(buildRunsHref({ runId: runIdParam || null }))}
             backLabel={runIdParam ? "Back to selected run" : "Open runs"}
             actions={
               <button
@@ -535,7 +536,7 @@ export default function InterventionsPage() {
                 <button
                   type="button"
                   className="panel__action panel__action--ghost"
-                  onClick={() => router.push(`/runs?run_id=${runIdParam}`)}
+                  onClick={() => router.push(buildRunsHref({ runId: runIdParam }))}
                 >
                   Return to run
                 </button>

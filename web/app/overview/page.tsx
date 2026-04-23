@@ -37,6 +37,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
+import { buildExperimentHref, buildSimulationHref } from "../../lib/routes";
 
 export default function OverviewPage() {
   const router = useRouter();
@@ -272,11 +273,11 @@ export default function OverviewPage() {
           handleCloseHistory();
         }}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(buildSimulationHref(run.id));
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id));
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}

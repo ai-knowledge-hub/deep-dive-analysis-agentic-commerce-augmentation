@@ -86,6 +86,12 @@ import {
   type BatteryGenerationReport,
 } from "../../components/experiments/BatteryGenerationReportNotice";
 import { FlowStatusPanel } from "../../components/experiments/FlowStatusPanel";
+import {
+  buildExperimentHref,
+  buildRunsHref,
+  buildSimulationHref,
+  buildValidationHref,
+} from "../../lib/routes";
 import { buildTenantStorageKey } from "../../lib/storage";
 
 export default function ExperimentsPage() {
@@ -513,49 +519,29 @@ export default function ExperimentsPage() {
   );
 
   const runsWorkspaceHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (selectedExperimentId) {
-      params.set("experiment_id", selectedExperimentId);
-    }
-    if (runIdParam) {
-      params.set("run_id", runIdParam);
-    }
-    const query = params.toString();
-    return query ? `/runs?${query}` : "/runs";
+    return buildRunsHref({
+      experimentId: selectedExperimentId,
+      runId: runIdParam || null,
+    });
   }, [runIdParam, selectedExperimentId]);
 
   const experimentBackHref = useMemo(() => {
     if (!runIdParam) {
       return "/lab";
     }
-    const params = new URLSearchParams();
-    params.set("run_id", runIdParam);
-    if (selectedExperimentId) {
-      params.set("experiment_id", selectedExperimentId);
-    }
-    return `/runs?${params.toString()}`;
+    return buildRunsHref({ experimentId: selectedExperimentId, runId: runIdParam });
   }, [runIdParam, selectedExperimentId]);
 
   const validationHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (selectedExperimentId) {
-      params.set("experiment_id", selectedExperimentId);
-    }
-    if (runIdParam) {
-      params.set("run_id", runIdParam);
-    }
-    const query = params.toString();
-    return query ? `/validation?${query}` : "/validation";
+    return buildValidationHref({
+      experimentId: selectedExperimentId,
+      runId: runIdParam || null,
+    });
   }, [runIdParam, selectedExperimentId]);
 
   const simulationHref = useCallback(
     (simulationRunId: string) => {
-      const params = new URLSearchParams();
-      params.set("run_id", simulationRunId);
-      if (selectedExperimentId) {
-        params.set("experiment_id", selectedExperimentId);
-      }
-      return `/simulation?${params.toString()}`;
+      return buildSimulationHref(simulationRunId, { experimentId: selectedExperimentId });
     },
     [selectedExperimentId],
   );
@@ -2558,7 +2544,7 @@ export default function ExperimentsPage() {
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id, { runId: runIdParam || null }));
           handleCloseHistory();
         }}
         onRequestDelete={(id) => setDeleteTargetId(id)}

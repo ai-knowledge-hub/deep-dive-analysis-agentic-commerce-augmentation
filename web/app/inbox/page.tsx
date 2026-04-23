@@ -12,6 +12,7 @@ import {
   getAgentRunEvents,
   listAgentRuns,
 } from "../../lib/api";
+import { buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
 type InboxItem = {
@@ -189,7 +190,7 @@ export default function InboxPage() {
         key={`${item.kind}-${item.run.id}`}
         type="button"
         className="list__row inbox-list__item"
-        onClick={() => router.push(`/runs?run_id=${item.run.id}`)}
+        onClick={() => router.push(buildRunsHref({ runId: item.run.id }))}
       >
         <div className="list__title">{item.title}</div>
         <div className="list__meta">

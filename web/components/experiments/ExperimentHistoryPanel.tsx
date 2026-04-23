@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { buildSimulationHref } from "../../lib/routes";
 import type {
   Experiment,
   ExperimentRun,
@@ -264,7 +265,7 @@ export function ExperimentHistoryPanel({
                           Run ID:{" "}
                           <a
                             className="panel__link"
-                            href={`/simulation?run_id=${run.simulation_run_id}`}
+                            href={buildSimulationHref(run.simulation_run_id)}
                           >
                             {run.simulation_run_id}
                           </a>

@@ -25,6 +25,7 @@ import {
   listExperiments,
 } from "../../lib/api";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { buildExperimentHref, buildSimulationHref } from "../../lib/routes";
 
 export default function EvidencePage() {
   const router = useRouter();
@@ -409,11 +410,11 @@ export default function EvidencePage() {
           handleCloseHistory();
         }}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(buildSimulationHref(run.id));
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id));
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}

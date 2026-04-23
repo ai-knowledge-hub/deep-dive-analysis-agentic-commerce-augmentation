@@ -45,6 +45,7 @@ import { ProductReasoning } from "../components/products/ProductReasoning";
 import { HistoryDrawer } from "../components/layout/HistoryDrawer";
 import { useUser } from "@clerk/nextjs";
 import { useTenant } from "../components/tenant/TenantProvider";
+import { buildExperimentHref, buildSimulationHref } from "../lib/routes";
 import { buildTenantStorageKey } from "../lib/storage";
 
 const CHAT_PROVIDER_MODELS: Record<string, string[]> = {
@@ -1034,11 +1035,11 @@ export default function HomePage() {
           setHistoryOpen(false);
         }}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(buildSimulationHref(run.id));
           setHistoryOpen(false);
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id));
           setHistoryOpen(false);
         }}
         onRequestDelete={handleDeleteSession}
@@ -1079,9 +1080,7 @@ export default function HomePage() {
                     type="button"
                     className="chat__quick-action"
                     onClick={() =>
-                      router.push(
-                        `/experiments?experiment_id=${labOperator.experiment_id}`,
-                      )
+                      router.push(buildExperimentHref(labOperator.experiment_id))
                     }
                   >
                     Open experiment
@@ -1094,10 +1093,10 @@ export default function HomePage() {
                     className="chat__quick-action"
                     onClick={() =>
                       router.push(
-                        `/simulation?run_id=${String(
+                        buildSimulationHref(String(
                           (labOperator?.evidence as { runs?: { run_id?: unknown }[] } | null)
                             ?.runs?.[0]?.run_id ?? "",
-                        )}`,
+                        )),
                       )
                     }
                   >

@@ -134,7 +134,7 @@ describe("ValidationPage", () => {
     expect(await screen.findByText(/Run context preserved/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Back to selected run/i }));
-    expect(pushMock).toHaveBeenCalledWith("/runs?run_id=run-1&experiment_id=exp-1");
+    expect(pushMock).toHaveBeenCalledWith("/runs?experiment_id=exp-1&run_id=run-1");
 
     await user.click(screen.getAllByRole("button", { name: /Open Experiments/i })[0]);
     await waitFor(() => {

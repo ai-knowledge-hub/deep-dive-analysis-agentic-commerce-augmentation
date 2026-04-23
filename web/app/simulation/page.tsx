@@ -40,6 +40,7 @@ import { SimulationPanel } from "../../components/simulation/SimulationPanel";
 import { SimulationHistory } from "../../components/simulation/SimulationHistory";
 import { SimulationLessons } from "../../components/simulation/SimulationLessons";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { buildExperimentHref, buildSimulationHref, buildValidationHref } from "../../lib/routes";
 import { buildTenantStorageKey } from "../../lib/storage";
 
 function filterProductsForBrand(
@@ -782,15 +783,7 @@ export default function SimulationPage() {
       if (runProductId) {
         setProductId(runProductId);
       }
-      const params = new URLSearchParams();
-      if (experimentIdParam) {
-        params.set("experiment_id", experimentIdParam);
-      }
-      if (activeRunId) {
-        params.set("run_id", activeRunId);
-      }
-      const query = params.toString();
-      router.push(query ? `/experiments?${query}` : "/experiments");
+      router.push(buildExperimentHref(experimentIdParam || null, { runId: activeRunId }));
     },
     [experimentIdParam, router, setProductId],
   );
@@ -1181,16 +1174,13 @@ export default function SimulationPage() {
           handleCloseHistory();
         }}
         onSelectSimulation={(run) => {
-          const params = new URLSearchParams();
-          params.set("run_id", run.id);
-          if (experimentIdParam) {
-            params.set("experiment_id", experimentIdParam);
-          }
-          router.push(`/simulation?${params.toString()}`);
+          router.push(
+            buildSimulationHref(run.id, { experimentId: experimentIdParam || null }),
+          );
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id, { runId: runIdParam || null }));
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
@@ -1207,12 +1197,12 @@ export default function SimulationPage() {
             onMenu={() => setSidebarOpen(true)}
             onBack={() => {
               if (runIdParam) {
-                const params = new URLSearchParams();
-                params.set("run_id", runIdParam);
-                if (experimentIdParam) {
-                  params.set("experiment_id", experimentIdParam);
-                }
-                router.push(`/validation?${params.toString()}`);
+                router.push(
+                  buildValidationHref({
+                    experimentId: experimentIdParam || null,
+                    runId: runIdParam,
+                  }),
+                );
                 return;
               }
               router.push("/lab");
@@ -1228,12 +1218,12 @@ export default function SimulationPage() {
                   type="button"
                   className="panel__action panel__action--ghost"
                   onClick={() => {
-                    const params = new URLSearchParams();
-                    params.set("run_id", runIdParam);
-                    if (experimentIdParam) {
-                      params.set("experiment_id", experimentIdParam);
-                    }
-                    router.push(`/validation?${params.toString()}`);
+                    router.push(
+                      buildValidationHref({
+                        experimentId: experimentIdParam || null,
+                        runId: runIdParam,
+                      }),
+                    );
                   }}
                 >
                   Return to validation

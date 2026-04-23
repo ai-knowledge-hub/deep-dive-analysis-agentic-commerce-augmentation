@@ -149,7 +149,7 @@ describe("SimulationPage", () => {
     expect(await screen.findByText(/Run context preserved/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Back to validation/i }));
-    expect(pushMock).toHaveBeenCalledWith("/validation?run_id=sim-1&experiment_id=exp-1");
+    expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=sim-1");
 
     await user.click(screen.getByRole("button", { name: /Open experiments/i }));
     await waitFor(() => {

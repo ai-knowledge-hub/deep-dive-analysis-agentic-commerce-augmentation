@@ -43,6 +43,11 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { ValidationFlowHeader } from "../../components/validation/ValidationFlowHeader";
+import {
+  buildExperimentHref,
+  buildRunsHref,
+  buildSimulationHref,
+} from "../../lib/routes";
 
 type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
 type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
@@ -183,43 +188,26 @@ export default function ValidationPage() {
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
   const experimentsHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (manualExperimentId) {
-      params.set("experiment_id", manualExperimentId);
-    } else if (experimentIdParam) {
-      params.set("experiment_id", experimentIdParam);
-    }
-    if (runIdParam) {
-      params.set("run_id", runIdParam);
-    }
-    const query = params.toString();
-    return query ? `/experiments?${query}` : "/experiments";
+    return buildExperimentHref(manualExperimentId || experimentIdParam || null, {
+      runId: runIdParam || null,
+    });
   }, [experimentIdParam, manualExperimentId, runIdParam]);
 
   const validationBackHref = useMemo(() => {
     if (!runIdParam) {
       return experimentsHref;
     }
-    const params = new URLSearchParams();
-    params.set("run_id", runIdParam);
-    if (manualExperimentId) {
-      params.set("experiment_id", manualExperimentId);
-    } else if (experimentIdParam) {
-      params.set("experiment_id", experimentIdParam);
-    }
-    return `/runs?${params.toString()}`;
+    return buildRunsHref({
+      experimentId: manualExperimentId || experimentIdParam || null,
+      runId: runIdParam,
+    });
   }, [experimentIdParam, experimentsHref, manualExperimentId, runIdParam]);
 
   const simulationHref = useCallback(
     (simulationRunId: string) => {
-      const params = new URLSearchParams();
-      if (manualExperimentId) {
-        params.set("experiment_id", manualExperimentId);
-      } else if (experimentIdParam) {
-        params.set("experiment_id", experimentIdParam);
-      }
-      params.set("run_id", simulationRunId);
-      return `/simulation?${params.toString()}`;
+      return buildSimulationHref(simulationRunId, {
+        experimentId: manualExperimentId || experimentIdParam || null,
+      });
     },
     [experimentIdParam, manualExperimentId],
   );
@@ -962,11 +950,15 @@ export default function ValidationPage() {
         onClose={handleCloseHistory}
         onSelect={() => {}}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(
+            buildSimulationHref(run.id, {
+              experimentId: manualExperimentId || experimentIdParam || null,
+            }),
+          );
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id, { runId: runIdParam || null }));
           handleCloseHistory();
         }}
         onRequestDelete={() => {}}

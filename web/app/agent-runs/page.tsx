@@ -17,32 +17,9 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
+import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
 const RUNS_ROUTE = "/runs";
-
-function buildValidationHref(experimentId?: string | null, runId?: string | null): string {
-  const params = new URLSearchParams();
-  if (experimentId) {
-    params.set("experiment_id", experimentId);
-  }
-  if (runId) {
-    params.set("run_id", runId);
-  }
-  const query = params.toString();
-  return query ? `/validation?${query}` : "/validation";
-}
-
-function buildExperimentHref(experimentId?: string | null, runId?: string | null): string {
-  const params = new URLSearchParams();
-  if (experimentId) {
-    params.set("experiment_id", experimentId);
-  }
-  if (runId) {
-    params.set("run_id", runId);
-  }
-  const query = params.toString();
-  return query ? `/experiments?${query}` : "/experiments";
-}
 
 const DEFAULT_ALLOWED_CAPABILITIES = [
   "freeze_retrieval_protocol",
@@ -1381,7 +1358,12 @@ export default function AgentRunsPage() {
                   }
                 }}
                 onOpenValidation={() =>
-                  router.push(buildValidationHref(selectedRun?.experiment_id, selectedRun?.id))
+                  router.push(
+                    buildValidationHref({
+                      experimentId: selectedRun?.experiment_id,
+                      runId: selectedRun?.id,
+                    }),
+                  )
                 }
                 onOpenInterventionsForRun={() => {
                   if (!selectedRun?.id) return;
@@ -1476,7 +1458,9 @@ export default function AgentRunsPage() {
                         className="button button--ghost"
                         onClick={() =>
                           router.push(
-                            buildExperimentHref(selectedRun.experiment_id, selectedRun.id),
+                            buildExperimentHref(selectedRun.experiment_id, {
+                              runId: selectedRun.id,
+                            }),
                           )
                         }
                       >
@@ -1972,7 +1956,7 @@ export default function AgentRunsPage() {
                                         buildExperimentHref(
                                           event.anchors?.experiment_id ||
                                             selectedRun?.experiment_id,
-                                          selectedRun?.id,
+                                          { runId: selectedRun?.id },
                                         ),
                                       )
                                     }}
@@ -1989,8 +1973,12 @@ export default function AgentRunsPage() {
                                       setSelectedEventId(event.id);
                                       router.push(
                                         buildValidationHref(
-                                          event.anchors?.experiment_id || selectedRun?.experiment_id,
-                                          selectedRun?.id,
+                                          {
+                                            experimentId:
+                                              event.anchors?.experiment_id ||
+                                              selectedRun?.experiment_id,
+                                            runId: selectedRun?.id,
+                                          },
                                         ),
                                       );
                                     }}
@@ -2087,7 +2075,7 @@ export default function AgentRunsPage() {
                                   ? router.push(
                                       buildExperimentHref(
                                         selectedRun.experiment_id,
-                                        selectedRun.id,
+                                        { runId: selectedRun.id },
                                       ),
                                     )
                                   : null
@@ -2103,8 +2091,10 @@ export default function AgentRunsPage() {
                               onClick={() =>
                                 router.push(
                                   buildValidationHref(
-                                    selectedRun?.experiment_id,
-                                    selectedRun?.id,
+                                    {
+                                      experimentId: selectedRun?.experiment_id,
+                                      runId: selectedRun?.id,
+                                    },
                                   ),
                                 )
                               }
@@ -2130,7 +2120,7 @@ export default function AgentRunsPage() {
                                     ? router.push(
                                         buildExperimentHref(
                                           selectedRun.experiment_id,
-                                          selectedRun.id,
+                                          { runId: selectedRun.id },
                                         ),
                                       )
                                     : null
