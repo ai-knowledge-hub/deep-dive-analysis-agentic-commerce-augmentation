@@ -536,6 +536,18 @@ export default function ExperimentsPage() {
     return `/runs?${params.toString()}`;
   }, [runIdParam, selectedExperimentId]);
 
+  const validationHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedExperimentId) {
+      params.set("experiment_id", selectedExperimentId);
+    }
+    if (runIdParam) {
+      params.set("run_id", runIdParam);
+    }
+    const query = params.toString();
+    return query ? `/validation?${query}` : "/validation";
+  }, [runIdParam, selectedExperimentId]);
+
   useEffect(() => {
     if (!selectedExperimentId) {
       setVariants([]);
@@ -2400,11 +2412,7 @@ export default function ExperimentsPage() {
         });
         return;
       case "open_validation":
-        if (selectedExperimentId) {
-          router.push(`/validation?experiment_id=${selectedExperimentId}`);
-          return;
-        }
-        router.push("/validation");
+        router.push(validationHref);
         return;
       case "generate_next_variant":
         variantsSectionRef.current?.scrollIntoView({
@@ -2422,6 +2430,7 @@ export default function ExperimentsPage() {
     nextFlowAction.action,
     router,
     selectedExperimentId,
+    validationHref,
     variants,
   ]);
 
@@ -2720,13 +2729,7 @@ export default function ExperimentsPage() {
               onOpenBeliefsTimeline={handleOpenBeliefsTimeline}
               onUseLatestBelief={handleUseLatestBelief}
               onRunNextFlowAction={handleRunNextFlowAction}
-              onOpenValidation={() =>
-                router.push(
-                  selectedExperimentId
-                    ? `/validation?experiment_id=${selectedExperimentId}`
-                    : "/validation",
-                )
-              }
+              onOpenValidation={() => router.push(validationHref)}
             />
           </section>
           <section className="panel__card panel__card--secondary">
@@ -3542,13 +3545,7 @@ export default function ExperimentsPage() {
               <OutcomeSnapshot
                 snapshot={outcomeSnapshot}
                 hasValidationSignals={hasValidationSignals}
-                onOpenValidation={() =>
-                  router.push(
-                    selectedExperimentId
-                      ? `/validation?experiment_id=${selectedExperimentId}`
-                      : "/validation",
-                  )
-                }
+                onOpenValidation={() => router.push(validationHref)}
               />
               <ExperimentOutcomeReview
                 latestMetric={latestMetric}
@@ -3804,13 +3801,7 @@ export default function ExperimentsPage() {
               <button
                 type="button"
                 className="panel__action panel__action--prominent"
-                onClick={() =>
-                  router.push(
-                    selectedExperimentId
-                      ? `/validation?experiment_id=${selectedExperimentId}`
-                      : "/validation",
-                  )
-                }
+                onClick={() => router.push(validationHref)}
               >
                 Open Validation
               </button>

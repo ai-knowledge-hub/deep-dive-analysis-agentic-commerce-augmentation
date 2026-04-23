@@ -20,6 +20,18 @@ import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat"
 
 const RUNS_ROUTE = "/runs";
 
+function buildValidationHref(experimentId?: string | null, runId?: string | null): string {
+  const params = new URLSearchParams();
+  if (experimentId) {
+    params.set("experiment_id", experimentId);
+  }
+  if (runId) {
+    params.set("run_id", runId);
+  }
+  const query = params.toString();
+  return query ? `/validation?${query}` : "/validation";
+}
+
 const DEFAULT_ALLOWED_CAPABILITIES = [
   "freeze_retrieval_protocol",
   "run_control_baseline",
@@ -1356,7 +1368,9 @@ export default function AgentRunsPage() {
                     router.push(`/experiments?${params.toString()}`);
                   }
                 }}
-                onOpenValidation={() => router.push("/validation")}
+                onOpenValidation={() =>
+                  router.push(buildValidationHref(selectedRun?.experiment_id, selectedRun?.id))
+                }
                 onOpenInterventionsForRun={() => {
                   if (!selectedRun?.id) return;
                   router.push(`/interventions?run_id=${selectedRun.id}`);
@@ -1958,7 +1972,12 @@ export default function AgentRunsPage() {
                                     onClick={(clickEvent) => {
                                       clickEvent.stopPropagation();
                                       setSelectedEventId(event.id);
-                                      router.push("/validation");
+                                      router.push(
+                                        buildValidationHref(
+                                          event.anchors?.experiment_id || selectedRun?.experiment_id,
+                                          selectedRun?.id,
+                                        ),
+                                      );
                                     }}
                                   >
                                     Open validation
@@ -2063,7 +2082,14 @@ export default function AgentRunsPage() {
                             <button
                               type="button"
                               className="button button--ghost button--sm"
-                              onClick={() => router.push("/validation")}
+                              onClick={() =>
+                                router.push(
+                                  buildValidationHref(
+                                    selectedRun?.experiment_id,
+                                    selectedRun?.id,
+                                  ),
+                                )
+                              }
                             >
                               Validation job:{" "}
                               {selectedAction.validation_job_id.slice(0, 8)}

@@ -330,6 +330,9 @@ describe("AgentRunsPage timeline presets", () => {
     payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
     expect(payload.capability_name).toBe("request_synthetic_validation");
 
+    await userEvent.click(screen.getByRole("button", { name: /Open validation/i }));
+    expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=run-1");
+
     await userEvent.click(screen.getByRole("button", { name: /Open interventions/i }));
     expect(pushMock).toHaveBeenCalledWith("/interventions?run_id=run-1");
 
