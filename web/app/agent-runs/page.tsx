@@ -32,6 +32,18 @@ function buildValidationHref(experimentId?: string | null, runId?: string | null
   return query ? `/validation?${query}` : "/validation";
 }
 
+function buildExperimentHref(experimentId?: string | null, runId?: string | null): string {
+  const params = new URLSearchParams();
+  if (experimentId) {
+    params.set("experiment_id", experimentId);
+  }
+  if (runId) {
+    params.set("run_id", runId);
+  }
+  const query = params.toString();
+  return query ? `/experiments?${query}` : "/experiments";
+}
+
 const DEFAULT_ALLOWED_CAPABILITIES = [
   "freeze_retrieval_protocol",
   "run_control_baseline",
@@ -1463,7 +1475,9 @@ export default function AgentRunsPage() {
                         type="button"
                         className="button button--ghost"
                         onClick={() =>
-                          router.push(`/experiments?experiment_id=${selectedRun.experiment_id}`)
+                          router.push(
+                            buildExperimentHref(selectedRun.experiment_id, selectedRun.id),
+                          )
                         }
                       >
                         Open experiment
@@ -1955,10 +1969,11 @@ export default function AgentRunsPage() {
                                       clickEvent.stopPropagation();
                                       setSelectedEventId(event.id);
                                       router.push(
-                                        `/experiments?experiment_id=${
+                                        buildExperimentHref(
                                           event.anchors?.experiment_id ||
-                                          selectedRun?.experiment_id
-                                        }`,
+                                            selectedRun?.experiment_id,
+                                          selectedRun?.id,
+                                        ),
                                       )
                                     }}
                                   >
@@ -2070,7 +2085,10 @@ export default function AgentRunsPage() {
                               onClick={() =>
                                 selectedRun?.experiment_id
                                   ? router.push(
-                                      `/experiments?experiment_id=${selectedRun.experiment_id}`,
+                                      buildExperimentHref(
+                                        selectedRun.experiment_id,
+                                        selectedRun.id,
+                                      ),
                                     )
                                   : null
                               }
@@ -2110,7 +2128,10 @@ export default function AgentRunsPage() {
                                 onClick={() =>
                                   selectedRun?.experiment_id
                                     ? router.push(
-                                        `/experiments?experiment_id=${selectedRun.experiment_id}`,
+                                        buildExperimentHref(
+                                          selectedRun.experiment_id,
+                                          selectedRun.id,
+                                        ),
                                       )
                                     : null
                                 }

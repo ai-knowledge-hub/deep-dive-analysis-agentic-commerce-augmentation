@@ -264,8 +264,9 @@ describe("AgentRunsPage timeline presets", () => {
           capability_version: "v1",
           rationale: "publish candidate",
           confidence: 0.8,
+          variant_id: "variant-1",
+          outputs: { metric_id: "metric-1" },
           inputs: {},
-          outputs: {},
         },
         {
           id: "act-2",
@@ -304,6 +305,9 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
 
+    await userEvent.click(screen.getAllByRole("button", { name: /^Open experiment$/i })[0]);
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+
     getAgentRunEventsMock.mockClear();
 
     await userEvent.click(screen.getByRole("button", { name: /Focus policy events/i }));
@@ -322,6 +326,12 @@ describe("AgentRunsPage timeline presets", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
     expect(screen.getByText(/Selection: publish_copy_revision/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Variant: variant-/i }));
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+
+    await userEvent.click(screen.getByRole("button", { name: /Metric: metric-1/i }));
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
 
     getAgentRunEventsMock.mockClear();
 
