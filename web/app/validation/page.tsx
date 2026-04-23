@@ -210,6 +210,20 @@ export default function ValidationPage() {
     return `/runs?${params.toString()}`;
   }, [experimentIdParam, experimentsHref, manualExperimentId, runIdParam]);
 
+  const simulationHref = useCallback(
+    (simulationRunId: string) => {
+      const params = new URLSearchParams();
+      if (manualExperimentId) {
+        params.set("experiment_id", manualExperimentId);
+      } else if (experimentIdParam) {
+        params.set("experiment_id", experimentIdParam);
+      }
+      params.set("run_id", simulationRunId);
+      return `/simulation?${params.toString()}`;
+    },
+    [experimentIdParam, manualExperimentId],
+  );
+
   const renderMetricValue = useCallback((value: unknown, fallback = "—") => {
     if (value === null || value === undefined) return fallback;
     if (typeof value === "number") return Number.isFinite(value) ? String(value) : fallback;
@@ -1577,7 +1591,7 @@ export default function ValidationPage() {
                     <strong>
                       <a
                         className="panel__link"
-                        href={`/simulation?run_id=${winnerContext.simulationRunId}`}
+                        href={simulationHref(winnerContext.simulationRunId)}
                       >
                         {winnerContext.winnerLabel}
                       </a>

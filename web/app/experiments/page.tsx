@@ -548,6 +548,18 @@ export default function ExperimentsPage() {
     return query ? `/validation?${query}` : "/validation";
   }, [runIdParam, selectedExperimentId]);
 
+  const simulationHref = useCallback(
+    (simulationRunId: string) => {
+      const params = new URLSearchParams();
+      params.set("run_id", simulationRunId);
+      if (selectedExperimentId) {
+        params.set("experiment_id", selectedExperimentId);
+      }
+      return `/simulation?${params.toString()}`;
+    },
+    [selectedExperimentId],
+  );
+
   useEffect(() => {
     if (!selectedExperimentId) {
       setVariants([]);
@@ -2542,7 +2554,7 @@ export default function ExperimentsPage() {
         onClose={handleCloseHistory}
         onSelect={(session) => router.push(`/?session=${session.id}`)}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(simulationHref(run.id));
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {

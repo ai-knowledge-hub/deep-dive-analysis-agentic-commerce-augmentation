@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
@@ -76,6 +76,8 @@ export default function SimulationPage() {
     () => buildTenantStorageKey("intentionality.simulation.latest", userId, storageClientId),
     [storageClientId, userId],
   );
+  const runIdParam = searchParams.get("run_id")?.trim() || "";
+  const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
   const evidenceStorageKey = useMemo(() => {
     const clientTag = storageClientId ? `.${storageClientId}` : "";
     return userId
@@ -776,13 +778,21 @@ export default function SimulationPage() {
   );
 
   const handleOpenExperiments = useCallback(
-    (_runId: string, runProductId?: string | null) => {
+    (activeRunId: string, runProductId?: string | null) => {
       if (runProductId) {
         setProductId(runProductId);
       }
-      router.push("/experiments");
+      const params = new URLSearchParams();
+      if (experimentIdParam) {
+        params.set("experiment_id", experimentIdParam);
+      }
+      if (activeRunId) {
+        params.set("run_id", activeRunId);
+      }
+      const query = params.toString();
+      router.push(query ? `/experiments?${query}` : "/experiments");
     },
-    [router, setProductId],
+    [experimentIdParam, router, setProductId],
   );
 
   const handleSaveTone = useCallback(async () => {
@@ -1094,19 +1104,21 @@ export default function SimulationPage() {
         void handleRetestSimulation();
         return;
       case "open_experiments":
-        router.push("/experiments");
+        handleOpenExperiments(simulationRun?.run_id ?? runIdParam, selectedSimulationProductId);
         return;
       default:
         return;
     }
   }, [
+    handleOpenExperiments,
     handleOptimizeSimulation,
     handleRetestSimulation,
     handleRunSimulation,
-    router,
+    runIdParam,
     selectedSimulationProductId,
     simulationBestScore?.product_id,
     simulationNextAction.action,
+    simulationRun?.run_id,
   ]);
 
   return (
@@ -1169,7 +1181,12 @@ export default function SimulationPage() {
           handleCloseHistory();
         }}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          const params = new URLSearchParams();
+          params.set("run_id", run.id);
+          if (experimentIdParam) {
+            params.set("experiment_id", experimentIdParam);
+          }
+          router.push(`/simulation?${params.toString()}`);
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
@@ -1188,8 +1205,51 @@ export default function SimulationPage() {
           <DetailHeader
             title="Simulation Sandbox"
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/lab")}
+            onBack={() => {
+              if (runIdParam) {
+                const params = new URLSearchParams();
+                params.set("run_id", runIdParam);
+                if (experimentIdParam) {
+                  params.set("experiment_id", experimentIdParam);
+                }
+                router.push(`/validation?${params.toString()}`);
+                return;
+              }
+              router.push("/lab");
+            }}
+            backLabel={runIdParam ? "Back to validation" : undefined}
           />
+          {runIdParam ? (
+            <section className="panel__notice panel__notice--info">
+              <strong>Run context preserved:</strong> this simulation view was opened from run{" "}
+              <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    params.set("run_id", runIdParam);
+                    if (experimentIdParam) {
+                      params.set("experiment_id", experimentIdParam);
+                    }
+                    router.push(`/validation?${params.toString()}`);
+                  }}
+                >
+                  Return to validation
+                </button>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() =>
+                    handleOpenExperiments(runIdParam, selectedSimulationProductId ?? productId)
+                  }
+                >
+                  Open experiments
+                </button>
+              </div>
+            </section>
+          ) : null}
           <section className="panel__notice panel__notice--info">
             <strong>Lab signal:</strong> Simulation scores are directional and
             should be validated with live outcomes before rollout.
