@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from "react";
+import { buildExperimentHref, buildSimulationHref } from "../../lib/routes";
 
 interface BeliefCardProps {
   belief: {
@@ -161,7 +162,7 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
                   {belief.evidence?.experiment_id && (
                     <a
                       className="belief-link"
-                      href={`/experiments?experiment_id=${belief.evidence.experiment_id}`}
+                      href={buildExperimentHref(belief.evidence.experiment_id)}
                     >
                       Open experiment
                     </a>
@@ -170,7 +171,7 @@ export function BeliefCard({ belief, onUseBelief }: BeliefCardProps) {
                     belief.evidence.runs[0]?.run_id && (
                       <a
                         className="belief-link"
-                        href={`/simulation?run_id=${belief.evidence.runs[0].run_id}`}
+                        href={buildSimulationHref(belief.evidence.runs[0].run_id)}
                       >
                         Open linked run
                       </a>

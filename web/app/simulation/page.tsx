@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
@@ -40,6 +40,7 @@ import { SimulationPanel } from "../../components/simulation/SimulationPanel";
 import { SimulationHistory } from "../../components/simulation/SimulationHistory";
 import { SimulationLessons } from "../../components/simulation/SimulationLessons";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { buildExperimentHref, buildSimulationHref, buildValidationHref } from "../../lib/routes";
 import { buildTenantStorageKey } from "../../lib/storage";
 
 function filterProductsForBrand(
@@ -76,6 +77,8 @@ export default function SimulationPage() {
     () => buildTenantStorageKey("intentionality.simulation.latest", userId, storageClientId),
     [storageClientId, userId],
   );
+  const runIdParam = searchParams.get("run_id")?.trim() || "";
+  const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
   const evidenceStorageKey = useMemo(() => {
     const clientTag = storageClientId ? `.${storageClientId}` : "";
     return userId
@@ -776,13 +779,13 @@ export default function SimulationPage() {
   );
 
   const handleOpenExperiments = useCallback(
-    (_runId: string, runProductId?: string | null) => {
+    (activeRunId: string, runProductId?: string | null) => {
       if (runProductId) {
         setProductId(runProductId);
       }
-      router.push("/experiments");
+      router.push(buildExperimentHref(experimentIdParam || null, { runId: activeRunId }));
     },
-    [router, setProductId],
+    [experimentIdParam, router, setProductId],
   );
 
   const handleSaveTone = useCallback(async () => {
@@ -1094,19 +1097,21 @@ export default function SimulationPage() {
         void handleRetestSimulation();
         return;
       case "open_experiments":
-        router.push("/experiments");
+        handleOpenExperiments(simulationRun?.run_id ?? runIdParam, selectedSimulationProductId);
         return;
       default:
         return;
     }
   }, [
+    handleOpenExperiments,
     handleOptimizeSimulation,
     handleRetestSimulation,
     handleRunSimulation,
-    router,
+    runIdParam,
     selectedSimulationProductId,
     simulationBestScore?.product_id,
     simulationNextAction.action,
+    simulationRun?.run_id,
   ]);
 
   return (
@@ -1169,11 +1174,13 @@ export default function SimulationPage() {
           handleCloseHistory();
         }}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(
+            buildSimulationHref(run.id, { experimentId: experimentIdParam || null }),
+          );
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id, { runId: runIdParam || null }));
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}
@@ -1188,8 +1195,51 @@ export default function SimulationPage() {
           <DetailHeader
             title="Simulation Sandbox"
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/lab")}
+            onBack={() => {
+              if (runIdParam) {
+                router.push(
+                  buildValidationHref({
+                    experimentId: experimentIdParam || null,
+                    runId: runIdParam,
+                  }),
+                );
+                return;
+              }
+              router.push("/lab");
+            }}
+            backLabel={runIdParam ? "Back to validation" : undefined}
           />
+          {runIdParam ? (
+            <section className="panel__notice panel__notice--info">
+              <strong>Run context preserved:</strong> this simulation view was opened from run{" "}
+              <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => {
+                    router.push(
+                      buildValidationHref({
+                        experimentId: experimentIdParam || null,
+                        runId: runIdParam,
+                      }),
+                    );
+                  }}
+                >
+                  Return to validation
+                </button>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() =>
+                    handleOpenExperiments(runIdParam, selectedSimulationProductId ?? productId)
+                  }
+                >
+                  Open experiments
+                </button>
+              </div>
+            </section>
+          ) : null}
           <section className="panel__notice panel__notice--info">
             <strong>Lab signal:</strong> Simulation scores are directional and
             should be validated with live outcomes before rollout.

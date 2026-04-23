@@ -17,6 +17,7 @@ import { IntentionalityProfileCard } from "../../components/products/Intentional
 import { GoalClarificationPanel } from "../../components/values/GoalClarificationPanel";
 import { ProductReasoning } from "../../components/products/ProductReasoning";
 import { useTenant } from "../../components/tenant/TenantProvider";
+import { buildExperimentHref, buildSimulationHref } from "../../lib/routes";
 import { buildTenantStorageKey } from "../../lib/storage";
 import {
   createBattery,
@@ -311,11 +312,11 @@ export default function AlignmentPage() {
           handleCloseHistory();
         }}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(buildSimulationHref(run.id));
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id));
           handleCloseHistory();
         }}
         onRequestDelete={(sessionId) => setDeleteTargetId(sessionId)}

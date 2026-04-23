@@ -30,7 +30,12 @@ type Props = {
   };
   onOpenExperiment?: () => void;
   onOpenValidation?: () => void;
+  onOpenInterventionsForRun?: () => void;
   onFocusFailures?: () => void;
+  onFocusApprovals?: () => void;
+  onFocusPolicy?: () => void;
+  onFocusValidationLinked?: () => void;
+  onJumpToNextAction?: () => void;
 };
 
 function formatRunLabel(run: AgentRun | null): string {
@@ -83,7 +88,12 @@ export function OperatorConsoleChat({
   nextRecommendedAction,
   onOpenExperiment,
   onOpenValidation,
+  onOpenInterventionsForRun,
   onFocusFailures,
+  onFocusApprovals,
+  onFocusPolicy,
+  onFocusValidationLinked,
+  onJumpToNextAction,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
@@ -378,6 +388,17 @@ export function OperatorConsoleChat({
         >
           Recommend next step
         </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => {
+            sendPrompt("recommend_next");
+            onJumpToNextAction?.();
+          }}
+          disabled={!nextRecommendedAction.action}
+        >
+          Jump to next action
+        </button>
       </div>
 
       <div className="operator-chat__thread">
@@ -411,7 +432,7 @@ export function OperatorConsoleChat({
           }}
           disabled={!run?.experiment_id}
         >
-          Open experiment
+          Open experiment context
         </button>
         <button
           type="button"
@@ -428,12 +449,56 @@ export function OperatorConsoleChat({
           type="button"
           className="button button--ghost button--sm"
           onClick={() => {
+            sendPrompt("recommend_next");
+            onOpenInterventionsForRun?.();
+          }}
+          disabled={!run}
+        >
+          Open interventions
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => {
             sendPrompt("summarize_failures");
             onFocusFailures?.();
           }}
           disabled={!run}
         >
           Focus failures
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => {
+            sendPrompt("blocked_action");
+            onFocusApprovals?.();
+          }}
+          disabled={derived.proposedActions.length === 0}
+        >
+          Focus approvals
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => {
+            sendPrompt("summarize_failures");
+            onFocusPolicy?.();
+          }}
+          disabled={derived.policyEvents.length === 0}
+        >
+          Focus policy events
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => {
+            sendPrompt("open_context");
+            onFocusValidationLinked?.();
+          }}
+          disabled={derived.validationLinkedActions.length === 0}
+        >
+          Focus validation-linked
         </button>
       </div>
     </section>

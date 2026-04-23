@@ -17,6 +17,7 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
+import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
 const RUNS_ROUTE = "/runs";
 
@@ -1343,15 +1344,69 @@ export default function AgentRunsPage() {
                 events={runEvents}
                 selectedAction={selectedAction}
                 nextRecommendedAction={nextRecommendedAction}
-                onOpenExperiment={() => {
-                  if (selectedRun?.experiment_id) {
-                    router.push(`/experiments?experiment_id=${selectedRun.experiment_id}`);
+                onJumpToNextAction={() => {
+                  if (nextRecommendedAction.action?.id) {
+                    setSelectedActionId(nextRecommendedAction.action.id);
                   }
                 }}
-                onOpenValidation={() => router.push("/validation")}
+                onOpenExperiment={() => {
+                  if (selectedRun?.experiment_id) {
+                    const params = new URLSearchParams();
+                    params.set("experiment_id", selectedRun.experiment_id);
+                    params.set("run_id", selectedRun.id);
+                    router.push(`/experiments?${params.toString()}`);
+                  }
+                }}
+                onOpenValidation={() =>
+                  router.push(
+                    buildValidationHref({
+                      experimentId: selectedRun?.experiment_id,
+                      runId: selectedRun?.id,
+                    }),
+                  )
+                }
+                onOpenInterventionsForRun={() => {
+                  if (!selectedRun?.id) return;
+                  router.push(`/interventions?run_id=${selectedRun.id}`);
+                }}
                 onFocusFailures={() => {
                   setTimelineFilter("failed");
                   setTimelineStatusFilter("failed");
+                  setTimelineCapabilityFilter("all");
+                  setTimelinePreset("custom");
+                }}
+                onFocusApprovals={() => {
+                  setTimelineFilter("all");
+                  setTimelineStatusFilter("proposed");
+                  setTimelineCapabilityFilter("all");
+                  setTimelineTimeWindow("all");
+                  setTimelinePreset("custom");
+                  if (nextRecommendedAction.action?.id) {
+                    setSelectedActionId(nextRecommendedAction.action.id);
+                  }
+                }}
+                onFocusPolicy={() => {
+                  setTimelineFilter("policy");
+                  setTimelineStatusFilter("failed");
+                  setTimelineCapabilityFilter("all");
+                  setTimelineTimeWindow("24h");
+                  setTimelinePreset("custom");
+                }}
+                onFocusValidationLinked={() => {
+                  const validationAction =
+                    actions.find((item) => Boolean(item.validation_job_id)) ??
+                    actions.find(
+                      (item) => item.capability_name === "request_synthetic_validation",
+                    ) ??
+                    null;
+                  setTimelineFilter("all");
+                  setTimelineStatusFilter("all");
+                  setTimelineCapabilityFilter("request_synthetic_validation");
+                  setTimelineTimeWindow("7d");
+                  setTimelinePreset("custom");
+                  if (validationAction?.id) {
+                    setSelectedActionId(validationAction.id);
+                  }
                 }}
               />
             </section>
@@ -1402,7 +1457,11 @@ export default function AgentRunsPage() {
                         type="button"
                         className="button button--ghost"
                         onClick={() =>
-                          router.push(`/experiments?experiment_id=${selectedRun.experiment_id}`)
+                          router.push(
+                            buildExperimentHref(selectedRun.experiment_id, {
+                              runId: selectedRun.id,
+                            }),
+                          )
                         }
                       >
                         Open experiment
@@ -1894,10 +1953,11 @@ export default function AgentRunsPage() {
                                       clickEvent.stopPropagation();
                                       setSelectedEventId(event.id);
                                       router.push(
-                                        `/experiments?experiment_id=${
+                                        buildExperimentHref(
                                           event.anchors?.experiment_id ||
-                                          selectedRun?.experiment_id
-                                        }`,
+                                            selectedRun?.experiment_id,
+                                          { runId: selectedRun?.id },
+                                        ),
                                       )
                                     }}
                                   >
@@ -1911,7 +1971,16 @@ export default function AgentRunsPage() {
                                     onClick={(clickEvent) => {
                                       clickEvent.stopPropagation();
                                       setSelectedEventId(event.id);
-                                      router.push("/validation");
+                                      router.push(
+                                        buildValidationHref(
+                                          {
+                                            experimentId:
+                                              event.anchors?.experiment_id ||
+                                              selectedRun?.experiment_id,
+                                            runId: selectedRun?.id,
+                                          },
+                                        ),
+                                      );
                                     }}
                                   >
                                     Open validation
@@ -2004,7 +2073,10 @@ export default function AgentRunsPage() {
                               onClick={() =>
                                 selectedRun?.experiment_id
                                   ? router.push(
-                                      `/experiments?experiment_id=${selectedRun.experiment_id}`,
+                                      buildExperimentHref(
+                                        selectedRun.experiment_id,
+                                        { runId: selectedRun.id },
+                                      ),
                                     )
                                   : null
                               }
@@ -2016,7 +2088,16 @@ export default function AgentRunsPage() {
                             <button
                               type="button"
                               className="button button--ghost button--sm"
-                              onClick={() => router.push("/validation")}
+                              onClick={() =>
+                                router.push(
+                                  buildValidationHref(
+                                    {
+                                      experimentId: selectedRun?.experiment_id,
+                                      runId: selectedRun?.id,
+                                    },
+                                  ),
+                                )
+                              }
                             >
                               Validation job:{" "}
                               {selectedAction.validation_job_id.slice(0, 8)}
@@ -2037,7 +2118,10 @@ export default function AgentRunsPage() {
                                 onClick={() =>
                                   selectedRun?.experiment_id
                                     ? router.push(
-                                        `/experiments?experiment_id=${selectedRun.experiment_id}`,
+                                        buildExperimentHref(
+                                          selectedRun.experiment_id,
+                                          { runId: selectedRun.id },
+                                        ),
                                       )
                                     : null
                                 }

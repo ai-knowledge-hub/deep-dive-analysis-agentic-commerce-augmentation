@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
@@ -14,6 +14,7 @@ import {
   getAgentRunEvents,
   listAgentRuns,
 } from "../../lib/api";
+import { buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
 type Priority = "critical" | "high" | "medium" | "low";
@@ -292,8 +293,10 @@ function buildEscalationItem(detail: InterventionDetail): EscalationItem | null 
 
 export default function InterventionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const userId = user?.id ?? null;
+  const runIdParam = searchParams.get("run_id")?.trim() || "";
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -363,16 +366,51 @@ export default function InterventionsPage() {
     void loadInterventions();
   }, [loadInterventions]);
 
+  const visibleApprovals = useMemo(
+    () => (runIdParam ? approvals.filter((item) => item.run.id === runIdParam) : approvals),
+    [approvals, runIdParam],
+  );
+
+  const visibleRetries = useMemo(
+    () => (runIdParam ? retries.filter((item) => item.run.id === runIdParam) : retries),
+    [retries, runIdParam],
+  );
+
+  const visiblePauses = useMemo(
+    () => (runIdParam ? pauses.filter((item) => item.run.id === runIdParam) : pauses),
+    [pauses, runIdParam],
+  );
+
+  const visibleEscalations = useMemo(
+    () => (runIdParam ? escalations.filter((item) => item.run.id === runIdParam) : escalations),
+    [escalations, runIdParam],
+  );
+
   const briefing = useMemo(() => {
     if (!userId) {
       return "Sign in to review approvals, retries, pauses, and escalation-worthy runs.";
     }
-    const total = approvals.length + retries.length + pauses.length + escalations.length;
+    const total =
+      visibleApprovals.length +
+      visibleRetries.length +
+      visiblePauses.length +
+      visibleEscalations.length;
     if (total === 0) {
+      if (runIdParam) {
+        return `Run ${runIdParam.slice(0, 8)} does not currently need operator intervention.`;
+      }
       return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
     }
-    return `${total} intervention item${total === 1 ? "" : "s"}: ${escalations.length} escalations, ${approvals.length} approvals, ${retries.length} retry or resume action${retries.length === 1 ? "" : "s"}, and ${pauses.length} active run pause decision${pauses.length === 1 ? "" : "s"}.`;
-  }, [approvals.length, escalations.length, pauses.length, retries.length, userId]);
+    const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
+    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
+  }, [
+    runIdParam,
+    userId,
+    visibleApprovals.length,
+    visibleEscalations.length,
+    visiblePauses.length,
+    visibleRetries.length,
+  ]);
 
   const handleDecision = useCallback(
     async (actionId: string, decision: "approve" | "reject") => {
@@ -438,7 +476,7 @@ export default function InterventionsPage() {
   }
 
   function openRun(runId: string) {
-    router.push(`/runs?run_id=${runId}`);
+    router.push(buildRunsHref({ runId }));
   }
 
   return (
@@ -461,8 +499,8 @@ export default function InterventionsPage() {
             title="Interventions"
             subtitle="Decision queue for approvals, retries, pauses, and manual escalation."
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/runs")}
-            backLabel="Open runs"
+            onBack={() => router.push(buildRunsHref({ runId: runIdParam || null }))}
+            backLabel={runIdParam ? "Back to selected run" : "Open runs"}
             actions={
               <button
                 type="button"
@@ -490,17 +528,40 @@ export default function InterventionsPage() {
             error={error}
           />
 
+          {runIdParam ? (
+            <section className="panel__notice panel__notice--info">
+              <strong>Run-scoped view:</strong> showing intervention items for run{" "}
+              <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => router.push(buildRunsHref({ runId: runIdParam }))}
+                >
+                  Return to run
+                </button>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => router.push("/interventions")}
+                >
+                  Clear run scope
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           <section className="agent-workspace inbox-workspace">
             <section className="panel__card panel__card--secondary">
               <div className="panel__header">
                 <h3>Escalations</h3>
-                <span className="panel__badge panel__badge--severity-high">{escalations.length}</span>
+                <span className="panel__badge panel__badge--severity-high">{visibleEscalations.length}</span>
               </div>
-              {escalations.length === 0 ? (
+              {visibleEscalations.length === 0 ? (
                 <div className="panel__muted">No runs currently require escalation.</div>
               ) : (
                 <div className="list">
-                  {escalations.map((item) => (
+                  {visibleEscalations.map((item) => (
                     <div key={`escalation-${item.run.id}`} className="list__row">
                       <div className="list__title">{item.title}</div>
                       {renderMeta(item.priority, item.risk, item.run)}
@@ -528,13 +589,13 @@ export default function InterventionsPage() {
             <section className="panel__card panel__card--secondary">
               <div className="panel__header">
                 <h3>Approvals</h3>
-                <span className="panel__badge panel__badge--warning">{approvals.length}</span>
+                <span className="panel__badge panel__badge--warning">{visibleApprovals.length}</span>
               </div>
-              {approvals.length === 0 ? (
+              {visibleApprovals.length === 0 ? (
                 <div className="panel__muted">No proposed actions are waiting for approval.</div>
               ) : (
                 <div className="list">
-                  {approvals.map((item) => {
+                  {visibleApprovals.map((item) => {
                     const approveKey = `decision:${item.action.id}:approve`;
                     const rejectKey = `decision:${item.action.id}:reject`;
                     return (
@@ -580,13 +641,13 @@ export default function InterventionsPage() {
             <section className="panel__card panel__card--secondary">
               <div className="panel__header">
                 <h3>Retries and resumes</h3>
-                <span className="panel__badge panel__badge--secondary">{retries.length}</span>
+                <span className="panel__badge panel__badge--secondary">{visibleRetries.length}</span>
               </div>
-              {retries.length === 0 ? (
+              {visibleRetries.length === 0 ? (
                 <div className="panel__muted">No runs are ready for an operator-driven restart or next step.</div>
               ) : (
                 <div className="list">
-                  {retries.map((item) => {
+                  {visibleRetries.map((item) => {
                     const controlKey = `control:${item.run.id}:${item.control}`;
                     return (
                       <div key={`retry-${item.run.id}`} className="list__row">
@@ -626,13 +687,13 @@ export default function InterventionsPage() {
             <section className="panel__card panel__card--secondary">
               <div className="panel__header">
                 <h3>Pauses</h3>
-                <span className="panel__badge panel__badge--secondary">{pauses.length}</span>
+                <span className="panel__badge panel__badge--secondary">{visiblePauses.length}</span>
               </div>
-              {pauses.length === 0 ? (
+              {visiblePauses.length === 0 ? (
                 <div className="panel__muted">No active runs currently need a pause decision.</div>
               ) : (
                 <div className="list">
-                  {pauses.map((item) => {
+                  {visiblePauses.map((item) => {
                     const pauseKey = `control:${item.run.id}:pause`;
                     const cancelKey = `control:${item.run.id}:cancel`;
                     return (

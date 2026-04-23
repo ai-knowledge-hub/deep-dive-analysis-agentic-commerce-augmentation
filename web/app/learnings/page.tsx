@@ -13,6 +13,7 @@ import {
   getOverviewSummary,
   listAgentRuns,
 } from "../../lib/api";
+import { buildRunsHref } from "../../lib/routes";
 import type {
   AgentRun,
   AgentRunEvent,
@@ -349,7 +350,7 @@ export default function LearningsPage() {
                       key={`${signal.run.id}-${signal.event.id}`}
                       type="button"
                       className="list__row"
-                      onClick={() => router.push(`/runs?run_id=${signal.run.id}`)}
+                      onClick={() => router.push(buildRunsHref({ runId: signal.run.id }))}
                     >
                       <div className="list__title">{signal.title}</div>
                       <div className="list__meta">

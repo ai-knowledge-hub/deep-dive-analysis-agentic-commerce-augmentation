@@ -243,4 +243,110 @@ describe("AgentRunsPage timeline presets", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
+
+  it("lets operator chat drive timeline filters and next-action selection", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "planned",
+        state: "variants_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "auto_execute_safe",
+      },
+      actions: [
+        {
+          id: "act-1",
+          sequence: 1,
+          status: "proposed",
+          capability_name: "publish_copy_revision",
+          capability_version: "v1",
+          rationale: "publish candidate",
+          confidence: 0.8,
+          variant_id: "variant-1",
+          outputs: { metric_id: "metric-1" },
+          inputs: {},
+        },
+        {
+          id: "act-2",
+          sequence: 2,
+          status: "approved",
+          capability_name: "request_synthetic_validation",
+          capability_version: "v1",
+          rationale: "validation candidate",
+          confidence: 0.7,
+          validation_job_id: "job-1",
+          inputs: {},
+          outputs: {},
+        },
+      ],
+    });
+    getAgentRunEventsMock.mockResolvedValue({
+      events: [
+        {
+          id: "evt-1",
+          status: "failed",
+          event_type: "policy",
+          capability_name: "publish_copy_revision",
+          is_policy_event: true,
+          note: "Policy requires review.",
+          timestamp: "2026-03-31T10:00:00Z",
+        },
+      ],
+      page: {
+        before_cursor: null,
+        after_cursor: null,
+        has_more_before: false,
+        has_more_after: false,
+      },
+    });
+
+    render(<AgentRunsPage />);
+    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+
+    await userEvent.click(screen.getAllByRole("button", { name: /^Open experiment$/i })[0]);
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+
+    getAgentRunEventsMock.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: /Focus policy events/i }));
+    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    let payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(payload.event_type).toBe("policy");
+    expect(payload.status).toBe("failed");
+
+    getAgentRunEventsMock.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: /Focus approvals/i }));
+    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(payload.event_type).toBe("all");
+    expect(payload.status).toBe("proposed");
+
+    await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
+    expect(screen.getByText(/Selection: publish_copy_revision/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Variant: variant-/i }));
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+
+    await userEvent.click(screen.getByRole("button", { name: /Metric: metric-1/i }));
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+
+    getAgentRunEventsMock.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: /Focus validation-linked/i }));
+    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(payload.capability_name).toBe("request_synthetic_validation");
+
+    await userEvent.click(screen.getByRole("button", { name: /Open validation/i }));
+    expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=run-1");
+
+    await userEvent.click(screen.getByRole("button", { name: /Open interventions/i }));
+    expect(pushMock).toHaveBeenCalledWith("/interventions?run_id=run-1");
+
+    await userEvent.click(screen.getByRole("button", { name: /Open experiment context/i }));
+    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+  });
 });

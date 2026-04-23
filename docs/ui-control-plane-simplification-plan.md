@@ -10,19 +10,19 @@ The current app has valuable functionality, but the top-level information archit
 
 ### Current top-level routes
 
-- [web/app/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx)
-- [web/app/overview/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/overview/page.tsx)
-- [web/app/alignment/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/alignment/page.tsx)
-- [web/app/evidence/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/evidence/page.tsx)
-- [web/app/simulation/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/simulation/page.tsx)
-- [web/app/experiments/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/experiments/page.tsx)
-- [web/app/validation/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/validation/page.tsx)
-- [web/app/agent-runs/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx)
-- [web/app/admin/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/admin/page.tsx)
+- [web/app/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx)
+- [web/app/overview/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/overview/page.tsx)
+- [web/app/alignment/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/alignment/page.tsx)
+- [web/app/evidence/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/evidence/page.tsx)
+- [web/app/simulation/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/simulation/page.tsx)
+- [web/app/experiments/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/experiments/page.tsx)
+- [web/app/validation/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/validation/page.tsx)
+- [web/app/agent-runs/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx)
+- [web/app/admin/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/admin/page.tsx)
 
 ### Current navigation
 
-The main sidebar in [web/components/layout/Sidebar.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx) exposes:
+The main sidebar in [web/components/layout/Sidebar.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx) exposes:
 
 - Alignment
 - Evidence
@@ -38,7 +38,7 @@ This reflects the internal lab workflow, not the operator’s actual decision lo
 ### Main UX problems
 
 1. The homepage is doing too much.
-   - [web/app/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx) mixes chat, evidence, simulation context, experiments context, model configuration, session history, and navigation intent.
+   - [web/app/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx) mixes chat, evidence, simulation context, experiments context, model configuration, session history, and navigation intent.
 
 2. Top-level routes are organized by internal subsystems, not operator jobs.
    - Operators think in terms of "what needs attention", "what is running", "what is blocked", and "what changed".
@@ -115,7 +115,7 @@ This should become the default landing page after sign-in.
 
 Primary route:
 
-- evolve [web/app/agent-runs/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx)
+- evolve [web/app/agent-runs/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx)
 
 Purpose:
 
@@ -176,15 +176,15 @@ Primary contents:
 
 This route should absorb most of what is currently spread between:
 
-- [web/app/overview/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/overview/page.tsx)
-- [web/app/alignment/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/alignment/page.tsx)
-- [web/app/evidence/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/evidence/page.tsx)
+- [web/app/overview/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/overview/page.tsx)
+- [web/app/alignment/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/alignment/page.tsx)
+- [web/app/evidence/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/evidence/page.tsx)
 
 ### 5. Admin
 
 Keep:
 
-- [web/app/admin/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/admin/page.tsx)
+- [web/app/admin/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/admin/page.tsx)
 
 But narrow its purpose to:
 
@@ -200,12 +200,12 @@ The current lab routes should remain available, but move under a secondary "Lab"
 
 ### Keep as advanced drill-downs
 
-- [web/app/simulation/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/simulation/page.tsx)
-- [web/app/experiments/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/experiments/page.tsx)
-- [web/app/validation/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/validation/page.tsx)
-- [web/app/alignment/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/alignment/page.tsx)
-- [web/app/evidence/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/evidence/page.tsx)
-- [web/app/overview/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/overview/page.tsx)
+- [web/app/simulation/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/simulation/page.tsx)
+- [web/app/experiments/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/experiments/page.tsx)
+- [web/app/validation/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/validation/page.tsx)
+- [web/app/alignment/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/alignment/page.tsx)
+- [web/app/evidence/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/evidence/page.tsx)
+- [web/app/overview/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/overview/page.tsx)
 
 These pages are still useful for deep investigation and manual workflows. They just should not dominate the first navigation layer.
 
@@ -215,7 +215,7 @@ The current home page should stop being the main all-in-one workspace.
 
 ### Current issue
 
-[web/app/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx) is effectively:
+[web/app/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx) is effectively:
 
 - chat entry
 - evidence launcher
@@ -249,7 +249,7 @@ This preserves manual exploratory work without forcing it to be the front door.
 
 ### Current sidebar problem
 
-[web/components/layout/Sidebar.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx) is doing three jobs at once:
+[web/components/layout/Sidebar.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx) is doing three jobs at once:
 
 - global navigation
 - tenant switching
@@ -294,12 +294,12 @@ This simplification should reuse existing components rather than replacing every
 
 ### Components to keep and repurpose
 
-- [web/components/layout/Sidebar.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx)
-- [web/components/layout/DetailHeader.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/DetailHeader.tsx)
-- [web/components/layout/HistoryDrawer.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/HistoryDrawer.tsx)
-- [web/components/simulation/SimulationPanel.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/simulation/SimulationPanel.tsx)
-- [web/components/evidence/EvidencePanel.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/evidence/EvidencePanel.tsx)
-- [web/components/validation/ValidationFlowHeader.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/validation/ValidationFlowHeader.tsx)
+- [web/components/layout/Sidebar.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx)
+- [web/components/layout/DetailHeader.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/DetailHeader.tsx)
+- [web/components/layout/HistoryDrawer.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/HistoryDrawer.tsx)
+- [web/components/simulation/SimulationPanel.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/simulation/SimulationPanel.tsx)
+- [web/components/evidence/EvidencePanel.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/evidence/EvidencePanel.tsx)
+- [web/components/validation/ValidationFlowHeader.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/components/validation/ValidationFlowHeader.tsx)
 
 ### Components that should become more central
 
@@ -378,7 +378,7 @@ Do not redesign the entire frontend at once.
 
 Use the current app structure as a migration base:
 
-- promote [web/app/agent-runs/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx) into the core control-plane view
+- promote [web/app/agent-runs/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx) into the core control-plane view
 - add `Inbox`, `Interventions`, and `Learnings`
 - demote the lab-heavy pages into a secondary navigation group
 - move the current all-in-one home page toward a lightweight role-aware entry point

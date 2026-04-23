@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import type {
@@ -43,6 +43,11 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { ValidationFlowHeader } from "../../components/validation/ValidationFlowHeader";
+import {
+  buildExperimentHref,
+  buildRunsHref,
+  buildSimulationHref,
+} from "../../lib/routes";
 
 type EntityType = "experiment_run" | "simulation_run" | "battery" | "copy_revision";
 type ProviderType = "openai" | "gemini" | "anthropic" | "openrouter";
@@ -180,6 +185,32 @@ export default function ValidationPage() {
     useState<ProviderRunLaunchInfo | null>(null);
   const [queryPrefillApplied, setQueryPrefillApplied] = useState(false);
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
+  const runIdParam = searchParams.get("run_id")?.trim() || "";
+
+  const experimentsHref = useMemo(() => {
+    return buildExperimentHref(manualExperimentId || experimentIdParam || null, {
+      runId: runIdParam || null,
+    });
+  }, [experimentIdParam, manualExperimentId, runIdParam]);
+
+  const validationBackHref = useMemo(() => {
+    if (!runIdParam) {
+      return experimentsHref;
+    }
+    return buildRunsHref({
+      experimentId: manualExperimentId || experimentIdParam || null,
+      runId: runIdParam,
+    });
+  }, [experimentIdParam, experimentsHref, manualExperimentId, runIdParam]);
+
+  const simulationHref = useCallback(
+    (simulationRunId: string) => {
+      return buildSimulationHref(simulationRunId, {
+        experimentId: manualExperimentId || experimentIdParam || null,
+      });
+    },
+    [experimentIdParam, manualExperimentId],
+  );
 
   const renderMetricValue = useCallback((value: unknown, fallback = "—") => {
     if (value === null || value === undefined) return fallback;
@@ -879,11 +910,7 @@ export default function ValidationPage() {
         void handleLogObservedValidation();
         return;
       case "open_experiments":
-        router.push(
-          manualExperimentId
-            ? `/experiments?experiment_id=${manualExperimentId}`
-            : "/experiments",
-        );
+        router.push(experimentsHref);
         return;
       default:
         return;
@@ -898,6 +925,7 @@ export default function ValidationPage() {
     router,
     userId,
     validationNextAction.action,
+    experimentsHref,
   ]);
 
   return (
@@ -922,11 +950,15 @@ export default function ValidationPage() {
         onClose={handleCloseHistory}
         onSelect={() => {}}
         onSelectSimulation={(run) => {
-          router.push(`/simulation?run_id=${run.id}`);
+          router.push(
+            buildSimulationHref(run.id, {
+              experimentId: manualExperimentId || experimentIdParam || null,
+            }),
+          );
           handleCloseHistory();
         }}
         onSelectExperiment={(experiment) => {
-          router.push(`/experiments?experiment_id=${experiment.id}`);
+          router.push(buildExperimentHref(experiment.id, { runId: runIdParam || null }));
           handleCloseHistory();
         }}
         onRequestDelete={() => {}}
@@ -937,9 +969,31 @@ export default function ValidationPage() {
             title="Validation"
             subtitle="Run in-app validation or collect structured external feedback."
             onMenu={() => setSidebarOpen(true)}
-            onBack={() => router.push("/experiments")}
-            backLabel="Back to experiments"
+            onBack={() => router.push(validationBackHref)}
+            backLabel={runIdParam ? "Back to selected run" : "Back to experiments"}
           />
+          {runIdParam ? (
+            <section className="panel__notice panel__notice--info">
+              <strong>Run context preserved:</strong> this validation view was opened from run{" "}
+              <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => router.push(validationBackHref)}
+                >
+                  Return to run
+                </button>
+                <button
+                  type="button"
+                  className="panel__action panel__action--ghost"
+                  onClick={() => router.push(experimentsHref)}
+                >
+                  Open experiments
+                </button>
+              </div>
+            </section>
+          ) : null}
           <ValidationFlowHeader
             currentStep={validationCurrentStep}
             steps={validationFlowSteps}
@@ -955,13 +1009,7 @@ export default function ValidationPage() {
             observedUnlockReady={observedUnlockReady}
             hasSyntheticResult={Boolean(result)}
             onRunNextAction={handleRunValidationNextAction}
-            onOpenExperiments={() =>
-              router.push(
-                manualExperimentId
-                  ? `/experiments?experiment_id=${manualExperimentId}`
-                  : "/experiments",
-              )
-            }
+            onOpenExperiments={() => router.push(experimentsHref)}
           />
           <section className="panel__card panel__card--secondary panel__card--compact">
             <div className="panel__subheading">Step 1 · Configure provider defaults</div>
@@ -1535,7 +1583,7 @@ export default function ValidationPage() {
                     <strong>
                       <a
                         className="panel__link"
-                        href={`/simulation?run_id=${winnerContext.simulationRunId}`}
+                        href={simulationHref(winnerContext.simulationRunId)}
                       >
                         {winnerContext.winnerLabel}
                       </a>
