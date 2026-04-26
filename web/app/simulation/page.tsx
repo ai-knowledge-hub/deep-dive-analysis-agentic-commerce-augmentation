@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import type {
   SimulationLesson,
   SimulationOptimizeResponse,
@@ -56,10 +56,10 @@ function filterProductsForBrand(
   });
 }
 
-export default function SimulationPage() {
+function SimulationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
   const { clientId, productId, productName, brandId, setProductId, setClientId } =
     useTenant();
@@ -1411,5 +1411,13 @@ export default function SimulationPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SimulationPage() {
+  return (
+    <Suspense fallback={null}>
+      <SimulationPageContent />
+    </Suspense>
   );
 }

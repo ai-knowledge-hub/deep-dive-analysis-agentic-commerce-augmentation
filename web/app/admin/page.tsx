@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import type {
   AdminBrand,
   AdminClient,
@@ -112,7 +112,7 @@ const LLM_MODEL_OPTIONS: Record<string, string[]> = {
 
 export default function AdminPage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const {
     clientId: tenantClientId,
     brandId: tenantBrandId,

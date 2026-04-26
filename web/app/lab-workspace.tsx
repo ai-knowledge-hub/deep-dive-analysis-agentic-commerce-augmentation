@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   analyzeEvidence,
@@ -43,7 +43,7 @@ import { IntentionalityProfileCard } from "../components/products/Intentionality
 import { IntentDisplay } from "../components/intent/IntentDisplay";
 import { ProductReasoning } from "../components/products/ProductReasoning";
 import { HistoryDrawer } from "../components/layout/HistoryDrawer";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../lib/auth";
 import { useTenant } from "../components/tenant/TenantProvider";
 import { buildExperimentHref, buildSimulationHref } from "../lib/routes";
 import { buildTenantStorageKey } from "../lib/storage";
@@ -87,7 +87,7 @@ type SessionState = {
   last_profiles?: EvidenceAnalyzeResponse["profiles"];
 };
 
-export default function HomePage() {
+function HomePageContent() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
@@ -137,7 +137,7 @@ export default function HomePage() {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const { user } = useUser();
+  const { user } = useAppUser();
   const searchParams = useSearchParams();
   const router = useRouter();
   const userId = user?.id ?? null;
@@ -1289,5 +1289,13 @@ export default function HomePage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <HomePageContent />
+    </Suspense>
   );
 }

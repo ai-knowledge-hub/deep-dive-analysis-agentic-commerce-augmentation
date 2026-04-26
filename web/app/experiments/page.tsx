@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import type {
   AdminProduct,
   BrandBelief,
@@ -94,10 +94,10 @@ import {
 } from "../../lib/routes";
 import { buildTenantStorageKey } from "../../lib/storage";
 
-export default function ExperimentsPage() {
+function ExperimentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
   const { productId, productName, brandId, clientId } = useTenant();
   const storageClientId =
@@ -3944,5 +3944,13 @@ export default function ExperimentsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ExperimentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ExperimentsPageContent />
+    </Suspense>
   );
 }

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import { Sidebar } from "./Sidebar";
 import { DetailHeader } from "./DetailHeader";
 
@@ -22,7 +22,7 @@ export function ControlPlanePlaceholder({
   nextItems,
 }: Props) {
   const router = useRouter();
-  const { user } = useUser();
+  const { user } = useAppUser();
 
   return (
     <div className="app">

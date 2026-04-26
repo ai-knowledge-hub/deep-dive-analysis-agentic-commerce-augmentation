@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { Sidebar } from "../../components/layout/Sidebar";
@@ -94,7 +94,7 @@ function buildFailureSummary(run: AgentRun, events: AgentRunEvent[]): InboxItem 
 
 export default function InboxPage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
 
   const [runs, setRuns] = useState<AgentRun[]>([]);

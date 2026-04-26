@@ -10,6 +10,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
+import { isMockAuthEnabled } from "../../lib/auth";
 import { useTenant } from "../tenant/TenantProvider";
 
 type SessionSummary = {
@@ -44,6 +45,7 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [showTenantPanel, setShowTenantPanel] = useState(false);
   const pathname = usePathname();
+  const mockAuth = isMockAuthEnabled();
   const {
     clients,
     clientId,
@@ -514,17 +516,23 @@ export function Sidebar({
       {!collapsed && (
         <div className="sidebar__footer">
           <div className="sidebar__auth">
-            <SignedOut>
-              <SignInButton />
-              <SignUpButton>
-                <button type="button" className="sidebar__auth-button">
-                  Sign up
-                </button>
-              </SignUpButton>
-            </SignedOut>
-            <SignedIn>
-              <UserButton />
-            </SignedIn>
+            {mockAuth ? (
+              <span className="sidebar__auth-button">Mock auth active</span>
+            ) : (
+              <>
+                <SignedOut>
+                  <SignInButton />
+                  <SignUpButton>
+                    <button type="button" className="sidebar__auth-button">
+                      Sign up
+                    </button>
+                  </SignUpButton>
+                </SignedOut>
+                <SignedIn>
+                  <UserButton />
+                </SignedIn>
+              </>
+            )}
           </div>
           <div className="sidebar__info">
             <span className="sidebar__info-label">Discovery Commerce</span>

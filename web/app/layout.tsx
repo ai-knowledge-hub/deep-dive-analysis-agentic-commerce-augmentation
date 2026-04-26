@@ -2,8 +2,26 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import { TenantProvider } from "../components/tenant/TenantProvider";
+import { isMockAuthEnabled } from "../lib/auth-mode";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  if (isMockAuthEnabled()) {
+    return (
+      <html lang="en">
+        <head>
+          <title>Intentionality Commerce</title>
+          <meta
+            name="description"
+            content="Intentionality optimization for AI commerce discovery"
+          />
+        </head>
+        <body>
+          <TenantProvider>{children}</TenantProvider>
+        </body>
+      </html>
+    );
+  }
+
   return (
     <ClerkProvider
       appearance={{

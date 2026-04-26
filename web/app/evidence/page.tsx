@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import type {
   EvidenceAnalyzeResponse,
   SessionSummary,
@@ -29,7 +29,7 @@ import { buildExperimentHref, buildSimulationHref } from "../../lib/routes";
 
 export default function EvidencePage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
   const { clientId, productId, productName, brandId } = useTenant();
   const storageClientId =

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import type {
   Experiment,
   ExperimentMetric,
@@ -145,10 +145,10 @@ function observedSummaryValue(
     | null;
 }
 
-export default function ValidationPage() {
+function ValidationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
   const { clientId } = useTenant();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -1638,5 +1638,13 @@ export default function ValidationPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ValidationPage() {
+  return (
+    <Suspense fallback={null}>
+      <ValidationPageContent />
+    </Suspense>
   );
 }

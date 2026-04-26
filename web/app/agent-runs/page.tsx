@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 import type { AgentAction, AgentRun, AgentRunEvent, Experiment } from "../../lib/types";
 import {
   controlAgentRun,
@@ -367,10 +367,10 @@ function resolveSinceForWindow(windowId: "all" | "24h" | "7d"): string | null {
   return new Date(now - deltaMs).toISOString();
 }
 
-export default function AgentRunsPage() {
+function AgentRunsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
 
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
@@ -2566,5 +2566,13 @@ export default function AgentRunsPage() {
 
       </main>
     </div>
+  );
+}
+
+export default function AgentRunsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgentRunsPageContent />
+    </Suspense>
   );
 }
