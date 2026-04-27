@@ -16,6 +16,7 @@ import {
   decideAgentAction,
   getAgentRun,
   getAgentRunEvents,
+  issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
   listAgentRuntimeRegistry,
@@ -1277,6 +1278,39 @@ function AgentRunsPageContent() {
     [loadRuns, loadSelected, selectedRunId, userId],
   );
 
+  const handleOperatorCommand = useCallback(
+    async (command: {
+      command_type:
+        | "explain"
+        | "focus"
+        | "change_plan"
+        | "start"
+        | "pause"
+        | "cancel"
+        | "step"
+        | "approve"
+        | "reject"
+        | "retry";
+      action_id?: string | null;
+      message?: string | null;
+    }) => {
+      if (!userId || !selectedRunId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        await issueAgentRunCommand(selectedRunId, command, userId);
+        await loadSelected();
+        await loadRuns();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to issue command.");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadRuns, loadSelected, selectedRunId, userId],
+  );
+
   return (
     <div className="app agent-runs-page">
       <Sidebar
@@ -1399,6 +1433,7 @@ function AgentRunsPageContent() {
                     setSelectedActionId(nextRecommendedAction.action.id);
                   }
                 }}
+                onIssueCommand={handleOperatorCommand}
                 onOpenExperiment={() => {
                   if (selectedRun?.experiment_id) {
                     const params = new URLSearchParams();

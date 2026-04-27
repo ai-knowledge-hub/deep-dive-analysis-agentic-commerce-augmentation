@@ -2,7 +2,12 @@
 
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
+import type {
+  AgentAction,
+  AgentRun,
+  AgentRunCommandType,
+  AgentRunEvent,
+} from "../../lib/types";
 
 type PromptId =
   | "brief"
@@ -36,6 +41,11 @@ type Props = {
   onFocusPolicy?: () => void;
   onFocusValidationLinked?: () => void;
   onJumpToNextAction?: () => void;
+  onIssueCommand?: (command: {
+    command_type: AgentRunCommandType;
+    action_id?: string | null;
+    message?: string | null;
+  }) => Promise<void> | void;
 };
 
 function formatRunLabel(run: AgentRun | null): string {
@@ -94,6 +104,7 @@ export function OperatorConsoleChat({
   onFocusPolicy,
   onFocusValidationLinked,
   onJumpToNextAction,
+  onIssueCommand,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
@@ -321,6 +332,42 @@ export function OperatorConsoleChat({
     setMessages((current) => [...current, userMessage, assistantMessage]);
   }
 
+  async function issueCommand(
+    command_type: AgentRunCommandType,
+    message: string,
+    action_id?: string | null,
+  ) {
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}-${command_type}`,
+      role: "user",
+      content: message,
+    };
+    setMessages((current) => [...current, userMessage]);
+    try {
+      await onIssueCommand?.({ command_type, action_id, message });
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}-${command_type}`,
+          role: "assistant",
+          content: `Command receipt recorded: ${command_type}. I refreshed the execution context so you can review the resulting run state and timeline.`,
+        },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}-${command_type}-error`,
+          role: "assistant",
+          content:
+            error instanceof Error
+              ? `Command failed: ${error.message}`
+              : "Command failed before the runtime accepted it.",
+        },
+      ]);
+    }
+  }
+
   return (
     <section className="panel__card panel__card--secondary">
       <div className="panel__header">
@@ -420,6 +467,53 @@ export function OperatorConsoleChat({
             </div>
           ))
         )}
+      </div>
+
+      <div className="panel__actions">
+        <button
+          type="button"
+          className="button button--primary button--sm"
+          onClick={() =>
+            issueCommand(
+              "approve",
+              `Approve ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "proposed"}
+        >
+          Approve selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "reject",
+              `Reject ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "proposed"}
+        >
+          Reject selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("pause", "Pause this run")}
+          disabled={!run}
+        >
+          Pause run
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("start", "Start or resume this run")}
+          disabled={!run}
+        >
+          Start run
+        </button>
       </div>
 
       <div className="panel__actions">

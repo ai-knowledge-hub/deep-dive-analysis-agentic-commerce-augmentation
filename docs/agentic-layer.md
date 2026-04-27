@@ -18,6 +18,7 @@ Implemented now:
 - Static skills/tools registry exposed at `GET /agent-runs/registry`
 - New planned actions/events carry `skill_id`, `tool_id`, `effect_class`, principal metadata, and trace id
 - Runs and Interventions UI visibility into selected-run skills, tools, policy profile, principal, and trace id
+- Operator chat steering endpoint with audited `operator_command_*` receipts
 
 ---
 
@@ -98,6 +99,10 @@ Worker/ops entry points:
     - `since`, `until`
     - `before`, `after`
     - `event_id`, `around`
+- API: `POST /agent-runs/{run_id}/commands`
+  - records `operator_command_*` receipts from the chat control plane
+  - delegates approve/reject/start/pause/cancel/step/retry to existing action/runtime controls
+  - supports non-mutating explain/focus/change-plan receipts for chat-led steering
 - CLI: `python -m scripts.run_agent_runtime_worker`
 - Make target: `make agent-runtime-tick`
 - Scheduler CLI: `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`
@@ -370,6 +375,12 @@ Event stream is exposed via:
   - `since`, `until`
   - `before`, `after`
   - `event_id`, `around`
+
+Operator steering is exposed via:
+- `POST /agent-runs/{run_id}/commands`
+- mutating commands: `approve`, `reject`, `retry`, `start`, `pause`, `cancel`, `step`
+- non-mutating command receipts: `explain`, `focus`, `change_plan`
+- command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
 
 ### 3.5 Version Registry (scientific reproducibility)
 

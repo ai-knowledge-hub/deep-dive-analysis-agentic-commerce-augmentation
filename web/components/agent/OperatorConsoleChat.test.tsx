@@ -168,4 +168,53 @@ describe("OperatorConsoleChat", () => {
     await user.click(screen.getByRole("button", { name: /Open experiment context/i }));
     expect(onOpenExperiment).toHaveBeenCalledTimes(1);
   });
+
+  it("issues state-changing operator commands with action context", async () => {
+    const user = userEvent.setup();
+    const onIssueCommand = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OperatorConsoleChat
+        run={{
+          id: "run-1",
+          experiment_id: "exp-12345678",
+          status: "planned",
+          state: "variants_ready",
+          run_mode: "auto_execute_safe",
+        }}
+        actions={[
+          {
+            id: "action-1",
+            agent_run_id: "run-1",
+            sequence: 1,
+            status: "proposed",
+            capability_name: "publish_copy_revision",
+          },
+        ]}
+        events={[]}
+        selectedAction={{
+          id: "action-1",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "proposed",
+          capability_name: "publish_copy_revision",
+        }}
+        nextRecommendedAction={{
+          action: null,
+          guardrails: [],
+          hint: "No next action.",
+        }}
+        onIssueCommand={onIssueCommand}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Approve selected/i }));
+
+    expect(onIssueCommand).toHaveBeenCalledWith({
+      command_type: "approve",
+      action_id: "action-1",
+      message: "Approve publish_copy_revision",
+    });
+    expect(await screen.findByText(/Command receipt recorded: approve/i)).toBeInTheDocument();
+  });
 });

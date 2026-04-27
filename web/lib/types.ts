@@ -1029,6 +1029,18 @@ export type AgentRunControlResponse = {
   message?: string;
 };
 
+export type AgentRunCommandType =
+  | "explain"
+  | "focus"
+  | "change_plan"
+  | "start"
+  | "pause"
+  | "cancel"
+  | "step"
+  | "approve"
+  | "reject"
+  | "retry";
+
 export type AgentRunEvent = {
   id: string;
   run_id: string;
@@ -1110,6 +1122,13 @@ export type AgentRunEventListResponse = {
     has_more_before?: boolean;
     has_more_after?: boolean;
   };
+};
+
+export type AgentRunCommandResponse = {
+  command: AgentRunEvent;
+  run: AgentRun;
+  action?: AgentAction;
+  message?: string;
 };
 
 export type ValidationJobListResponse = {

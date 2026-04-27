@@ -279,6 +279,52 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
 
 
+def test_operator_command_endpoint_records_receipt_and_delegates_approval(
+    client: TestClient,
+):
+    created = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+    assert created.status_code == 200
+    run = created.json()["run"]
+    detail = client.get(
+        f"/agent-runs/{run['id']}",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    action = detail.json()["actions"][0]
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "approve",
+            "action_id": action["id"],
+            "message": "Approve from operator chat.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["command"]["event_type"] == "operator_command_approve"
+    assert payload["command"]["status"] == "received"
+    assert payload["action"]["status"] == "approved"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    event_types = [event["event_type"] for event in events.json()["events"]]
+    assert "operator_command_approve" in event_types
+    assert "action_approved" in event_types
+    assert any(event["status"] == "completed" for event in events.json()["events"])
+
+
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(
     client: TestClient,
 ):

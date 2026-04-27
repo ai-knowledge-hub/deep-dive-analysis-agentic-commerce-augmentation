@@ -34,6 +34,7 @@ The codebase now has the minimum spine for the pivot:
 - Read API for the runtime registry: `GET /agent-runs/registry`.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
+- Operator chat can issue audited steering commands for approve, reject, pause, start, and non-mutating focus/explain/change-plan intents.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -75,13 +76,12 @@ Next steps:
 
 ### 2. Agent Chat As Primary Control Interface
 
-Current state: operator chat can explain and navigate execution context.
+Current state: operator chat can explain, navigate execution context, and issue a first set of audited steering commands through existing runtime/action controls.
 
 Next steps:
 
-- Add chat-issued steering commands: explain, focus, pause, approve, reject, retry, change plan.
-- Keep commands routed through policy and existing action/run APIs.
-- Add command receipts to event history.
+- Expand command coverage beyond approve/reject/start/pause into retry, step, cancel, and structured change-plan workflows in the UI.
+- Add richer policy preflight previews before high-risk command submission.
 - Add undo/rollback guidance where side effects cannot be reversed.
 
 ### 3. External Agent API Contracts
@@ -128,11 +128,11 @@ Next steps:
 
 ## Near-Term Recommendation
 
-The next implementation slice should be chat-issued steering commands:
+The next implementation slice should be command preflight and safer retry:
 
-1. Add a backend command endpoint that maps operator-chat intents to existing run/action controls.
-2. Support `explain`, `focus`, `pause`, `approve`, `reject`, `retry`, and `change_plan` command types.
-3. Route every state-changing command through existing policy checks and emit command receipt events.
-4. Show command receipts in the Runs timeline and Interventions context.
+1. Add a policy preflight response for chat commands before high-risk state changes.
+2. Make retry explicit: retry failed action, retry from last safe checkpoint, or create a new proposed recovery action.
+3. Surface command receipts and command outcomes as first-class timeline filters.
+4. Add Interventions actions for command-originated high-risk decisions.
 
-That slice turns the chat console from a navigator into the primary human steering interface.
+That slice makes the chat console safer as it becomes the primary human steering interface.

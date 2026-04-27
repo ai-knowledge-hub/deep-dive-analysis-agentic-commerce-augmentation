@@ -16,6 +16,7 @@ const createAgentRunMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
+const issueAgentRunCommandMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
 
 const localStorageMock = {
@@ -62,6 +63,7 @@ vi.mock("../../lib/api", () => ({
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
   listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
+  issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
 }));
 
 describe("AgentRunsPage timeline presets", () => {
@@ -84,6 +86,7 @@ describe("AgentRunsPage timeline presets", () => {
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
     listAgentRuntimeRegistryMock.mockReset();
+    issueAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
     window.localStorage.clear();
 
@@ -132,6 +135,10 @@ describe("AgentRunsPage timeline presets", () => {
     createAgentRunMock.mockResolvedValue({ run: { id: "run-2" } });
     decideAgentActionMock.mockResolvedValue({});
     controlAgentRunMock.mockResolvedValue({});
+    issueAgentRunCommandMock.mockResolvedValue({
+      command: { id: "evt-command", run_id: "run-1", sequence: 0, event_type: "operator_command_approve", status: "completed" },
+      run: { id: "run-1" },
+    });
     listAgentRuntimeRegistryMock.mockResolvedValue({
       skills: [
         {
@@ -402,5 +409,52 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/experiment.run_variant/i)).toBeInTheDocument();
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
+  });
+
+  it("routes operator chat steering commands through the command API", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "planned",
+        state: "battery_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "plan_only",
+        allowed_capabilities: ["run_variant"],
+      },
+      actions: [
+        {
+          id: "action-1",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "proposed",
+          capability_name: "run_variant",
+          capability_version: "v1",
+          rationale: "Run variant.",
+          inputs: {},
+          outputs: {},
+          tool_id: "experiment.run_variant",
+          skill_id: "optimize-product-representation",
+          effect_class: "write_low_risk",
+        },
+      ],
+    });
+
+    render(<AgentRunsPage />);
+
+    await screen.findByText(/Selection: run_variant/i);
+    await userEvent.click(screen.getByRole("button", { name: /Approve selected/i }));
+
+    await waitFor(() => expect(issueAgentRunCommandMock).toHaveBeenCalled());
+    expect(issueAgentRunCommandMock).toHaveBeenCalledWith(
+      "run-1",
+      {
+        command_type: "approve",
+        action_id: "action-1",
+        message: "Approve run_variant",
+      },
+      "user-a",
+    );
   });
 });

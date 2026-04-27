@@ -7,6 +7,8 @@ import {
   AgentRunCreateResponse,
   AgentRunDetailResponse,
   AgentRunListResponse,
+  AgentRunCommandResponse,
+  AgentRunCommandType,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
   CopyRevisionListResponse,
@@ -627,6 +629,27 @@ export async function controlAgentRun(
       }),
     },
   );
+}
+
+export async function issueAgentRunCommand(
+  runId: string,
+  payload: {
+    command_type: AgentRunCommandType;
+    action_id?: string | null;
+    message?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AgentRunCommandResponse> {
+  const clientId = getClientId();
+  return request<AgentRunCommandResponse>(`/agent-runs/${runId}/commands`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
 }
 
 export async function getHealthLLM(): Promise<HealthLLMResponse> {

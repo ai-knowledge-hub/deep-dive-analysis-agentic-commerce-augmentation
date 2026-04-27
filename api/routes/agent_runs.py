@@ -119,6 +119,15 @@ class AgentRunTickRequest(BaseModel):
     max_steps_per_run: int = 5
 
 
+class AgentRunCommandRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    command_type: str = Field(..., min_length=1)
+    action_id: Optional[str] = None
+    message: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
 def _serialize_spec(value: Any) -> Dict[str, Any]:
     if is_dataclass(value):
         return asdict(value)
@@ -135,6 +144,49 @@ def _hash_payload(value: Any) -> str:
     except Exception:
         encoded = str(value).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _record_command_event(
+    *,
+    deps: AppDeps,
+    run: Dict[str, Any],
+    command_type: str,
+    status: str,
+    action: Optional[Dict[str, Any]] = None,
+    note: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return deps.agent_events.create_agent_event(
+        agent_run_id=str(run.get("id") or ""),
+        action_id=str(action.get("id") or "") if action else None,
+        sequence=int(action.get("sequence") or 0) if action else 0,
+        event_type=f"operator_command_{command_type}",
+        status=status,
+        capability_name=str(action.get("capability_name") or "") if action else None,
+        capability_version=str(action.get("capability_version") or "") if action else None,
+        principal_type=run.get("principal_type"),
+        principal_id=run.get("principal_id"),
+        tool_id=action.get("tool_id") if action else None,
+        skill_id=(
+            action.get("skill_id") or skill_id_for_tool_id(action.get("tool_id"))
+            if action
+            else None
+        ),
+        effect_class=action.get("effect_class") if action else None,
+        trace_id=run.get("trace_id"),
+        note=note or f"Operator command: {command_type}",
+        is_policy_event=False,
+        anchors={
+            "experiment_id": run.get("experiment_id"),
+            "variant_id": action.get("variant_id") if action else None,
+            "validation_job_id": action.get("validation_job_id") if action else None,
+            "hypothesis_id": action.get("hypothesis_id") if action else None,
+            "snapshot_version": action.get("snapshot_version") if action else None,
+            "metric_id": None,
+            "command_type": command_type,
+            "metadata": metadata or {},
+        },
+    )
 
 
 @router.get("/registry")
@@ -433,6 +485,138 @@ def get_agent_run_events(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     payload = page.to_dict()
     return AgentRunEventListResponse(events=payload["events"], page=payload["page"])
+
+
+@router.post("/{run_id}/commands")
+def issue_agent_run_command(
+    run_id: str,
+    payload: AgentRunCommandRequest,
+    runtime: AgentRuntimeService = Depends(_runtime),
+    deps: AppDeps = Depends(_deps),
+) -> Dict[str, Any]:
+    scoped_client_id = require_client_id(payload.client_id, payload.user_id)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    command_type = str(payload.command_type or "").strip().lower()
+    allowed_commands = {
+        "explain",
+        "focus",
+        "change_plan",
+        "start",
+        "pause",
+        "cancel",
+        "step",
+        "approve",
+        "reject",
+        "retry",
+    }
+    if command_type not in allowed_commands:
+        raise HTTPException(status_code=400, detail="Unsupported command")
+
+    action = None
+    if payload.action_id:
+        action = deps.agent_actions.get_agent_action(
+            action_id=payload.action_id,
+            client_id=scoped_client_id,
+        )
+        if not action or str(action.get("agent_run_id") or "") != run_id:
+            raise HTTPException(status_code=404, detail="Agent action not found")
+
+    receipt = _record_command_event(
+        deps=deps,
+        run=run,
+        command_type=command_type,
+        status="received",
+        action=action,
+        note=payload.message or f"Operator chat command: {command_type}",
+        metadata=payload.metadata,
+    )
+    result: Dict[str, Any] = {"command": receipt, "run": run}
+
+    if command_type in {"explain", "focus", "change_plan"}:
+        return result
+
+    try:
+        if command_type == "start":
+            runtime_result = runtime.start_run(run_id=run_id)
+            result["run"] = runtime_result.run
+            result["message"] = runtime_result.message
+        elif command_type == "pause":
+            runtime_result = runtime.pause_run(run_id=run_id)
+            result["run"] = runtime_result.run
+        elif command_type == "cancel":
+            runtime_result = runtime.cancel_run(run_id=run_id)
+            result["run"] = runtime_result.run
+        elif command_type == "step":
+            runtime_result = runtime.step_once(run_id=run_id, user_id=payload.user_id)
+            result["run"] = runtime_result.run
+            result["action"] = runtime_result.action
+        elif command_type in {"approve", "reject", "retry"}:
+            if not action:
+                raise HTTPException(status_code=400, detail="Action id is required")
+            status = "rejected" if command_type == "reject" else "approved"
+            updated = deps.agent_actions.update_agent_action_status(
+                action_id=str(action.get("id")),
+                status=status,
+            )
+            current = updated or action
+            deps.agent_events.create_agent_event(
+                agent_run_id=run_id,
+                action_id=str(current.get("id") or ""),
+                sequence=int(current.get("sequence") or 0),
+                event_type=(
+                    "action_retry_queued"
+                    if command_type == "retry"
+                    else f"action_{status}"
+                ),
+                status=status,
+                capability_name=str(current.get("capability_name") or "") or None,
+                capability_version=str(current.get("capability_version") or "") or None,
+                principal_type=run.get("principal_type"),
+                principal_id=run.get("principal_id"),
+                tool_id=current.get("tool_id")
+                or capability_to_tool_id(current.get("capability_name")),
+                skill_id=current.get("skill_id")
+                or skill_id_for_tool_id(
+                    current.get("tool_id")
+                    or capability_to_tool_id(current.get("capability_name"))
+                ),
+                effect_class=current.get("effect_class")
+                or tool_effect_class(
+                    current.get("tool_id")
+                    or capability_to_tool_id(current.get("capability_name"))
+                ),
+                trace_id=run.get("trace_id"),
+                note=f"Action {command_type} by operator chat",
+                is_policy_event=False,
+                anchors={
+                    "experiment_id": run.get("experiment_id"),
+                    "variant_id": current.get("variant_id"),
+                    "validation_job_id": current.get("validation_job_id"),
+                    "hypothesis_id": current.get("hypothesis_id"),
+                    "snapshot_version": current.get("snapshot_version"),
+                    "metric_id": None,
+                },
+            )
+            result["action"] = updated or action
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PlanOnlyModeError, NoApprovedActionError, RunBusyError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CapabilityExecutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AgentRuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _record_command_event(
+        deps=deps,
+        run=result.get("run") or run,
+        command_type=command_type,
+        status="completed",
+        action=result.get("action") or action,
+        note=f"Operator chat command completed: {command_type}",
+        metadata=payload.metadata,
+    )
+    return result
 
 
 @router.post("/actions/{action_id}/decision")
