@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,12 +17,17 @@ from application.services.agent_runtime.capabilities import (
 )
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
+    list_skill_specs,
     new_trace_id,
     policy_profile_for_run_mode,
     tool_effect_class,
 )
 from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime.planner import build_initial_plan
+from application.services.agent_runtime.registry import (
+    list_capability_specs,
+    list_tool_specs,
+)
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
     AgentRuntimeService,
@@ -112,6 +118,14 @@ class AgentRunTickRequest(BaseModel):
     max_steps_per_run: int = 5
 
 
+def _serialize_spec(value: Any) -> Dict[str, Any]:
+    if is_dataclass(value):
+        return asdict(value)
+    if isinstance(value, dict):
+        return dict(value)
+    return dict(getattr(value, "__dict__", {}))
+
+
 def _hash_payload(value: Any) -> str:
     try:
         encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode(
@@ -120,6 +134,43 @@ def _hash_payload(value: Any) -> str:
     except Exception:
         encoded = str(value).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+@router.get("/registry")
+def get_agent_runtime_registry() -> Dict[str, Any]:
+    skills = [_serialize_spec(skill) for skill in list_skill_specs()]
+    tools = [_serialize_spec(tool) for tool in list_tool_specs()]
+    capabilities = [_serialize_spec(capability) for capability in list_capability_specs()]
+    skill_ids_by_tool: Dict[str, List[str]] = {}
+    for skill in skills:
+        for tool_id in skill.get("tool_ids", []) or []:
+            skill_ids_by_tool.setdefault(str(tool_id), []).append(str(skill.get("id")))
+    return {
+        "skills": skills,
+        "tools": tools,
+        "capabilities": capabilities,
+        "skill_ids_by_tool": skill_ids_by_tool,
+        "policy_profiles": [
+            {
+                "id": "human_approval_required",
+                "name": "Human Approval Required",
+                "description": "Plan-first profile; proposed actions require operator approval before execution.",
+                "auto_effect_classes": [],
+            },
+            {
+                "id": "safe_auto",
+                "name": "Safe Auto",
+                "description": "Allows bounded execution for low-risk approved work while preserving gates for risky effects.",
+                "auto_effect_classes": ["read", "recommend", "write_low_risk"],
+            },
+            {
+                "id": "observe",
+                "name": "Observe",
+                "description": "Read-only profile for inspection, explanation, and audit workflows.",
+                "auto_effect_classes": ["read", "recommend"],
+            },
+        ],
+    }
 
 
 @router.post("")

@@ -963,6 +963,13 @@ export type AgentRun = {
   brand_id?: string | null;
   product_id?: string | null;
   experiment_id?: string | null;
+  principal_type?: "human" | "internal_agent" | "external_agent" | string | null;
+  principal_id?: string | null;
+  agent_profile_id?: string | null;
+  harness_id?: string | null;
+  policy_profile_id?: string | null;
+  idempotency_key?: string | null;
+  trace_id?: string | null;
   objective?: Record<string, unknown>;
   allowed_capabilities?: string[];
   capability_versions?: Record<string, unknown>;
@@ -995,6 +1002,9 @@ export type AgentAction = {
   hypothesis_id?: string | null;
   variant_id?: string | null;
   validation_job_id?: string | null;
+  tool_id?: string | null;
+  skill_id?: string | null;
+  effect_class?: string | null;
   error?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -1028,6 +1038,11 @@ export type AgentRunEvent = {
   status: string;
   capability_name?: string | null;
   capability_version?: string | null;
+  principal_type?: "human" | "internal_agent" | "external_agent" | string | null;
+  principal_id?: string | null;
+  tool_id?: string | null;
+  skill_id?: string | null;
+  effect_class?: string | null;
   timestamp?: string | null;
   note?: string | null;
   is_policy_event?: boolean;
@@ -1039,6 +1054,52 @@ export type AgentRunEvent = {
     snapshot_version?: number | null;
     metric_id?: string | null;
   };
+};
+
+export type AgentRuntimeSkillSpec = {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  tool_ids: string[];
+  risk_class: string;
+};
+
+export type AgentRuntimeToolSpec = {
+  id: string;
+  capability_name: string;
+  default_version?: string;
+  required_inputs?: string[];
+  default_inputs?: Record<string, unknown>;
+  side_effects?: string[];
+  next_state?: string | null;
+  effect_class?: string;
+};
+
+export type AgentRuntimeCapabilitySpec = {
+  name: string;
+  tool_id: string;
+  default_version?: string;
+  required_inputs?: string[];
+  default_inputs?: Record<string, unknown>;
+  side_effects?: string[];
+  next_state?: string | null;
+  effect_class?: string;
+};
+
+export type AgentRuntimePolicyProfile = {
+  id: string;
+  name: string;
+  description: string;
+  auto_effect_classes: string[];
+};
+
+export type AgentRuntimeRegistryResponse = {
+  skills: AgentRuntimeSkillSpec[];
+  tools: AgentRuntimeToolSpec[];
+  capabilities: AgentRuntimeCapabilitySpec[];
+  skill_ids_by_tool: Record<string, string[]>;
+  policy_profiles: AgentRuntimePolicyProfile[];
 };
 
 export type AgentRunEventListResponse = {

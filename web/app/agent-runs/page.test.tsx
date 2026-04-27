@@ -15,6 +15,7 @@ const getAgentRunEventsMock = vi.fn();
 const createAgentRunMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
+const listAgentRuntimeRegistryMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
 
 const localStorageMock = {
@@ -60,6 +61,7 @@ vi.mock("../../lib/api", () => ({
   createAgentRun: (...args: unknown[]) => createAgentRunMock(...args),
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
+  listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
 }));
 
 describe("AgentRunsPage timeline presets", () => {
@@ -81,6 +83,7 @@ describe("AgentRunsPage timeline presets", () => {
     createAgentRunMock.mockReset();
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
+    listAgentRuntimeRegistryMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
     window.localStorage.clear();
 
@@ -94,6 +97,9 @@ describe("AgentRunsPage timeline presets", () => {
           budgets: {},
           requires_approval: true,
           run_mode: "plan_only",
+          allowed_capabilities: ["run_variant"],
+          principal_type: "human",
+          policy_profile_id: "human_approval_required",
         },
       ],
     });
@@ -107,6 +113,10 @@ describe("AgentRunsPage timeline presets", () => {
         budgets: {},
         requires_approval: true,
         run_mode: "plan_only",
+        allowed_capabilities: ["run_variant"],
+        principal_type: "human",
+        policy_profile_id: "human_approval_required",
+        trace_id: "trace_1234567890",
       },
       actions: [],
     });
@@ -122,6 +132,40 @@ describe("AgentRunsPage timeline presets", () => {
     createAgentRunMock.mockResolvedValue({ run: { id: "run-2" } });
     decideAgentActionMock.mockResolvedValue({});
     controlAgentRunMock.mockResolvedValue({});
+    listAgentRuntimeRegistryMock.mockResolvedValue({
+      skills: [
+        {
+          id: "optimize-product-representation",
+          name: "Optimize Product Representation",
+          description: "Improve product representation.",
+          version: "v1",
+          tool_ids: ["experiment.run_variant"],
+          risk_class: "write_low_risk",
+        },
+      ],
+      tools: [
+        {
+          id: "experiment.run_variant",
+          capability_name: "run_variant",
+          default_version: "v1",
+          side_effects: ["create_experiment_run"],
+          effect_class: "write_low_risk",
+        },
+      ],
+      capabilities: [
+        {
+          name: "run_variant",
+          tool_id: "experiment.run_variant",
+          default_version: "v1",
+          side_effects: ["create_experiment_run"],
+          effect_class: "write_low_risk",
+        },
+      ],
+      skill_ids_by_tool: {
+        "experiment.run_variant": ["optimize-product-representation"],
+      },
+      policy_profiles: [],
+    });
   });
 
   it("applies Policy failures preset to event query payload", async () => {
@@ -348,5 +392,15 @@ describe("AgentRunsPage timeline presets", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Open experiment context/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+  });
+
+  it("shows the selected run skills and tool registry contract", async () => {
+    render(<AgentRunsPage />);
+
+    expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
+    expect(screen.getByText(/Optimize Product Representation/i)).toBeInTheDocument();
+    expect(screen.getByText(/experiment.run_variant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
+    expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
   });
 });

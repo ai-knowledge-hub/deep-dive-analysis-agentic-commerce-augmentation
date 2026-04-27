@@ -3,7 +3,13 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
-import type { AgentAction, AgentRun, AgentRunEvent, Experiment } from "../../lib/types";
+import type {
+  AgentAction,
+  AgentRun,
+  AgentRunEvent,
+  AgentRuntimeRegistryResponse,
+  Experiment,
+} from "../../lib/types";
 import {
   controlAgentRun,
   createAgentRun,
@@ -12,6 +18,7 @@ import {
   getAgentRunEvents,
   listExperiments,
   listAgentRuns,
+  listAgentRuntimeRegistry,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
@@ -406,6 +413,8 @@ function AgentRunsPageContent() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
+  const [runtimeRegistry, setRuntimeRegistry] =
+    useState<AgentRuntimeRegistryResponse | null>(null);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -463,6 +472,15 @@ function AgentRunsPageContent() {
     () => resolveSinceForWindow(timelineTimeWindow),
     [timelineTimeWindow],
   );
+
+  const loadRuntimeRegistry = useCallback(async () => {
+    try {
+      const response = await listAgentRuntimeRegistry();
+      setRuntimeRegistry(response);
+    } catch {
+      setRuntimeRegistry(null);
+    }
+  }, []);
 
   const loadRuns = useCallback(async () => {
     if (!userId) return;
@@ -705,6 +723,10 @@ function AgentRunsPageContent() {
   }, [loadExperiments]);
 
   useEffect(() => {
+    void loadRuntimeRegistry();
+  }, [loadRuntimeRegistry]);
+
+  useEffect(() => {
     loadSelected();
   }, [loadSelected]);
 
@@ -801,6 +823,31 @@ function AgentRunsPageContent() {
       null,
     [actions, selectedActionId],
   );
+
+  const allowedRuntimeTools = useMemo(() => {
+    if (!runtimeRegistry || !selectedRun) return [];
+    const allowed = new Set(selectedRun.allowed_capabilities ?? []);
+    const usedToolIds = new Set((actions ?? []).map((action) => action.tool_id).filter(Boolean));
+    return runtimeRegistry.capabilities
+      .filter((capability) => allowed.has(capability.name))
+      .map((capability) => ({
+        capability,
+        tool: runtimeRegistry.tools.find((tool) => tool.id === capability.tool_id) ?? null,
+      }))
+      .filter(({ capability }) => capability.tool_id || usedToolIds.has(capability.tool_id));
+  }, [actions, runtimeRegistry, selectedRun]);
+
+  const activeRuntimeSkills = useMemo(() => {
+    if (!runtimeRegistry) return [];
+    const allowedToolIds = new Set(
+      allowedRuntimeTools
+        .map(({ capability }) => capability.tool_id)
+        .filter((toolId): toolId is string => Boolean(toolId)),
+    );
+    return runtimeRegistry.skills.filter((skill) =>
+      (skill.tool_ids ?? []).some((toolId) => allowedToolIds.has(toolId)),
+    );
+  }, [allowedRuntimeTools, runtimeRegistry]);
 
   const actionCounters = useMemo(() => {
     const counts = {
@@ -1564,6 +1611,76 @@ function AgentRunsPageContent() {
                         )}
                       </div>
                     </div>
+                    <section className="panel__card panel__card--secondary">
+                      <div className="panel__header">
+                        <h4>Skills and tools</h4>
+                        <span className="panel__badge panel__badge--secondary">
+                          {runtimeRegistry ? "Registry v1" : "Loading registry"}
+                        </span>
+                      </div>
+                      <p className="panel__muted">
+                        This is the agent-facing execution contract for the selected run:
+                        skills describe reusable workflows, tools are the policy-governed
+                        capabilities the runtime can execute.
+                      </p>
+                      <div className="agent-ops-summary">
+                        <span className="panel__badge panel__badge--secondary">
+                          Principal: {selectedRun.principal_type ?? "human"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
+                        </span>
+                      </div>
+                      <div className="agent-ops-summary">
+                        {activeRuntimeSkills.slice(0, 4).map((skill) => (
+                          <span key={skill.id} className="panel__badge panel__badge--secondary">
+                            {skill.name} · {skill.risk_class}
+                          </span>
+                        ))}
+                        {runtimeRegistry && activeRuntimeSkills.length === 0 ? (
+                          <span className="panel__badge panel__badge--warning">
+                            No matching skills for allowed tools
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="table">
+                        <div className="table__header">
+                          <div className="table__cell">Tool</div>
+                          <div className="table__cell">Capability</div>
+                          <div className="table__cell">Effect</div>
+                          <div className="table__cell">Side effects</div>
+                        </div>
+                        {allowedRuntimeTools.slice(0, 8).map(({ capability, tool }) => (
+                          <div key={capability.name} className="table__row">
+                            <div className="table__cell" data-label="Tool">
+                              <div className="table__strong">{capability.tool_id}</div>
+                              <div className="table__muted">
+                                {tool?.default_version ?? capability.default_version ?? "v1"}
+                              </div>
+                            </div>
+                            <div className="table__cell" data-label="Capability">
+                              {capability.name}
+                            </div>
+                            <div className="table__cell" data-label="Effect">
+                              {tool?.effect_class ?? capability.effect_class ?? "unknown"}
+                            </div>
+                            <div className="table__cell table__muted" data-label="Side effects">
+                              {(tool?.side_effects ?? capability.side_effects ?? [])
+                                .slice(0, 3)
+                                .join(", ") || "none declared"}
+                            </div>
+                          </div>
+                        ))}
+                        {runtimeRegistry && allowedRuntimeTools.length === 0 ? (
+                          <div className="panel__muted">
+                            No registry tools match this run’s allowed capabilities.
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
                     <div className="agent-budget-grid">
                       <div
                         className={`agent-budget-card ${

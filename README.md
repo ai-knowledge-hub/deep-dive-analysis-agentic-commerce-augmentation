@@ -18,6 +18,8 @@ The core moat is not a single score. It is the **feedback loop** that continuous
 Current extension:
 - **Agent operator mode (v0)**: governed backend orchestration with run/action persistence, runtime step controls, centralized capability registry, and policy enforcement.
   See `docs/agentic-layer.md`.
+- **Agent-first pivot checkpoint**: the platform direction is now a governed agent execution fabric with a human control plane, not only a human-led lab.
+  See `docs/agentification-checkpoint.md`.
 
 ---
 
@@ -106,6 +108,8 @@ Layer rule enforced by architecture checks:
   - approved action execution in `auto_execute_safe`,
   - runtime safety with run lock + heartbeat refresh,
   - centralized capability specs + policy checks,
+  - machine-facing tools/skills registry exposed through `GET /agent-runs/registry`,
+  - principal-aware run creation for humans, internal agents, and external agents,
   - operator UI in `Agent runs` with approvals, timeline deep-links, and action explainability,
   - immutable run event history (`agent_events`) for audit/replay.
 
@@ -115,6 +119,9 @@ Experiment protocol transparency APIs:
 - `GET /experiments/{experiment_id}/hypotheses`
 
 Agent operator APIs:
+- `GET /agent-runs/registry`
+  - read-only skills/tools/capabilities registry
+  - exposes policy profile summaries for operator and agent clients
 - `POST /agent-runs`
 - `GET /agent-runs`
 - `GET /agent-runs/{run_id}`
@@ -309,7 +316,12 @@ Architecture checks are part of CI and enforce layer boundaries.
 
 ## Documentation
 
+- `docs/agentification-checkpoint.md`
+- `docs/agent-first-modular-architecture-v1.md`
+- `docs/agent-first-migration-slice-rfc.md`
 - `docs/agentic-layer.md`
+- `docs/chat-led-operator-console-spec.md`
+- `docs/ui-control-plane-simplification-plan.md`
 - `docs/app-architecture.md`
 - `docs/app-workflows.md`
 - `docs/experiment-flow-detailed.md`

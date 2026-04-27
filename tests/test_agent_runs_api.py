@@ -249,6 +249,22 @@ def test_seed_skill_specs_are_available():
     assert "request-validation-and-ingest-result" in skills
 
 
+def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
+    client: TestClient,
+):
+    response = client.get("/agent-runs/registry")
+    assert response.status_code == 200
+    payload = response.json()
+    tool_ids = {tool["id"] for tool in payload["tools"]}
+    skill_ids = {skill["id"] for skill in payload["skills"]}
+    policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
+
+    assert "experiment.run_variant" in tool_ids
+    assert "optimize-product-representation" in skill_ids
+    assert "safe_auto" in policy_ids
+    assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+
+
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(
     client: TestClient,
 ):

@@ -7,6 +7,7 @@ import {
   AgentRunCreateResponse,
   AgentRunDetailResponse,
   AgentRunListResponse,
+  AgentRuntimeRegistryResponse,
   ConversationResponse,
   CopyRevisionListResponse,
   CopyRevisionResponse,
@@ -585,6 +586,10 @@ export async function getAgentRunEvents(
   return request<AgentRunEventListResponse>(
     `/agent-runs/${runId}/events${params.toString() ? `?${params.toString()}` : ""}`,
   );
+}
+
+export async function listAgentRuntimeRegistry(): Promise<AgentRuntimeRegistryResponse> {
+  return request<AgentRuntimeRegistryResponse>("/agent-runs/registry");
 }
 
 export async function decideAgentAction(

@@ -1,15 +1,85 @@
 # Terminology Glossary
 
-This document defines the core terms used across the AI Discoverability Simulation Sandbox codebase.
+This document defines the core terms used across the agentic commerce codebase.
 
 The goal is to ensure **conceptual precision**, prevent semantic drift, and align architecture with implementation.
+
+---
+
+## Agent-First Commerce Control Plane
+
+**Definition**
+The current product direction: a governed commerce execution surface where humans, internal agents, and external agents operate through scoped principals, policy profiles, skills, tools, and auditable execution receipts.
+
+**Key Property**
+> The UI is a supervision and intervention surface; the backend runtime is the execution substrate.
+
+**In Code**
+```
+api/routes/agent_runs.py
+application/services/agent_runtime/*
+web/app/agent-runs/page.tsx
+web/app/interventions/page.tsx
+```
+
+---
+
+## Principal
+
+**Definition**
+The actor whose authority is used for a run or event.
+
+Allowed principal types:
+- `human`
+- `internal_agent`
+- `external_agent`
+
+**In Code**
+```
+api/utils/principals.py
+shared/db/migrations/027_agent_first_slice.sql
+```
+
+---
+
+## Skill
+
+**Definition**
+A reusable workflow capability for agents, composed from one or more policy-governed tools.
+
+Examples:
+- `optimize-product-representation`
+- `request-validation-and-ingest-result`
+- `triage-failed-run`
+
+**In Code**
+```
+application/services/agent_runtime/agent_first.py
+GET /agent-runs/registry
+```
+
+---
+
+## Tool
+
+**Definition**
+A machine-facing operation identifier mapped from legacy runtime capabilities. Tools carry effect classes and side-effect declarations so policy can reason about execution risk.
+
+Example:
+`run_variant` maps to `experiment.run_variant`.
+
+**In Code**
+```
+application/services/agent_runtime/registry.py
+application/services/agent_runtime/agent_first.py
+```
 
 ---
 
 ## Simulation Sandbox
 
 **Definition**
-A test environment where brand marketers can simulate LLM shopping behavior to understand why their products do or don't get recommended.
+A lab workspace where operators can simulate LLM shopping behavior to understand why products do or do not get recommended.
 
 **Core Loop**
 ```
@@ -17,7 +87,7 @@ SET UP SCENARIO → SIMULATE → SEE RESULTS → OPTIMIZE → RE-TEST
 ```
 
 **Key Property**
-> The simulation sandbox solves the core user problem: "I don't know what the LLM sees when it decides whether to recommend my product."
+> The simulation sandbox remains useful, but it is now a lab surface inside the broader agent-first control plane.
 
 **In Code**
 ```
