@@ -110,6 +110,7 @@ Layer rule enforced by architecture checks:
   - centralized capability specs + policy checks,
   - machine-facing tools/skills registry exposed through `GET /agent-runs/registry`,
   - principal-aware run creation for humans, internal agents, and external agents,
+  - skill/tool/effect lineage stamped onto planned actions and runtime events,
   - operator UI in `Agent runs` with approvals, timeline deep-links, and action explainability,
   - immutable run event history (`agent_events`) for audit/replay.
 

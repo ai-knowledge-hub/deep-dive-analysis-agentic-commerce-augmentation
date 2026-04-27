@@ -32,6 +32,7 @@ The codebase now has the minimum spine for the pivot:
 - Static skills registry v1 for initial commerce workflows.
 - Static tools/capabilities registry v1 for executable runtime capabilities.
 - Read API for the runtime registry: `GET /agent-runs/registry`.
+- `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
@@ -62,13 +63,13 @@ Use these docs together:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events.
 
 Next steps:
 
 - Add a persistent registry table or versioned config store.
 - Add schema validation for tool inputs and outputs.
-- Add `skill_id` assignment when planners propose actions.
+- Add persistent registry ownership and richer skill selection when multiple skills can use the same tool.
 - Add skill/tool version pinning onto runs and actions.
 - Add registry diff/audit events when definitions change.
 
@@ -127,11 +128,11 @@ Next steps:
 
 ## Near-Term Recommendation
 
-The next implementation slice should be `skill_id` propagation:
+The next implementation slice should be chat-issued steering commands:
 
-1. Map proposed actions to the skill that owns their tool.
-2. Persist `skill_id` on `agent_actions` and `agent_events`.
-3. Show skill lineage in Runs and Interventions.
-4. Add tests that verify actions/events carry `tool_id`, `skill_id`, `effect_class`, and principal metadata.
+1. Add a backend command endpoint that maps operator-chat intents to existing run/action controls.
+2. Support `explain`, `focus`, `pause`, `approve`, `reject`, `retry`, and `change_plan` command types.
+3. Route every state-changing command through existing policy checks and emit command receipt events.
+4. Show command receipts in the Runs timeline and Interventions context.
 
-That slice turns the registry from a visible catalog into a real execution lineage mechanism.
+That slice turns the chat console from a navigator into the primary human steering interface.

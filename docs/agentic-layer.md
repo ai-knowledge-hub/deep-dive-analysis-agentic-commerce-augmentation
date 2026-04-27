@@ -16,7 +16,8 @@ Implemented now:
 - Autonomous scheduler service (`AgentRuntimeSchedulerService`) for interval-based continuous orchestration
 - Principal-aware run creation for `human`, `internal_agent`, and `external_agent`
 - Static skills/tools registry exposed at `GET /agent-runs/registry`
-- Runs UI visibility into selected-run skills, tools, policy profile, principal, and trace id
+- New planned actions/events carry `skill_id`, `tool_id`, `effect_class`, principal metadata, and trace id
+- Runs and Interventions UI visibility into selected-run skills, tools, policy profile, principal, and trace id
 
 ---
 
@@ -110,6 +111,7 @@ Implemented in v0:
 - runtime + execution entrypoints validate against the same registry contract
 - machine-facing `tool_id` values mapped from legacy `capability_name`
 - initial static skill specs in `application/services/agent_runtime/agent_first.py`
+- deterministic tool-to-skill lineage for planned actions and runtime events
 - read API: `GET /agent-runs/registry`
 
 Agents must not call raw endpoints. They request named capabilities:

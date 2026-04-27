@@ -605,6 +605,17 @@ function InterventionsPageContent() {
                         </div>
                         {renderMeta(item.priority, item.risk, item.run)}
                         <div className="panel__muted">{item.summary}</div>
+                        <div className="agent-ops-summary">
+                          <span className="panel__badge panel__badge--secondary">
+                            Skill: {item.action.skill_id ?? "unmapped"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Tool: {item.action.tool_id ?? "legacy"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Effect: {item.action.effect_class ?? item.risk}
+                          </span>
+                        </div>
                         <div className="list__meta">{item.reason}</div>
                         <div className="detail__actions">
                           <button

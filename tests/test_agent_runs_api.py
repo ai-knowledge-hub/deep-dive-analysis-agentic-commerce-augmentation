@@ -239,7 +239,18 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     payload = detail.json()
     assert payload["run"]["trace_id"] == run["trace_id"]
     assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
+    assert payload["actions"][0]["skill_id"] == "optimize-product-representation"
     assert payload["actions"][0]["effect_class"] == "write_low_risk"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    assert events.status_code == 200
+    event_payload = events.json()
+    assert event_payload["events"][0]["tool_id"] == "experiment.run_variant"
+    assert event_payload["events"][0]["skill_id"] == "optimize-product-representation"
+    assert event_payload["events"][0]["effect_class"] == "write_low_risk"
 
 
 def test_seed_skill_specs_are_available():
@@ -262,6 +273,9 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert "experiment.run_variant" in tool_ids
     assert "optimize-product-representation" in skill_ids
     assert "safe_auto" in policy_ids
+    assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
+        "optimize-product-representation"
+    ]
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
 
 

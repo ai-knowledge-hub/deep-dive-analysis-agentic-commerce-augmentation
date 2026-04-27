@@ -876,6 +876,9 @@ function AgentRunsPageContent() {
       status: String(event.status || "unknown").toLowerCase(),
       when: event.timestamp ?? null,
       note: event.note ?? null,
+      toolId: event.tool_id ?? null,
+      skillId: event.skill_id ?? null,
+      effectClass: event.effect_class ?? null,
       isPolicy: Boolean(event.is_policy_event),
       anchors: event.anchors ?? {},
     }));
@@ -1826,6 +1829,13 @@ function AgentRunsPageContent() {
                             {a.capability_version && (
                               <div className="table__muted">{a.capability_version}</div>
                             )}
+                            {a.skill_id || a.tool_id ? (
+                              <div className="table__muted">
+                                {a.skill_id ? `Skill: ${a.skill_id}` : null}
+                                {a.skill_id && a.tool_id ? " · " : null}
+                                {a.tool_id ? `Tool: ${a.tool_id}` : null}
+                              </div>
+                            ) : null}
                           </div>
                           <div className="table__cell" data-label="Status">
                             {a.status}
@@ -2036,6 +2046,16 @@ function AgentRunsPageContent() {
                               <div className="agent-timeline__meta">
                                 <span className="agent-timeline__seq">#{event.sequence}</span>
                                 <span className="agent-timeline__cap">{event.capability}</span>
+                                {event.skillId ? (
+                                  <span className="panel__badge panel__badge--secondary">
+                                    {event.skillId}
+                                  </span>
+                                ) : null}
+                                {event.toolId ? (
+                                  <span className="panel__badge panel__badge--secondary">
+                                    {event.toolId}
+                                  </span>
+                                ) : null}
                                 <span
                                   className={`agent-timeline__status is-${event.status}`}
                                 >
@@ -2162,6 +2182,17 @@ function AgentRunsPageContent() {
                           {CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
                             "Capability summary not yet documented."}
                         </p>
+                        <div className="agent-ops-summary">
+                          <span className="panel__badge panel__badge--secondary">
+                            Skill: {selectedAction.skill_id ?? "unmapped"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Tool: {selectedAction.tool_id ?? "legacy"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Effect: {selectedAction.effect_class ?? "unknown"}
+                          </span>
+                        </div>
                         <p className="panel__subheading">What it changes</p>
                         <ul className="panel__list panel__list--compact">
                           {(

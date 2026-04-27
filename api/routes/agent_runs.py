@@ -20,6 +20,7 @@ from application.services.agent_runtime.agent_first import (
     list_skill_specs,
     new_trace_id,
     policy_profile_for_run_mode,
+    skill_id_for_tool_id,
     tool_effect_class,
 )
 from application.services.agent_runtime.events import list_agent_run_events_page
@@ -222,6 +223,7 @@ def create_agent_run(
     )
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)
+        skill_id = skill_id_for_tool_id(tool_id)
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
@@ -239,6 +241,7 @@ def create_agent_run(
             variant_id=None,
             validation_job_id=None,
             tool_id=tool_id,
+            skill_id=skill_id,
             effect_class=tool_effect_class(tool_id),
         )
         deps.agent_events.create_agent_event(
@@ -466,7 +469,10 @@ def decide_action(
         principal_type=run_row.get("principal_type") if run_row else "human",
         principal_id=run_row.get("principal_id") if run_row else (payload.user_id or None),
         tool_id=current.get("tool_id") or capability_to_tool_id(current.get("capability_name")),
-        skill_id=current.get("skill_id"),
+        skill_id=current.get("skill_id")
+        or skill_id_for_tool_id(
+            current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
+        ),
         effect_class=current.get("effect_class")
         or tool_effect_class(
             current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
