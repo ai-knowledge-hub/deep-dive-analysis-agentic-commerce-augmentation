@@ -355,6 +355,75 @@ def test_operator_command_preflight_blocks_plan_only_step(client: TestClient):
     assert "Run is plan-only" in preflight["blockers"][0]
 
 
+def test_operator_retry_command_creates_new_proposed_retry_action(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="variants_ready",
+        status="failed",
+    )
+    failed = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="failed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1", "variant_selection": "top_1"},
+        outputs={},
+        inputs_hash="inputs-1",
+        outputs_hash=None,
+        rationale="Original variant run failed.",
+        confidence=0.55,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+        effect_class="write_low_risk",
+        error="Transient execution failure.",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "retry",
+            "action_id": failed["id"],
+            "message": "Retry safely.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    retry_action = payload["action"]
+    assert payload["preflight"]["requires_confirmation"] is True
+    assert retry_action["id"] != failed["id"]
+    assert retry_action["status"] == "proposed"
+    assert retry_action["retry_count"] == 1
+    assert retry_action["dedupe_key"] == f"retry:{failed['id']}:1"
+    assert deps.agent_actions.get_agent_action(failed["id"])["status"] == "failed"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    event_types = [event["event_type"] for event in events.json()["events"]]
+    assert "action_retry_proposed" in event_types
+    assert "operator_command_retry" in event_types
+
+
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(
     client: TestClient,
 ):

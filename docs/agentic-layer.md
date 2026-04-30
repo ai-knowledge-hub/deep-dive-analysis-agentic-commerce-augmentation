@@ -102,7 +102,8 @@ Worker/ops entry points:
     - `event_id`, `around`
 - API: `POST /agent-runs/{run_id}/commands`
   - records `operator_command_*` receipts from the chat control plane
-  - delegates approve/reject/start/pause/cancel/step/retry to existing action/runtime controls
+  - delegates approve/reject/start/pause/cancel/step to existing action/runtime controls
+  - handles retry by creating a new proposed retry action with incremented `retry_count`
   - supports non-mutating explain/focus/change-plan receipts for chat-led steering
 - API: `POST /agent-runs/{run_id}/commands/preflight`
   - returns whether a command is allowed before execution
@@ -387,6 +388,7 @@ Operator steering is exposed via:
 - non-mutating command receipts: `explain`, `focus`, `change_plan`
 - command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
 - high-risk command preflight requires explicit confirmation in the operator chat before submission
+- retry always requires explicit confirmation and emits `action_retry_proposed` for a new proposed action; the original failed action remains failed
 
 ### 3.5 Version Registry (scientific reproducibility)
 

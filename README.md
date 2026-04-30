@@ -143,6 +143,7 @@ Agent operator APIs:
 - `POST /agent-runs/{run_id}/step`
 - `POST /agent-runs/{run_id}/commands`
   - chat/operator command endpoint for approve, reject, retry, start, pause, cancel, step
+  - `retry` creates a new proposed retry action with incremented `retry_count`; it does not mutate the failed action back to approved
   - records non-mutating explain, focus, and change-plan intents as command receipts
 - `POST /agent-runs/{run_id}/commands/preflight`
   - previews command risk, blockers, warnings, side effects, and rollback guidance before submission

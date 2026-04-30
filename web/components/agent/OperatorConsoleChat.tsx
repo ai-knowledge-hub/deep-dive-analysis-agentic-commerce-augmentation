@@ -543,6 +543,20 @@ export function OperatorConsoleChat({
         <button
           type="button"
           className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "retry",
+              `Retry ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
+        >
+          Retry selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
           onClick={() => issueCommand("pause", "Pause this run")}
           disabled={!run}
         >

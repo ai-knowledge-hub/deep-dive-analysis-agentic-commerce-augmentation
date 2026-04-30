@@ -283,4 +283,75 @@ describe("OperatorConsoleChat", () => {
 
     await waitFor(() => expect(onIssueCommand).toHaveBeenCalledTimes(1));
   });
+
+  it("issues retry as an explicit confirmed command for failed actions", async () => {
+    const user = userEvent.setup();
+    const onIssueCommand = vi.fn().mockResolvedValue(undefined);
+    const onPreflightCommand = vi.fn().mockResolvedValue({
+      allowed: true,
+      command_type: "retry",
+      risk_level: "medium",
+      requires_confirmation: true,
+      requires_approval: true,
+      effect_class: "write_low_risk",
+      tool_id: "experiment.run_variant",
+      skill_id: "optimize-product-representation",
+      side_effects: ["create_experiment_run"],
+      blockers: [],
+      warnings: [],
+      rollback_guidance: "Low-risk writes can usually be superseded by a later action.",
+      summary: "Preflight passed with medium risk.",
+    });
+
+    render(
+      <OperatorConsoleChat
+        run={{
+          id: "run-1",
+          experiment_id: "exp-12345678",
+          status: "failed",
+          state: "experiment_run_completed",
+          run_mode: "auto_execute_safe",
+        }}
+        actions={[
+          {
+            id: "action-1",
+            agent_run_id: "run-1",
+            sequence: 1,
+            status: "failed",
+            capability_name: "run_variant",
+          },
+        ]}
+        events={[]}
+        selectedAction={{
+          id: "action-1",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "failed",
+          capability_name: "run_variant",
+        }}
+        nextRecommendedAction={{
+          action: null,
+          guardrails: [],
+          hint: "No next action.",
+        }}
+        onPreflightCommand={onPreflightCommand}
+        onIssueCommand={onIssueCommand}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Retry selected/i }));
+
+    expect(onIssueCommand).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Click the command again to confirm/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Retry selected/i }));
+
+    await waitFor(() =>
+      expect(onIssueCommand).toHaveBeenCalledWith({
+        command_type: "retry",
+        action_id: "action-1",
+        message: "Retry run_variant",
+      }),
+    );
+  });
 });

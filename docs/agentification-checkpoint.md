@@ -36,6 +36,7 @@ The codebase now has the minimum spine for the pivot:
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
 - Operator chat can issue audited steering commands for approve, reject, pause, start, and non-mutating focus/explain/change-plan intents.
 - Chat-issued commands now have a policy preflight contract with risk level, blockers, warnings, side effects, and rollback guidance.
+- Retry commands now create a new proposed retry action with incremented `retry_count` and preserve the original failed action.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -77,11 +78,11 @@ Next steps:
 
 ### 2. Agent Chat As Primary Control Interface
 
-Current state: operator chat can explain, navigate execution context, preflight risky commands, and issue a first set of audited steering commands through existing runtime/action controls.
+Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, and propose explicit retry actions for failures.
 
 Next steps:
 
-- Expand command coverage beyond approve/reject/start/pause into retry, step, cancel, and structured change-plan workflows in the UI.
+- Expand command coverage beyond approve/reject/retry/start/pause into step, cancel, and structured change-plan workflows in the UI.
 - Promote command preflight receipts into the timeline/filter model.
 - Add undo/rollback guidance where side effects cannot be reversed.
 
@@ -129,11 +130,11 @@ Next steps:
 
 ## Near-Term Recommendation
 
-The next implementation slice should be safer retry and command observability:
+The next implementation slice should be command observability and structured recovery:
 
-1. Make retry explicit: retry failed action, retry from last safe checkpoint, or create a new proposed recovery action.
-2. Surface command receipts and command outcomes as first-class timeline filters.
-3. Add Interventions actions for command-originated high-risk decisions.
-4. Add structured change-plan commands that create proposed recovery actions instead of mutating plans silently.
+1. Surface command receipts and command outcomes as first-class timeline filters.
+2. Add Interventions actions for command-originated high-risk decisions.
+3. Add structured change-plan commands that create proposed recovery actions instead of mutating plans silently.
+4. Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
 
 That slice makes the chat console safer as it becomes the primary human steering interface.

@@ -291,7 +291,9 @@ def _command_preflight(
         "allowed": not blockers,
         "command_type": command_type,
         "risk_level": risk_level,
-        "requires_confirmation": risk_level == "high" or bool(blockers),
+        "requires_confirmation": command_type == "retry"
+        or risk_level == "high"
+        or bool(blockers),
         "requires_approval": bool(run.get("requires_approval")) or risk_level == "high",
         "effect_class": effect_class,
         "tool_id": tool_id,
@@ -756,7 +758,85 @@ def issue_agent_run_command(
             runtime_result = runtime.step_once(run_id=run_id, user_id=payload.user_id)
             result["run"] = runtime_result.run
             result["action"] = runtime_result.action
-        elif command_type in {"approve", "reject", "retry"}:
+        elif command_type == "retry":
+            if not action:
+                raise HTTPException(status_code=400, detail="Action id is required")
+            actions = deps.agent_actions.list_agent_actions(
+                agent_run_id=run_id,
+                limit=500,
+            )
+            next_sequence = max(
+                [int(item.get("sequence") or 0) for item in actions] or [0]
+            ) + 1
+            retry_count = int(action.get("retry_count") or 0) + 1
+            retry_action = deps.agent_actions.create_agent_action(
+                agent_run_id=run_id,
+                sequence=next_sequence,
+                status="proposed",
+                capability_name=str(action.get("capability_name") or ""),
+                capability_version=action.get("capability_version"),
+                inputs=action.get("inputs") or {},
+                outputs={},
+                inputs_hash=action.get("inputs_hash")
+                or _hash_payload(action.get("inputs") or {}),
+                outputs_hash=None,
+                rationale=(
+                    f"Retry proposed from failed action {str(action.get('id') or '')[:8]}. "
+                    f"{action.get('error') or action.get('rationale') or ''}"
+                ).strip(),
+                confidence=action.get("confidence"),
+                snapshot_version=action.get("snapshot_version"),
+                hypothesis_id=action.get("hypothesis_id"),
+                variant_id=action.get("variant_id"),
+                validation_job_id=action.get("validation_job_id"),
+                tool_id=action.get("tool_id")
+                or capability_to_tool_id(action.get("capability_name")),
+                skill_id=action.get("skill_id")
+                or skill_id_for_tool_id(
+                    action.get("tool_id")
+                    or capability_to_tool_id(action.get("capability_name"))
+                ),
+                effect_class=action.get("effect_class")
+                or tool_effect_class(
+                    action.get("tool_id")
+                    or capability_to_tool_id(action.get("capability_name"))
+                ),
+                retry_count=retry_count,
+                dedupe_key=f"retry:{action.get('id')}:{retry_count}",
+            )
+            deps.agent_events.create_agent_event(
+                agent_run_id=run_id,
+                action_id=str(retry_action.get("id") or ""),
+                sequence=int(retry_action.get("sequence") or 0),
+                event_type="action_retry_proposed",
+                status="proposed",
+                capability_name=str(retry_action.get("capability_name") or "") or None,
+                capability_version=str(retry_action.get("capability_version") or "")
+                or None,
+                principal_type=run.get("principal_type"),
+                principal_id=run.get("principal_id"),
+                tool_id=retry_action.get("tool_id"),
+                skill_id=retry_action.get("skill_id"),
+                effect_class=retry_action.get("effect_class"),
+                trace_id=run.get("trace_id"),
+                note="Retry action proposed by operator chat",
+                is_policy_event=False,
+                anchors={
+                    "experiment_id": run.get("experiment_id"),
+                    "variant_id": retry_action.get("variant_id"),
+                    "validation_job_id": retry_action.get("validation_job_id"),
+                    "hypothesis_id": retry_action.get("hypothesis_id"),
+                    "snapshot_version": retry_action.get("snapshot_version"),
+                    "metric_id": None,
+                    "original_action_id": action.get("id"),
+                    "retry_count": retry_count,
+                    "retry_strategy": payload.metadata.get(
+                        "retry_strategy", "same_action"
+                    ),
+                },
+            )
+            result["action"] = retry_action
+        elif command_type in {"approve", "reject"}:
             if not action:
                 raise HTTPException(status_code=400, detail="Action id is required")
             status = "rejected" if command_type == "reject" else "approved"
@@ -770,9 +850,7 @@ def issue_agent_run_command(
                 action_id=str(current.get("id") or ""),
                 sequence=int(current.get("sequence") or 0),
                 event_type=(
-                    "action_retry_queued"
-                    if command_type == "retry"
-                    else f"action_{status}"
+                    f"action_{status}"
                 ),
                 status=status,
                 capability_name=str(current.get("capability_name") or "") or None,
