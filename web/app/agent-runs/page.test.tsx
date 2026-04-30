@@ -17,6 +17,7 @@ const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
+const preflightAgentRunCommandMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
 
 const localStorageMock = {
@@ -64,6 +65,8 @@ vi.mock("../../lib/api", () => ({
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
   listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
+  preflightAgentRunCommand: (...args: unknown[]) =>
+    preflightAgentRunCommandMock(...args),
 }));
 
 describe("AgentRunsPage timeline presets", () => {
@@ -87,6 +90,7 @@ describe("AgentRunsPage timeline presets", () => {
     controlAgentRunMock.mockReset();
     listAgentRuntimeRegistryMock.mockReset();
     issueAgentRunCommandMock.mockReset();
+    preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
     window.localStorage.clear();
 
@@ -138,6 +142,20 @@ describe("AgentRunsPage timeline presets", () => {
     issueAgentRunCommandMock.mockResolvedValue({
       command: { id: "evt-command", run_id: "run-1", sequence: 0, event_type: "operator_command_approve", status: "completed" },
       run: { id: "run-1" },
+    });
+    preflightAgentRunCommandMock.mockResolvedValue({
+      preflight: {
+        allowed: true,
+        command_type: "approve",
+        risk_level: "low",
+        requires_confirmation: false,
+        requires_approval: true,
+        side_effects: [],
+        blockers: [],
+        warnings: [],
+        rollback_guidance: "No direct side effects are expected from this command.",
+        summary: "Preflight passed with low risk.",
+      },
     });
     listAgentRuntimeRegistryMock.mockResolvedValue({
       skills: [
@@ -446,6 +464,15 @@ describe("AgentRunsPage timeline presets", () => {
     await screen.findByText(/Selection: run_variant/i);
     await userEvent.click(screen.getByRole("button", { name: /Approve selected/i }));
 
+    expect(preflightAgentRunCommandMock).toHaveBeenCalledWith(
+      "run-1",
+      {
+        command_type: "approve",
+        action_id: "action-1",
+        message: "Approve run_variant",
+      },
+      "user-a",
+    );
     await waitFor(() => expect(issueAgentRunCommandMock).toHaveBeenCalled());
     expect(issueAgentRunCommandMock).toHaveBeenCalledWith(
       "run-1",

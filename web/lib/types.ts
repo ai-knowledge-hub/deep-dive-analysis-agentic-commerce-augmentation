@@ -1041,6 +1041,22 @@ export type AgentRunCommandType =
   | "reject"
   | "retry";
 
+export type AgentRunCommandPreflight = {
+  allowed: boolean;
+  command_type: AgentRunCommandType;
+  risk_level: "low" | "medium" | "high" | string;
+  requires_confirmation: boolean;
+  requires_approval: boolean;
+  effect_class?: string | null;
+  tool_id?: string | null;
+  skill_id?: string | null;
+  side_effects: string[];
+  blockers: string[];
+  warnings: string[];
+  rollback_guidance: string;
+  summary: string;
+};
+
 export type AgentRunEvent = {
   id: string;
   run_id: string;
@@ -1129,6 +1145,13 @@ export type AgentRunCommandResponse = {
   run: AgentRun;
   action?: AgentAction;
   message?: string;
+  preflight?: AgentRunCommandPreflight;
+};
+
+export type AgentRunCommandPreflightResponse = {
+  preflight: AgentRunCommandPreflight;
+  run: AgentRun;
+  action?: AgentAction | null;
 };
 
 export type ValidationJobListResponse = {

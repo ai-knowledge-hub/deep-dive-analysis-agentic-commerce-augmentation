@@ -8,6 +8,7 @@ import {
   AgentRunDetailResponse,
   AgentRunListResponse,
   AgentRunCommandResponse,
+  AgentRunCommandPreflightResponse,
   AgentRunCommandType,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
@@ -650,6 +651,30 @@ export async function issueAgentRunCommand(
       client_id: clientId ?? undefined,
     }),
   });
+}
+
+export async function preflightAgentRunCommand(
+  runId: string,
+  payload: {
+    command_type: AgentRunCommandType;
+    action_id?: string | null;
+    message?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AgentRunCommandPreflightResponse> {
+  const clientId = getClientId();
+  return request<AgentRunCommandPreflightResponse>(
+    `/agent-runs/${runId}/commands/preflight`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...payload,
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
 }
 
 export async function getHealthLLM(): Promise<HealthLLMResponse> {

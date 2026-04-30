@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   AgentAction,
   AgentRun,
+  AgentRunCommandPreflight,
   AgentRunCommandType,
   AgentRunEvent,
 } from "../../lib/types";
@@ -21,6 +22,12 @@ type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
+};
+
+type OperatorCommand = {
+  command_type: AgentRunCommandType;
+  action_id?: string | null;
+  message?: string | null;
 };
 
 type Props = {
@@ -41,11 +48,8 @@ type Props = {
   onFocusPolicy?: () => void;
   onFocusValidationLinked?: () => void;
   onJumpToNextAction?: () => void;
-  onIssueCommand?: (command: {
-    command_type: AgentRunCommandType;
-    action_id?: string | null;
-    message?: string | null;
-  }) => Promise<void> | void;
+  onPreflightCommand?: (command: OperatorCommand) => Promise<AgentRunCommandPreflight>;
+  onIssueCommand?: (command: OperatorCommand) => Promise<void> | void;
 };
 
 function formatRunLabel(run: AgentRun | null): string {
@@ -104,9 +108,11 @@ export function OperatorConsoleChat({
   onFocusPolicy,
   onFocusValidationLinked,
   onJumpToNextAction,
+  onPreflightCommand,
   onIssueCommand,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingCommandKey, setPendingCommandKey] = useState<string | null>(null);
 
   const derived = useMemo(() => {
     const proposedActions = actions.filter(
@@ -337,6 +343,8 @@ export function OperatorConsoleChat({
     message: string,
     action_id?: string | null,
   ) {
+    const command = { command_type, action_id, message };
+    const commandKey = `${command_type}:${action_id ?? "run"}`;
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}-${command_type}`,
       role: "user",
@@ -344,7 +352,41 @@ export function OperatorConsoleChat({
     };
     setMessages((current) => [...current, userMessage]);
     try {
-      await onIssueCommand?.({ command_type, action_id, message });
+      if (onPreflightCommand) {
+        const preflight = await onPreflightCommand(command);
+        setMessages((current) => [
+          ...current,
+          {
+            id: `assistant-${Date.now()}-${command_type}-preflight`,
+            role: "assistant",
+            content: [
+              `Preflight: ${preflight.summary}`,
+              preflight.blockers.length > 0
+                ? `Blocker: ${preflight.blockers[0]}`
+                : "",
+              preflight.warnings.length > 0
+                ? `Warning: ${preflight.warnings[0]}`
+                : "",
+              `Rollback: ${preflight.rollback_guidance}`,
+              preflight.requires_confirmation && pendingCommandKey !== commandKey
+                ? "Click the command again to confirm."
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" "),
+          },
+        ]);
+        if (!preflight.allowed) {
+          setPendingCommandKey(null);
+          return;
+        }
+        if (preflight.requires_confirmation && pendingCommandKey !== commandKey) {
+          setPendingCommandKey(commandKey);
+          return;
+        }
+      }
+      setPendingCommandKey(null);
+      await onIssueCommand?.(command);
       setMessages((current) => [
         ...current,
         {

@@ -313,6 +313,7 @@ def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     payload = response.json()
     assert payload["command"]["event_type"] == "operator_command_approve"
     assert payload["command"]["status"] == "received"
+    assert payload["preflight"]["allowed"] is True
     assert payload["action"]["status"] == "approved"
 
     events = client.get(
@@ -323,6 +324,35 @@ def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     assert "operator_command_approve" in event_types
     assert "action_approved" in event_types
     assert any(event["status"] == "completed" for event in events.json()["events"])
+
+
+def test_operator_command_preflight_blocks_plan_only_step(client: TestClient):
+    created = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["run_variant"],
+            "run_mode": "plan_only",
+        },
+    )
+    assert created.status_code == 200
+    run = created.json()["run"]
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands/preflight",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "step",
+        },
+    )
+
+    assert response.status_code == 200
+    preflight = response.json()["preflight"]
+    assert preflight["allowed"] is False
+    assert preflight["risk_level"] == "medium"
+    assert "Run is plan-only" in preflight["blockers"][0]
 
 
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(

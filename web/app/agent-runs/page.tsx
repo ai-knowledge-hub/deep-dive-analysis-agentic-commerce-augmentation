@@ -6,6 +6,7 @@ import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
   AgentRun,
+  AgentRunCommandType,
   AgentRunEvent,
   AgentRuntimeRegistryResponse,
   Experiment,
@@ -20,6 +21,7 @@ import {
   listExperiments,
   listAgentRuns,
   listAgentRuntimeRegistry,
+  preflightAgentRunCommand,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
@@ -1280,17 +1282,7 @@ function AgentRunsPageContent() {
 
   const handleOperatorCommand = useCallback(
     async (command: {
-      command_type:
-        | "explain"
-        | "focus"
-        | "change_plan"
-        | "start"
-        | "pause"
-        | "cancel"
-        | "step"
-        | "approve"
-        | "reject"
-        | "retry";
+      command_type: AgentRunCommandType;
       action_id?: string | null;
       message?: string | null;
     }) => {
@@ -1309,6 +1301,21 @@ function AgentRunsPageContent() {
       }
     },
     [loadRuns, loadSelected, selectedRunId, userId],
+  );
+
+  const handleOperatorCommandPreflight = useCallback(
+    async (command: {
+      command_type: AgentRunCommandType;
+      action_id?: string | null;
+      message?: string | null;
+    }) => {
+      if (!userId || !selectedRunId) {
+        throw new Error("Select a run before issuing an operator command.");
+      }
+      const response = await preflightAgentRunCommand(selectedRunId, command, userId);
+      return response.preflight;
+    },
+    [selectedRunId, userId],
   );
 
   return (
@@ -1433,6 +1440,7 @@ function AgentRunsPageContent() {
                     setSelectedActionId(nextRecommendedAction.action.id);
                   }
                 }}
+                onPreflightCommand={handleOperatorCommandPreflight}
                 onIssueCommand={handleOperatorCommand}
                 onOpenExperiment={() => {
                   if (selectedRun?.experiment_id) {

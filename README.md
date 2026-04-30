@@ -112,6 +112,7 @@ Layer rule enforced by architecture checks:
   - principal-aware run creation for humans, internal agents, and external agents,
   - skill/tool/effect lineage stamped onto planned actions and runtime events,
   - chat-issued steering commands with immutable `operator_command_*` receipts,
+  - command preflight with blockers, warnings, risk, side effects, and rollback guidance,
   - operator UI in `Agent runs` with approvals, timeline deep-links, and action explainability,
   - immutable run event history (`agent_events`) for audit/replay.
 
@@ -143,6 +144,8 @@ Agent operator APIs:
 - `POST /agent-runs/{run_id}/commands`
   - chat/operator command endpoint for approve, reject, retry, start, pause, cancel, step
   - records non-mutating explain, focus, and change-plan intents as command receipts
+- `POST /agent-runs/{run_id}/commands/preflight`
+  - previews command risk, blockers, warnings, side effects, and rollback guidance before submission
 - `POST /agent-runs/actions/{action_id}/decision`
 - `POST /agent-runs/tick` (bounded autonomous worker tick)
 
