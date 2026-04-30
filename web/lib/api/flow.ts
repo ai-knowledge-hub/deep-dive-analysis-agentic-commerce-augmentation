@@ -7,6 +7,10 @@ import {
   AgentRunCreateResponse,
   AgentRunDetailResponse,
   AgentRunListResponse,
+  AgentRunCommandResponse,
+  AgentRunCommandPreflightResponse,
+  AgentRunCommandType,
+  AgentRuntimeRegistryResponse,
   ConversationResponse,
   CopyRevisionListResponse,
   CopyRevisionResponse,
@@ -587,6 +591,10 @@ export async function getAgentRunEvents(
   );
 }
 
+export async function listAgentRuntimeRegistry(): Promise<AgentRuntimeRegistryResponse> {
+  return request<AgentRuntimeRegistryResponse>("/agent-runs/registry");
+}
+
 export async function decideAgentAction(
   actionId: string,
   payload: { decision: "approve" | "reject" },
@@ -617,6 +625,51 @@ export async function controlAgentRun(
     {
       method: "POST",
       body: JSON.stringify({
+        user_id: userId ?? undefined,
+        client_id: clientId ?? undefined,
+      }),
+    },
+  );
+}
+
+export async function issueAgentRunCommand(
+  runId: string,
+  payload: {
+    command_type: AgentRunCommandType;
+    action_id?: string | null;
+    message?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AgentRunCommandResponse> {
+  const clientId = getClientId();
+  return request<AgentRunCommandResponse>(`/agent-runs/${runId}/commands`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      user_id: userId ?? undefined,
+      client_id: clientId ?? undefined,
+    }),
+  });
+}
+
+export async function preflightAgentRunCommand(
+  runId: string,
+  payload: {
+    command_type: AgentRunCommandType;
+    action_id?: string | null;
+    message?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  userId?: string | null,
+): Promise<AgentRunCommandPreflightResponse> {
+  const clientId = getClientId();
+  return request<AgentRunCommandPreflightResponse>(
+    `/agent-runs/${runId}/commands/preflight`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...payload,
         user_id: userId ?? undefined,
         client_id: clientId ?? undefined,
       }),

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -291,10 +291,10 @@ function buildEscalationItem(detail: InterventionDetail): EscalationItem | null 
   };
 }
 
-export default function InterventionsPage() {
+function InterventionsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
@@ -605,6 +605,17 @@ export default function InterventionsPage() {
                         </div>
                         {renderMeta(item.priority, item.risk, item.run)}
                         <div className="panel__muted">{item.summary}</div>
+                        <div className="agent-ops-summary">
+                          <span className="panel__badge panel__badge--secondary">
+                            Skill: {item.action.skill_id ?? "unmapped"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Tool: {item.action.tool_id ?? "legacy"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Effect: {item.action.effect_class ?? item.risk}
+                          </span>
+                        </div>
                         <div className="list__meta">{item.reason}</div>
                         <div className="detail__actions">
                           <button
@@ -736,5 +747,13 @@ export default function InterventionsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function InterventionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <InterventionsPageContent />
+    </Suspense>
   );
 }

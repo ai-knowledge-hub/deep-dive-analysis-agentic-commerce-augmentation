@@ -18,6 +18,8 @@ The core moat is not a single score. It is the **feedback loop** that continuous
 Current extension:
 - **Agent operator mode (v0)**: governed backend orchestration with run/action persistence, runtime step controls, centralized capability registry, and policy enforcement.
   See `docs/agentic-layer.md`.
+- **Agent-first pivot checkpoint**: the platform direction is now a governed agent execution fabric with a human control plane, not only a human-led lab.
+  See `docs/agentification-checkpoint.md`.
 
 ---
 
@@ -106,6 +108,11 @@ Layer rule enforced by architecture checks:
   - approved action execution in `auto_execute_safe`,
   - runtime safety with run lock + heartbeat refresh,
   - centralized capability specs + policy checks,
+  - machine-facing tools/skills registry exposed through `GET /agent-runs/registry`,
+  - principal-aware run creation for humans, internal agents, and external agents,
+  - skill/tool/effect lineage stamped onto planned actions and runtime events,
+  - chat-issued steering commands with immutable `operator_command_*` receipts,
+  - command preflight with blockers, warnings, risk, side effects, and rollback guidance,
   - operator UI in `Agent runs` with approvals, timeline deep-links, and action explainability,
   - immutable run event history (`agent_events`) for audit/replay.
 
@@ -115,6 +122,9 @@ Experiment protocol transparency APIs:
 - `GET /experiments/{experiment_id}/hypotheses`
 
 Agent operator APIs:
+- `GET /agent-runs/registry`
+  - read-only skills/tools/capabilities registry
+  - exposes policy profile summaries for operator and agent clients
 - `POST /agent-runs`
 - `GET /agent-runs`
 - `GET /agent-runs/{run_id}`
@@ -131,6 +141,12 @@ Agent operator APIs:
 - `POST /agent-runs/{run_id}/pause`
 - `POST /agent-runs/{run_id}/cancel`
 - `POST /agent-runs/{run_id}/step`
+- `POST /agent-runs/{run_id}/commands`
+  - chat/operator command endpoint for approve, reject, retry, start, pause, cancel, step
+  - `retry` creates a new proposed retry action with incremented `retry_count`; it does not mutate the failed action back to approved
+  - records non-mutating explain, focus, and change-plan intents as command receipts
+- `POST /agent-runs/{run_id}/commands/preflight`
+  - previews command risk, blockers, warnings, side effects, and rollback guidance before submission
 - `POST /agent-runs/actions/{action_id}/decision`
 - `POST /agent-runs/tick` (bounded autonomous worker tick)
 
@@ -309,7 +325,12 @@ Architecture checks are part of CI and enforce layer boundaries.
 
 ## Documentation
 
+- `docs/agentification-checkpoint.md`
+- `docs/agent-first-modular-architecture-v1.md`
+- `docs/agent-first-migration-slice-rfc.md`
 - `docs/agentic-layer.md`
+- `docs/chat-led-operator-console-spec.md`
+- `docs/ui-control-plane-simplification-plan.md`
 - `docs/app-architecture.md`
 - `docs/app-workflows.md`
 - `docs/experiment-flow-detailed.md`

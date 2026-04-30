@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../lib/auth";
 
 import { Sidebar } from "../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../components/layout/ControlPlaneBriefing";
@@ -64,7 +64,7 @@ const SECONDARY_ENTRY_CARDS: EntryCard[] = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   const greeting = useMemo(() => {

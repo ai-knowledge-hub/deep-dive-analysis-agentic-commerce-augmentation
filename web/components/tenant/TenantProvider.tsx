@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 
 import { listAdminBrands, listAdminClients, listAdminProducts } from "../../lib/api";
 
@@ -50,7 +50,7 @@ const PRODUCT_STORAGE_KEY = "product_id";
 const TenantContext = createContext<TenantState | null>(null);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
   const [clientId, setClientIdState] = useState(
     process.env.NEXT_PUBLIC_CLIENT_ID ?? "",

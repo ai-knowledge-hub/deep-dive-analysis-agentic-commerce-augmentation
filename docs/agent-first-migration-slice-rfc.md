@@ -1,5 +1,17 @@
 # Agent-First Migration Slice RFC
 
+Status: **Implemented as the first pivot foundation.**
+
+Implementation notes:
+- Principal-aware agent run creation is implemented.
+- Machine-principal token resolution is implemented for run creation.
+- Runtime actions/events carry `tool_id`, effect class, and principal metadata.
+- Initial static skill specs are implemented.
+- The runtime registry is exposed through `GET /agent-runs/registry`.
+- The Runs UI surfaces skills/tools for the selected run.
+
+For the current checkpoint and follow-up tracks, see [docs/agentification-checkpoint.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/agentification-checkpoint.md).
+
 This RFC defines the first implementation slice for the agent-first modular architecture described in [docs/agent-first-modular-architecture-v1.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/agent-first-modular-architecture-v1.md).
 
 The goal of this slice is not to complete the pivot. The goal is to introduce the minimum structural changes that unblock the pivot safely.

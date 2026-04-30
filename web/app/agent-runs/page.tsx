@@ -1,17 +1,27 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
-import type { AgentAction, AgentRun, AgentRunEvent, Experiment } from "../../lib/types";
+import { useAppUser } from "../../lib/auth";
+import type {
+  AgentAction,
+  AgentRun,
+  AgentRunCommandType,
+  AgentRunEvent,
+  AgentRuntimeRegistryResponse,
+  Experiment,
+} from "../../lib/types";
 import {
   controlAgentRun,
   createAgentRun,
   decideAgentAction,
   getAgentRun,
   getAgentRunEvents,
+  issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
+  listAgentRuntimeRegistry,
+  preflightAgentRunCommand,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
@@ -367,10 +377,10 @@ function resolveSinceForWindow(windowId: "all" | "24h" | "7d"): string | null {
   return new Date(now - deltaMs).toISOString();
 }
 
-export default function AgentRunsPage() {
+function AgentRunsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
 
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
@@ -406,6 +416,8 @@ export default function AgentRunsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
   const [actions, setActions] = useState<AgentAction[]>([]);
+  const [runtimeRegistry, setRuntimeRegistry] =
+    useState<AgentRuntimeRegistryResponse | null>(null);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -463,6 +475,15 @@ export default function AgentRunsPage() {
     () => resolveSinceForWindow(timelineTimeWindow),
     [timelineTimeWindow],
   );
+
+  const loadRuntimeRegistry = useCallback(async () => {
+    try {
+      const response = await listAgentRuntimeRegistry();
+      setRuntimeRegistry(response);
+    } catch {
+      setRuntimeRegistry(null);
+    }
+  }, []);
 
   const loadRuns = useCallback(async () => {
     if (!userId) return;
@@ -705,6 +726,10 @@ export default function AgentRunsPage() {
   }, [loadExperiments]);
 
   useEffect(() => {
+    void loadRuntimeRegistry();
+  }, [loadRuntimeRegistry]);
+
+  useEffect(() => {
     loadSelected();
   }, [loadSelected]);
 
@@ -802,6 +827,31 @@ export default function AgentRunsPage() {
     [actions, selectedActionId],
   );
 
+  const allowedRuntimeTools = useMemo(() => {
+    if (!runtimeRegistry || !selectedRun) return [];
+    const allowed = new Set(selectedRun.allowed_capabilities ?? []);
+    const usedToolIds = new Set((actions ?? []).map((action) => action.tool_id).filter(Boolean));
+    return runtimeRegistry.capabilities
+      .filter((capability) => allowed.has(capability.name))
+      .map((capability) => ({
+        capability,
+        tool: runtimeRegistry.tools.find((tool) => tool.id === capability.tool_id) ?? null,
+      }))
+      .filter(({ capability }) => capability.tool_id || usedToolIds.has(capability.tool_id));
+  }, [actions, runtimeRegistry, selectedRun]);
+
+  const activeRuntimeSkills = useMemo(() => {
+    if (!runtimeRegistry) return [];
+    const allowedToolIds = new Set(
+      allowedRuntimeTools
+        .map(({ capability }) => capability.tool_id)
+        .filter((toolId): toolId is string => Boolean(toolId)),
+    );
+    return runtimeRegistry.skills.filter((skill) =>
+      (skill.tool_ids ?? []).some((toolId) => allowedToolIds.has(toolId)),
+    );
+  }, [allowedRuntimeTools, runtimeRegistry]);
+
   const actionCounters = useMemo(() => {
     const counts = {
       proposed: 0,
@@ -829,6 +879,9 @@ export default function AgentRunsPage() {
       status: String(event.status || "unknown").toLowerCase(),
       when: event.timestamp ?? null,
       note: event.note ?? null,
+      toolId: event.tool_id ?? null,
+      skillId: event.skill_id ?? null,
+      effectClass: event.effect_class ?? null,
       isPolicy: Boolean(event.is_policy_event),
       anchors: event.anchors ?? {},
     }));
@@ -1227,6 +1280,44 @@ export default function AgentRunsPage() {
     [loadRuns, loadSelected, selectedRunId, userId],
   );
 
+  const handleOperatorCommand = useCallback(
+    async (command: {
+      command_type: AgentRunCommandType;
+      action_id?: string | null;
+      message?: string | null;
+    }) => {
+      if (!userId || !selectedRunId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        await issueAgentRunCommand(selectedRunId, command, userId);
+        await loadSelected();
+        await loadRuns();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to issue command.");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadRuns, loadSelected, selectedRunId, userId],
+  );
+
+  const handleOperatorCommandPreflight = useCallback(
+    async (command: {
+      command_type: AgentRunCommandType;
+      action_id?: string | null;
+      message?: string | null;
+    }) => {
+      if (!userId || !selectedRunId) {
+        throw new Error("Select a run before issuing an operator command.");
+      }
+      const response = await preflightAgentRunCommand(selectedRunId, command, userId);
+      return response.preflight;
+    },
+    [selectedRunId, userId],
+  );
+
   return (
     <div className="app agent-runs-page">
       <Sidebar
@@ -1349,6 +1440,8 @@ export default function AgentRunsPage() {
                     setSelectedActionId(nextRecommendedAction.action.id);
                   }
                 }}
+                onPreflightCommand={handleOperatorCommandPreflight}
+                onIssueCommand={handleOperatorCommand}
                 onOpenExperiment={() => {
                   if (selectedRun?.experiment_id) {
                     const params = new URLSearchParams();
@@ -1564,6 +1657,76 @@ export default function AgentRunsPage() {
                         )}
                       </div>
                     </div>
+                    <section className="panel__card panel__card--secondary">
+                      <div className="panel__header">
+                        <h4>Skills and tools</h4>
+                        <span className="panel__badge panel__badge--secondary">
+                          {runtimeRegistry ? "Registry v1" : "Loading registry"}
+                        </span>
+                      </div>
+                      <p className="panel__muted">
+                        This is the agent-facing execution contract for the selected run:
+                        skills describe reusable workflows, tools are the policy-governed
+                        capabilities the runtime can execute.
+                      </p>
+                      <div className="agent-ops-summary">
+                        <span className="panel__badge panel__badge--secondary">
+                          Principal: {selectedRun.principal_type ?? "human"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
+                        </span>
+                      </div>
+                      <div className="agent-ops-summary">
+                        {activeRuntimeSkills.slice(0, 4).map((skill) => (
+                          <span key={skill.id} className="panel__badge panel__badge--secondary">
+                            {skill.name} · {skill.risk_class}
+                          </span>
+                        ))}
+                        {runtimeRegistry && activeRuntimeSkills.length === 0 ? (
+                          <span className="panel__badge panel__badge--warning">
+                            No matching skills for allowed tools
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="table">
+                        <div className="table__header">
+                          <div className="table__cell">Tool</div>
+                          <div className="table__cell">Capability</div>
+                          <div className="table__cell">Effect</div>
+                          <div className="table__cell">Side effects</div>
+                        </div>
+                        {allowedRuntimeTools.slice(0, 8).map(({ capability, tool }) => (
+                          <div key={capability.name} className="table__row">
+                            <div className="table__cell" data-label="Tool">
+                              <div className="table__strong">{capability.tool_id}</div>
+                              <div className="table__muted">
+                                {tool?.default_version ?? capability.default_version ?? "v1"}
+                              </div>
+                            </div>
+                            <div className="table__cell" data-label="Capability">
+                              {capability.name}
+                            </div>
+                            <div className="table__cell" data-label="Effect">
+                              {tool?.effect_class ?? capability.effect_class ?? "unknown"}
+                            </div>
+                            <div className="table__cell table__muted" data-label="Side effects">
+                              {(tool?.side_effects ?? capability.side_effects ?? [])
+                                .slice(0, 3)
+                                .join(", ") || "none declared"}
+                            </div>
+                          </div>
+                        ))}
+                        {runtimeRegistry && allowedRuntimeTools.length === 0 ? (
+                          <div className="panel__muted">
+                            No registry tools match this run’s allowed capabilities.
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
                     <div className="agent-budget-grid">
                       <div
                         className={`agent-budget-card ${
@@ -1709,6 +1872,13 @@ export default function AgentRunsPage() {
                             {a.capability_version && (
                               <div className="table__muted">{a.capability_version}</div>
                             )}
+                            {a.skill_id || a.tool_id ? (
+                              <div className="table__muted">
+                                {a.skill_id ? `Skill: ${a.skill_id}` : null}
+                                {a.skill_id && a.tool_id ? " · " : null}
+                                {a.tool_id ? `Tool: ${a.tool_id}` : null}
+                              </div>
+                            ) : null}
                           </div>
                           <div className="table__cell" data-label="Status">
                             {a.status}
@@ -1919,6 +2089,16 @@ export default function AgentRunsPage() {
                               <div className="agent-timeline__meta">
                                 <span className="agent-timeline__seq">#{event.sequence}</span>
                                 <span className="agent-timeline__cap">{event.capability}</span>
+                                {event.skillId ? (
+                                  <span className="panel__badge panel__badge--secondary">
+                                    {event.skillId}
+                                  </span>
+                                ) : null}
+                                {event.toolId ? (
+                                  <span className="panel__badge panel__badge--secondary">
+                                    {event.toolId}
+                                  </span>
+                                ) : null}
                                 <span
                                   className={`agent-timeline__status is-${event.status}`}
                                 >
@@ -2045,6 +2225,17 @@ export default function AgentRunsPage() {
                           {CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
                             "Capability summary not yet documented."}
                         </p>
+                        <div className="agent-ops-summary">
+                          <span className="panel__badge panel__badge--secondary">
+                            Skill: {selectedAction.skill_id ?? "unmapped"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Tool: {selectedAction.tool_id ?? "legacy"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Effect: {selectedAction.effect_class ?? "unknown"}
+                          </span>
+                        </div>
                         <p className="panel__subheading">What it changes</p>
                         <ul className="panel__list panel__list--compact">
                           {(
@@ -2566,5 +2757,13 @@ export default function AgentRunsPage() {
 
       </main>
     </div>
+  );
+}
+
+export default function AgentRunsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgentRunsPageContent />
+    </Suspense>
   );
 }

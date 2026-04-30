@@ -95,8 +95,15 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         tool_ids=(
             "product.read",
             "brand.read",
+            "retrieval.freeze_protocol",
+            "experiment.run_control_baseline",
+            "hypothesis.seed",
+            "variant.generate",
+            "experiment.run_variant",
             "representation.optimize",
             "copy.revise_draft",
+            "learning.update_posterior_and_decisions",
+            "policy.recommend_next_action",
         ),
         risk_class="write_low_risk",
     ),
@@ -107,10 +114,24 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         version="v1",
         tool_ids=(
             "validation.request",
+            "validation.request_synthetic",
+            "validation.review_readiness",
             "validation.result.read",
             "evidence.ingest",
         ),
         risk_class="external_side_effect",
+    ),
+    SkillSpec(
+        id="promote-and-publish-approved-copy",
+        name="Promote And Publish Approved Copy",
+        description="Promote validated variants and publish approved copy changes.",
+        version="v1",
+        tool_ids=(
+            "promotion.promote_lab",
+            "promotion.promote_prod",
+            "copy.publish_revision",
+        ),
+        risk_class="write_high_risk",
     ),
     SkillSpec(
         id="triage-failed-run",
@@ -135,11 +156,27 @@ def list_skill_specs() -> list[SkillSpec]:
     return list(_SKILL_SPECS)
 
 
+def skill_id_for_tool_id(tool_id: str | None) -> str | None:
+    key = str(tool_id or "").strip()
+    if not key:
+        return None
+    for skill in _SKILL_SPECS:
+        if key in skill.tool_ids:
+            return skill.id
+    return None
+
+
+def skill_id_for_capability(capability_name: str | None) -> str | None:
+    return skill_id_for_tool_id(capability_to_tool_id(capability_name))
+
+
 __all__ = [
     "SkillSpec",
     "capability_to_tool_id",
     "list_skill_specs",
     "new_trace_id",
     "policy_profile_for_run_mode",
+    "skill_id_for_capability",
+    "skill_id_for_tool_id",
     "tool_effect_class",
 ]

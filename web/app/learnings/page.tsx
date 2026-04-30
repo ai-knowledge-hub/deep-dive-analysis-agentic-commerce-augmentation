@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAppUser } from "../../lib/auth";
 
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -140,7 +140,7 @@ function buildRecommendations(
 
 export default function LearningsPage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user } = useAppUser();
   const userId = user?.id ?? null;
 
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null);

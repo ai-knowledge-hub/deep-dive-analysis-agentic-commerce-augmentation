@@ -7,6 +7,10 @@ from application.services.agent_runtime.registry import (
     next_state_for_capability,
     tool_supported,
 )
+from application.services.agent_runtime.agent_first import (
+    skill_id_for_capability,
+    skill_id_for_tool_id,
+)
 
 
 def test_registry_contains_core_capability_and_defaults():
@@ -35,3 +39,13 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert normalized["retrieval_max_results"] == 5
     assert tool_supported("experiment.run_variant") is True
     assert tool_supported("not.real") is False
+
+
+def test_runtime_tools_resolve_to_skill_lineage():
+    assert skill_id_for_tool_id("experiment.run_variant") == "optimize-product-representation"
+    assert (
+        skill_id_for_capability("request_synthetic_validation")
+        == "request-validation-and-ingest-result"
+    )
+    assert skill_id_for_tool_id("copy.publish_revision") == "promote-and-publish-approved-copy"
+    assert skill_id_for_tool_id("not.real") is None

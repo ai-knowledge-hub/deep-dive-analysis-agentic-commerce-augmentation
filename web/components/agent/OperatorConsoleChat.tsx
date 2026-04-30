@@ -2,7 +2,13 @@
 
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
+import type {
+  AgentAction,
+  AgentRun,
+  AgentRunCommandPreflight,
+  AgentRunCommandType,
+  AgentRunEvent,
+} from "../../lib/types";
 
 type PromptId =
   | "brief"
@@ -16,6 +22,12 @@ type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
+};
+
+type OperatorCommand = {
+  command_type: AgentRunCommandType;
+  action_id?: string | null;
+  message?: string | null;
 };
 
 type Props = {
@@ -36,6 +48,8 @@ type Props = {
   onFocusPolicy?: () => void;
   onFocusValidationLinked?: () => void;
   onJumpToNextAction?: () => void;
+  onPreflightCommand?: (command: OperatorCommand) => Promise<AgentRunCommandPreflight>;
+  onIssueCommand?: (command: OperatorCommand) => Promise<void> | void;
 };
 
 function formatRunLabel(run: AgentRun | null): string {
@@ -94,8 +108,11 @@ export function OperatorConsoleChat({
   onFocusPolicy,
   onFocusValidationLinked,
   onJumpToNextAction,
+  onPreflightCommand,
+  onIssueCommand,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingCommandKey, setPendingCommandKey] = useState<string | null>(null);
 
   const derived = useMemo(() => {
     const proposedActions = actions.filter(
@@ -321,6 +338,78 @@ export function OperatorConsoleChat({
     setMessages((current) => [...current, userMessage, assistantMessage]);
   }
 
+  async function issueCommand(
+    command_type: AgentRunCommandType,
+    message: string,
+    action_id?: string | null,
+  ) {
+    const command = { command_type, action_id, message };
+    const commandKey = `${command_type}:${action_id ?? "run"}`;
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}-${command_type}`,
+      role: "user",
+      content: message,
+    };
+    setMessages((current) => [...current, userMessage]);
+    try {
+      if (onPreflightCommand) {
+        const preflight = await onPreflightCommand(command);
+        setMessages((current) => [
+          ...current,
+          {
+            id: `assistant-${Date.now()}-${command_type}-preflight`,
+            role: "assistant",
+            content: [
+              `Preflight: ${preflight.summary}`,
+              preflight.blockers.length > 0
+                ? `Blocker: ${preflight.blockers[0]}`
+                : "",
+              preflight.warnings.length > 0
+                ? `Warning: ${preflight.warnings[0]}`
+                : "",
+              `Rollback: ${preflight.rollback_guidance}`,
+              preflight.requires_confirmation && pendingCommandKey !== commandKey
+                ? "Click the command again to confirm."
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" "),
+          },
+        ]);
+        if (!preflight.allowed) {
+          setPendingCommandKey(null);
+          return;
+        }
+        if (preflight.requires_confirmation && pendingCommandKey !== commandKey) {
+          setPendingCommandKey(commandKey);
+          return;
+        }
+      }
+      setPendingCommandKey(null);
+      await onIssueCommand?.(command);
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}-${command_type}`,
+          role: "assistant",
+          content: `Command receipt recorded: ${command_type}. I refreshed the execution context so you can review the resulting run state and timeline.`,
+        },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}-${command_type}-error`,
+          role: "assistant",
+          content:
+            error instanceof Error
+              ? `Command failed: ${error.message}`
+              : "Command failed before the runtime accepted it.",
+        },
+      ]);
+    }
+  }
+
   return (
     <section className="panel__card panel__card--secondary">
       <div className="panel__header">
@@ -420,6 +509,67 @@ export function OperatorConsoleChat({
             </div>
           ))
         )}
+      </div>
+
+      <div className="panel__actions">
+        <button
+          type="button"
+          className="button button--primary button--sm"
+          onClick={() =>
+            issueCommand(
+              "approve",
+              `Approve ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "proposed"}
+        >
+          Approve selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "reject",
+              `Reject ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "proposed"}
+        >
+          Reject selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "retry",
+              `Retry ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
+        >
+          Retry selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("pause", "Pause this run")}
+          disabled={!run}
+        >
+          Pause run
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("start", "Start or resume this run")}
+          disabled={!run}
+        >
+          Start run
+        </button>
       </div>
 
       <div className="panel__actions">

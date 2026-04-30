@@ -14,6 +14,7 @@ from application.services.agent_runtime.capabilities import (
 )
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
+    skill_id_for_tool_id,
     tool_effect_class,
 )
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
@@ -389,7 +390,11 @@ class AgentRuntimeService:
             principal_id=run.get("principal_id"),
             tool_id=action.get("tool_id")
             or capability_to_tool_id(str(action.get("capability_name") or "")),
-            skill_id=action.get("skill_id"),
+            skill_id=action.get("skill_id")
+            or skill_id_for_tool_id(
+                action.get("tool_id")
+                or capability_to_tool_id(str(action.get("capability_name") or ""))
+            ),
             effect_class=action.get("effect_class")
             or tool_effect_class(
                 action.get("tool_id")

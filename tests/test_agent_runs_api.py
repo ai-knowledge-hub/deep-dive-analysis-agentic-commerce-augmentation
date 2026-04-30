@@ -239,7 +239,18 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     payload = detail.json()
     assert payload["run"]["trace_id"] == run["trace_id"]
     assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
+    assert payload["actions"][0]["skill_id"] == "optimize-product-representation"
     assert payload["actions"][0]["effect_class"] == "write_low_risk"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    assert events.status_code == 200
+    event_payload = events.json()
+    assert event_payload["events"][0]["tool_id"] == "experiment.run_variant"
+    assert event_payload["events"][0]["skill_id"] == "optimize-product-representation"
+    assert event_payload["events"][0]["effect_class"] == "write_low_risk"
 
 
 def test_seed_skill_specs_are_available():
@@ -247,6 +258,170 @@ def test_seed_skill_specs_are_available():
     assert "discover-protocol-candidates" in skills
     assert "optimize-product-representation" in skills
     assert "request-validation-and-ingest-result" in skills
+
+
+def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
+    client: TestClient,
+):
+    response = client.get("/agent-runs/registry")
+    assert response.status_code == 200
+    payload = response.json()
+    tool_ids = {tool["id"] for tool in payload["tools"]}
+    skill_ids = {skill["id"] for skill in payload["skills"]}
+    policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
+
+    assert "experiment.run_variant" in tool_ids
+    assert "optimize-product-representation" in skill_ids
+    assert "safe_auto" in policy_ids
+    assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
+        "optimize-product-representation"
+    ]
+    assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+
+
+def test_operator_command_endpoint_records_receipt_and_delegates_approval(
+    client: TestClient,
+):
+    created = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+    assert created.status_code == 200
+    run = created.json()["run"]
+    detail = client.get(
+        f"/agent-runs/{run['id']}",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    action = detail.json()["actions"][0]
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "approve",
+            "action_id": action["id"],
+            "message": "Approve from operator chat.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["command"]["event_type"] == "operator_command_approve"
+    assert payload["command"]["status"] == "received"
+    assert payload["preflight"]["allowed"] is True
+    assert payload["action"]["status"] == "approved"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    event_types = [event["event_type"] for event in events.json()["events"]]
+    assert "operator_command_approve" in event_types
+    assert "action_approved" in event_types
+    assert any(event["status"] == "completed" for event in events.json()["events"])
+
+
+def test_operator_command_preflight_blocks_plan_only_step(client: TestClient):
+    created = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["run_variant"],
+            "run_mode": "plan_only",
+        },
+    )
+    assert created.status_code == 200
+    run = created.json()["run"]
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands/preflight",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "step",
+        },
+    )
+
+    assert response.status_code == 200
+    preflight = response.json()["preflight"]
+    assert preflight["allowed"] is False
+    assert preflight["risk_level"] == "medium"
+    assert "Run is plan-only" in preflight["blockers"][0]
+
+
+def test_operator_retry_command_creates_new_proposed_retry_action(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="variants_ready",
+        status="failed",
+    )
+    failed = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="failed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1", "variant_selection": "top_1"},
+        outputs={},
+        inputs_hash="inputs-1",
+        outputs_hash=None,
+        rationale="Original variant run failed.",
+        confidence=0.55,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+        effect_class="write_low_risk",
+        error="Transient execution failure.",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "retry",
+            "action_id": failed["id"],
+            "message": "Retry safely.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    retry_action = payload["action"]
+    assert payload["preflight"]["requires_confirmation"] is True
+    assert retry_action["id"] != failed["id"]
+    assert retry_action["status"] == "proposed"
+    assert retry_action["retry_count"] == 1
+    assert retry_action["dedupe_key"] == f"retry:{failed['id']}:1"
+    assert deps.agent_actions.get_agent_action(failed["id"])["status"] == "failed"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    event_types = [event["event_type"] for event in events.json()["events"]]
+    assert "action_retry_proposed" in event_types
+    assert "operator_command_retry" in event_types
 
 
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(

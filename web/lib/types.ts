@@ -963,6 +963,13 @@ export type AgentRun = {
   brand_id?: string | null;
   product_id?: string | null;
   experiment_id?: string | null;
+  principal_type?: "human" | "internal_agent" | "external_agent" | string | null;
+  principal_id?: string | null;
+  agent_profile_id?: string | null;
+  harness_id?: string | null;
+  policy_profile_id?: string | null;
+  idempotency_key?: string | null;
+  trace_id?: string | null;
   objective?: Record<string, unknown>;
   allowed_capabilities?: string[];
   capability_versions?: Record<string, unknown>;
@@ -995,6 +1002,9 @@ export type AgentAction = {
   hypothesis_id?: string | null;
   variant_id?: string | null;
   validation_job_id?: string | null;
+  tool_id?: string | null;
+  skill_id?: string | null;
+  effect_class?: string | null;
   error?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -1019,6 +1029,34 @@ export type AgentRunControlResponse = {
   message?: string;
 };
 
+export type AgentRunCommandType =
+  | "explain"
+  | "focus"
+  | "change_plan"
+  | "start"
+  | "pause"
+  | "cancel"
+  | "step"
+  | "approve"
+  | "reject"
+  | "retry";
+
+export type AgentRunCommandPreflight = {
+  allowed: boolean;
+  command_type: AgentRunCommandType;
+  risk_level: "low" | "medium" | "high" | string;
+  requires_confirmation: boolean;
+  requires_approval: boolean;
+  effect_class?: string | null;
+  tool_id?: string | null;
+  skill_id?: string | null;
+  side_effects: string[];
+  blockers: string[];
+  warnings: string[];
+  rollback_guidance: string;
+  summary: string;
+};
+
 export type AgentRunEvent = {
   id: string;
   run_id: string;
@@ -1028,6 +1066,11 @@ export type AgentRunEvent = {
   status: string;
   capability_name?: string | null;
   capability_version?: string | null;
+  principal_type?: "human" | "internal_agent" | "external_agent" | string | null;
+  principal_id?: string | null;
+  tool_id?: string | null;
+  skill_id?: string | null;
+  effect_class?: string | null;
   timestamp?: string | null;
   note?: string | null;
   is_policy_event?: boolean;
@@ -1041,6 +1084,52 @@ export type AgentRunEvent = {
   };
 };
 
+export type AgentRuntimeSkillSpec = {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  tool_ids: string[];
+  risk_class: string;
+};
+
+export type AgentRuntimeToolSpec = {
+  id: string;
+  capability_name: string;
+  default_version?: string;
+  required_inputs?: string[];
+  default_inputs?: Record<string, unknown>;
+  side_effects?: string[];
+  next_state?: string | null;
+  effect_class?: string;
+};
+
+export type AgentRuntimeCapabilitySpec = {
+  name: string;
+  tool_id: string;
+  default_version?: string;
+  required_inputs?: string[];
+  default_inputs?: Record<string, unknown>;
+  side_effects?: string[];
+  next_state?: string | null;
+  effect_class?: string;
+};
+
+export type AgentRuntimePolicyProfile = {
+  id: string;
+  name: string;
+  description: string;
+  auto_effect_classes: string[];
+};
+
+export type AgentRuntimeRegistryResponse = {
+  skills: AgentRuntimeSkillSpec[];
+  tools: AgentRuntimeToolSpec[];
+  capabilities: AgentRuntimeCapabilitySpec[];
+  skill_ids_by_tool: Record<string, string[]>;
+  policy_profiles: AgentRuntimePolicyProfile[];
+};
+
 export type AgentRunEventListResponse = {
   events: AgentRunEvent[];
   page?: {
@@ -1049,6 +1138,20 @@ export type AgentRunEventListResponse = {
     has_more_before?: boolean;
     has_more_after?: boolean;
   };
+};
+
+export type AgentRunCommandResponse = {
+  command: AgentRunEvent;
+  run: AgentRun;
+  action?: AgentAction;
+  message?: string;
+  preflight?: AgentRunCommandPreflight;
+};
+
+export type AgentRunCommandPreflightResponse = {
+  preflight: AgentRunCommandPreflight;
+  run: AgentRun;
+  action?: AgentAction | null;
 };
 
 export type ValidationJobListResponse = {

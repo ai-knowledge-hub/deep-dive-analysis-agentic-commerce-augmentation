@@ -14,6 +14,12 @@ Implemented now:
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution
 - Autonomous scheduler service (`AgentRuntimeSchedulerService`) for interval-based continuous orchestration
+- Principal-aware run creation for `human`, `internal_agent`, and `external_agent`
+- Static skills/tools registry exposed at `GET /agent-runs/registry`
+- New planned actions/events carry `skill_id`, `tool_id`, `effect_class`, principal metadata, and trace id
+- Runs and Interventions UI visibility into selected-run skills, tools, policy profile, principal, and trace id
+- Operator chat steering endpoint with audited `operator_command_*` receipts
+- Command preflight endpoint with risk level, blockers, warnings, side effects, and rollback guidance
 
 ---
 
@@ -94,6 +100,14 @@ Worker/ops entry points:
     - `since`, `until`
     - `before`, `after`
     - `event_id`, `around`
+- API: `POST /agent-runs/{run_id}/commands`
+  - records `operator_command_*` receipts from the chat control plane
+  - delegates approve/reject/start/pause/cancel/step to existing action/runtime controls
+  - handles retry by creating a new proposed retry action with incremented `retry_count`
+  - supports non-mutating explain/focus/change-plan receipts for chat-led steering
+- API: `POST /agent-runs/{run_id}/commands/preflight`
+  - returns whether a command is allowed before execution
+  - includes risk level, required confirmation, blockers, warnings, side effects, and rollback guidance
 - CLI: `python -m scripts.run_agent_runtime_worker`
 - Make target: `make agent-runtime-tick`
 - Scheduler CLI: `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`
@@ -105,6 +119,10 @@ Implemented in v0:
 - centralized capability specs in `application/services/agent_runtime/registry.py`
 - per-capability defaults, required inputs, side effects, and state transition mapping
 - runtime + execution entrypoints validate against the same registry contract
+- machine-facing `tool_id` values mapped from legacy `capability_name`
+- initial static skill specs in `application/services/agent_runtime/agent_first.py`
+- deterministic tool-to-skill lineage for planned actions and runtime events
+- read API: `GET /agent-runs/registry`
 
 Agents must not call raw endpoints. They request named capabilities:
 
@@ -362,6 +380,15 @@ Event stream is exposed via:
   - `since`, `until`
   - `before`, `after`
   - `event_id`, `around`
+
+Operator steering is exposed via:
+- `POST /agent-runs/{run_id}/commands`
+- `POST /agent-runs/{run_id}/commands/preflight`
+- mutating commands: `approve`, `reject`, `retry`, `start`, `pause`, `cancel`, `step`
+- non-mutating command receipts: `explain`, `focus`, `change_plan`
+- command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
+- high-risk command preflight requires explicit confirmation in the operator chat before submission
+- retry always requires explicit confirmation and emits `action_retry_proposed` for a new proposed action; the original failed action remains failed
 
 ### 3.5 Version Registry (scientific reproducibility)
 

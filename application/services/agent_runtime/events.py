@@ -19,6 +19,12 @@ class AgentRunEvent:
     status: str
     capability_name: Optional[str]
     capability_version: Optional[str]
+    principal_type: Optional[str]
+    principal_id: Optional[str]
+    tool_id: Optional[str]
+    skill_id: Optional[str]
+    effect_class: Optional[str]
+    trace_id: Optional[str]
     timestamp: Optional[str]
     note: Optional[str]
     is_policy_event: bool
@@ -233,6 +239,12 @@ def _to_event(item: Dict[str, Any], *, run_id: str) -> AgentRunEvent:
         status=str(item.get("status") or "unknown"),
         capability_name=item.get("capability_name"),
         capability_version=item.get("capability_version"),
+        principal_type=item.get("principal_type"),
+        principal_id=item.get("principal_id"),
+        tool_id=item.get("tool_id"),
+        skill_id=item.get("skill_id"),
+        effect_class=item.get("effect_class"),
+        trace_id=item.get("trace_id"),
         timestamp=item.get("timestamp"),
         note=item.get("note"),
         is_policy_event=bool(item.get("is_policy_event")),

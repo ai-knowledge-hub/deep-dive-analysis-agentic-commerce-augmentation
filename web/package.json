@@ -9,6 +9,7 @@
     "lint": "pnpm exec next lint",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",
+    "test:e2e": "NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm run build && NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm exec playwright test",
     "web:dev": "pnpm run dev",
     "api:dev": "uvicorn api.main:app --reload"
   },
