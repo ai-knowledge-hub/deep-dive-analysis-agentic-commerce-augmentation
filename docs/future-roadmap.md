@@ -100,16 +100,31 @@ This document complements:
 
 ---
 
-## 8) Agentic Loop Extensions (Deferred)
+## 8) Agentic Loop Extensions (Active / Partially Implemented)
 
-1. **Agent operator mode (governed orchestration layer)**
-   - AgentRuntime job runner (backend)
-   - Capability registry + policy-as-code
-   - Agent action audit log + reproducible capability version pinning
-   - Multi-agent roles (planner/variant/validation/policy)
-2. **Active learning from “lessons learned”**
-3. **Knowledge graph & ontology‑based reasoning**
-4. **Scheduled experiment execution automation**
+Implemented foundation:
+- AgentRuntime job runner with run/action/event persistence.
+- Capability registry and policy enforcement for executable runtime capabilities.
+- Operator chat command surface with preflight, command receipts, and explicit retry proposals.
+- Runtime worker and interval scheduler entrypoints.
+
+Planned extensions:
+1. **Command observability and structured recovery**
+   - First-class timeline filtering for command receipts/outcomes
+   - Interventions entries for command-originated risky work
+   - Structured `change_plan` recovery proposals
+2. **Capability/skill registry hardening**
+   - Persistent registry definitions
+   - Tool input/output schema validation
+   - Skill/tool version pinning on runs and actions
+3. **Multi-agent roles**
+   - Planner
+   - Variant optimizer
+   - Validation operator
+   - Policy/recovery agent
+4. **Active learning from “lessons learned”**
+5. **Knowledge graph & ontology‑based reasoning**
+6. **Scheduled experiment execution automation**
    - Automatic execution of due experiment schedules via `run_due`
    - Deployment options: cron / GitHub Action / worker service
    - Integrate with the existing loop maintenance automation template as a companion job

@@ -1,6 +1,6 @@
 # Agentification Checkpoint
 
-Status date: 2026-04-26
+Status date: 2026-04-30
 
 This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
 
@@ -57,10 +57,13 @@ Use these docs together:
 
 - `docs/agentification-checkpoint.md`: current checkpoint and next implementation tracks
 - `docs/agent-first-modular-architecture-v1.md`: target architecture
-- `docs/agent-first-migration-slice-rfc.md`: first migration slice; now mostly implemented
 - `docs/chat-led-operator-console-spec.md`: target human control-plane UX
 - `docs/ui-control-plane-simplification-plan.md`: UI simplification roadmap
 - `docs/agentic-layer.md`: runtime implementation notes
+
+Historical reference:
+
+- `docs/agent-first-migration-slice-rfc.md`: first migration slice; implemented and retained as rationale/history, not the active work plan
 
 ## Next Development Tracks
 
@@ -128,13 +131,27 @@ Next steps:
 - Reduce duplicate dashboards.
 - Make all risky actions visible through Interventions.
 
-## Near-Term Recommendation
+## Next Build Slice
 
-The next implementation slice should be command observability and structured recovery:
+The next implementation slice should be command observability and structured recovery. This is the right next slice because chat commands now mutate runtime state safely, but the timeline/intervention model still treats command receipts as generic events.
 
-1. Surface command receipts and command outcomes as first-class timeline filters.
-2. Add Interventions actions for command-originated high-risk decisions.
-3. Add structured change-plan commands that create proposed recovery actions instead of mutating plans silently.
-4. Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
+Deliverables:
 
-That slice makes the chat console safer as it becomes the primary human steering interface.
+- Timeline observability:
+  - Add `event_type=command` filtering for `operator_command_*`.
+  - Add a command timeline preset in Agent Runs.
+  - Show command status as `received`, `completed`, or blocked by preflight.
+- Interventions integration:
+  - Surface high-risk command preflights and retry proposals in Interventions.
+  - Group command-originated work by urgency/risk.
+- Structured recovery:
+  - Make `change_plan` create proposed recovery actions instead of only recording a non-mutating receipt.
+  - Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
+- Verification:
+  - Backend tests for command event filtering and recovery action creation.
+  - Frontend tests for command timeline preset and Interventions visibility.
+  - Keep mock-auth Playwright smoke green.
+
+Definition of done:
+
+- An operator can ask the chat to steer execution, see the command receipt/outcome in the timeline, and find command-originated high-risk work in Interventions without reading raw event JSON.

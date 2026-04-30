@@ -1,6 +1,6 @@
 # Agent-First Migration Slice RFC
 
-Status: **Implemented as the first pivot foundation.**
+Status: **Implemented as the first pivot foundation. Historical reference only.**
 
 Implementation notes:
 - Principal-aware agent run creation is implemented.
@@ -11,6 +11,8 @@ Implementation notes:
 - The Runs UI surfaces skills/tools for the selected run.
 
 For the current checkpoint and follow-up tracks, see [docs/agentification-checkpoint.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/agentification-checkpoint.md).
+
+Do not use this RFC as the active backlog. It is retained to explain why the first agent-first data/runtime slice was shaped the way it was.
 
 This RFC defines the first implementation slice for the agent-first modular architecture described in [docs/agent-first-modular-architecture-v1.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/agent-first-modular-architecture-v1.md).
 
