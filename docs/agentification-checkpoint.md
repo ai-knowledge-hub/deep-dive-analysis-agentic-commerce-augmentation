@@ -34,9 +34,12 @@ The codebase now has the minimum spine for the pivot:
 - Read API for the runtime registry: `GET /agent-runs/registry`.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
-- Operator chat can issue audited steering commands for approve, reject, pause, start, and non-mutating focus/explain/change-plan intents.
+- Operator chat can issue audited steering commands for approve, reject, pause, start, non-mutating focus/explain intents, and structured change-plan recovery proposals.
 - Chat-issued commands now have a policy preflight contract with risk level, blockers, warnings, side effects, and rollback guidance.
 - Retry commands now create a new proposed retry action with incremented `retry_count` and preserve the original failed action.
+- Command events are first-class timeline filters through `event_type=command` and the Agent Runs `Commands (24h)` preset.
+- Interventions surfaces command-originated retry/recovery work.
+- `change_plan` now creates a proposed recovery action instead of only recording a non-mutating receipt.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -81,12 +84,12 @@ Next steps:
 
 ### 2. Agent Chat As Primary Control Interface
 
-Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, and propose explicit retry actions for failures.
+Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, propose explicit retry actions, and create structured recovery proposals.
 
 Next steps:
 
-- Expand command coverage beyond approve/reject/retry/start/pause into step, cancel, and structured change-plan workflows in the UI.
-- Promote command preflight receipts into the timeline/filter model.
+- Expand command controls in the UI beyond approve/reject/retry/start/pause into step and cancel.
+- Add richer command outcome summaries to the chat thread after execution.
 - Add undo/rollback guidance where side effects cannot be reversed.
 
 ### 3. External Agent API Contracts
@@ -133,25 +136,25 @@ Next steps:
 
 ## Next Build Slice
 
-The next implementation slice should be command observability and structured recovery. This is the right next slice because chat commands now mutate runtime state safely, but the timeline/intervention model still treats command receipts as generic events.
+The current implementation slice covers the first command observability and structured recovery pass.
 
-Deliverables:
+Completed in this slice:
 
 - Timeline observability:
-  - Add `event_type=command` filtering for `operator_command_*`.
-  - Add a command timeline preset in Agent Runs.
-  - Show command status as `received`, `completed`, or blocked by preflight.
+  - `event_type=command` filtering for `operator_command_*`.
+  - `Commands (24h)` timeline preset in Agent Runs.
 - Interventions integration:
-  - Surface high-risk command preflights and retry proposals in Interventions.
+  - Surface command-originated retry/recovery work in Interventions.
   - Group command-originated work by urgency/risk.
 - Structured recovery:
-  - Make `change_plan` create proposed recovery actions instead of only recording a non-mutating receipt.
-  - Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
+  - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
-  - Keep mock-auth Playwright smoke green.
 
-Definition of done:
+Next build should deepen this slice:
 
-- An operator can ask the chat to steer execution, see the command receipt/outcome in the timeline, and find command-originated high-risk work in Interventions without reading raw event JSON.
+- Add richer command outcome summaries to the chat thread.
+- Add step/cancel chat controls with preflight confirmation.
+- Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
+- Keep mock-auth Playwright smoke green.

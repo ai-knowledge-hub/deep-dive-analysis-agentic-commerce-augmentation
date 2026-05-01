@@ -273,6 +273,10 @@ def _matches_filters(
     if event_type and event_type not in {"all", ""}:
         if event_type == "policy" and not event.is_policy_event:
             return False
+        if event_type == "command" and not event.event_type.startswith(
+            "operator_command_"
+        ):
+            return False
         if event_type in {"failed", "executed"} and event.status != event_type:
             return False
     if status and status not in {"all", ""} and event.status != status:

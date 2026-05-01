@@ -68,6 +68,16 @@ type EscalationItem = {
   latestEvent?: AgentRunEvent | null;
 };
 
+type CommandItem = {
+  kind: "command";
+  run: AgentRun;
+  event: AgentRunEvent;
+  priority: Priority;
+  risk: RiskLevel;
+  title: string;
+  summary: string;
+};
+
 const HIGH_RISK_CAPABILITIES = new Set([
   "promote_variant_prod",
   "publish_copy_revision",
@@ -104,6 +114,13 @@ function getRiskForCapability(capabilityName?: string | null): RiskLevel {
   const key = String(capabilityName || "");
   if (HIGH_RISK_CAPABILITIES.has(key)) return "high";
   if (MEDIUM_RISK_CAPABILITIES.has(key)) return "medium";
+  return "low";
+}
+
+function getRiskForEffect(effectClass?: string | null): RiskLevel {
+  const key = normalize(effectClass);
+  if (key === "write_high_risk") return "high";
+  if (key === "external_side_effect") return "medium";
   return "low";
 }
 
@@ -291,6 +308,59 @@ function buildEscalationItem(detail: InterventionDetail): EscalationItem | null 
   };
 }
 
+function buildCommandItems(detail: InterventionDetail): CommandItem[] {
+  return detail.events
+    .filter((event) => {
+      const eventType = String(event.event_type || "");
+      return (
+        eventType.startsWith("operator_command_") ||
+        eventType === "action_retry_proposed" ||
+        eventType === "action_recovery_proposed"
+      );
+    })
+    .map((event) => {
+      const eventType = String(event.event_type || "");
+      const command = eventType.replace(/^operator_command_/, "");
+      const risk = maxRisk(
+        getRiskForCapability(event.capability_name),
+        getRiskForEffect(event.effect_class),
+      );
+      const isRetryProposal = eventType === "action_retry_proposed" || command === "retry";
+      const isRecoveryProposal = eventType === "action_recovery_proposed";
+      const priority: Priority =
+        risk === "high" || event.status === "failed"
+          ? "high"
+          : isRetryProposal
+            ? "medium"
+            : "low";
+      return {
+        kind: "command" as const,
+        run: detail.run,
+        event,
+        priority,
+        risk,
+        title: isRetryProposal
+          ? `${formatRunLabel(detail.run)} has a retry proposal`
+          : isRecoveryProposal
+            ? `${formatRunLabel(detail.run)} has a recovery proposal`
+            : `${formatRunLabel(detail.run)} command: ${command || eventType}`,
+        summary:
+          event.note ||
+          (isRetryProposal
+            ? "A chat-issued retry created a proposed recovery action."
+            : isRecoveryProposal
+              ? "A chat-issued change-plan command created a proposed recovery action."
+            : "A chat-issued command changed or inspected runtime state."),
+      };
+    })
+    .filter(
+      (item) =>
+        item.risk !== "low" ||
+        item.event.event_type === "action_retry_proposed" ||
+        item.event.event_type === "action_recovery_proposed",
+    );
+}
+
 function InterventionsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -306,6 +376,7 @@ function InterventionsPageContent() {
   const [retries, setRetries] = useState<RetryItem[]>([]);
   const [pauses, setPauses] = useState<PauseItem[]>([]);
   const [escalations, setEscalations] = useState<EscalationItem[]>([]);
+  const [commands, setCommands] = useState<CommandItem[]>([]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const loadInterventions = useCallback(async () => {
@@ -355,6 +426,11 @@ function InterventionsPageContent() {
             .filter((item): item is EscalationItem => Boolean(item)),
         ),
       );
+      setCommands(
+        sortByPriorityAndRisk(
+          detailRows.flatMap((detail) => buildCommandItems(detail)),
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load interventions.");
     } finally {
@@ -386,6 +462,11 @@ function InterventionsPageContent() {
     [escalations, runIdParam],
   );
 
+  const visibleCommands = useMemo(
+    () => (runIdParam ? commands.filter((item) => item.run.id === runIdParam) : commands),
+    [commands, runIdParam],
+  );
+
   const briefing = useMemo(() => {
     if (!userId) {
       return "Sign in to review approvals, retries, pauses, and escalation-worthy runs.";
@@ -394,7 +475,8 @@ function InterventionsPageContent() {
       visibleApprovals.length +
       visibleRetries.length +
       visiblePauses.length +
-      visibleEscalations.length;
+      visibleEscalations.length +
+      visibleCommands.length;
     if (total === 0) {
       if (runIdParam) {
         return `Run ${runIdParam.slice(0, 8)} does not currently need operator intervention.`;
@@ -402,11 +484,12 @@ function InterventionsPageContent() {
       return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
     }
     const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
-    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
+    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleCommands.length} command-originated item${visibleCommands.length === 1 ? "" : "s"}, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
   }, [
     runIdParam,
     userId,
     visibleApprovals.length,
+    visibleCommands.length,
     visibleEscalations.length,
     visiblePauses.length,
     visibleRetries.length,
@@ -521,6 +604,7 @@ function InterventionsPageContent() {
             metrics={[
               { label: "Escalations", value: escalations.length, tone: escalations.length > 0 ? "warning" : "default" },
               { label: "Approvals", value: approvals.length },
+              { label: "Commands", value: commands.length, tone: commands.length > 0 ? "warning" : "default" },
               { label: "Retries", value: retries.length },
               { label: "Pauses", value: pauses.length },
             ]}
@@ -578,6 +662,51 @@ function InterventionsPageContent() {
                           onClick={() => openRun(item.run.id)}
                         >
                           Open run
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="panel__card panel__card--secondary">
+              <div className="panel__header">
+                <h3>Command-originated work</h3>
+                <span className="panel__badge panel__badge--warning">{visibleCommands.length}</span>
+              </div>
+              {visibleCommands.length === 0 ? (
+                <div className="panel__muted">No high-risk command receipts or retry proposals need intervention.</div>
+              ) : (
+                <div className="list">
+                  {visibleCommands.map((item) => (
+                    <div key={`command-${item.event.id}`} className="list__row">
+                      <div className="list__title">{item.title}</div>
+                      {renderMeta(item.priority, item.risk, item.run)}
+                      <div className="panel__muted">{item.summary}</div>
+                      <div className="agent-ops-summary">
+                        <span className="panel__badge panel__badge--secondary">
+                          Event: {item.event.event_type}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Status: {item.event.status}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Effect: {item.event.effect_class ?? item.risk}
+                        </span>
+                      </div>
+                      {item.event.timestamp ? (
+                        <div className="list__meta">
+                          Command signal: {formatEventTime(item.event.timestamp)}
+                        </div>
+                      ) : null}
+                      <div className="detail__actions">
+                        <button
+                          type="button"
+                          className="button button--ghost button--sm"
+                          onClick={() => openRun(item.run.id)}
+                        >
+                          Inspect run
                         </button>
                       </div>
                     </div>

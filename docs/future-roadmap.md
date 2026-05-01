@@ -110,9 +110,10 @@ Implemented foundation:
 
 Planned extensions:
 1. **Command observability and structured recovery**
-   - First-class timeline filtering for command receipts/outcomes
-   - Interventions entries for command-originated risky work
-   - Structured `change_plan` recovery proposals
+   - First-class timeline filtering for command receipts/outcomes (initial pass implemented)
+   - Interventions entries for command-originated risky work (initial pass implemented)
+   - Structured `change_plan` recovery proposals (initial pass implemented)
+   - Richer retry strategies and chat outcome summaries
 2. **Capability/skill registry hardening**
    - Persistent registry definitions
    - Tool input/output schema validation

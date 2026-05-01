@@ -128,12 +128,14 @@ type TimelineStatusFilter =
 type TimelineWindowFilter = "all" | "24h" | "7d";
 type TimelinePresetId =
   | "all_activity"
+  | "commands_24h"
   | "policy_failures_24h"
   | "variant_execution_7d"
   | "validation_focus_7d"
   | "custom";
+type TimelineEventFilter = "all" | "failed" | "policy" | "executed" | "command";
 
-const TIMELINE_EVENT_TYPES = new Set(["all", "failed", "policy", "executed"]);
+const TIMELINE_EVENT_TYPES = new Set(["all", "failed", "policy", "executed", "command"]);
 const TIMELINE_STATUS_TYPES = new Set([
   "all",
   "proposed",
@@ -146,6 +148,7 @@ const TIMELINE_STATUS_TYPES = new Set([
 const TIMELINE_WINDOWS = new Set(["all", "24h", "7d"]);
 const TIMELINE_PRESET_IDS = new Set([
   "all_activity",
+  "commands_24h",
   "policy_failures_24h",
   "variant_execution_7d",
   "validation_focus_7d",
@@ -155,7 +158,7 @@ const TIMELINE_PRESET_IDS = new Set([
 const TIMELINE_PRESETS: Array<{
   id: Exclude<TimelinePresetId, "custom">;
   label: string;
-  eventType: "all" | "failed" | "policy" | "executed";
+  eventType: TimelineEventFilter;
   status: TimelineStatusFilter;
   capabilityName: string;
   timeWindow: TimelineWindowFilter;
@@ -167,6 +170,14 @@ const TIMELINE_PRESETS: Array<{
     status: "all",
     capabilityName: "all",
     timeWindow: "all",
+  },
+  {
+    id: "commands_24h",
+    label: "Commands (24h)",
+    eventType: "command",
+    status: "all",
+    capabilityName: "all",
+    timeWindow: "24h",
   },
   {
     id: "policy_failures_24h",
@@ -393,7 +404,7 @@ function AgentRunsPageContent() {
   const eventIdParam = searchParams.get("event_id")?.trim() || "";
   const initialTimelineFilter = (TIMELINE_EVENT_TYPES.has(timelineEventTypeParam)
     ? timelineEventTypeParam
-    : "all") as "all" | "failed" | "policy" | "executed";
+    : "all") as TimelineEventFilter;
   const initialTimelineStatus = (TIMELINE_STATUS_TYPES.has(timelineStatusParam)
     ? timelineStatusParam
     : "all") as TimelineStatusFilter;
@@ -432,9 +443,8 @@ function AgentRunsPageContent() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [diffDrawerOpen, setDiffDrawerOpen] = useState(false);
   const [hideUnchangedDiffLines, setHideUnchangedDiffLines] = useState(true);
-  const [timelineFilter, setTimelineFilter] = useState<
-    "all" | "failed" | "policy" | "executed"
-  >(initialTimelineFilter);
+  const [timelineFilter, setTimelineFilter] =
+    useState<TimelineEventFilter>(initialTimelineFilter);
   const [timelineStatusFilter, setTimelineStatusFilter] =
     useState<TimelineStatusFilter>(initialTimelineStatus);
   const [timelineCapabilityFilter, setTimelineCapabilityFilter] = useState<string>(
@@ -2022,6 +2032,15 @@ function AgentRunsPageContent() {
                           onClick={() => setTimelineFilter("policy")}
                         >
                           Policy
+                        </button>
+                        <button
+                          type="button"
+                          className={`button button--ghost button--sm ${
+                            timelineFilter === "command" ? "is-active" : ""
+                          }`}
+                          onClick={() => setTimelineFilter("command")}
+                        >
+                          Commands
                         </button>
                         <button
                           type="button"

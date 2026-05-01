@@ -134,6 +134,7 @@ Agent operator APIs:
   - run-level event feed with keyset pagination and deep-link recovery
   - supports:
     - `event_type=all|failed|policy|executed`
+    - `event_type=command` for `operator_command_*` receipts
     - `status=all|proposed|approved|executing|executed|failed|rejected`
     - `capability_name`
     - `since`, `until`
@@ -146,7 +147,8 @@ Agent operator APIs:
 - `POST /agent-runs/{run_id}/commands`
   - chat/operator command endpoint for approve, reject, retry, start, pause, cancel, step
   - `retry` creates a new proposed retry action with incremented `retry_count`; it does not mutate the failed action back to approved
-  - records non-mutating explain, focus, and change-plan intents as command receipts
+  - `change_plan` creates a proposed recovery action instead of silently mutating plans
+  - records non-mutating explain and focus intents as command receipts
 - `POST /agent-runs/{run_id}/commands/preflight`
   - previews command risk, blockers, warnings, side effects, and rollback guidance before submission
 - `POST /agent-runs/actions/{action_id}/decision`

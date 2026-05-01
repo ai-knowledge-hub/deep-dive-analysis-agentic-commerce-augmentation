@@ -251,7 +251,7 @@ The agentic module is implemented as an orchestration layer over the same experi
 ### Agent run events API
 - `GET /agent-runs/{run_id}/events`
 - Query params:
-  - `event_type=all|failed|policy|executed`
+  - `event_type=all|failed|policy|executed|command`
   - `status=all|proposed|approved|executing|executed|failed|rejected`
   - `capability_name`
   - `since`, `until`

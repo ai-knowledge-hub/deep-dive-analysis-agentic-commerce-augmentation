@@ -163,6 +163,30 @@ describe("InterventionsPage", () => {
           ],
         };
       }
+      if (runId === "run-3") {
+        return {
+          events: [
+            {
+              id: "evt-retry-proposed",
+              event_type: "action_retry_proposed",
+              status: "proposed",
+              capability_name: "run_variant",
+              effect_class: "write_low_risk",
+              note: "Retry action proposed by operator chat",
+              timestamp: "2026-03-18T11:30:00Z",
+            },
+            {
+              id: "evt-recovery-proposed",
+              event_type: "action_recovery_proposed",
+              status: "proposed",
+              capability_name: "recommend_next_action",
+              effect_class: "recommend",
+              note: "Recovery action proposed by operator change-plan command",
+              timestamp: "2026-03-18T11:31:00Z",
+            },
+          ],
+        };
+      }
       return { events: [] };
     });
 
@@ -188,6 +212,12 @@ describe("InterventionsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-retr is ready to resume/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Experiment exp-retr has a retry proposal/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Experiment exp-retr has a recovery proposal/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-acti is executing/i),

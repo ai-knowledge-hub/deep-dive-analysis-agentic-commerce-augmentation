@@ -94,7 +94,7 @@ Worker/ops entry points:
 - API: `POST /agent-runs/tick`
 - API: `GET /agent-runs/{run_id}/events`
   - query params:
-    - `event_type=all|failed|policy|executed`
+    - `event_type=all|failed|policy|executed|command`
     - `status=all|proposed|approved|executing|executed|failed|rejected`
     - `capability_name`
     - `since`, `until`
@@ -104,7 +104,8 @@ Worker/ops entry points:
   - records `operator_command_*` receipts from the chat control plane
   - delegates approve/reject/start/pause/cancel/step to existing action/runtime controls
   - handles retry by creating a new proposed retry action with incremented `retry_count`
-  - supports non-mutating explain/focus/change-plan receipts for chat-led steering
+  - handles `change_plan` by creating a proposed recovery action for operator review
+  - supports non-mutating explain/focus receipts for chat-led steering
 - API: `POST /agent-runs/{run_id}/commands/preflight`
   - returns whether a command is allowed before execution
   - includes risk level, required confirmation, blockers, warnings, side effects, and rollback guidance
@@ -374,7 +375,7 @@ Actions remain the mutable execution queue; events are immutable lifecycle recor
 Event stream is exposed via:
 - `GET /agent-runs/{run_id}/events`
 - filters:
-  - `event_type=all|failed|policy|executed`
+  - `event_type=all|failed|policy|executed|command`
   - `status=all|proposed|approved|executing|executed|failed|rejected`
   - `capability_name`
   - `since`, `until`
@@ -385,10 +386,12 @@ Operator steering is exposed via:
 - `POST /agent-runs/{run_id}/commands`
 - `POST /agent-runs/{run_id}/commands/preflight`
 - mutating commands: `approve`, `reject`, `retry`, `start`, `pause`, `cancel`, `step`
-- non-mutating command receipts: `explain`, `focus`, `change_plan`
+- non-mutating command receipts: `explain`, `focus`
+- structured recovery command: `change_plan`
 - command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
 - high-risk command preflight requires explicit confirmation in the operator chat before submission
 - retry always requires explicit confirmation and emits `action_retry_proposed` for a new proposed action; the original failed action remains failed
+- change-plan emits `action_recovery_proposed`; Interventions surfaces command-originated retry/recovery work
 
 ### 3.5 Version Registry (scientific reproducibility)
 

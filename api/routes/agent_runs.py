@@ -232,6 +232,17 @@ def _command_preflight(
         blockers.append("Canceled or completed runs cannot be started.")
     if command_type == "cancel" and run_status in {"canceled", "completed"}:
         blockers.append("Run is already terminal.")
+    if command_type == "change_plan":
+        allowed = [
+            str(item).strip()
+            for item in list(run.get("allowed_capabilities") or [])
+            if str(item).strip()
+        ]
+        if not allowed:
+            blockers.append("Change-plan needs at least one allowed recovery capability.")
+        warnings.append(
+            "Change-plan creates a proposed recovery action for operator review; it does not execute immediately."
+        )
 
     if action and spec and command_type == "retry":
         inputs = spec.normalize_inputs(action.get("inputs") or {})
@@ -284,7 +295,11 @@ def _command_preflight(
     risk_level = "low"
     if command_type == "cancel" or effect_class == "write_high_risk":
         risk_level = "high"
-    elif effect_class == "external_side_effect" or command_type in {"retry", "step"}:
+    elif effect_class == "external_side_effect" or command_type in {
+        "change_plan",
+        "retry",
+        "step",
+    }:
         risk_level = "medium"
 
     return {
@@ -740,11 +755,93 @@ def issue_agent_run_command(
     )
     result: Dict[str, Any] = {"command": receipt, "run": run, "preflight": preflight}
 
-    if command_type in {"explain", "focus", "change_plan"}:
+    if command_type in {"explain", "focus"}:
         return result
 
     try:
-        if command_type == "start":
+        if command_type == "change_plan":
+            actions = deps.agent_actions.list_agent_actions(
+                agent_run_id=run_id,
+                limit=500,
+            )
+            next_sequence = max(
+                [int(item.get("sequence") or 0) for item in actions] or [0]
+            ) + 1
+            allowed = [
+                str(item).strip()
+                for item in list(run.get("allowed_capabilities") or [])
+                if str(item).strip()
+            ]
+            requested_capability = str(
+                payload.metadata.get("capability_name") or ""
+            ).strip()
+            capability_name = (
+                requested_capability
+                if requested_capability in allowed
+                else "recommend_next_action"
+                if "recommend_next_action" in allowed
+                else allowed[0]
+            )
+            tool_id = capability_to_tool_id(capability_name)
+            recovery_inputs = payload.metadata.get("inputs")
+            inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
+            if run.get("experiment_id") and not inputs.get("experiment_id"):
+                inputs["experiment_id"] = run.get("experiment_id")
+            recovery_action = deps.agent_actions.create_agent_action(
+                agent_run_id=run_id,
+                sequence=next_sequence,
+                status="proposed",
+                capability_name=capability_name,
+                capability_version=None,
+                inputs=inputs,
+                outputs={},
+                inputs_hash=_hash_payload(inputs),
+                outputs_hash=None,
+                rationale=payload.message
+                or "Recovery action proposed from operator change-plan command.",
+                confidence=0.5,
+                snapshot_version=action.get("snapshot_version") if action else None,
+                hypothesis_id=action.get("hypothesis_id") if action else None,
+                variant_id=action.get("variant_id") if action else None,
+                validation_job_id=action.get("validation_job_id") if action else None,
+                tool_id=tool_id,
+                skill_id=skill_id_for_tool_id(tool_id),
+                effect_class=tool_effect_class(tool_id),
+                dedupe_key=f"change_plan:{receipt.get('id')}",
+            )
+            deps.agent_events.create_agent_event(
+                agent_run_id=run_id,
+                action_id=str(recovery_action.get("id") or ""),
+                sequence=int(recovery_action.get("sequence") or 0),
+                event_type="action_recovery_proposed",
+                status="proposed",
+                capability_name=str(recovery_action.get("capability_name") or "")
+                or None,
+                capability_version=None,
+                principal_type=run.get("principal_type"),
+                principal_id=run.get("principal_id"),
+                tool_id=recovery_action.get("tool_id"),
+                skill_id=recovery_action.get("skill_id"),
+                effect_class=recovery_action.get("effect_class"),
+                trace_id=run.get("trace_id"),
+                note="Recovery action proposed by operator change-plan command",
+                is_policy_event=False,
+                anchors={
+                    "experiment_id": run.get("experiment_id"),
+                    "variant_id": recovery_action.get("variant_id"),
+                    "validation_job_id": recovery_action.get("validation_job_id"),
+                    "hypothesis_id": recovery_action.get("hypothesis_id"),
+                    "snapshot_version": recovery_action.get("snapshot_version"),
+                    "metric_id": None,
+                    "source_command_id": receipt.get("id"),
+                    "source_action_id": action.get("id") if action else None,
+                    "recovery_strategy": payload.metadata.get(
+                        "recovery_strategy", "propose_next_action"
+                    ),
+                },
+            )
+            result["action"] = recovery_action
+        elif command_type == "start":
             runtime_result = runtime.start_run(run_id=run_id)
             result["run"] = runtime_result.run
             result["message"] = runtime_result.message

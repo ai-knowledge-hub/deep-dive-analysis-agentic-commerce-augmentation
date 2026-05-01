@@ -424,6 +424,55 @@ def test_operator_retry_command_creates_new_proposed_retry_action(client: TestCl
     assert "operator_command_retry" in event_types
 
 
+def test_change_plan_command_creates_recovery_proposal(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["recommend_next_action", "run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="failed",
+        status="failed",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "change_plan",
+            "message": "Create a recovery proposal from the failed run.",
+            "metadata": {
+                "inputs": {"experiment_id": "exp-1"},
+                "recovery_strategy": "propose_next_action",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    action = payload["action"]
+    assert action["status"] == "proposed"
+    assert action["capability_name"] == "recommend_next_action"
+    assert action["inputs"]["experiment_id"] == "exp-1"
+    assert action["dedupe_key"].startswith("change_plan:")
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    event_types = [event["event_type"] for event in events.json()["events"]]
+    assert "action_recovery_proposed" in event_types
+    assert "operator_command_change_plan" in event_types
+
+
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(
     client: TestClient,
 ):
