@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
+  AgentRegistryAuditEvent,
   AgentRun,
   AgentRunCommandType,
   AgentRunEvent,
@@ -20,6 +21,7 @@ import {
   issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
+  listAgentRuntimeRegistryAudit,
   listAgentRuntimeRegistry,
   preflightAgentRunCommand,
 } from "../../lib/api";
@@ -218,6 +220,26 @@ function formatDateCompact(value?: string | null): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "unknown date";
   return parsed.toLocaleDateString();
+}
+
+function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
+  const sections = [
+    ["skills", event.diff.skills],
+    ["tools", event.diff.tools],
+    ["capabilities", event.diff.capabilities],
+    ["policies", event.diff.policy_profiles],
+  ] as const;
+  const changes = sections.flatMap(([label, section]) => {
+    const added = section?.added?.length ?? 0;
+    const removed = section?.removed?.length ?? 0;
+    const changed = section?.changed?.length ?? 0;
+    const total = added + removed + changed;
+    return total > 0 ? [`${label}: +${added} -${removed} ~${changed}`] : [];
+  });
+  if (event.diff.skill_ids_by_tool_changed) {
+    changes.push("tool-skill map changed");
+  }
+  return changes.length > 0 ? changes.join(" · ") : "No structural diff recorded";
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -429,6 +451,9 @@ function AgentRunsPageContent() {
   const [actions, setActions] = useState<AgentAction[]>([]);
   const [runtimeRegistry, setRuntimeRegistry] =
     useState<AgentRuntimeRegistryResponse | null>(null);
+  const [registryAuditEvents, setRegistryAuditEvents] = useState<
+    AgentRegistryAuditEvent[]
+  >([]);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -490,8 +515,11 @@ function AgentRunsPageContent() {
     try {
       const response = await listAgentRuntimeRegistry();
       setRuntimeRegistry(response);
+      const auditResponse = await listAgentRuntimeRegistryAudit({ limit: 5 });
+      setRegistryAuditEvents(auditResponse.events ?? []);
     } catch {
       setRuntimeRegistry(null);
+      setRegistryAuditEvents([]);
     }
   }, []);
 
@@ -1722,6 +1750,42 @@ function AgentRunsPageContent() {
                             No matching skills for allowed tools
                           </span>
                         ) : null}
+                      </div>
+                      <div className="panel__card panel__card--secondary">
+                        <div className="panel__header">
+                          <h4>Registry release trail</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {registryAuditEvents.length} recent changes
+                          </span>
+                        </div>
+                        {registryAuditEvents.length > 0 ? (
+                          <div className="run-event-list">
+                            {registryAuditEvents.slice(0, 3).map((event) => (
+                              <div key={event.id} className="run-event-list__item">
+                                <div>
+                                  <div className="table__strong">
+                                    {event.event_type.replaceAll("_", " ")}
+                                  </div>
+                                  <div className="table__muted">
+                                    {event.previous_registry_fingerprint
+                                      ? `${event.previous_registry_fingerprint.slice(0, 12)} -> `
+                                      : ""}
+                                    {event.registry_fingerprint.slice(0, 12)} ·{" "}
+                                    {formatDateCompact(event.created_at)}
+                                  </div>
+                                </div>
+                                <div className="table__muted">
+                                  {summarizeRegistryAuditDiff(event)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="panel__muted">
+                            No registry transitions recorded yet. The current release is the
+                            first observed contract for this environment.
+                          </p>
+                        )}
                       </div>
                       <div className="table">
                         <div className="table__header">

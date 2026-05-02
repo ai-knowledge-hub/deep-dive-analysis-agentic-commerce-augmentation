@@ -1176,6 +1176,35 @@ export type AgentRuntimeRegistryResponse = {
   policy_profiles: AgentRuntimePolicyProfile[];
 };
 
+export type AgentRegistryAuditDiffSection = {
+  added?: string[];
+  removed?: string[];
+  changed?: string[];
+};
+
+export type AgentRegistryAuditDiff = {
+  skills?: AgentRegistryAuditDiffSection;
+  tools?: AgentRegistryAuditDiffSection;
+  capabilities?: AgentRegistryAuditDiffSection;
+  policy_profiles?: AgentRegistryAuditDiffSection;
+  skill_ids_by_tool_changed?: boolean;
+};
+
+export type AgentRegistryAuditEvent = {
+  id: string;
+  event_type: string;
+  previous_registry_fingerprint?: string | null;
+  registry_fingerprint: string;
+  registry_version: string;
+  source: string;
+  diff: AgentRegistryAuditDiff;
+  created_at?: string | null;
+};
+
+export type AgentRegistryAuditListResponse = {
+  events: AgentRegistryAuditEvent[];
+};
+
 export type AgentRunEventListResponse = {
   events: AgentRunEvent[];
   page?: {

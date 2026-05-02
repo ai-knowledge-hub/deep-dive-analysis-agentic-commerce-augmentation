@@ -364,6 +364,21 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     diff = json.loads(row["diff_json"])
     assert diff["tools"]["added"] == ["test.synthetic_tool"]
 
+    audit_response = client.get("/agent-runs/registry/audit", params={"limit": 5})
+    assert audit_response.status_code == 200
+    audit_payload = audit_response.json()
+    assert audit_payload["events"][0]["registry_fingerprint"] == changed_fingerprint
+    assert audit_payload["events"][0]["diff"]["tools"]["added"] == [
+        "test.synthetic_tool"
+    ]
+
+    filtered_response = client.get(
+        "/agent-runs/registry/audit",
+        params={"registry_fingerprint": changed_fingerprint},
+    )
+    assert filtered_response.status_code == 200
+    assert len(filtered_response.json()["events"]) == 1
+
 
 def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     client: TestClient,

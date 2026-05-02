@@ -39,7 +39,10 @@ from application.services.agent_runtime.runtime import (
     RunNotFoundError,
 )
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
-from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
+from infrastructure.db.agent.agent_registry import (
+    ensure_agent_registry_version,
+    list_agent_registry_audit_events,
+)
 
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
@@ -482,6 +485,20 @@ def get_agent_runtime_registry() -> Dict[str, Any]:
         "registry_snapshot_id": snapshot.get("id"),
         "registry_snapshot_created_at": snapshot.get("created_at"),
         "registry_source": snapshot.get("source"),
+    }
+
+
+@router.get("/registry/audit")
+def get_agent_runtime_registry_audit(
+    registry_fingerprint: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    bounded_limit = max(1, min(int(limit), 100))
+    return {
+        "events": list_agent_registry_audit_events(
+            registry_fingerprint=registry_fingerprint,
+            limit=bounded_limit,
+        )
     }
 
 
