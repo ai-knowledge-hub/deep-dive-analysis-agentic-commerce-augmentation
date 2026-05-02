@@ -378,25 +378,48 @@ def next_state_for_capability(name: str) -> str | None:
 
 
 def validate_inputs(spec: CapabilitySpec, inputs: Mapping[str, Any]) -> list[str]:
-    schema = spec.input_schema or {}
+    return _validate_mapping_schema(
+        spec=spec,
+        schema=spec.input_schema or {},
+        values=inputs,
+        value_label="Input",
+    )
+
+
+def validate_outputs(spec: CapabilitySpec, outputs: Mapping[str, Any]) -> list[str]:
+    return _validate_mapping_schema(
+        spec=spec,
+        schema=spec.output_schema or {},
+        values=outputs,
+        value_label="Output",
+    )
+
+
+def _validate_mapping_schema(
+    *,
+    spec: CapabilitySpec,
+    schema: Mapping[str, Any],
+    values: Mapping[str, Any],
+    value_label: str,
+) -> list[str]:
     properties = schema.get("properties") if isinstance(schema, dict) else {}
     if not isinstance(properties, dict):
         return []
     errors: list[str] = []
     for key, definition in properties.items():
-        if key not in inputs:
+        if key not in values:
             continue
         if not isinstance(definition, dict):
             continue
         expected = definition.get("type")
         if not expected:
             continue
-        value = inputs.get(key)
+        value = values.get(key)
         if value is None:
             continue
         if not _matches_schema_type(value, str(expected)):
             errors.append(
-                f"Input '{key}' for capability '{spec.name}' must be {expected}"
+                f"{value_label} '{key}' for capability '{spec.name}' must be {expected}"
             )
     return errors
 
@@ -429,5 +452,6 @@ __all__ = [
     "list_capability_specs",
     "next_state_for_capability",
     "validate_inputs",
+    "validate_outputs",
     "version_context_for_capability",
 ]

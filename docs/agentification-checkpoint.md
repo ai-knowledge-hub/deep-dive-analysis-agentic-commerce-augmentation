@@ -32,7 +32,7 @@ The codebase now has the minimum spine for the pivot:
 - Static skills registry v1 for initial commerce workflows.
 - Static tools/capabilities registry v1 for executable runtime capabilities, with summaries, input/output schema metadata, side-effect notes, and operator review checklists.
 - Read API for the runtime registry: `GET /agent-runs/registry`.
-- Runtime policy now validates registry-declared tool input types before execution and records invalid-input failures through the normal run/action failure path.
+- Runtime policy now validates registry-declared tool input types before execution, and runtime receipt checks validate registry-declared output types after execution.
 - Agent actions now pin `registry_version`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
@@ -78,12 +78,12 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, side-effect metadata, and review checklists. Runtime policy validates registry-declared input types before execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill versions.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, side-effect metadata, and review checklists. Runtime validates registry-declared input and output types around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill versions.
 
 Next steps:
 
 - Add a persistent registry table or versioned config store.
-- Add output schema validation/receipt checks after tool execution.
+- Add required output receipt fields where capabilities can guarantee them.
 - Add persistent registry ownership and richer skill selection when multiple skills can use the same tool.
 - Consider run-level registry version pins once persistent registry releases exist.
 - Add registry diff/audit events when definitions change.
@@ -153,7 +153,9 @@ Completed in this slice:
   - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
 - Policy enforcement:
   - Registry-declared input schemas are validated before tool execution.
+  - Registry-declared output schemas are validated after capability execution.
   - Invalid schema inputs are caught by runtime policy handling, mark the action/run failed, and preserve an auditable failure path.
+  - Invalid output receipts mark the action/run failed before the malformed receipt is persisted as successful.
 - Control-plane UI:
   - Agent Runs selected-action detail now prefers registry-provided summaries, side effects, and review checklists over hardcoded fallback explanations.
 - Verification:
@@ -168,7 +170,7 @@ Initial scope:
 
 - Add a persistent registry/version table or versioned config source.
 - Backfill or migrate historical actions that predate registry/tool/skill version pins if needed.
-- Add output schema validation and execution receipt checks.
+- Add required output receipt fields where capabilities can guarantee them.
 - Add registry diff/audit events when definitions change.
 - Add ownership/steward metadata for registry entries.
 - Keep mock-auth Playwright smoke green.

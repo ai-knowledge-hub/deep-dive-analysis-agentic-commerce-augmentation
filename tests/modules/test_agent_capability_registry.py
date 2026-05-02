@@ -7,6 +7,7 @@ from application.services.agent_runtime.registry import (
     next_state_for_capability,
     tool_supported,
     validate_inputs,
+    validate_outputs,
     version_context_for_capability,
 )
 from application.services.agent_runtime.agent_first import (
@@ -30,6 +31,8 @@ def test_registry_contains_core_capability_and_defaults():
     assert "retrieval_max_results" in validate_inputs(
         spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
     )[0]
+    assert validate_outputs(spec, {"metric_id": "metric-1"}) == []
+    assert "metric_id" in validate_outputs(spec, {"metric_id": 123})[0]
     assert version_context_for_capability(
         "run_variant",
         tool_id="experiment.run_variant",

@@ -21,6 +21,7 @@ from application.services.agent_runtime.policy import PolicyEnforcer, PolicyErro
 from application.services.agent_runtime.registry import (
     get_capability_spec,
     next_state_for_capability,
+    validate_outputs,
 )
 
 
@@ -187,6 +188,9 @@ class AgentRuntimeService:
                     capability_name=capability_name,
                     inputs=inputs,
                 )
+                output_errors = validate_outputs(spec, outputs)
+                if output_errors:
+                    raise CapabilityExecutionError("; ".join(output_errors))
             except PolicyError as exc:
                 self._deps.agent_actions.update_agent_action_status(
                     action_id=str(action.get("id") or ""),
