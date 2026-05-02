@@ -169,18 +169,18 @@ class AgentRuntimeService:
             all_actions = self._deps.agent_actions.list_agent_actions(
                 agent_run_id=run_id, limit=500
             )
-            self._policy.validate_action_execution(
-                run=run,
-                action=action,
-                spec=spec,
-                all_actions=all_actions,
-                inputs=inputs,
-            )
-            context = CapabilityContext(
-                client_id=str(run.get("client_id") or ""),
-                user_id=user_id,
-            )
             try:
+                self._policy.validate_action_execution(
+                    run=run,
+                    action=action,
+                    spec=spec,
+                    all_actions=all_actions,
+                    inputs=inputs,
+                )
+                context = CapabilityContext(
+                    client_id=str(run.get("client_id") or ""),
+                    user_id=user_id,
+                )
                 outputs = execute_capability(
                     deps=self._deps,
                     context=context,

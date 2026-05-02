@@ -5,18 +5,25 @@ from typing import Any, Dict, Mapping, Optional
 
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
+    list_skill_specs,
     tool_effect_class,
 )
+
+REGISTRY_VERSION = "agent-runtime-static-v1"
 
 
 @dataclass(frozen=True)
 class ToolSpec:
     id: str
     capability_name: str
+    summary: str = ""
     default_version: str = "v1"
     required_inputs: tuple[str, ...] = ()
     default_inputs: Dict[str, Any] = field(default_factory=dict)
+    input_schema: Dict[str, Any] = field(default_factory=dict)
+    output_schema: Dict[str, Any] = field(default_factory=dict)
     side_effects: tuple[str, ...] = ()
+    review_checklist: tuple[str, ...] = ()
     next_state: Optional[str] = None
     effect_class: str = "write_low_risk"
 
@@ -31,10 +38,14 @@ class ToolSpec:
 class CapabilitySpec:
     name: str
     tool_id: str
+    summary: str = ""
     default_version: str = "v1"
     required_inputs: tuple[str, ...] = ()
     default_inputs: Dict[str, Any] = field(default_factory=dict)
+    input_schema: Dict[str, Any] = field(default_factory=dict)
+    output_schema: Dict[str, Any] = field(default_factory=dict)
     side_effects: tuple[str, ...] = ()
+    review_checklist: tuple[str, ...] = ()
     next_state: Optional[str] = None
     effect_class: str = "write_low_risk"
 
@@ -48,52 +59,106 @@ class CapabilitySpec:
 def _tool(
     *,
     capability_name: str,
+    summary: str,
     default_version: str = "v1",
     required_inputs: tuple[str, ...] = (),
     default_inputs: Dict[str, Any] | None = None,
+    input_properties: Dict[str, Any] | None = None,
+    output_properties: Dict[str, Any] | None = None,
     side_effects: tuple[str, ...] = (),
+    review_checklist: tuple[str, ...] = (),
     next_state: Optional[str] = None,
 ) -> ToolSpec:
     tool_id = capability_to_tool_id(capability_name) or f"legacy.{capability_name}"
+    defaults = dict(default_inputs or {})
     return ToolSpec(
         id=tool_id,
         capability_name=capability_name,
+        summary=summary,
         default_version=default_version,
         required_inputs=required_inputs,
-        default_inputs=dict(default_inputs or {}),
+        default_inputs=defaults,
+        input_schema=_schema(
+            required=required_inputs,
+            properties={**_default_input_properties(defaults), **dict(input_properties or {})},
+        ),
+        output_schema=_schema(required=(), properties=dict(output_properties or {})),
         side_effects=side_effects,
+        review_checklist=review_checklist,
         next_state=next_state,
         effect_class=tool_effect_class(tool_id) or "write_low_risk",
     )
 
 
+def _schema(*, required: tuple[str, ...], properties: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "required": list(required),
+        "properties": properties,
+        "additionalProperties": True,
+    }
+
+
+def _default_input_properties(defaults: Mapping[str, Any]) -> Dict[str, Any]:
+    return {key: _property_for_value(value) for key, value in defaults.items()}
+
+
+def _property_for_value(value: Any) -> Dict[str, Any]:
+    if isinstance(value, bool):
+        return {"type": "boolean", "default": value}
+    if isinstance(value, int):
+        return {"type": "integer", "default": value}
+    if isinstance(value, float):
+        return {"type": "number", "default": value}
+    return {"type": "string", "default": value}
+
+
 _TOOLS: Dict[str, ToolSpec] = {
     "retrieval.freeze_protocol": _tool(
         capability_name="freeze_retrieval_protocol",
+        summary="Freeze retrieval snapshots for fair experiment comparisons.",
         required_inputs=("experiment_id",),
+        input_properties={"experiment_id": {"type": "string"}},
+        output_properties={"snapshot_version": {"type": "integer"}},
         default_inputs={"retrieval_max_results": 5},
         side_effects=(
             "create_experiment_retrieval_snapshots",
             "update_experiment_state",
         ),
+        review_checklist=("Confirm the experiment battery is ready.",),
         next_state="retrieval_snapshots_ready",
     ),
     "experiment.run_control_baseline": _tool(
         capability_name="run_control_baseline",
+        summary="Run the control variant on frozen retrieval snapshots.",
         required_inputs=("experiment_id",),
+        input_properties={"experiment_id": {"type": "string"}},
+        output_properties={"metric_id": {"type": "string"}},
         default_inputs={"retrieval_max_results": 5},
         side_effects=("create_experiment_run", "create_experiment_metric"),
+        review_checklist=("Confirm retrieval snapshots are frozen.",),
         next_state="baseline_scored",
     ),
     "hypothesis.seed": _tool(
         capability_name="seed_hypotheses",
+        summary="Create hypotheses from baseline gaps and winner-signal deltas.",
         required_inputs=("experiment_id",),
+        input_properties={"experiment_id": {"type": "string"}},
+        output_properties={"hypothesis_ids": {"type": "array"}},
         side_effects=("create_experiment_hypotheses",),
+        review_checklist=("Review repeated missing-winner signals.",),
         next_state="hypotheses_ready",
     ),
     "variant.generate": _tool(
         capability_name="generate_variants",
+        summary="Generate candidate variants from evidence and hypotheses.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "max_candidates": {"type": "integer"},
+            "persist_count": {"type": "integer"},
+        },
+        output_properties={"created_variants": {"type": "array"}},
         default_inputs={
             "mode": "loop_evidence",
             "strategy": "both",
@@ -101,18 +166,40 @@ _TOOLS: Dict[str, ToolSpec] = {
             "persist_count": 2,
         },
         side_effects=("create_experiment_variants",),
+        review_checklist=("Review generated copy and provenance before running variants.",),
         next_state="variants_ready",
     ),
     "experiment.run_variant": _tool(
         capability_name="run_variant",
+        summary="Execute one candidate variant against the frozen snapshot set.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "variant_id": {"type": "string"},
+            "variant_selection": {"type": "string"},
+            "retrieval_max_results": {"type": "integer"},
+        },
+        output_properties={
+            "metric_id": {"type": "string"},
+            "variant_id": {"type": "string"},
+            "snapshot_version": {"type": "integer"},
+        },
         default_inputs={"variant_selection": "top_1", "retrieval_max_results": 5},
         side_effects=("create_experiment_run", "create_experiment_metric"),
+        review_checklist=("Compare the metric against control before promotion.",),
         next_state="experiment_run_completed",
     ),
     "validation.request_synthetic": _tool(
         capability_name="request_synthetic_validation",
+        summary="Request synthetic validation for the selected experiment/variant.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "provider": {"type": "string"},
+            "auto_run": {"type": "boolean"},
+            "variant_id": {"type": "string"},
+        },
+        output_properties={"validation_job_id": {"type": "string"}},
         default_inputs={
             "provider": "openrouter",
             "mode": "in_app_byok",
@@ -121,11 +208,20 @@ _TOOLS: Dict[str, ToolSpec] = {
             "prompt_version": "v1",
         },
         side_effects=("create_validation_job", "create_validation_result"),
+        review_checklist=("Confirm provider configuration and cost posture.",),
         next_state="validation_completed",
     ),
     "validation.review_readiness": _tool(
         capability_name="review_validation_readiness",
+        summary="Review validation and promotion readiness gates without mutating state.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "prod_min_coverage": {"type": "number"},
+            "min_verified_runs": {"type": "integer"},
+            "min_synthetic_results": {"type": "integer"},
+        },
+        output_properties={"readiness": {"type": "object"}},
         default_inputs={
             "variant_selection": "top_1",
             "prod_min_coverage": 0.2,
@@ -133,27 +229,51 @@ _TOOLS: Dict[str, ToolSpec] = {
             "min_synthetic_results": 1,
         },
         side_effects=("read_validation_and_metrics",),
+        review_checklist=("Inspect validation coverage and observed/synthetic agreement.",),
     ),
     "learning.update_posterior_and_decisions": _tool(
         capability_name="update_posterior_and_decisions",
+        summary="Refresh posterior and decision outputs from latest evidence.",
         required_inputs=("experiment_id",),
+        input_properties={"experiment_id": {"type": "string"}},
+        output_properties={"metric_id": {"type": "string"}},
         side_effects=("create_experiment_metric", "create_decision_event"),
+        review_checklist=("Review evidence freshness before treating decisions as final.",),
         next_state="posterior_updated",
     ),
     "policy.recommend_next_action": _tool(
         capability_name="recommend_next_action",
+        summary="Recommend the safest next action under current constraints.",
         required_inputs=("experiment_id",),
+        input_properties={"experiment_id": {"type": "string"}},
+        output_properties={"recommendations": {"type": "array"}},
         side_effects=("create_experiment_recommendation",),
+        review_checklist=("Check recommendation rationale and risk class.",),
     ),
     "promotion.promote_lab": _tool(
         capability_name="promote_variant_lab",
+        summary="Promote a variant into the lab progression path.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "variant_selection": {"type": "string"},
+            "require_promote_decision": {"type": "boolean"},
+        },
+        output_properties={"variant_id": {"type": "string"}},
         default_inputs={"variant_selection": "top_1", "require_promote_decision": True},
         side_effects=("create_analytics_event", "create_decision_event"),
+        review_checklist=("Confirm the lab-promotion gate passed.",),
     ),
     "promotion.promote_prod": _tool(
         capability_name="promote_variant_prod",
+        summary="Promote a variant toward production when readiness gates pass.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "variant_selection": {"type": "string"},
+            "require_promote_decision": {"type": "boolean"},
+        },
+        output_properties={"variant_id": {"type": "string"}},
         default_inputs={
             "variant_selection": "top_1",
             "require_promote_decision": True,
@@ -162,10 +282,18 @@ _TOOLS: Dict[str, ToolSpec] = {
             "min_synthetic_results": 1,
         },
         side_effects=("create_analytics_event", "create_decision_event"),
+        review_checklist=("Confirm observed validation gates and rollback plan.",),
     ),
     "copy.publish_revision": _tool(
         capability_name="publish_copy_revision",
+        summary="Publish an approved copy revision to the product description.",
         required_inputs=("experiment_id",),
+        input_properties={
+            "experiment_id": {"type": "string"},
+            "variant_selection": {"type": "string"},
+            "require_prod_promotion": {"type": "boolean"},
+        },
+        output_properties={"copy_revision_id": {"type": "string"}},
         default_inputs={"variant_selection": "top_1", "require_prod_promotion": True},
         side_effects=(
             "create_or_update_copy_revision",
@@ -173,6 +301,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "create_analytics_event",
             "create_decision_event",
         ),
+        review_checklist=("Confirm production promotion, copy diff, and manual rollback owner.",),
     ),
 }
 
@@ -180,10 +309,14 @@ _CAPABILITIES: Dict[str, CapabilitySpec] = {
     tool.capability_name: CapabilitySpec(
         name=tool.capability_name,
         tool_id=tool.id,
+        summary=tool.summary,
         default_version=tool.default_version,
         required_inputs=tool.required_inputs,
         default_inputs=dict(tool.default_inputs),
+        input_schema=tool.input_schema,
+        output_schema=tool.output_schema,
         side_effects=tool.side_effects,
+        review_checklist=tool.review_checklist,
         next_state=tool.next_state,
         effect_class=tool.effect_class,
     )
@@ -215,13 +348,78 @@ def list_capability_specs() -> list[CapabilitySpec]:
     return list(_CAPABILITIES.values())
 
 
+def version_context_for_capability(
+    capability_name: str | None,
+    *,
+    tool_id: str | None = None,
+    skill_id: str | None = None,
+) -> Dict[str, str | None]:
+    resolved_tool_id = str(tool_id or "").strip() or capability_to_tool_id(capability_name)
+    spec = get_capability_spec(str(capability_name or ""))
+    skill_version = None
+    resolved_skill_id = str(skill_id or "").strip()
+    for skill in list_skill_specs():
+        if resolved_skill_id and skill.id == resolved_skill_id:
+            skill_version = skill.version
+            break
+        if not resolved_skill_id and resolved_tool_id and resolved_tool_id in skill.tool_ids:
+            skill_version = skill.version
+            break
+    return {
+        "registry_version": REGISTRY_VERSION,
+        "tool_version": spec.default_version if spec else None,
+        "skill_version": skill_version,
+    }
+
+
 def next_state_for_capability(name: str) -> str | None:
     spec = get_capability_spec(name)
     return spec.next_state if spec else None
 
 
+def validate_inputs(spec: CapabilitySpec, inputs: Mapping[str, Any]) -> list[str]:
+    schema = spec.input_schema or {}
+    properties = schema.get("properties") if isinstance(schema, dict) else {}
+    if not isinstance(properties, dict):
+        return []
+    errors: list[str] = []
+    for key, definition in properties.items():
+        if key not in inputs:
+            continue
+        if not isinstance(definition, dict):
+            continue
+        expected = definition.get("type")
+        if not expected:
+            continue
+        value = inputs.get(key)
+        if value is None:
+            continue
+        if not _matches_schema_type(value, str(expected)):
+            errors.append(
+                f"Input '{key}' for capability '{spec.name}' must be {expected}"
+            )
+    return errors
+
+
+def _matches_schema_type(value: Any, expected: str) -> bool:
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return (isinstance(value, int) or isinstance(value, float)) and not isinstance(value, bool)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "object":
+        return isinstance(value, dict)
+    return True
+
+
 __all__ = [
     "CapabilitySpec",
+    "REGISTRY_VERSION",
     "ToolSpec",
     "get_tool_spec",
     "tool_supported",
@@ -230,4 +428,6 @@ __all__ = [
     "capability_supported",
     "list_capability_specs",
     "next_state_for_capability",
+    "validate_inputs",
+    "version_context_for_capability",
 ]

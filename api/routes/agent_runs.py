@@ -30,6 +30,7 @@ from application.services.agent_runtime.registry import (
     get_capability_spec,
     list_capability_specs,
     list_tool_specs,
+    version_context_for_capability,
 )
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
@@ -561,6 +562,9 @@ def create_agent_run(
         tool_id = capability_to_tool_id(action.capability_name)
         skill_id = skill_id_for_tool_id(tool_id)
         effect_class = tool_effect_class(tool_id)
+        version_context = version_context_for_capability(
+            action.capability_name, tool_id=tool_id, skill_id=skill_id
+        )
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
@@ -579,6 +583,9 @@ def create_agent_run(
             validation_job_id=None,
             tool_id=tool_id,
             skill_id=skill_id,
+            registry_version=version_context["registry_version"],
+            tool_version=version_context["tool_version"],
+            skill_version=version_context["skill_version"],
             effect_class=effect_class,
             side_effects=_capability_side_effects(action.capability_name),
             rollback_guidance=_capability_rollback_guidance(
@@ -908,7 +915,11 @@ def issue_agent_run_command(
                 else allowed[0]
             )
             tool_id = capability_to_tool_id(capability_name)
+            skill_id = skill_id_for_tool_id(tool_id)
             effect_class = tool_effect_class(tool_id)
+            version_context = version_context_for_capability(
+                capability_name, tool_id=tool_id, skill_id=skill_id
+            )
             recovery_inputs = payload.metadata.get("inputs")
             inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
             if run.get("experiment_id") and not inputs.get("experiment_id"):
@@ -931,7 +942,10 @@ def issue_agent_run_command(
                 variant_id=action.get("variant_id") if action else None,
                 validation_job_id=action.get("validation_job_id") if action else None,
                 tool_id=tool_id,
-                skill_id=skill_id_for_tool_id(tool_id),
+                skill_id=skill_id,
+                registry_version=version_context["registry_version"],
+                tool_version=version_context["tool_version"],
+                skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
                 rollback_guidance=_capability_rollback_guidance(
@@ -1031,7 +1045,11 @@ def issue_agent_run_command(
             if retry_strategy == "create_recovery_action":
                 retry_inputs["recovery_from_action_id"] = action.get("id")
             tool_id = capability_to_tool_id(capability_name)
+            skill_id = skill_id_for_tool_id(tool_id)
             effect_class = tool_effect_class(tool_id)
+            version_context = version_context_for_capability(
+                capability_name, tool_id=tool_id, skill_id=skill_id
+            )
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -1056,7 +1074,10 @@ def issue_agent_run_command(
                 variant_id=action.get("variant_id"),
                 validation_job_id=action.get("validation_job_id"),
                 tool_id=tool_id,
-                skill_id=skill_id_for_tool_id(tool_id),
+                skill_id=skill_id,
+                registry_version=version_context["registry_version"],
+                tool_version=version_context["tool_version"],
+                skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
                 rollback_guidance=_capability_rollback_guidance(

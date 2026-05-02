@@ -172,8 +172,19 @@ describe("AgentRunsPage timeline presets", () => {
         {
           id: "experiment.run_variant",
           capability_name: "run_variant",
+          summary: "Execute one candidate variant against frozen snapshots.",
           default_version: "v1",
+          input_schema: {
+            type: "object",
+            required: ["experiment_id"],
+            properties: { experiment_id: { type: "string" } },
+          },
+          output_schema: {
+            type: "object",
+            properties: { metric_id: { type: "string" } },
+          },
           side_effects: ["create_experiment_run"],
+          review_checklist: ["Compare the metric against control before promotion."],
           effect_class: "write_low_risk",
         },
       ],
@@ -181,8 +192,19 @@ describe("AgentRunsPage timeline presets", () => {
         {
           name: "run_variant",
           tool_id: "experiment.run_variant",
+          summary: "Execute one candidate variant against frozen snapshots.",
           default_version: "v1",
+          input_schema: {
+            type: "object",
+            required: ["experiment_id"],
+            properties: { experiment_id: { type: "string" } },
+          },
+          output_schema: {
+            type: "object",
+            properties: { metric_id: { type: "string" } },
+          },
           side_effects: ["create_experiment_run"],
+          review_checklist: ["Compare the metric against control before promotion."],
           effect_class: "write_low_risk",
         },
       ],
@@ -440,12 +462,53 @@ describe("AgentRunsPage timeline presets", () => {
   });
 
   it("shows the selected run skills and tool registry contract", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "planned",
+        state: "battery_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "plan_only",
+        allowed_capabilities: ["run_variant"],
+      },
+      actions: [
+        {
+          id: "action-1",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "proposed",
+          capability_name: "run_variant",
+          capability_version: "v1",
+          rationale: "Run variant.",
+          inputs: { experiment_id: "exp-1" },
+          outputs: {},
+          tool_id: "experiment.run_variant",
+          skill_id: "optimize-product-representation",
+          registry_version: "agent-runtime-static-v1",
+          tool_version: "v1",
+          skill_version: "v1",
+          effect_class: "write_low_risk",
+        },
+      ],
+    });
+
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
     expect(screen.getByText(/Optimize Product Representation/i)).toBeInTheDocument();
-    expect(screen.getByText(/experiment.run_variant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Execute one candidate variant against frozen snapshots/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Compare the metric against control before promotion/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Registry: agent-runtime-static-v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
   });
 

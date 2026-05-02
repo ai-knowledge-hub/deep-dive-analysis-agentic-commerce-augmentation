@@ -240,6 +240,9 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert payload["run"]["trace_id"] == run["trace_id"]
     assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
     assert payload["actions"][0]["skill_id"] == "optimize-product-representation"
+    assert payload["actions"][0]["registry_version"] == "agent-runtime-static-v1"
+    assert payload["actions"][0]["tool_version"] == "v1"
+    assert payload["actions"][0]["skill_version"] == "v1"
     assert payload["actions"][0]["effect_class"] == "write_low_risk"
 
     events = client.get(
@@ -273,6 +276,15 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert "experiment.run_variant" in tool_ids
     assert "optimize-product-representation" in skill_ids
     assert "safe_auto" in policy_ids
+    run_variant = next(
+        capability
+        for capability in payload["capabilities"]
+        if capability["name"] == "run_variant"
+    )
+    assert run_variant["summary"]
+    assert run_variant["input_schema"]["properties"]["experiment_id"]["type"] == "string"
+    assert run_variant["output_schema"]["properties"]["metric_id"]["type"] == "string"
+    assert run_variant["review_checklist"]
     assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
     ]
@@ -413,6 +425,9 @@ def test_operator_retry_command_creates_new_proposed_retry_action(client: TestCl
     assert retry_action["status"] == "proposed"
     assert retry_action["retry_count"] == 1
     assert retry_action["dedupe_key"] == f"retry:{failed['id']}:same_action:1"
+    assert retry_action["registry_version"] == "agent-runtime-static-v1"
+    assert retry_action["tool_version"] == "v1"
+    assert retry_action["skill_version"] == "v1"
     assert deps.agent_actions.get_agent_action(failed["id"])["status"] == "failed"
 
     events = client.get(
@@ -481,6 +496,7 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     assert action["dedupe_key"] == f"retry:{failed['id']}:create_recovery_action:1"
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
+    assert action["registry_version"] == "agent-runtime-static-v1"
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
@@ -674,6 +690,7 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert action["dedupe_key"].startswith("change_plan:")
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
+    assert action["registry_version"] == "agent-runtime-static-v1"
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",

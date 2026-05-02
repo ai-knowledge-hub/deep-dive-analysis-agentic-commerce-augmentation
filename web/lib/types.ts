@@ -1004,6 +1004,9 @@ export type AgentAction = {
   validation_job_id?: string | null;
   tool_id?: string | null;
   skill_id?: string | null;
+  registry_version?: string | null;
+  tool_version?: string | null;
+  skill_version?: string | null;
   effect_class?: string | null;
   side_effects?: string[];
   rollback_guidance?: string | null;
@@ -1120,10 +1123,14 @@ export type AgentRuntimeSkillSpec = {
 export type AgentRuntimeToolSpec = {
   id: string;
   capability_name: string;
+  summary?: string;
   default_version?: string;
   required_inputs?: string[];
   default_inputs?: Record<string, unknown>;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
   side_effects?: string[];
+  review_checklist?: string[];
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1131,10 +1138,14 @@ export type AgentRuntimeToolSpec = {
 export type AgentRuntimeCapabilitySpec = {
   name: string;
   tool_id: string;
+  summary?: string;
   default_version?: string;
   required_inputs?: string[];
   default_inputs?: Record<string, unknown>;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
   side_effects?: string[];
+  review_checklist?: string[];
   next_state?: string | null;
   effect_class?: string;
 };

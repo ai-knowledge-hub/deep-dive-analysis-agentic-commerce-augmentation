@@ -6,6 +6,8 @@ from application.services.agent_runtime.registry import (
     get_tool_spec,
     next_state_for_capability,
     tool_supported,
+    validate_inputs,
+    version_context_for_capability,
 )
 from application.services.agent_runtime.agent_first import (
     skill_id_for_capability,
@@ -20,6 +22,23 @@ def test_registry_contains_core_capability_and_defaults():
     assert normalized["variant_selection"] == "top_1"
     assert normalized["retrieval_max_results"] == 5
     assert normalized["experiment_id"] == "exp-1"
+    assert spec.summary
+    assert spec.input_schema["properties"]["experiment_id"]["type"] == "string"
+    assert spec.output_schema["properties"]["metric_id"]["type"] == "string"
+    assert spec.review_checklist
+    assert validate_inputs(spec, normalized) == []
+    assert "retrieval_max_results" in validate_inputs(
+        spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
+    )[0]
+    assert version_context_for_capability(
+        "run_variant",
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+    ) == {
+        "registry_version": "agent-runtime-static-v1",
+        "tool_version": "v1",
+        "skill_version": "v1",
+    }
 
 
 def test_registry_support_and_next_state():

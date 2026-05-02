@@ -862,6 +862,15 @@ function AgentRunsPageContent() {
     );
   }, [allowedRuntimeTools, runtimeRegistry]);
 
+  const selectedCapabilitySpec = useMemo(() => {
+    if (!runtimeRegistry || !selectedAction) return null;
+    return (
+      runtimeRegistry.capabilities.find(
+        (capability) => capability.name === selectedAction.capability_name,
+      ) ?? null
+    );
+  }, [runtimeRegistry, selectedAction]);
+
   const actionCounters = useMemo(() => {
     const counts = {
       proposed: 0,
@@ -2247,7 +2256,8 @@ function AgentRunsPageContent() {
                           </span>
                         </div>
                         <p className="panel__muted">
-                          {CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
+                          {selectedCapabilitySpec?.summary ??
+                            CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
                             "Capability summary not yet documented."}
                         </p>
                         <div className="agent-ops-summary">
@@ -2260,18 +2270,41 @@ function AgentRunsPageContent() {
                           <span className="panel__badge panel__badge--secondary">
                             Effect: {selectedAction.effect_class ?? "unknown"}
                           </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Registry: {selectedAction.registry_version ?? "unpinned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Tool version: {selectedAction.tool_version ?? "unpinned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Skill version: {selectedAction.skill_version ?? "unpinned"}
+                          </span>
                         </div>
                         <p className="panel__subheading">What it changes</p>
                         <ul className="panel__list panel__list--compact">
                           {(
                             selectedAction.side_effects?.length
                               ? selectedAction.side_effects
-                              : CAPABILITY_EXPLAIN[selectedAction.capability_name]
-                              ?.sideEffects ?? ["No side-effect metadata yet."]
+                              : selectedCapabilitySpec?.side_effects?.length
+                                ? selectedCapabilitySpec.side_effects
+                                : CAPABILITY_EXPLAIN[selectedAction.capability_name]
+                                  ?.sideEffects ?? ["No side-effect metadata yet."]
                           ).map((effect, index) => (
                             <li key={`${effect}-${index}`}>{effect}</li>
                           ))}
                         </ul>
+                        <p className="panel__subheading">Registry review checklist</p>
+                        {selectedCapabilitySpec?.review_checklist?.length ? (
+                          <ul className="panel__list panel__list--compact">
+                            {selectedCapabilitySpec.review_checklist.map((item, index) => (
+                              <li key={`${item}-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="panel__muted">
+                            No registry checklist captured for this capability yet.
+                          </p>
+                        )}
                         <p className="panel__subheading">Rollback guidance</p>
                         <p className="panel__muted">
                           {selectedAction.rollback_guidance ||

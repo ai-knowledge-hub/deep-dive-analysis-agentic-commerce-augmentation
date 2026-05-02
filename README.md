@@ -20,7 +20,7 @@ Current extension:
   See `docs/agentic-layer.md`.
 - **Agent-first pivot checkpoint**: the platform direction is now a governed agent execution fabric with a human control plane, not only a human-led lab.
   See `docs/agentification-checkpoint.md`.
-- **Next build track**: Registry Hardening v1: schema validation, richer recovery metadata, and registry-driven UI metadata.
+- **Next build track**: Registry Hardening v1 persistence: persistent registry source, output receipts, ownership metadata, and diff/audit events.
   See the `Next Development Tracks` section in `docs/agentification-checkpoint.md`.
 
 ---
