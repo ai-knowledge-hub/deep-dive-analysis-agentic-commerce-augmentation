@@ -197,6 +197,7 @@ def _command_preflight(
     run: Dict[str, Any],
     command_type: str,
     action: Optional[Dict[str, Any]],
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     run_status = str(run.get("status") or "").lower()
     run_mode = str(run.get("run_mode") or "plan_only").lower()
@@ -232,6 +233,43 @@ def _command_preflight(
         blockers.append("Canceled or completed runs cannot be started.")
     if command_type == "cancel" and run_status in {"canceled", "completed"}:
         blockers.append("Run is already terminal.")
+    if command_type == "change_plan":
+        allowed = [
+            str(item).strip()
+            for item in list(run.get("allowed_capabilities") or [])
+            if str(item).strip()
+        ]
+        requested_capability = _requested_recovery_capability(metadata)
+        if not allowed:
+            blockers.append("Change-plan needs at least one allowed recovery capability.")
+        elif requested_capability and requested_capability not in allowed:
+            blockers.append(
+                f"Recovery capability '{requested_capability}' is not allowed for this run."
+            )
+        if requested_capability and not get_capability_spec(requested_capability):
+            blockers.append(
+                f"Recovery capability '{requested_capability}' has no executable registry spec."
+            )
+        warnings.append(
+            "Change-plan creates a proposed recovery action for operator review; it does not execute immediately."
+        )
+    if command_type == "retry" and action:
+        retry_strategy = str((metadata or {}).get("retry_strategy") or "").strip()
+        requested_capability = _requested_recovery_capability(metadata)
+        if retry_strategy == "create_recovery_action" and requested_capability:
+            allowed = [
+                str(item).strip()
+                for item in list(run.get("allowed_capabilities") or [])
+                if str(item).strip()
+            ]
+            if requested_capability not in allowed:
+                blockers.append(
+                    f"Recovery capability '{requested_capability}' is not allowed for this run."
+                )
+            elif not get_capability_spec(requested_capability):
+                blockers.append(
+                    f"Recovery capability '{requested_capability}' has no executable registry spec."
+                )
 
     if action and spec and command_type == "retry":
         inputs = spec.normalize_inputs(action.get("inputs") or {})
@@ -284,14 +322,18 @@ def _command_preflight(
     risk_level = "low"
     if command_type == "cancel" or effect_class == "write_high_risk":
         risk_level = "high"
-    elif effect_class == "external_side_effect" or command_type in {"retry", "step"}:
+    elif effect_class == "external_side_effect" or command_type in {
+        "change_plan",
+        "retry",
+        "step",
+    }:
         risk_level = "medium"
 
     return {
         "allowed": not blockers,
         "command_type": command_type,
         "risk_level": risk_level,
-        "requires_confirmation": command_type == "retry"
+        "requires_confirmation": command_type in {"retry", "step"}
         or risk_level == "high"
         or bool(blockers),
         "requires_approval": bool(run.get("requires_approval")) or risk_level == "high",
@@ -333,6 +375,87 @@ def _rollback_guidance(
     return "No direct side effects are expected from this command."
 
 
+def _capability_side_effects(capability_name: str) -> List[str]:
+    spec = get_capability_spec(capability_name)
+    return list(spec.side_effects) if spec else []
+
+
+def _capability_rollback_guidance(capability_name: str, effect_class: str | None) -> str:
+    return _rollback_guidance(
+        command_type="execute",
+        effect_class=str(effect_class or ""),
+        side_effects=_capability_side_effects(capability_name),
+    )
+
+
+def _compensating_actions_for_capability(
+    *,
+    capability_name: str,
+    effect_class: str | None,
+    allowed_capabilities: List[str],
+) -> List[Dict[str, Any]]:
+    allowed = {
+        str(item).strip()
+        for item in list(allowed_capabilities or [])
+        if str(item).strip()
+    }
+    effect = str(effect_class or "").strip()
+    side_effects = _capability_side_effects(capability_name)
+    recommendations: List[Dict[str, Any]] = []
+
+    def add_capability(
+        *,
+        capability: str,
+        label: str,
+        rationale: str,
+        priority: str,
+    ) -> None:
+        if capability not in allowed:
+            return
+        recommendations.append(
+            {
+                "kind": "capability",
+                "command_type": "change_plan",
+                "capability_name": capability,
+                "label": label,
+                "rationale": rationale,
+                "priority": priority,
+            }
+        )
+
+    if effect == "external_side_effect":
+        add_capability(
+            capability="review_validation_readiness",
+            label="Review provider and validation state before retry",
+            rationale=(
+                "External validation jobs may keep running outside this system; "
+                "inspect provider/job state before creating another external request."
+            ),
+            priority="high",
+        )
+    if effect == "write_high_risk":
+        add_capability(
+            capability="review_validation_readiness",
+            label="Re-check promotion readiness before any further high-risk write",
+            rationale=(
+                "High-risk writes may need manual rollback or a compensating change; "
+                "re-run readiness gates before approving more promotion/publish work."
+            ),
+            priority="high",
+        )
+    if side_effects and effect not in {"read", "recommend"}:
+        add_capability(
+            capability="recommend_next_action",
+            label="Ask policy for the safest compensating next action",
+            rationale=(
+                "If the side effect is wrong or stale, create a recommendation "
+                "proposal instead of mutating the completed action."
+            ),
+            priority="medium" if effect == "write_low_risk" else "high",
+        )
+    return recommendations
+
+
 def _preflight_summary(
     *, command_type: str, risk_level: str, blockers: List[str], warnings: List[str]
 ) -> str:
@@ -341,6 +464,13 @@ def _preflight_summary(
     if warnings:
         return f"Preflight passed with {risk_level} risk: {warnings[0]}"
     return f"Preflight passed with {risk_level} risk."
+
+
+def _requested_recovery_capability(metadata: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(metadata, dict):
+        return ""
+    raw = metadata.get("capability_name") or metadata.get("target_capability")
+    return str(raw or "").strip()
 
 
 @router.get("/registry")
@@ -430,6 +560,7 @@ def create_agent_run(
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)
         skill_id = skill_id_for_tool_id(tool_id)
+        effect_class = tool_effect_class(tool_id)
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
@@ -448,7 +579,16 @@ def create_agent_run(
             validation_job_id=None,
             tool_id=tool_id,
             skill_id=skill_id,
-            effect_class=tool_effect_class(tool_id),
+            effect_class=effect_class,
+            side_effects=_capability_side_effects(action.capability_name),
+            rollback_guidance=_capability_rollback_guidance(
+                action.capability_name, effect_class
+            ),
+            compensating_actions=_compensating_actions_for_capability(
+                capability_name=action.capability_name,
+                effect_class=effect_class,
+                allowed_capabilities=payload.allowed_capabilities or [],
+            ),
         )
         deps.agent_events.create_agent_event(
             agent_run_id=run.get("id"),
@@ -680,6 +820,7 @@ def preflight_agent_run_command(
             run=run,
             command_type=command_type,
             action=action,
+            metadata=payload.metadata,
         ),
         "run": run,
         "action": action,
@@ -725,6 +866,7 @@ def issue_agent_run_command(
         run=run,
         command_type=command_type,
         action=action,
+        metadata=payload.metadata,
     )
     if not preflight["allowed"]:
         raise HTTPException(status_code=409, detail=preflight)
@@ -740,11 +882,106 @@ def issue_agent_run_command(
     )
     result: Dict[str, Any] = {"command": receipt, "run": run, "preflight": preflight}
 
-    if command_type in {"explain", "focus", "change_plan"}:
+    if command_type in {"explain", "focus"}:
         return result
 
     try:
-        if command_type == "start":
+        if command_type == "change_plan":
+            actions = deps.agent_actions.list_agent_actions(
+                agent_run_id=run_id,
+                limit=500,
+            )
+            next_sequence = max(
+                [int(item.get("sequence") or 0) for item in actions] or [0]
+            ) + 1
+            allowed = [
+                str(item).strip()
+                for item in list(run.get("allowed_capabilities") or [])
+                if str(item).strip()
+            ]
+            requested_capability = _requested_recovery_capability(payload.metadata)
+            capability_name = (
+                requested_capability
+                if requested_capability in allowed
+                else "recommend_next_action"
+                if "recommend_next_action" in allowed
+                else allowed[0]
+            )
+            tool_id = capability_to_tool_id(capability_name)
+            effect_class = tool_effect_class(tool_id)
+            recovery_inputs = payload.metadata.get("inputs")
+            inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
+            if run.get("experiment_id") and not inputs.get("experiment_id"):
+                inputs["experiment_id"] = run.get("experiment_id")
+            recovery_action = deps.agent_actions.create_agent_action(
+                agent_run_id=run_id,
+                sequence=next_sequence,
+                status="proposed",
+                capability_name=capability_name,
+                capability_version=None,
+                inputs=inputs,
+                outputs={},
+                inputs_hash=_hash_payload(inputs),
+                outputs_hash=None,
+                rationale=payload.message
+                or "Recovery action proposed from operator change-plan command.",
+                confidence=0.5,
+                snapshot_version=action.get("snapshot_version") if action else None,
+                hypothesis_id=action.get("hypothesis_id") if action else None,
+                variant_id=action.get("variant_id") if action else None,
+                validation_job_id=action.get("validation_job_id") if action else None,
+                tool_id=tool_id,
+                skill_id=skill_id_for_tool_id(tool_id),
+                effect_class=effect_class,
+                side_effects=_capability_side_effects(capability_name),
+                rollback_guidance=_capability_rollback_guidance(
+                    capability_name, effect_class
+                ),
+                compensating_actions=_compensating_actions_for_capability(
+                    capability_name=capability_name,
+                    effect_class=effect_class,
+                    allowed_capabilities=allowed,
+                ),
+                dedupe_key=f"change_plan:{receipt.get('id')}",
+            )
+            deps.agent_events.create_agent_event(
+                agent_run_id=run_id,
+                action_id=str(recovery_action.get("id") or ""),
+                sequence=int(recovery_action.get("sequence") or 0),
+                event_type="action_recovery_proposed",
+                status="proposed",
+                capability_name=str(recovery_action.get("capability_name") or "")
+                or None,
+                capability_version=None,
+                principal_type=run.get("principal_type"),
+                principal_id=run.get("principal_id"),
+                tool_id=recovery_action.get("tool_id"),
+                skill_id=recovery_action.get("skill_id"),
+                effect_class=recovery_action.get("effect_class"),
+                trace_id=run.get("trace_id"),
+                note="Recovery action proposed by operator change-plan command",
+                is_policy_event=False,
+                anchors={
+                    "experiment_id": run.get("experiment_id"),
+                    "variant_id": recovery_action.get("variant_id"),
+                    "validation_job_id": recovery_action.get("validation_job_id"),
+                    "hypothesis_id": recovery_action.get("hypothesis_id"),
+                    "snapshot_version": recovery_action.get("snapshot_version"),
+                    "metric_id": None,
+                    "source_command_id": receipt.get("id"),
+                    "source_action_id": action.get("id") if action else None,
+                    "recovery_strategy": payload.metadata.get(
+                        "recovery_strategy", "propose_next_action"
+                    ),
+                    "side_effects": recovery_action.get("side_effects"),
+                    "rollback_guidance": recovery_action.get("rollback_guidance"),
+                    "compensating_actions": recovery_action.get(
+                        "compensating_actions"
+                    ),
+                },
+            )
+            result["action"] = recovery_action
+        elif command_type == "start":
             runtime_result = runtime.start_run(run_id=run_id)
             result["run"] = runtime_result.run
             result["message"] = runtime_result.message
@@ -769,19 +1006,48 @@ def issue_agent_run_command(
                 [int(item.get("sequence") or 0) for item in actions] or [0]
             ) + 1
             retry_count = int(action.get("retry_count") or 0) + 1
+            retry_strategy = str(
+                payload.metadata.get("retry_strategy") or "same_action"
+            ).strip()
+            allowed = [
+                str(item).strip()
+                for item in list(run.get("allowed_capabilities") or [])
+                if str(item).strip()
+            ]
+            if retry_strategy == "create_recovery_action":
+                requested_capability = _requested_recovery_capability(payload.metadata)
+                capability_name = (
+                    requested_capability
+                    if requested_capability in allowed
+                    else "recommend_next_action"
+                    if "recommend_next_action" in allowed
+                    else str(action.get("capability_name") or "")
+                )
+            else:
+                capability_name = str(action.get("capability_name") or "")
+            retry_inputs = dict(action.get("inputs") or {})
+            if retry_strategy == "last_safe_checkpoint":
+                retry_inputs["retry_from"] = "last_safe_checkpoint"
+            if retry_strategy == "create_recovery_action":
+                retry_inputs["recovery_from_action_id"] = action.get("id")
+            tool_id = capability_to_tool_id(capability_name)
+            effect_class = tool_effect_class(tool_id)
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
                 status="proposed",
-                capability_name=str(action.get("capability_name") or ""),
-                capability_version=action.get("capability_version"),
-                inputs=action.get("inputs") or {},
+                capability_name=capability_name,
+                capability_version=(
+                    None
+                    if retry_strategy == "create_recovery_action"
+                    else action.get("capability_version")
+                ),
+                inputs=retry_inputs,
                 outputs={},
-                inputs_hash=action.get("inputs_hash")
-                or _hash_payload(action.get("inputs") or {}),
+                inputs_hash=_hash_payload(retry_inputs),
                 outputs_hash=None,
                 rationale=(
-                    f"Retry proposed from failed action {str(action.get('id') or '')[:8]}. "
+                    f"{retry_strategy} proposed from failed action {str(action.get('id') or '')[:8]}. "
                     f"{action.get('error') or action.get('rationale') or ''}"
                 ).strip(),
                 confidence=action.get("confidence"),
@@ -789,26 +1055,30 @@ def issue_agent_run_command(
                 hypothesis_id=action.get("hypothesis_id"),
                 variant_id=action.get("variant_id"),
                 validation_job_id=action.get("validation_job_id"),
-                tool_id=action.get("tool_id")
-                or capability_to_tool_id(action.get("capability_name")),
-                skill_id=action.get("skill_id")
-                or skill_id_for_tool_id(
-                    action.get("tool_id")
-                    or capability_to_tool_id(action.get("capability_name"))
+                tool_id=tool_id,
+                skill_id=skill_id_for_tool_id(tool_id),
+                effect_class=effect_class,
+                side_effects=_capability_side_effects(capability_name),
+                rollback_guidance=_capability_rollback_guidance(
+                    capability_name, effect_class
                 ),
-                effect_class=action.get("effect_class")
-                or tool_effect_class(
-                    action.get("tool_id")
-                    or capability_to_tool_id(action.get("capability_name"))
+                compensating_actions=_compensating_actions_for_capability(
+                    capability_name=capability_name,
+                    effect_class=effect_class,
+                    allowed_capabilities=allowed,
                 ),
                 retry_count=retry_count,
-                dedupe_key=f"retry:{action.get('id')}:{retry_count}",
+                dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
             )
             deps.agent_events.create_agent_event(
                 agent_run_id=run_id,
                 action_id=str(retry_action.get("id") or ""),
                 sequence=int(retry_action.get("sequence") or 0),
-                event_type="action_retry_proposed",
+                event_type=(
+                    "action_recovery_proposed"
+                    if retry_strategy == "create_recovery_action"
+                    else "action_retry_proposed"
+                ),
                 status="proposed",
                 capability_name=str(retry_action.get("capability_name") or "") or None,
                 capability_version=str(retry_action.get("capability_version") or "")
@@ -830,9 +1100,10 @@ def issue_agent_run_command(
                     "metric_id": None,
                     "original_action_id": action.get("id"),
                     "retry_count": retry_count,
-                    "retry_strategy": payload.metadata.get(
-                        "retry_strategy", "same_action"
-                    ),
+                    "retry_strategy": retry_strategy,
+                    "side_effects": retry_action.get("side_effects"),
+                    "rollback_guidance": retry_action.get("rollback_guidance"),
+                    "compensating_actions": retry_action.get("compensating_actions"),
                 },
             )
             result["action"] = retry_action

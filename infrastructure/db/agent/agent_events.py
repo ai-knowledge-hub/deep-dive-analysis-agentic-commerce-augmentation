@@ -101,6 +101,8 @@ def list_agent_events(
     if event_type and event_type not in {"all", ""}:
         if event_type == "policy":
             filters.append("is_policy_event = 1")
+        elif event_type == "command":
+            filters.append("event_type LIKE 'operator_command_%'")
         elif event_type in {"failed", "executed"}:
             filters.append("status = ?")
             params.append(event_type)

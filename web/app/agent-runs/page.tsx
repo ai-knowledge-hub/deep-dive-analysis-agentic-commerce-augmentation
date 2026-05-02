@@ -128,12 +128,14 @@ type TimelineStatusFilter =
 type TimelineWindowFilter = "all" | "24h" | "7d";
 type TimelinePresetId =
   | "all_activity"
+  | "commands_24h"
   | "policy_failures_24h"
   | "variant_execution_7d"
   | "validation_focus_7d"
   | "custom";
+type TimelineEventFilter = "all" | "failed" | "policy" | "executed" | "command";
 
-const TIMELINE_EVENT_TYPES = new Set(["all", "failed", "policy", "executed"]);
+const TIMELINE_EVENT_TYPES = new Set(["all", "failed", "policy", "executed", "command"]);
 const TIMELINE_STATUS_TYPES = new Set([
   "all",
   "proposed",
@@ -146,6 +148,7 @@ const TIMELINE_STATUS_TYPES = new Set([
 const TIMELINE_WINDOWS = new Set(["all", "24h", "7d"]);
 const TIMELINE_PRESET_IDS = new Set([
   "all_activity",
+  "commands_24h",
   "policy_failures_24h",
   "variant_execution_7d",
   "validation_focus_7d",
@@ -155,7 +158,7 @@ const TIMELINE_PRESET_IDS = new Set([
 const TIMELINE_PRESETS: Array<{
   id: Exclude<TimelinePresetId, "custom">;
   label: string;
-  eventType: "all" | "failed" | "policy" | "executed";
+  eventType: TimelineEventFilter;
   status: TimelineStatusFilter;
   capabilityName: string;
   timeWindow: TimelineWindowFilter;
@@ -167,6 +170,14 @@ const TIMELINE_PRESETS: Array<{
     status: "all",
     capabilityName: "all",
     timeWindow: "all",
+  },
+  {
+    id: "commands_24h",
+    label: "Commands (24h)",
+    eventType: "command",
+    status: "all",
+    capabilityName: "all",
+    timeWindow: "24h",
   },
   {
     id: "policy_failures_24h",
@@ -393,7 +404,7 @@ function AgentRunsPageContent() {
   const eventIdParam = searchParams.get("event_id")?.trim() || "";
   const initialTimelineFilter = (TIMELINE_EVENT_TYPES.has(timelineEventTypeParam)
     ? timelineEventTypeParam
-    : "all") as "all" | "failed" | "policy" | "executed";
+    : "all") as TimelineEventFilter;
   const initialTimelineStatus = (TIMELINE_STATUS_TYPES.has(timelineStatusParam)
     ? timelineStatusParam
     : "all") as TimelineStatusFilter;
@@ -432,9 +443,8 @@ function AgentRunsPageContent() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [diffDrawerOpen, setDiffDrawerOpen] = useState(false);
   const [hideUnchangedDiffLines, setHideUnchangedDiffLines] = useState(true);
-  const [timelineFilter, setTimelineFilter] = useState<
-    "all" | "failed" | "policy" | "executed"
-  >(initialTimelineFilter);
+  const [timelineFilter, setTimelineFilter] =
+    useState<TimelineEventFilter>(initialTimelineFilter);
   const [timelineStatusFilter, setTimelineStatusFilter] =
     useState<TimelineStatusFilter>(initialTimelineStatus);
   const [timelineCapabilityFilter, setTimelineCapabilityFilter] = useState<string>(
@@ -1285,14 +1295,16 @@ function AgentRunsPageContent() {
       command_type: AgentRunCommandType;
       action_id?: string | null;
       message?: string | null;
+      metadata?: Record<string, unknown>;
     }) => {
       if (!userId || !selectedRunId) return;
       setLoading(true);
       setError(null);
       try {
-        await issueAgentRunCommand(selectedRunId, command, userId);
+        const response = await issueAgentRunCommand(selectedRunId, command, userId);
         await loadSelected();
         await loadRuns();
+        return response;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to issue command.");
         throw err;
@@ -1308,6 +1320,7 @@ function AgentRunsPageContent() {
       command_type: AgentRunCommandType;
       action_id?: string | null;
       message?: string | null;
+      metadata?: Record<string, unknown>;
     }) => {
       if (!userId || !selectedRunId) {
         throw new Error("Select a run before issuing an operator command.");
@@ -2026,6 +2039,15 @@ function AgentRunsPageContent() {
                         <button
                           type="button"
                           className={`button button--ghost button--sm ${
+                            timelineFilter === "command" ? "is-active" : ""
+                          }`}
+                          onClick={() => setTimelineFilter("command")}
+                        >
+                          Commands
+                        </button>
+                        <button
+                          type="button"
+                          className={`button button--ghost button--sm ${
                             timelineFilter === "executed" ? "is-active" : ""
                           }`}
                           onClick={() => setTimelineFilter("executed")}
@@ -2033,6 +2055,7 @@ function AgentRunsPageContent() {
                           Executed
                         </button>
                         <select
+                          aria-label="Timeline status filter"
                           className="input"
                           style={{ minWidth: 170 }}
                           value={timelineStatusFilter}
@@ -2049,6 +2072,7 @@ function AgentRunsPageContent() {
                           <option value="rejected">Rejected</option>
                         </select>
                         <select
+                          aria-label="Timeline capability filter"
                           className="input"
                           style={{ minWidth: 220 }}
                           value={timelineCapabilityFilter}
@@ -2061,6 +2085,7 @@ function AgentRunsPageContent() {
                           ))}
                         </select>
                         <select
+                          aria-label="Timeline window filter"
                           className="input"
                           style={{ minWidth: 160 }}
                           value={timelineTimeWindow}
@@ -2239,12 +2264,34 @@ function AgentRunsPageContent() {
                         <p className="panel__subheading">What it changes</p>
                         <ul className="panel__list panel__list--compact">
                           {(
-                            CAPABILITY_EXPLAIN[selectedAction.capability_name]
+                            selectedAction.side_effects?.length
+                              ? selectedAction.side_effects
+                              : CAPABILITY_EXPLAIN[selectedAction.capability_name]
                               ?.sideEffects ?? ["No side-effect metadata yet."]
                           ).map((effect, index) => (
                             <li key={`${effect}-${index}`}>{effect}</li>
                           ))}
                         </ul>
+                        <p className="panel__subheading">Rollback guidance</p>
+                        <p className="panel__muted">
+                          {selectedAction.rollback_guidance ||
+                            "No rollback guidance captured for this action yet."}
+                        </p>
+                        <p className="panel__subheading">Compensating actions</p>
+                        {selectedAction.compensating_actions?.length ? (
+                          <ul className="panel__list panel__list--compact">
+                            {selectedAction.compensating_actions.map((item, index) => (
+                              <li key={`${item.capability_name ?? item.label ?? "compensating"}-${index}`}>
+                                {item.label ?? item.capability_name ?? "Review compensating action"}
+                                {item.rationale ? `: ${item.rationale}` : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="panel__muted">
+                            No compensating action recommendation captured.
+                          </p>
+                        )}
                         <p className="panel__subheading">Rationale and confidence</p>
                         <p className="panel__muted">
                           {selectedAction.rationale || "No rationale captured."}

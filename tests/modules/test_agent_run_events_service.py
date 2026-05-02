@@ -176,6 +176,18 @@ def test_list_agent_run_events_supports_event_type_filters(tmp_path):
         is_policy_event=True,
         anchors={},
     )
+    deps.agent_events.create_agent_event(
+        agent_run_id=run["id"],
+        action_id=action_failed["id"],
+        sequence=3,
+        event_type="operator_command_retry",
+        status="completed",
+        capability_name="seed_hypotheses",
+        capability_version="v1",
+        note="retry requested",
+        is_policy_event=False,
+        anchors={},
+    )
 
     all_events = list_agent_run_events(deps=deps, run_id=run["id"], event_type="all")
     failed_events = list_agent_run_events(
@@ -187,14 +199,19 @@ def test_list_agent_run_events_supports_event_type_filters(tmp_path):
     executed_events = list_agent_run_events(
         deps=deps, run_id=run["id"], event_type="executed"
     )
+    command_events = list_agent_run_events(
+        deps=deps, run_id=run["id"], event_type="command"
+    )
 
-    assert len(all_events) == 2
+    assert len(all_events) == 3
     assert len(failed_events) == 1
     assert failed_events[0]["status"] == "failed"
     assert len(policy_events) == 1
     assert policy_events[0]["is_policy_event"] is True
     assert len(executed_events) == 1
     assert executed_events[0]["status"] == "executed"
+    assert len(command_events) == 1
+    assert command_events[0]["event_type"] == "operator_command_retry"
 
 
 def test_list_agent_run_events_page_supports_before_after_cursor(tmp_path):

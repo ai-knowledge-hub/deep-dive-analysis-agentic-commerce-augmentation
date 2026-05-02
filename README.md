@@ -20,6 +20,8 @@ Current extension:
   See `docs/agentic-layer.md`.
 - **Agent-first pivot checkpoint**: the platform direction is now a governed agent execution fabric with a human control plane, not only a human-led lab.
   See `docs/agentification-checkpoint.md`.
+- **Next build track**: command observability and structured recovery.
+  See the `Next Build Slice` section in `docs/agentification-checkpoint.md`.
 
 ---
 
@@ -132,6 +134,7 @@ Agent operator APIs:
   - run-level event feed with keyset pagination and deep-link recovery
   - supports:
     - `event_type=all|failed|policy|executed`
+    - `event_type=command` for `operator_command_*` receipts
     - `status=all|proposed|approved|executing|executed|failed|rejected`
     - `capability_name`
     - `since`, `until`
@@ -143,8 +146,16 @@ Agent operator APIs:
 - `POST /agent-runs/{run_id}/step`
 - `POST /agent-runs/{run_id}/commands`
   - chat/operator command endpoint for approve, reject, retry, start, pause, cancel, step
+  - step and high-risk commands are confirmed through command preflight before execution
   - `retry` creates a new proposed retry action with incremented `retry_count`; it does not mutate the failed action back to approved
-  - records non-mutating explain, focus, and change-plan intents as command receipts
+  - retry supports same-action, last-safe-checkpoint, and recovery-action strategies
+  - recovery-action retry and `change_plan` can target a specific allowed capability
+  - `change_plan` creates a proposed recovery action instead of silently mutating plans
+  - proposed recovery actions persist side-effect metadata and rollback guidance for later approval/review
+  - recovery proposals can include compensating-action recommendations for high-risk or external side effects
+  - Interventions preflights and confirms audited compensating proposals directly from recommendations
+  - command outcomes guide operators to relevant metrics, variants, validation jobs, revisions, hypotheses, snapshots, and failures
+  - records non-mutating explain and focus intents as command receipts
 - `POST /agent-runs/{run_id}/commands/preflight`
   - previews command risk, blockers, warnings, side effects, and rollback guidance before submission
 - `POST /agent-runs/actions/{action_id}/decision`

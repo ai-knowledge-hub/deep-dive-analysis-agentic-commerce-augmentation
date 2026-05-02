@@ -560,7 +560,7 @@ export async function getAgentRunEvents(
   runId: string,
   payload: {
     limit?: number;
-    event_type?: "all" | "failed" | "policy" | "executed";
+    event_type?: "all" | "failed" | "policy" | "executed" | "command";
     status?: "all" | "proposed" | "approved" | "executing" | "executed" | "failed" | "rejected";
     capability_name?: string | null;
     since?: string | null;

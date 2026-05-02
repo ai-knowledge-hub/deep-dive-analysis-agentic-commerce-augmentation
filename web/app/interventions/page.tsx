@@ -12,10 +12,18 @@ import {
   decideAgentAction,
   getAgentRun,
   getAgentRunEvents,
+  issueAgentRunCommand,
   listAgentRuns,
+  preflightAgentRunCommand,
 } from "../../lib/api";
 import { buildRunsHref } from "../../lib/routes";
-import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
+import type {
+  AgentAction,
+  AgentCompensatingAction,
+  AgentRun,
+  AgentRunCommandPreflight,
+  AgentRunEvent,
+} from "../../lib/types";
 
 type Priority = "critical" | "high" | "medium" | "low";
 type RiskLevel = "high" | "medium" | "low";
@@ -68,6 +76,25 @@ type EscalationItem = {
   latestEvent?: AgentRunEvent | null;
 };
 
+type CommandItem = {
+  kind: "command";
+  run: AgentRun;
+  event: AgentRunEvent;
+  priority: Priority;
+  risk: RiskLevel;
+  title: string;
+  summary: string;
+  rollbackGuidance?: string | null;
+  compensatingActions?: AgentCompensatingAction[];
+};
+
+type CompensatingCommand = {
+  command_type: "change_plan";
+  action_id?: string | null;
+  message: string;
+  metadata: Record<string, unknown>;
+};
+
 const HIGH_RISK_CAPABILITIES = new Set([
   "promote_variant_prod",
   "publish_copy_revision",
@@ -107,9 +134,54 @@ function getRiskForCapability(capabilityName?: string | null): RiskLevel {
   return "low";
 }
 
+function getRiskForEffect(effectClass?: string | null): RiskLevel {
+  const key = normalize(effectClass);
+  if (key === "write_high_risk") return "high";
+  if (key === "external_side_effect") return "medium";
+  return "low";
+}
+
 function maxRisk(left: RiskLevel, right: RiskLevel): RiskLevel {
   const order: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2 };
   return order[left] >= order[right] ? left : right;
+}
+
+function eventRollbackGuidance(event: AgentRunEvent): string | null {
+  const value = event.anchors?.rollback_guidance;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function eventCompensatingActions(event: AgentRunEvent): AgentCompensatingAction[] {
+  const value = event.anchors?.compensating_actions;
+  return Array.isArray(value) ? (value as AgentCompensatingAction[]) : [];
+}
+
+function sourceActionId(event: AgentRunEvent): string | null {
+  const source = event.anchors?.source_action_id;
+  if (typeof source === "string" && source.trim()) return source;
+  return event.action_id ?? null;
+}
+
+function compensatingCommand(
+  item: CommandItem,
+  recommendation: AgentCompensatingAction,
+): CompensatingCommand | null {
+  if (!recommendation.capability_name) return null;
+  return {
+    command_type: "change_plan",
+    action_id: sourceActionId(item.event),
+    message:
+      recommendation.label ||
+      `Create compensating proposal for ${recommendation.capability_name}`,
+    metadata: {
+      recovery_strategy: "compensating_action",
+      capability_name: recommendation.capability_name,
+      source_event_id: item.event.id,
+      compensating_priority: recommendation.priority,
+      compensating_rationale: recommendation.rationale,
+      inputs: item.run.experiment_id ? { experiment_id: item.run.experiment_id } : {},
+    },
+  };
 }
 
 function badgeClassForPriority(priority: Priority): string {
@@ -291,6 +363,61 @@ function buildEscalationItem(detail: InterventionDetail): EscalationItem | null 
   };
 }
 
+function buildCommandItems(detail: InterventionDetail): CommandItem[] {
+  return detail.events
+    .filter((event) => {
+      const eventType = String(event.event_type || "");
+      return (
+        eventType.startsWith("operator_command_") ||
+        eventType === "action_retry_proposed" ||
+        eventType === "action_recovery_proposed"
+      );
+    })
+    .map((event) => {
+      const eventType = String(event.event_type || "");
+      const command = eventType.replace(/^operator_command_/, "");
+      const risk = maxRisk(
+        getRiskForCapability(event.capability_name),
+        getRiskForEffect(event.effect_class),
+      );
+      const isRetryProposal = eventType === "action_retry_proposed" || command === "retry";
+      const isRecoveryProposal = eventType === "action_recovery_proposed";
+      const priority: Priority =
+        risk === "high" || event.status === "failed"
+          ? "high"
+          : isRetryProposal
+            ? "medium"
+            : "low";
+      return {
+        kind: "command" as const,
+        run: detail.run,
+        event,
+        priority,
+        risk,
+        title: isRetryProposal
+          ? `${formatRunLabel(detail.run)} has a retry proposal`
+          : isRecoveryProposal
+            ? `${formatRunLabel(detail.run)} has a recovery proposal`
+            : `${formatRunLabel(detail.run)} command: ${command || eventType}`,
+        summary:
+          event.note ||
+          (isRetryProposal
+            ? "A chat-issued retry created a proposed recovery action."
+            : isRecoveryProposal
+              ? "A chat-issued change-plan command created a proposed recovery action."
+            : "A chat-issued command changed or inspected runtime state."),
+        rollbackGuidance: eventRollbackGuidance(event),
+        compensatingActions: eventCompensatingActions(event),
+      };
+    })
+    .filter(
+      (item) =>
+        item.risk !== "low" ||
+        item.event.event_type === "action_retry_proposed" ||
+        item.event.event_type === "action_recovery_proposed",
+    );
+}
+
 function InterventionsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -306,7 +433,12 @@ function InterventionsPageContent() {
   const [retries, setRetries] = useState<RetryItem[]>([]);
   const [pauses, setPauses] = useState<PauseItem[]>([]);
   const [escalations, setEscalations] = useState<EscalationItem[]>([]);
+  const [commands, setCommands] = useState<CommandItem[]>([]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [pendingCompensatingKey, setPendingCompensatingKey] = useState<string | null>(null);
+  const [compensatingPreflights, setCompensatingPreflights] = useState<
+    Record<string, AgentRunCommandPreflight>
+  >({});
 
   const loadInterventions = useCallback(async () => {
     if (!userId) return;
@@ -355,6 +487,11 @@ function InterventionsPageContent() {
             .filter((item): item is EscalationItem => Boolean(item)),
         ),
       );
+      setCommands(
+        sortByPriorityAndRisk(
+          detailRows.flatMap((detail) => buildCommandItems(detail)),
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load interventions.");
     } finally {
@@ -386,6 +523,11 @@ function InterventionsPageContent() {
     [escalations, runIdParam],
   );
 
+  const visibleCommands = useMemo(
+    () => (runIdParam ? commands.filter((item) => item.run.id === runIdParam) : commands),
+    [commands, runIdParam],
+  );
+
   const briefing = useMemo(() => {
     if (!userId) {
       return "Sign in to review approvals, retries, pauses, and escalation-worthy runs.";
@@ -394,7 +536,8 @@ function InterventionsPageContent() {
       visibleApprovals.length +
       visibleRetries.length +
       visiblePauses.length +
-      visibleEscalations.length;
+      visibleEscalations.length +
+      visibleCommands.length;
     if (total === 0) {
       if (runIdParam) {
         return `Run ${runIdParam.slice(0, 8)} does not currently need operator intervention.`;
@@ -402,11 +545,12 @@ function InterventionsPageContent() {
       return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
     }
     const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
-    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
+    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleCommands.length} command-originated item${visibleCommands.length === 1 ? "" : "s"}, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
   }, [
     runIdParam,
     userId,
     visibleApprovals.length,
+    visibleCommands.length,
     visibleEscalations.length,
     visiblePauses.length,
     visibleRetries.length,
@@ -461,6 +605,52 @@ function InterventionsPageContent() {
       }
     },
     [loadInterventions, userId],
+  );
+
+  const handleCompensatingAction = useCallback(
+    async (item: CommandItem, recommendation: AgentCompensatingAction) => {
+      if (!userId || !recommendation.capability_name) return;
+      const busy = `compensate:${item.event.id}:${recommendation.capability_name}`;
+      const pendingKey = busy;
+      const command = compensatingCommand(item, recommendation);
+      if (!command) return;
+      setBusyKey(busy);
+      setError(null);
+      setStatusMessage(null);
+      try {
+        const response = await preflightAgentRunCommand(item.run.id, command, userId);
+        setCompensatingPreflights((current) => ({
+          ...current,
+          [pendingKey]: response.preflight,
+        }));
+        if (!response.preflight.allowed) {
+          setPendingCompensatingKey(null);
+          return;
+        }
+        if (
+          response.preflight.requires_confirmation &&
+          pendingCompensatingKey !== pendingKey
+        ) {
+          setPendingCompensatingKey(pendingKey);
+          return;
+        }
+        await issueAgentRunCommand(item.run.id, command, userId);
+        setPendingCompensatingKey(null);
+        setStatusMessage(
+          `Compensating proposal created for ${recommendation.capability_name}.`,
+        );
+        await loadInterventions();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create compensating proposal.",
+        );
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [loadInterventions, pendingCompensatingKey, userId],
   );
 
   function renderMeta(priority: Priority, risk: RiskLevel, run: AgentRun) {
@@ -521,6 +711,7 @@ function InterventionsPageContent() {
             metrics={[
               { label: "Escalations", value: escalations.length, tone: escalations.length > 0 ? "warning" : "default" },
               { label: "Approvals", value: approvals.length },
+              { label: "Commands", value: commands.length, tone: commands.length > 0 ? "warning" : "default" },
               { label: "Retries", value: retries.length },
               { label: "Pauses", value: pauses.length },
             ]}
@@ -582,6 +773,109 @@ function InterventionsPageContent() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </section>
+
+            <section className="panel__card panel__card--secondary">
+              <div className="panel__header">
+                <h3>Command-originated work</h3>
+                <span className="panel__badge panel__badge--warning">{visibleCommands.length}</span>
+              </div>
+              {visibleCommands.length === 0 ? (
+                <div className="panel__muted">No high-risk command receipts or retry proposals need intervention.</div>
+              ) : (
+                <div className="list">
+                  {visibleCommands.map((item) => {
+                      const compensating = item.compensatingActions?.[0] ?? null;
+                      const compensatingKey = compensating?.capability_name
+                        ? `compensate:${item.event.id}:${compensating.capability_name}`
+                        : null;
+                      const preflight = compensatingKey
+                        ? compensatingPreflights[compensatingKey]
+                        : null;
+                      const needsConfirm =
+                        compensatingKey && pendingCompensatingKey === compensatingKey;
+                      return (
+                        <div key={`command-${item.event.id}`} className="list__row">
+                          <div className="list__title">{item.title}</div>
+                          {renderMeta(item.priority, item.risk, item.run)}
+                          <div className="panel__muted">{item.summary}</div>
+                          {item.rollbackGuidance ? (
+                            <div className="list__meta">
+                              Rollback: {item.rollbackGuidance}
+                            </div>
+                          ) : null}
+                          {compensating ? (
+                            <div className="list__meta">
+                              Compensating action:{" "}
+                              {compensating.label ??
+                                compensating.capability_name ??
+                                "Review next safe action"}
+                            </div>
+                          ) : null}
+                          {preflight ? (
+                            <div className="panel__notice panel__notice--info">
+                              <strong>Preflight:</strong> {preflight.summary}{" "}
+                              <span className="panel__badge panel__badge--secondary">
+                                Risk: {preflight.risk_level}
+                              </span>
+                              {preflight.blockers[0] ? (
+                                <div>Blocker: {preflight.blockers[0]}</div>
+                              ) : null}
+                              {preflight.warnings[0] ? (
+                                <div>Warning: {preflight.warnings[0]}</div>
+                              ) : null}
+                              <div>Rollback: {preflight.rollback_guidance}</div>
+                              {needsConfirm ? (
+                                <div>Click again to confirm proposal creation.</div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <div className="agent-ops-summary">
+                            <span className="panel__badge panel__badge--secondary">
+                              Event: {item.event.event_type}
+                            </span>
+                            <span className="panel__badge panel__badge--secondary">
+                              Status: {item.event.status}
+                            </span>
+                            <span className="panel__badge panel__badge--secondary">
+                              Effect: {item.event.effect_class ?? item.risk}
+                            </span>
+                          </div>
+                          {item.event.timestamp ? (
+                            <div className="list__meta">
+                              Command signal: {formatEventTime(item.event.timestamp)}
+                            </div>
+                          ) : null}
+                          <div className="detail__actions">
+                            {compensating?.capability_name && compensatingKey ? (
+                              <button
+                                type="button"
+                                className="button button--primary button--sm"
+                                onClick={() =>
+                                  void handleCompensatingAction(item, compensating)
+                                }
+                                disabled={busyKey === compensatingKey}
+                              >
+                                {busyKey === compensatingKey
+                                  ? "Checking..."
+                                  : needsConfirm
+                                    ? "Confirm compensating proposal"
+                                    : "Create compensating proposal"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              onClick={() => openRun(item.run.id)}
+                            >
+                              Inspect run
+                            </button>
+                          </div>
+                        </div>
+                      );
+                  })}
                 </div>
               )}
             </section>

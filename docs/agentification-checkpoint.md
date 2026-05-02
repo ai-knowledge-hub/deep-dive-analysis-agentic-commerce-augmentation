@@ -1,6 +1,6 @@
 # Agentification Checkpoint
 
-Status date: 2026-04-26
+Status date: 2026-04-30
 
 This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
 
@@ -34,9 +34,16 @@ The codebase now has the minimum spine for the pivot:
 - Read API for the runtime registry: `GET /agent-runs/registry`.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
-- Operator chat can issue audited steering commands for approve, reject, pause, start, and non-mutating focus/explain/change-plan intents.
+- Operator chat can issue audited steering commands for approve, reject, pause, start, non-mutating focus/explain intents, and structured change-plan recovery proposals.
 - Chat-issued commands now have a policy preflight contract with risk level, blockers, warnings, side effects, and rollback guidance.
 - Retry commands now create a new proposed retry action with incremented `retry_count` and preserve the original failed action.
+- Command events are first-class timeline filters through `event_type=command` and the Agent Runs `Commands (24h)` preset.
+- Interventions surfaces command-originated retry/recovery work.
+- `change_plan` now creates a proposed recovery action instead of only recording a non-mutating receipt.
+- Recovery commands can target a specific allowed capability instead of always falling back to the default recommendation action.
+- Proposed recovery actions now persist side-effect metadata and rollback guidance for downstream approval review.
+- Recovery proposals now include compensating-action recommendations for high-risk and external-side-effect paths.
+- Interventions can now preflight, confirm, and create audited compensating proposals directly from those recommendations.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -57,10 +64,13 @@ Use these docs together:
 
 - `docs/agentification-checkpoint.md`: current checkpoint and next implementation tracks
 - `docs/agent-first-modular-architecture-v1.md`: target architecture
-- `docs/agent-first-migration-slice-rfc.md`: first migration slice; now mostly implemented
 - `docs/chat-led-operator-console-spec.md`: target human control-plane UX
 - `docs/ui-control-plane-simplification-plan.md`: UI simplification roadmap
 - `docs/agentic-layer.md`: runtime implementation notes
+
+Historical reference:
+
+- `docs/agent-first-migration-slice-rfc.md`: first migration slice; implemented and retained as rationale/history, not the active work plan
 
 ## Next Development Tracks
 
@@ -78,13 +88,12 @@ Next steps:
 
 ### 2. Agent Chat As Primary Control Interface
 
-Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, and propose explicit retry actions for failures.
+Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, propose explicit retry actions, and create structured recovery proposals.
 
 Next steps:
 
-- Expand command coverage beyond approve/reject/retry/start/pause into step, cancel, and structured change-plan workflows in the UI.
-- Promote command preflight receipts into the timeline/filter model.
-- Add undo/rollback guidance where side effects cannot be reversed.
+- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
+- Consider promoting compensating recommendation creation into a reusable control-plane component.
 
 ### 3. External Agent API Contracts
 
@@ -128,13 +137,47 @@ Next steps:
 - Reduce duplicate dashboards.
 - Make all risky actions visible through Interventions.
 
-## Near-Term Recommendation
+## Next Build Slice
 
-The next implementation slice should be command observability and structured recovery:
+The current implementation slice covers the first command observability and structured recovery pass.
 
-1. Surface command receipts and command outcomes as first-class timeline filters.
-2. Add Interventions actions for command-originated high-risk decisions.
-3. Add structured change-plan commands that create proposed recovery actions instead of mutating plans silently.
-4. Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
+Completed in this slice:
 
-That slice makes the chat console safer as it becomes the primary human steering interface.
+- Timeline observability:
+  - `event_type=command` filtering for `operator_command_*`.
+  - `Commands (24h)` timeline preset in Agent Runs.
+- Interventions integration:
+  - Surface command-originated retry/recovery work in Interventions.
+  - Group command-originated work by urgency/risk.
+- Structured recovery:
+  - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
+  - Recovery target capabilities are validated by preflight against the run's allowed capabilities.
+  - Proposed recovery actions carry persisted side effects and rollback guidance.
+- Chat command controls:
+  - Operator chat now exposes step and cancel commands through the same preflight path.
+  - Operator chat exposes direct `change_plan` recovery proposal controls.
+  - Command responses are summarized in the chat thread with resulting run/action state.
+  - Command outcome summaries include artifact-specific inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures.
+- Retry strategies:
+  - `same_action` retries the failed capability with copied inputs.
+  - `last_safe_checkpoint` retries the failed capability with checkpoint intent stamped into inputs.
+  - `create_recovery_action` creates a targeted recovery proposal, defaulting to `recommend_next_action` when available.
+- Rollback guidance:
+  - Recovery/retry proposals persist capability side effects and rollback guidance on the action row.
+  - `action_recovery_proposed` and `action_retry_proposed` events carry rollback guidance in anchors for Interventions visibility.
+  - Operator chat includes rollback guidance in command outcomes.
+- Compensating actions:
+  - Recovery/retry proposals can persist recommended compensating follow-ups.
+  - External-side-effect proposals recommend `review_validation_readiness` when allowed.
+  - High-risk proposals recommend readiness review and/or policy recommendation when allowed.
+  - Interventions and operator chat surface the first compensating recommendation.
+  - Interventions can create a compensating `change_plan` proposal through the audited command endpoint.
+  - Interventions shows command preflight risk/blockers/warnings/rollback before creating compensating proposals.
+- Verification:
+  - Backend tests for command event filtering and recovery action creation.
+  - Frontend tests for command timeline preset and Interventions visibility.
+
+Next build should deepen this slice:
+
+- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
+- Keep mock-auth Playwright smoke green.

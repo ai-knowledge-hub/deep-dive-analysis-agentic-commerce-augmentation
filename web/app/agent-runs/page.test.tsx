@@ -210,14 +210,34 @@ describe("AgentRunsPage timeline presets", () => {
     expect(typeof payload.since).toBe("string");
   });
 
+  it("applies Commands preset to event query payload", async () => {
+    render(<AgentRunsPage />);
+    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Commands \(24h\)/i });
+
+    getAgentRunEventsMock.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: /Commands \(24h\)/i }));
+
+    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
+    const payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<
+      string,
+      unknown
+    >;
+    expect(payload.event_type).toBe("command");
+    expect(payload.status).toBe("all");
+    expect(typeof payload.since).toBe("string");
+  });
+
   it("shows custom view badge when filters diverge from presets", async () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
     await screen.findByRole("button", { name: /Policy failures \(24h\)/i });
 
     await userEvent.click(screen.getByRole("button", { name: /Policy failures \(24h\)/i }));
-    const filters = screen.getAllByRole("combobox");
-    await userEvent.selectOptions(filters[0], "executed");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Timeline status filter/i),
+      "executed",
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Custom view")).toBeInTheDocument();

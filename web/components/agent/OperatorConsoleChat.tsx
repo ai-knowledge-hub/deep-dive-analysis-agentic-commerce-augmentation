@@ -6,6 +6,7 @@ import type {
   AgentAction,
   AgentRun,
   AgentRunCommandPreflight,
+  AgentRunCommandResponse,
   AgentRunCommandType,
   AgentRunEvent,
 } from "../../lib/types";
@@ -28,6 +29,7 @@ type OperatorCommand = {
   command_type: AgentRunCommandType;
   action_id?: string | null;
   message?: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 type Props = {
@@ -49,7 +51,9 @@ type Props = {
   onFocusValidationLinked?: () => void;
   onJumpToNextAction?: () => void;
   onPreflightCommand?: (command: OperatorCommand) => Promise<AgentRunCommandPreflight>;
-  onIssueCommand?: (command: OperatorCommand) => Promise<void> | void;
+  onIssueCommand?: (
+    command: OperatorCommand,
+  ) => Promise<AgentRunCommandResponse | void> | AgentRunCommandResponse | void;
 };
 
 function formatRunLabel(run: AgentRun | null): string {
@@ -94,6 +98,105 @@ function actionRiskLabel(action: AgentAction | null): string {
   return "Low risk";
 }
 
+function outputString(outputs: Record<string, unknown> | undefined, key: string): string | null {
+  const value = outputs?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function buildArtifactGuidance(action: AgentAction): string[] {
+  const outputs = action.outputs;
+  const metricId =
+    outputString(outputs, "metric_id") ||
+    outputString(outputs, "new_metric_id") ||
+    outputString(outputs, "source_metric_id");
+  const revisionId =
+    outputString(outputs, "revision_id") ||
+    outputString(outputs, "copy_revision_id") ||
+    outputString(outputs, "published_revision_id");
+  const validationJobId =
+    action.validation_job_id || outputString(outputs, "validation_job_id");
+  const variantId = action.variant_id || outputString(outputs, "variant_id");
+  const hypothesisId = action.hypothesis_id || outputString(outputs, "hypothesis_id");
+
+  const guidance: string[] = [];
+  if (metricId) {
+    guidance.push(`Review metric ${metricId} in the experiment evidence before approving downstream promotion.`);
+  }
+  if (variantId) {
+    guidance.push(`Compare variant ${variantId} against the control and latest posterior.`);
+  }
+  if (validationJobId) {
+    guidance.push(`Open validation job ${validationJobId} to inspect synthetic/observed agreement.`);
+  }
+  if (revisionId) {
+    guidance.push(`Inspect copy revision ${revisionId} and confirm the published text/audit event.`);
+  }
+  if (hypothesisId) {
+    guidance.push(`Check hypothesis ${hypothesisId} to see which belief this action supports or challenges.`);
+  }
+  if (action.snapshot_version != null) {
+    guidance.push(`Use snapshot version ${action.snapshot_version} when comparing retrieval-backed results.`);
+  }
+  if (action.error) {
+    guidance.push(`Failure note: ${action.error}`);
+  }
+  if (guidance.length === 0 && Object.keys(outputs ?? {}).length > 0) {
+    guidance.push("Inspect the action output payload for generated artifacts and decision details.");
+  }
+  return guidance;
+}
+
+function buildCommandOutcome(
+  commandType: AgentRunCommandType,
+  response?: AgentRunCommandResponse | void,
+): string {
+  if (!response) {
+    return `Command receipt recorded: ${commandType}. I refreshed the execution context so you can review the resulting run state and timeline.`;
+  }
+  const parts = [`Command completed: ${commandType}.`];
+  if (response.message) {
+    parts.push(response.message);
+  }
+  if (response.action) {
+    parts.push(
+      `Action ${response.action.capability_name ?? response.action.id} is now ${response.action.status ?? "updated"}.`,
+    );
+    if (response.action.retry_count && response.action.retry_count > 0) {
+      parts.push(`Retry count is ${response.action.retry_count}.`);
+    }
+    if (response.action.rollback_guidance) {
+      parts.push(`Rollback guidance: ${response.action.rollback_guidance}`);
+    }
+    const compensatingAction = response.action.compensating_actions?.[0];
+    if (compensatingAction?.label) {
+      parts.push(`Compensating action: ${compensatingAction.label}.`);
+    }
+    const guidance = buildArtifactGuidance(response.action);
+    if (guidance.length > 0) {
+      parts.push(`Next inspection: ${guidance.slice(0, 3).join(" ")}`);
+    }
+  }
+  if (response.run) {
+    parts.push(
+      `Run is ${response.run.status ?? "unknown"} in ${response.run.state ?? "unknown"} state.`,
+    );
+  }
+  if (response.preflight?.risk_level) {
+    parts.push(`Preflight risk was ${response.preflight.risk_level}.`);
+  }
+  return parts.join(" ");
+}
+
+function recoveryCapabilityLabel(capabilityName: string): string {
+  return capabilityName.replaceAll("_", " ");
+}
+
+function preferredRecoveryCapability(capabilities: string[]): string {
+  return capabilities.includes("recommend_next_action")
+    ? "recommend_next_action"
+    : capabilities[0] ?? "";
+}
+
 export function OperatorConsoleChat({
   run,
   actions,
@@ -113,6 +216,7 @@ export function OperatorConsoleChat({
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingCommandKey, setPendingCommandKey] = useState<string | null>(null);
+  const [selectedRecoveryCapability, setSelectedRecoveryCapability] = useState("");
 
   const derived = useMemo(() => {
     const proposedActions = actions.filter(
@@ -139,6 +243,9 @@ export function OperatorConsoleChat({
       .reverse()
       .find((item) => Boolean(item.is_policy_event)) ?? null;
     const validationLinkedActions = actions.filter((item) => Boolean(item.validation_job_id));
+    const recoveryCapabilities = Array.from(
+      new Set((run?.allowed_capabilities ?? []).filter((item) => Boolean(item?.trim()))),
+    );
     return {
       proposedActions,
       approvedActions,
@@ -150,8 +257,19 @@ export function OperatorConsoleChat({
       latestFailureEvent,
       latestPolicyEvent,
       validationLinkedActions,
+      recoveryCapabilities,
     };
-  }, [actions, events]);
+  }, [actions, events, run?.allowed_capabilities]);
+
+  useEffect(() => {
+    const preferred = preferredRecoveryCapability(derived.recoveryCapabilities);
+    setSelectedRecoveryCapability((current) =>
+      current && derived.recoveryCapabilities.includes(current) ? current : preferred,
+    );
+  }, [derived.recoveryCapabilities]);
+
+  const activeRecoveryCapability =
+    selectedRecoveryCapability || preferredRecoveryCapability(derived.recoveryCapabilities);
 
   useEffect(() => {
     if (!run) {
@@ -342,9 +460,13 @@ export function OperatorConsoleChat({
     command_type: AgentRunCommandType,
     message: string,
     action_id?: string | null,
+    metadata?: Record<string, unknown>,
   ) {
-    const command = { command_type, action_id, message };
-    const commandKey = `${command_type}:${action_id ?? "run"}`;
+    const command: OperatorCommand = { command_type, action_id, message };
+    if (metadata !== undefined) {
+      command.metadata = metadata;
+    }
+    const commandKey = `${command_type}:${action_id ?? "run"}:${JSON.stringify(metadata ?? {})}`;
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}-${command_type}`,
       role: "user",
@@ -386,13 +508,13 @@ export function OperatorConsoleChat({
         }
       }
       setPendingCommandKey(null);
-      await onIssueCommand?.(command);
+      const response = await onIssueCommand?.(command);
       setMessages((current) => [
         ...current,
         {
           id: `assistant-${Date.now()}-${command_type}`,
           role: "assistant",
-          content: `Command receipt recorded: ${command_type}. I refreshed the execution context so you can review the resulting run state and timeline.`,
+          content: buildCommandOutcome(command_type, response),
         },
       ]);
     } catch (error) {
@@ -548,12 +670,90 @@ export function OperatorConsoleChat({
               "retry",
               `Retry ${selectedAction?.capability_name ?? "selected action"}`,
               selectedAction?.id,
+              { retry_strategy: "same_action" },
             )
           }
           disabled={!run || !selectedAction || selectedAction.status !== "failed"}
         >
           Retry selected
         </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "retry",
+              `Retry ${selectedAction?.capability_name ?? "selected action"} from checkpoint`,
+              selectedAction?.id,
+              { retry_strategy: "last_safe_checkpoint" },
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
+        >
+          Retry checkpoint
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "retry",
+              `Create recovery action for ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+              {
+                retry_strategy: "create_recovery_action",
+                capability_name: activeRecoveryCapability || undefined,
+              },
+            )
+          }
+          disabled={
+            !run ||
+            !selectedAction ||
+            selectedAction.status !== "failed" ||
+            derived.recoveryCapabilities.length === 0
+          }
+        >
+          Recovery action
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "change_plan",
+              "Create a recovery plan proposal",
+              selectedAction?.id,
+              {
+                recovery_strategy: "propose_next_action",
+                capability_name: activeRecoveryCapability || undefined,
+                inputs: run?.experiment_id ? { experiment_id: run.experiment_id } : {},
+              },
+            )
+          }
+          disabled={!run || derived.recoveryCapabilities.length === 0}
+        >
+          Change plan
+        </button>
+        <label className="field">
+          <span className="field__label">Recovery target</span>
+          <select
+            aria-label="Recovery target capability"
+            className="field__input"
+            value={activeRecoveryCapability}
+            onChange={(event) => setSelectedRecoveryCapability(event.target.value)}
+            disabled={!run || derived.recoveryCapabilities.length === 0}
+          >
+            {derived.recoveryCapabilities.length === 0 ? (
+              <option value="">No allowed capabilities</option>
+            ) : (
+              derived.recoveryCapabilities.map((capability) => (
+                <option key={capability} value={capability}>
+                  {recoveryCapabilityLabel(capability)}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
         <button
           type="button"
           className="button button--ghost button--sm"
@@ -569,6 +769,22 @@ export function OperatorConsoleChat({
           disabled={!run}
         >
           Start run
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("step", "Step this run")}
+          disabled={!run}
+        >
+          Step run
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("cancel", "Cancel this run")}
+          disabled={!run}
+        >
+          Cancel run
         </button>
       </div>
 
