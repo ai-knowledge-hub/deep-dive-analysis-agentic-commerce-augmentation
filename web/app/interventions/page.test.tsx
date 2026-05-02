@@ -182,6 +182,10 @@ describe("InterventionsPage", () => {
               capability_name: "recommend_next_action",
               effect_class: "recommend",
               note: "Recovery action proposed by operator change-plan command",
+              anchors: {
+                rollback_guidance:
+                  "Low-risk writes can usually be superseded by a later action.",
+              },
               timestamp: "2026-03-18T11:31:00Z",
             },
           ],
@@ -218,6 +222,9 @@ describe("InterventionsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-retr has a recovery proposal/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Rollback: Low-risk writes can usually be superseded/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-acti is executing/i),

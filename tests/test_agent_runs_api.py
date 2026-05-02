@@ -479,6 +479,8 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     assert action["capability_name"] == "recommend_next_action"
     assert action["inputs"]["recovery_from_action_id"] == failed["id"]
     assert action["dedupe_key"] == f"retry:{failed['id']}:create_recovery_action:1"
+    assert action["side_effects"] == ["create_experiment_recommendation"]
+    assert "superseded by a later action" in action["rollback_guidance"]
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
@@ -587,6 +589,8 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert action["capability_name"] == "recommend_next_action"
     assert action["inputs"]["experiment_id"] == "exp-1"
     assert action["dedupe_key"].startswith("change_plan:")
+    assert action["side_effects"] == ["create_experiment_recommendation"]
+    assert "superseded by a later action" in action["rollback_guidance"]
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
@@ -595,6 +599,17 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     event_types = [event["event_type"] for event in events.json()["events"]]
     assert "action_recovery_proposed" in event_types
     assert "operator_command_change_plan" in event_types
+    recovery_event = next(
+        event
+        for event in events.json()["events"]
+        if event["event_type"] == "action_recovery_proposed"
+    )
+    assert recovery_event["anchors"]["side_effects"] == [
+        "create_experiment_recommendation"
+    ]
+    assert "superseded by a later action" in recovery_event["anchors"][
+        "rollback_guidance"
+    ]
 
 
 def test_change_plan_preflight_blocks_unallowed_recovery_capability(

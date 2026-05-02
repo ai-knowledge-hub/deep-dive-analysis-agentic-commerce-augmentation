@@ -164,6 +164,9 @@ function buildCommandOutcome(
     if (response.action.retry_count && response.action.retry_count > 0) {
       parts.push(`Retry count is ${response.action.retry_count}.`);
     }
+    if (response.action.rollback_guidance) {
+      parts.push(`Rollback guidance: ${response.action.rollback_guidance}`);
+    }
     const guidance = buildArtifactGuidance(response.action);
     if (guidance.length > 0) {
       parts.push(`Next inspection: ${guidance.slice(0, 3).join(" ")}`);

@@ -151,6 +151,7 @@ Agent operator APIs:
   - retry supports same-action, last-safe-checkpoint, and recovery-action strategies
   - recovery-action retry and `change_plan` can target a specific allowed capability
   - `change_plan` creates a proposed recovery action instead of silently mutating plans
+  - proposed recovery actions persist side-effect metadata and rollback guidance for later approval/review
   - command outcomes guide operators to relevant metrics, variants, validation jobs, revisions, hypotheses, snapshots, and failures
   - records non-mutating explain and focus intents as command receipts
 - `POST /agent-runs/{run_id}/commands/preflight`

@@ -521,6 +521,8 @@ describe("OperatorConsoleChat", () => {
         variant_id: "variant-1",
         validation_job_id: "job-1",
         snapshot_version: 7,
+        rollback_guidance:
+          "Low-risk writes can usually be superseded by a later action.",
         outputs: {
           new_metric_id: "metric-1",
         },
@@ -565,6 +567,7 @@ describe("OperatorConsoleChat", () => {
     expect(await screen.findByText(/Review metric metric-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Compare variant variant-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Open validation job job-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rollback guidance: Low-risk writes/i)).toBeInTheDocument();
   });
 
   it("preflights and confirms step and cancel commands", async () => {

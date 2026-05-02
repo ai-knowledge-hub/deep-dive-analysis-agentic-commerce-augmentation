@@ -76,6 +76,7 @@ type CommandItem = {
   risk: RiskLevel;
   title: string;
   summary: string;
+  rollbackGuidance?: string | null;
 };
 
 const HIGH_RISK_CAPABILITIES = new Set([
@@ -127,6 +128,11 @@ function getRiskForEffect(effectClass?: string | null): RiskLevel {
 function maxRisk(left: RiskLevel, right: RiskLevel): RiskLevel {
   const order: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2 };
   return order[left] >= order[right] ? left : right;
+}
+
+function eventRollbackGuidance(event: AgentRunEvent): string | null {
+  const value = event.anchors?.rollback_guidance;
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function badgeClassForPriority(priority: Priority): string {
@@ -351,6 +357,7 @@ function buildCommandItems(detail: InterventionDetail): CommandItem[] {
             : isRecoveryProposal
               ? "A chat-issued change-plan command created a proposed recovery action."
             : "A chat-issued command changed or inspected runtime state."),
+        rollbackGuidance: eventRollbackGuidance(event),
       };
     })
     .filter(
@@ -684,6 +691,11 @@ function InterventionsPageContent() {
                       <div className="list__title">{item.title}</div>
                       {renderMeta(item.priority, item.risk, item.run)}
                       <div className="panel__muted">{item.summary}</div>
+                      {item.rollbackGuidance ? (
+                        <div className="list__meta">
+                          Rollback: {item.rollbackGuidance}
+                        </div>
+                      ) : null}
                       <div className="agent-ops-summary">
                         <span className="panel__badge panel__badge--secondary">
                           Event: {item.event.event_type}

@@ -2264,12 +2264,19 @@ function AgentRunsPageContent() {
                         <p className="panel__subheading">What it changes</p>
                         <ul className="panel__list panel__list--compact">
                           {(
-                            CAPABILITY_EXPLAIN[selectedAction.capability_name]
+                            selectedAction.side_effects?.length
+                              ? selectedAction.side_effects
+                              : CAPABILITY_EXPLAIN[selectedAction.capability_name]
                               ?.sideEffects ?? ["No side-effect metadata yet."]
                           ).map((effect, index) => (
                             <li key={`${effect}-${index}`}>{effect}</li>
                           ))}
                         </ul>
+                        <p className="panel__subheading">Rollback guidance</p>
+                        <p className="panel__muted">
+                          {selectedAction.rollback_guidance ||
+                            "No rollback guidance captured for this action yet."}
+                        </p>
                         <p className="panel__subheading">Rationale and confidence</p>
                         <p className="panel__muted">
                           {selectedAction.rationale || "No rationale captured."}

@@ -375,6 +375,19 @@ def _rollback_guidance(
     return "No direct side effects are expected from this command."
 
 
+def _capability_side_effects(capability_name: str) -> List[str]:
+    spec = get_capability_spec(capability_name)
+    return list(spec.side_effects) if spec else []
+
+
+def _capability_rollback_guidance(capability_name: str, effect_class: str | None) -> str:
+    return _rollback_guidance(
+        command_type="execute",
+        effect_class=str(effect_class or ""),
+        side_effects=_capability_side_effects(capability_name),
+    )
+
+
 def _preflight_summary(
     *, command_type: str, risk_level: str, blockers: List[str], warnings: List[str]
 ) -> str:
@@ -479,6 +492,7 @@ def create_agent_run(
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)
         skill_id = skill_id_for_tool_id(tool_id)
+        effect_class = tool_effect_class(tool_id)
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
@@ -497,7 +511,11 @@ def create_agent_run(
             validation_job_id=None,
             tool_id=tool_id,
             skill_id=skill_id,
-            effect_class=tool_effect_class(tool_id),
+            effect_class=effect_class,
+            side_effects=_capability_side_effects(action.capability_name),
+            rollback_guidance=_capability_rollback_guidance(
+                action.capability_name, effect_class
+            ),
         )
         deps.agent_events.create_agent_event(
             agent_run_id=run.get("id"),
@@ -817,6 +835,7 @@ def issue_agent_run_command(
                 else allowed[0]
             )
             tool_id = capability_to_tool_id(capability_name)
+            effect_class = tool_effect_class(tool_id)
             recovery_inputs = payload.metadata.get("inputs")
             inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
             if run.get("experiment_id") and not inputs.get("experiment_id"):
@@ -840,7 +859,11 @@ def issue_agent_run_command(
                 validation_job_id=action.get("validation_job_id") if action else None,
                 tool_id=tool_id,
                 skill_id=skill_id_for_tool_id(tool_id),
-                effect_class=tool_effect_class(tool_id),
+                effect_class=effect_class,
+                side_effects=_capability_side_effects(capability_name),
+                rollback_guidance=_capability_rollback_guidance(
+                    capability_name, effect_class
+                ),
                 dedupe_key=f"change_plan:{receipt.get('id')}",
             )
             deps.agent_events.create_agent_event(
@@ -872,6 +895,8 @@ def issue_agent_run_command(
                     "recovery_strategy": payload.metadata.get(
                         "recovery_strategy", "propose_next_action"
                     ),
+                    "side_effects": recovery_action.get("side_effects"),
+                    "rollback_guidance": recovery_action.get("rollback_guidance"),
                 },
             )
             result["action"] = recovery_action
@@ -925,6 +950,7 @@ def issue_agent_run_command(
             if retry_strategy == "create_recovery_action":
                 retry_inputs["recovery_from_action_id"] = action.get("id")
             tool_id = capability_to_tool_id(capability_name)
+            effect_class = tool_effect_class(tool_id)
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -950,7 +976,11 @@ def issue_agent_run_command(
                 validation_job_id=action.get("validation_job_id"),
                 tool_id=tool_id,
                 skill_id=skill_id_for_tool_id(tool_id),
-                effect_class=tool_effect_class(tool_id),
+                effect_class=effect_class,
+                side_effects=_capability_side_effects(capability_name),
+                rollback_guidance=_capability_rollback_guidance(
+                    capability_name, effect_class
+                ),
                 retry_count=retry_count,
                 dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
             )
@@ -985,6 +1015,8 @@ def issue_agent_run_command(
                     "original_action_id": action.get("id"),
                     "retry_count": retry_count,
                     "retry_strategy": retry_strategy,
+                    "side_effects": retry_action.get("side_effects"),
+                    "rollback_guidance": retry_action.get("rollback_guidance"),
                 },
             )
             result["action"] = retry_action

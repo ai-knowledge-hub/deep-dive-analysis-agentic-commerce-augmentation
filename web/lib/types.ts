@@ -1005,6 +1005,8 @@ export type AgentAction = {
   tool_id?: string | null;
   skill_id?: string | null;
   effect_class?: string | null;
+  side_effects?: string[];
+  rollback_guidance?: string | null;
   receipt_id?: string | null;
   retry_count?: number | null;
   dedupe_key?: string | null;
@@ -1084,6 +1086,8 @@ export type AgentRunEvent = {
     hypothesis_id?: string | null;
     snapshot_version?: number | null;
     metric_id?: string | null;
+    side_effects?: string[];
+    rollback_guidance?: string | null;
   };
 };
 

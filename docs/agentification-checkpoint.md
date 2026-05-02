@@ -41,6 +41,7 @@ The codebase now has the minimum spine for the pivot:
 - Interventions surfaces command-originated retry/recovery work.
 - `change_plan` now creates a proposed recovery action instead of only recording a non-mutating receipt.
 - Recovery commands can target a specific allowed capability instead of always falling back to the default recommendation action.
+- Proposed recovery actions now persist side-effect metadata and rollback guidance for downstream approval review.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -89,9 +90,8 @@ Current state: operator chat can explain, navigate execution context, preflight 
 
 Next steps:
 
-- Expand command controls in the UI beyond approve/reject/retry/start/pause into step and cancel.
-- Improve command outcome summaries with artifact/result-specific guidance after execution.
-- Add undo/rollback guidance where side effects cannot be reversed.
+- Add explicit compensating-action proposals for high-risk or externally irreversible side effects.
+- Make rollback guidance actionable from Interventions when a compensating capability exists.
 
 ### 3. External Agent API Contracts
 
@@ -150,6 +150,7 @@ Completed in this slice:
 - Structured recovery:
   - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
   - Recovery target capabilities are validated by preflight against the run's allowed capabilities.
+  - Proposed recovery actions carry persisted side effects and rollback guidance.
 - Chat command controls:
   - Operator chat now exposes step and cancel commands through the same preflight path.
   - Operator chat exposes direct `change_plan` recovery proposal controls.
@@ -159,11 +160,15 @@ Completed in this slice:
   - `same_action` retries the failed capability with copied inputs.
   - `last_safe_checkpoint` retries the failed capability with checkpoint intent stamped into inputs.
   - `create_recovery_action` creates a targeted recovery proposal, defaulting to `recommend_next_action` when available.
+- Rollback guidance:
+  - Recovery/retry proposals persist capability side effects and rollback guidance on the action row.
+  - `action_recovery_proposed` and `action_retry_proposed` events carry rollback guidance in anchors for Interventions visibility.
+  - Operator chat includes rollback guidance in command outcomes.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
 Next build should deepen this slice:
 
-- Add undo/rollback guidance for proposed recovery actions, especially when external side effects cannot be reversed.
+- Add compensating-action recommendations for high-risk recovery paths, not only static rollback guidance.
 - Keep mock-auth Playwright smoke green.

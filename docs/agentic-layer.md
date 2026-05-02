@@ -395,6 +395,7 @@ Operator steering is exposed via:
 - retry always requires explicit confirmation and emits `action_retry_proposed` for a new proposed action; the original failed action remains failed
 - retry supports `same_action`, `last_safe_checkpoint`, and target-capability-aware `create_recovery_action` strategies
 - change-plan emits `action_recovery_proposed`; operators can choose the target recovery capability, and Interventions surfaces command-originated retry/recovery work
+- proposed recovery actions persist capability side effects and rollback guidance so later approvals keep the safety context attached
 - operator chat summarizes command outcomes with resulting run/action state after execution
 - command outcome summaries include artifact inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures
 
