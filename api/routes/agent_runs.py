@@ -42,6 +42,7 @@ from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 from infrastructure.db.agent.agent_registry import (
     create_agent_registry_audit_event,
     ensure_agent_registry_version,
+    get_agent_registry_release_detail,
     list_agent_registry_audit_events,
     list_agent_registry_versions,
 )
@@ -527,6 +528,21 @@ def get_agent_runtime_registry_releases(
             limit=bounded_limit,
         )
     }
+
+
+@router.get("/registry/releases/{registry_fingerprint}")
+def get_agent_runtime_registry_release_detail(
+    registry_fingerprint: str,
+    audit_limit: int = 20,
+) -> Dict[str, Any]:
+    bounded_audit_limit = max(1, min(int(audit_limit), 100))
+    release = get_agent_registry_release_detail(
+        registry_fingerprint=registry_fingerprint,
+        audit_limit=bounded_audit_limit,
+    )
+    if not release:
+        raise HTTPException(status_code=404, detail="Registry release not found")
+    return {"release": release}
 
 
 @router.post("/registry/backfill-pins")

@@ -1235,8 +1235,24 @@ export type AgentRegistryRelease = {
   };
 };
 
+export type AgentRegistryReleaseDetail = AgentRegistryRelease & {
+  payload: {
+    registry_version?: string;
+    skills?: AgentRuntimeSkillSpec[];
+    tools?: AgentRuntimeToolSpec[];
+    capabilities?: AgentRuntimeCapabilitySpec[];
+    skill_ids_by_tool?: Record<string, string[]>;
+    policy_profiles?: AgentRuntimePolicyProfile[];
+  };
+  audit_events: AgentRegistryAuditEvent[];
+};
+
 export type AgentRegistryReleaseListResponse = {
   releases: AgentRegistryRelease[];
+};
+
+export type AgentRegistryReleaseDetailResponse = {
+  release: AgentRegistryReleaseDetail;
 };
 
 export type AgentRegistryPinBackfillResponse = {

@@ -12,6 +12,7 @@ import {
   AgentRunCommandType,
   AgentRegistryAuditListResponse,
   AgentRegistryPinBackfillResponse,
+  AgentRegistryReleaseDetailResponse,
   AgentRegistryReleaseListResponse,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
@@ -619,6 +620,19 @@ export async function listAgentRuntimeRegistryReleases(
   if (payload.limit) params.set("limit", String(payload.limit));
   return request<AgentRegistryReleaseListResponse>(
     `/agent-runs/registry/releases${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function getAgentRuntimeRegistryRelease(
+  registryFingerprint: string,
+  payload: { audit_limit?: number } = {},
+): Promise<AgentRegistryReleaseDetailResponse> {
+  const params = new URLSearchParams();
+  if (payload.audit_limit) params.set("audit_limit", String(payload.audit_limit));
+  return request<AgentRegistryReleaseDetailResponse>(
+    `/agent-runs/registry/releases/${encodeURIComponent(registryFingerprint)}${
+      params.toString() ? `?${params.toString()}` : ""
+    }`,
   );
 }
 

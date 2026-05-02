@@ -421,6 +421,22 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     )
     assert invalid_status.status_code == 400
 
+    detail_response = client.get(
+        f"/agent-runs/registry/releases/{changed_fingerprint}",
+        params={"audit_limit": 5},
+    )
+    assert detail_response.status_code == 200
+    release_detail = detail_response.json()["release"]
+    assert release_detail["registry_fingerprint"] == changed_fingerprint
+    assert release_detail["payload"]["tools"][-1]["id"] == "test.synthetic_tool"
+    assert release_detail["counts"]["capabilities"] == len(
+        changed_contract["capabilities"]
+    )
+    assert release_detail["audit_events"][0]["registry_fingerprint"] == changed_fingerprint
+
+    missing_detail = client.get("/agent-runs/registry/releases/not-a-real-fingerprint")
+    assert missing_detail.status_code == 404
+
 
 def test_registry_pin_backfill_supports_dry_run_and_scoped_update(
     client: TestClient,

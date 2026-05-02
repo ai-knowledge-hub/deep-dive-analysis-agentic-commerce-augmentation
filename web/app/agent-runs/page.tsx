@@ -8,6 +8,7 @@ import type {
   AgentRegistryAuditEvent,
   AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
+  AgentRegistryReleaseDetail,
   AgentRun,
   AgentRunCommandType,
   AgentRunEvent,
@@ -21,6 +22,7 @@ import {
   decideAgentAction,
   getAgentRun,
   getAgentRunEvents,
+  getAgentRuntimeRegistryRelease,
   issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
@@ -464,6 +466,9 @@ function AgentRunsPageContent() {
     AgentRegistryAuditEvent[]
   >([]);
   const [registryReleases, setRegistryReleases] = useState<AgentRegistryRelease[]>([]);
+  const [selectedRegistryRelease, setSelectedRegistryRelease] =
+    useState<AgentRegistryReleaseDetail | null>(null);
+  const [registryReleaseBusy, setRegistryReleaseBusy] = useState<string | null>(null);
   const [registryBackfillPreview, setRegistryBackfillPreview] =
     useState<AgentRegistryPinBackfillResponse | null>(null);
   const [registryBackfillBusy, setRegistryBackfillBusy] = useState(false);
@@ -603,6 +608,20 @@ function AgentRunsPageContent() {
     },
     [loadRuntimeRegistry, loadRuns, userId],
   );
+
+  const loadRegistryReleaseDetail = useCallback(async (registryFingerprint: string) => {
+    setRegistryReleaseBusy(registryFingerprint);
+    try {
+      const response = await getAgentRuntimeRegistryRelease(registryFingerprint, {
+        audit_limit: 5,
+      });
+      setSelectedRegistryRelease(response.release);
+    } catch {
+      setSelectedRegistryRelease(null);
+    } finally {
+      setRegistryReleaseBusy(null);
+    }
+  }, []);
 
   const loadExperiments = useCallback(async () => {
     if (!userId) return;
@@ -1837,6 +1856,20 @@ function AgentRunsPageContent() {
                                   {release.counts.skills} skills · {release.counts.tools} tools ·{" "}
                                   {release.counts.capabilities} capabilities
                                 </div>
+                                <button
+                                  type="button"
+                                  className="button button--ghost button--sm"
+                                  onClick={() =>
+                                    loadRegistryReleaseDetail(release.registry_fingerprint)
+                                  }
+                                  disabled={
+                                    registryReleaseBusy === release.registry_fingerprint
+                                  }
+                                >
+                                  {registryReleaseBusy === release.registry_fingerprint
+                                    ? "Loading"
+                                    : "View details"}
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -1845,6 +1878,38 @@ function AgentRunsPageContent() {
                             No registry releases have been persisted in this environment yet.
                           </p>
                         )}
+                        {selectedRegistryRelease ? (
+                          <div className="panel__notice panel__notice--info">
+                            <div className="panel__eyebrow">Release detail</div>
+                            <div className="table__strong">
+                              {selectedRegistryRelease.registry_fingerprint.slice(0, 12)} ·{" "}
+                              {selectedRegistryRelease.status}
+                            </div>
+                            <p className="panel__muted">
+                              Payload contains{" "}
+                              {selectedRegistryRelease.payload.skills?.length ?? 0} skills,{" "}
+                              {selectedRegistryRelease.payload.tools?.length ?? 0} tools, and{" "}
+                              {selectedRegistryRelease.payload.policy_profiles?.length ?? 0}{" "}
+                              policy profiles.
+                            </p>
+                            <div className="agent-ops-summary">
+                              {(selectedRegistryRelease.payload.capabilities ?? [])
+                                .slice(0, 4)
+                                .map((capability) => (
+                                  <span
+                                    key={capability.name}
+                                    className="panel__badge panel__badge--secondary"
+                                  >
+                                    {capability.name} · {capability.effect_class}
+                                  </span>
+                                ))}
+                            </div>
+                            <p className="panel__muted">
+                              {selectedRegistryRelease.audit_events.length} audit events are tied
+                              to this release.
+                            </p>
+                          </div>
+                        ) : null}
                         <div className="panel__actions">
                           <button
                             type="button"

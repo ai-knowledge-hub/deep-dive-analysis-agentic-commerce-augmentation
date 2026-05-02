@@ -105,6 +105,23 @@ def get_agent_registry_version(
     return _row(row) if row else None
 
 
+def get_agent_registry_release_detail(
+    *, registry_fingerprint: str, audit_limit: int = 20
+) -> Optional[Dict[str, Any]]:
+    release = get_agent_registry_version(registry_fingerprint=registry_fingerprint)
+    if not release:
+        return None
+    payload = release.get("payload") or {}
+    return {
+        **_release_payload_summary(release, payload),
+        "payload": payload,
+        "audit_events": list_agent_registry_audit_events(
+            registry_fingerprint=registry_fingerprint,
+            limit=audit_limit,
+        ),
+    }
+
+
 def get_latest_agent_registry_version() -> Optional[Dict[str, Any]]:
     row = (
         get_connection()
@@ -341,14 +358,20 @@ def _audit_row(row) -> Dict[str, Any]:
 
 def _release_row(row) -> Dict[str, Any]:
     payload = from_json(row["payload_json"], {})
+    return _release_payload_summary(_row(row), payload)
+
+
+def _release_payload_summary(
+    release: Dict[str, Any], payload: Dict[str, Any]
+) -> Dict[str, Any]:
     return {
-        "id": row["id"],
-        "registry_version": row["registry_version"],
-        "registry_fingerprint": row["registry_fingerprint"],
-        "hash_algorithm": row["hash_algorithm"],
-        "source": row["source"],
-        "status": row["status"],
-        "created_at": row["created_at"],
+        "id": release["id"],
+        "registry_version": release["registry_version"],
+        "registry_fingerprint": release["registry_fingerprint"],
+        "hash_algorithm": release["hash_algorithm"],
+        "source": release["source"],
+        "status": release["status"],
+        "created_at": release["created_at"],
         "counts": {
             "skills": len(payload.get("skills") or []),
             "tools": len(payload.get("tools") or []),
@@ -362,6 +385,7 @@ __all__ = [
     "create_agent_registry_audit_event",
     "ensure_agent_registry_version",
     "get_active_agent_registry_version",
+    "get_agent_registry_release_detail",
     "get_agent_registry_version",
     "get_latest_agent_registry_version",
     "list_agent_registry_audit_events",
