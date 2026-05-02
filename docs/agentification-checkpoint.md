@@ -137,9 +137,9 @@ Next steps:
 - Reduce duplicate dashboards.
 - Make all risky actions visible through Interventions.
 
-## Next Build Slice
+## Recently Completed Slice
 
-The current implementation slice covers the first command observability and structured recovery pass.
+The most recent implementation slice covered the first command observability and structured recovery pass.
 
 Completed in this slice:
 
@@ -177,7 +177,15 @@ Completed in this slice:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
-Next build should deepen this slice:
+## Next Build Slice
 
-- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
+The next implementation slice should start Registry Hardening v1.
+
+Initial scope:
+
+- Add schema validation for tool inputs and outputs.
+- Move richer recovery metadata toward registry specs.
+- Pin registry/tool/skill version context onto actions where practical.
+- Extend `GET /agent-runs/registry` with metadata the frontend can consume.
+- Replace hardcoded Runs capability explanations with registry-provided metadata where possible.
 - Keep mock-auth Playwright smoke green.
