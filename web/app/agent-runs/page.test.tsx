@@ -172,6 +172,7 @@ describe("AgentRunsPage timeline presets", () => {
       registry_snapshot_id: "abcdef1234567890",
       registry_snapshot_created_at: "2026-05-02T10:00:00Z",
       registry_source: "static_code",
+      registry_status: "active",
       skills: [
         {
           id: "optimize-product-representation",
@@ -549,6 +550,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Run registry: agent-runtime-static-v1/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
+    expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
     expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();

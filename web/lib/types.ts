@@ -1171,6 +1171,7 @@ export type AgentRuntimeRegistryResponse = {
   registry_snapshot_id?: string | null;
   registry_snapshot_created_at?: string | null;
   registry_source?: string | null;
+  registry_status?: string | null;
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];

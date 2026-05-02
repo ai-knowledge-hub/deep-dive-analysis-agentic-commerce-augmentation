@@ -485,6 +485,7 @@ def get_agent_runtime_registry() -> Dict[str, Any]:
         "registry_snapshot_id": snapshot.get("id"),
         "registry_snapshot_created_at": snapshot.get("created_at"),
         "registry_source": snapshot.get("source"),
+        "registry_status": snapshot.get("status"),
     }
 
 

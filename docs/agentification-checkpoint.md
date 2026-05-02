@@ -81,7 +81,7 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, and new actions pin registry/tool/skill/fingerprint context.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. One registry snapshot is explicitly active; previous active snapshots are retired on fingerprint transitions. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, and new actions pin registry/tool/skill/fingerprint context.
 
 Next steps:
 
@@ -156,6 +156,7 @@ Completed in this slice:
   - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
 - Persistence:
   - The registry endpoint now records the current registry payload in `agent_registry_versions`, keyed by deterministic fingerprint.
+  - Registry snapshots now use explicit active/retired release status instead of relying on latest-observed ordering.
   - Registry fingerprint changes create `agent_registry_audit_events` rows with diff summaries.
   - Agent Runs shows the active registry source, fingerprint, and recent registry release trail.
 - Policy enforcement:

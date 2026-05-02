@@ -281,12 +281,13 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert len(payload["registry_fingerprint"]) == 64
     assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
     assert payload["registry_source"] == "static_code"
+    assert payload["registry_status"] == "active"
     assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
         "registry_fingerprint"
     ]
     row = get_connection().execute(
         """
-        SELECT registry_version, registry_fingerprint, source, payload_json
+        SELECT registry_version, registry_fingerprint, source, status, payload_json
         FROM agent_registry_versions
         WHERE registry_fingerprint = ?
         """,
@@ -295,6 +296,7 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert row is not None
     assert row["registry_version"] == "agent-runtime-static-v1"
     assert row["source"] == "static_code"
+    assert row["status"] == "active"
     assert '"registry_version":"agent-runtime-static-v1"' in row["payload_json"].replace(" ", "")
     tool_ids = {tool["id"] for tool in payload["tools"]}
     skill_ids = {skill["id"] for skill in payload["skills"]}
@@ -354,6 +356,7 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     changed = client.get("/agent-runs/registry").json()
 
     assert changed["registry_fingerprint"] == changed_fingerprint
+    assert changed["registry_status"] == "active"
     row = get_connection().execute(
         """
         SELECT previous_registry_fingerprint, registry_fingerprint, diff_json
@@ -366,6 +369,17 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     assert row["previous_registry_fingerprint"] == first["registry_fingerprint"]
     diff = json.loads(row["diff_json"])
     assert diff["tools"]["added"] == ["test.synthetic_tool"]
+    status_rows = get_connection().execute(
+        """
+        SELECT registry_fingerprint, status
+        FROM agent_registry_versions
+        WHERE registry_fingerprint IN (?, ?)
+        """,
+        (first["registry_fingerprint"], changed_fingerprint),
+    ).fetchall()
+    statuses = {item["registry_fingerprint"]: item["status"] for item in status_rows}
+    assert statuses[first["registry_fingerprint"]] == "retired"
+    assert statuses[changed_fingerprint] == "active"
 
     audit_response = client.get("/agent-runs/registry/audit", params={"limit": 5})
     assert audit_response.status_code == 200

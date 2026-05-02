@@ -1746,6 +1746,9 @@ function AgentRunsPageContent() {
                         <span className="panel__badge panel__badge--secondary">
                           Registry source: {runtimeRegistry?.registry_source ?? "pending"}
                         </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Release status: {runtimeRegistry?.registry_status ?? "pending"}
+                        </span>
                       </div>
                       <div className="agent-ops-summary">
                         {activeRuntimeSkills.slice(0, 4).map((skill) => (

@@ -18,7 +18,8 @@ def ensure_agent_registry_version(
     status: str = "active",
 ) -> Dict[str, Any]:
     conn = get_connection()
-    latest_before = get_latest_agent_registry_version()
+    release_status = status or "active"
+    active_before = get_active_agent_registry_version()
     conn.execute(
         """
         INSERT OR IGNORE INTO agent_registry_versions (
@@ -39,15 +40,44 @@ def ensure_agent_registry_version(
             hash_algorithm,
             source,
             to_json(payload) or to_json({}),
-            status,
+            release_status,
+        ),
+    )
+    conn.execute(
+        """
+        UPDATE agent_registry_versions
+        SET
+            registry_version = ?,
+            hash_algorithm = ?,
+            source = ?,
+            payload_json = json(?),
+            status = ?
+        WHERE registry_fingerprint = ?
+        """,
+        (
+            registry_version,
+            hash_algorithm,
+            source,
+            to_json(payload) or to_json({}),
+            release_status,
+            registry_fingerprint,
         ),
     )
     if (
-        latest_before
-        and latest_before["registry_fingerprint"] != registry_fingerprint
+        release_status == "active"
+        and active_before
+        and active_before["registry_fingerprint"] != registry_fingerprint
     ):
+        conn.execute(
+            """
+            UPDATE agent_registry_versions
+            SET status = 'retired'
+            WHERE status = 'active' AND registry_fingerprint != ?
+            """,
+            (registry_fingerprint,),
+        )
         _create_registry_transition_event(
-            previous=latest_before,
+            previous=active_before,
             registry_version=registry_version,
             registry_fingerprint=registry_fingerprint,
             payload=payload,
@@ -82,6 +112,23 @@ def get_latest_agent_registry_version() -> Optional[Dict[str, Any]]:
             """
             SELECT *
             FROM agent_registry_versions
+            ORDER BY created_at DESC, registry_fingerprint ASC
+            LIMIT 1
+            """
+        )
+        .fetchone()
+    )
+    return _row(row) if row else None
+
+
+def get_active_agent_registry_version() -> Optional[Dict[str, Any]]:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT *
+            FROM agent_registry_versions
+            WHERE status = 'active'
             ORDER BY created_at DESC, registry_fingerprint ASC
             LIMIT 1
             """
@@ -221,6 +268,7 @@ def _audit_row(row) -> Dict[str, Any]:
 
 __all__ = [
     "ensure_agent_registry_version",
+    "get_active_agent_registry_version",
     "get_agent_registry_version",
     "get_latest_agent_registry_version",
     "list_agent_registry_audit_events",
