@@ -150,14 +150,18 @@ Completed in this slice:
   - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
 - Chat command controls:
   - Operator chat now exposes step and cancel commands through the same preflight path.
+  - Operator chat exposes direct `change_plan` recovery proposal controls.
   - Command responses are summarized in the chat thread with resulting run/action state.
+- Retry strategies:
+  - `same_action` retries the failed capability with copied inputs.
+  - `last_safe_checkpoint` retries the failed capability with checkpoint intent stamped into inputs.
+  - `create_recovery_action` creates a `recommend_next_action` recovery proposal when available.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
 Next build should deepen this slice:
 
-- Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
 - Add artifact/result-specific command outcome guidance after execution.
-- Add direct chat affordances for `change_plan` recovery proposals.
+- Add direct chat affordances for choosing a target recovery capability, not only the default recommendation action.
 - Keep mock-auth Playwright smoke green.

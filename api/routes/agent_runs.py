@@ -866,19 +866,44 @@ def issue_agent_run_command(
                 [int(item.get("sequence") or 0) for item in actions] or [0]
             ) + 1
             retry_count = int(action.get("retry_count") or 0) + 1
+            retry_strategy = str(
+                payload.metadata.get("retry_strategy") or "same_action"
+            ).strip()
+            allowed = [
+                str(item).strip()
+                for item in list(run.get("allowed_capabilities") or [])
+                if str(item).strip()
+            ]
+            if retry_strategy == "create_recovery_action":
+                capability_name = (
+                    "recommend_next_action"
+                    if "recommend_next_action" in allowed
+                    else str(action.get("capability_name") or "")
+                )
+            else:
+                capability_name = str(action.get("capability_name") or "")
+            retry_inputs = dict(action.get("inputs") or {})
+            if retry_strategy == "last_safe_checkpoint":
+                retry_inputs["retry_from"] = "last_safe_checkpoint"
+            if retry_strategy == "create_recovery_action":
+                retry_inputs["recovery_from_action_id"] = action.get("id")
+            tool_id = capability_to_tool_id(capability_name)
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
                 status="proposed",
-                capability_name=str(action.get("capability_name") or ""),
-                capability_version=action.get("capability_version"),
-                inputs=action.get("inputs") or {},
+                capability_name=capability_name,
+                capability_version=(
+                    None
+                    if retry_strategy == "create_recovery_action"
+                    else action.get("capability_version")
+                ),
+                inputs=retry_inputs,
                 outputs={},
-                inputs_hash=action.get("inputs_hash")
-                or _hash_payload(action.get("inputs") or {}),
+                inputs_hash=_hash_payload(retry_inputs),
                 outputs_hash=None,
                 rationale=(
-                    f"Retry proposed from failed action {str(action.get('id') or '')[:8]}. "
+                    f"{retry_strategy} proposed from failed action {str(action.get('id') or '')[:8]}. "
                     f"{action.get('error') or action.get('rationale') or ''}"
                 ).strip(),
                 confidence=action.get("confidence"),
@@ -886,26 +911,21 @@ def issue_agent_run_command(
                 hypothesis_id=action.get("hypothesis_id"),
                 variant_id=action.get("variant_id"),
                 validation_job_id=action.get("validation_job_id"),
-                tool_id=action.get("tool_id")
-                or capability_to_tool_id(action.get("capability_name")),
-                skill_id=action.get("skill_id")
-                or skill_id_for_tool_id(
-                    action.get("tool_id")
-                    or capability_to_tool_id(action.get("capability_name"))
-                ),
-                effect_class=action.get("effect_class")
-                or tool_effect_class(
-                    action.get("tool_id")
-                    or capability_to_tool_id(action.get("capability_name"))
-                ),
+                tool_id=tool_id,
+                skill_id=skill_id_for_tool_id(tool_id),
+                effect_class=tool_effect_class(tool_id),
                 retry_count=retry_count,
-                dedupe_key=f"retry:{action.get('id')}:{retry_count}",
+                dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
             )
             deps.agent_events.create_agent_event(
                 agent_run_id=run_id,
                 action_id=str(retry_action.get("id") or ""),
                 sequence=int(retry_action.get("sequence") or 0),
-                event_type="action_retry_proposed",
+                event_type=(
+                    "action_recovery_proposed"
+                    if retry_strategy == "create_recovery_action"
+                    else "action_retry_proposed"
+                ),
                 status="proposed",
                 capability_name=str(retry_action.get("capability_name") or "") or None,
                 capability_version=str(retry_action.get("capability_version") or "")
@@ -927,9 +947,7 @@ def issue_agent_run_command(
                     "metric_id": None,
                     "original_action_id": action.get("id"),
                     "retry_count": retry_count,
-                    "retry_strategy": payload.metadata.get(
-                        "retry_strategy", "same_action"
-                    ),
+                    "retry_strategy": retry_strategy,
                 },
             )
             result["action"] = retry_action

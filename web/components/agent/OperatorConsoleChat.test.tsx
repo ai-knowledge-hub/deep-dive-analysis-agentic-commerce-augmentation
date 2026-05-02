@@ -351,8 +351,76 @@ describe("OperatorConsoleChat", () => {
         command_type: "retry",
         action_id: "action-1",
         message: "Retry run_variant",
+        metadata: { retry_strategy: "same_action" },
       }),
     );
+  });
+
+  it("issues checkpoint retry and change-plan recovery commands with metadata", async () => {
+    const user = userEvent.setup();
+    const onIssueCommand = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OperatorConsoleChat
+        run={{
+          id: "run-1",
+          experiment_id: "exp-12345678",
+          status: "failed",
+          state: "experiment_run_completed",
+          run_mode: "auto_execute_safe",
+        }}
+        actions={[
+          {
+            id: "action-1",
+            agent_run_id: "run-1",
+            sequence: 1,
+            status: "failed",
+            capability_name: "run_variant",
+          },
+        ]}
+        events={[]}
+        selectedAction={{
+          id: "action-1",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "failed",
+          capability_name: "run_variant",
+        }}
+        nextRecommendedAction={{
+          action: null,
+          guardrails: [],
+          hint: "No next action.",
+        }}
+        onIssueCommand={onIssueCommand}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Retry checkpoint/i }));
+    expect(onIssueCommand).toHaveBeenCalledWith({
+      command_type: "retry",
+      action_id: "action-1",
+      message: "Retry run_variant from checkpoint",
+      metadata: { retry_strategy: "last_safe_checkpoint" },
+    });
+
+    await user.click(screen.getByRole("button", { name: /Recovery action/i }));
+    expect(onIssueCommand).toHaveBeenCalledWith({
+      command_type: "retry",
+      action_id: "action-1",
+      message: "Create recovery action for run_variant",
+      metadata: { retry_strategy: "create_recovery_action" },
+    });
+
+    await user.click(screen.getByRole("button", { name: /Change plan/i }));
+    expect(onIssueCommand).toHaveBeenCalledWith({
+      command_type: "change_plan",
+      action_id: "action-1",
+      message: "Create a recovery plan proposal",
+      metadata: {
+        recovery_strategy: "propose_next_action",
+        inputs: { experiment_id: "exp-12345678" },
+      },
+    });
   });
 
   it("summarizes command outcomes from the runtime response", async () => {

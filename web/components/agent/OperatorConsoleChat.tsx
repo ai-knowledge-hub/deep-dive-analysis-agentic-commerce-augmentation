@@ -29,6 +29,7 @@ type OperatorCommand = {
   command_type: AgentRunCommandType;
   action_id?: string | null;
   message?: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 type Props = {
@@ -375,9 +376,13 @@ export function OperatorConsoleChat({
     command_type: AgentRunCommandType,
     message: string,
     action_id?: string | null,
+    metadata?: Record<string, unknown>,
   ) {
-    const command = { command_type, action_id, message };
-    const commandKey = `${command_type}:${action_id ?? "run"}`;
+    const command: OperatorCommand = { command_type, action_id, message };
+    if (metadata !== undefined) {
+      command.metadata = metadata;
+    }
+    const commandKey = `${command_type}:${action_id ?? "run"}:${JSON.stringify(metadata ?? {})}`;
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}-${command_type}`,
       role: "user",
@@ -581,11 +586,60 @@ export function OperatorConsoleChat({
               "retry",
               `Retry ${selectedAction?.capability_name ?? "selected action"}`,
               selectedAction?.id,
+              { retry_strategy: "same_action" },
             )
           }
           disabled={!run || !selectedAction || selectedAction.status !== "failed"}
         >
           Retry selected
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "retry",
+              `Retry ${selectedAction?.capability_name ?? "selected action"} from checkpoint`,
+              selectedAction?.id,
+              { retry_strategy: "last_safe_checkpoint" },
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
+        >
+          Retry checkpoint
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "retry",
+              `Create recovery action for ${selectedAction?.capability_name ?? "selected action"}`,
+              selectedAction?.id,
+              { retry_strategy: "create_recovery_action" },
+            )
+          }
+          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
+        >
+          Recovery action
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() =>
+            issueCommand(
+              "change_plan",
+              "Create a recovery plan proposal",
+              selectedAction?.id,
+              {
+                recovery_strategy: "propose_next_action",
+                inputs: run?.experiment_id ? { experiment_id: run.experiment_id } : {},
+              },
+            )
+          }
+          disabled={!run}
+        >
+          Change plan
         </button>
         <button
           type="button"

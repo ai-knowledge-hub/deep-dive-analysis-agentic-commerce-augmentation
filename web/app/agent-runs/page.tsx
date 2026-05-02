@@ -1295,6 +1295,7 @@ function AgentRunsPageContent() {
       command_type: AgentRunCommandType;
       action_id?: string | null;
       message?: string | null;
+      metadata?: Record<string, unknown>;
     }) => {
       if (!userId || !selectedRunId) return;
       setLoading(true);
@@ -1319,6 +1320,7 @@ function AgentRunsPageContent() {
       command_type: AgentRunCommandType;
       action_id?: string | null;
       message?: string | null;
+      metadata?: Record<string, unknown>;
     }) => {
       if (!userId || !selectedRunId) {
         throw new Error("Select a run before issuing an operator command.");
