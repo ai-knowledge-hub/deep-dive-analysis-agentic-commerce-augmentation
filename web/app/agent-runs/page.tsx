@@ -227,6 +227,11 @@ function formatDateCompact(value?: string | null): string {
 }
 
 function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
+  if (event.event_type === "registry_pin_backfill_applied") {
+    const runs = event.diff.runs?.updated ?? 0;
+    const actions = event.diff.actions?.updated ?? 0;
+    return `Backfilled ${runs} runs · ${actions} actions`;
+  }
   const sections = [
     ["skills", event.diff.skills],
     ["tools", event.diff.tools],

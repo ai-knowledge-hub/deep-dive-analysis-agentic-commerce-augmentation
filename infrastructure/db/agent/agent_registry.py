@@ -193,6 +193,50 @@ def list_agent_registry_audit_events(
     return [_audit_row(row) for row in rows]
 
 
+def create_agent_registry_audit_event(
+    *,
+    event_type: str,
+    registry_fingerprint: str,
+    registry_version: str,
+    diff: Dict[str, Any],
+    previous_registry_fingerprint: Optional[str] = None,
+    source: str = "system",
+) -> Dict[str, Any]:
+    event_id = str(uuid.uuid4())
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO agent_registry_audit_events (
+            id,
+            event_type,
+            previous_registry_fingerprint,
+            registry_fingerprint,
+            registry_version,
+            source,
+            diff_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, json(?))
+        """,
+        (
+            event_id,
+            event_type,
+            previous_registry_fingerprint,
+            registry_fingerprint,
+            registry_version,
+            source,
+            to_json(diff) or to_json({}),
+        ),
+    )
+    conn.commit()
+    row = (
+        conn.execute(
+            "SELECT * FROM agent_registry_audit_events WHERE id = ?",
+            (event_id,),
+        ).fetchone()
+    )
+    return _audit_row(row) if row else {}
+
+
 def _create_registry_transition_event(
     *,
     previous: Dict[str, Any],
@@ -315,6 +359,7 @@ def _release_row(row) -> Dict[str, Any]:
 
 
 __all__ = [
+    "create_agent_registry_audit_event",
     "ensure_agent_registry_version",
     "get_active_agent_registry_version",
     "get_agent_registry_version",

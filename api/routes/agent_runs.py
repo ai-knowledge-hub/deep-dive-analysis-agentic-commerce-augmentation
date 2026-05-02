@@ -40,6 +40,7 @@ from application.services.agent_runtime.runtime import (
 )
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 from infrastructure.db.agent.agent_registry import (
+    create_agent_registry_audit_event,
     ensure_agent_registry_version,
     list_agent_registry_audit_events,
     list_agent_registry_versions,
@@ -579,6 +580,26 @@ def backfill_agent_runtime_registry_pins(
                 skill_version=version_context["skill_version"],
             )
             updated_actions += 1
+        if updated_runs or updated_actions:
+            create_agent_registry_audit_event(
+                event_type="registry_pin_backfill_applied",
+                registry_version=str(snapshot["registry_version"]),
+                registry_fingerprint=str(snapshot["registry_fingerprint"]),
+                source="operator_backfill",
+                diff={
+                    "client_id": client_id,
+                    "runs": {
+                        "matched": len(run_candidates),
+                        "updated": updated_runs,
+                        "sample_ids": [item["id"] for item in run_candidates[:10]],
+                    },
+                    "actions": {
+                        "matched": len(action_candidates),
+                        "updated": updated_actions,
+                        "sample_ids": [item["id"] for item in action_candidates[:10]],
+                    },
+                },
+            )
     return {
         "client_id": client_id,
         "dry_run": bool(payload.dry_run),

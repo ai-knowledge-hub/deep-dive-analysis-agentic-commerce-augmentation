@@ -1191,6 +1191,17 @@ export type AgentRegistryAuditDiff = {
   capabilities?: AgentRegistryAuditDiffSection;
   policy_profiles?: AgentRegistryAuditDiffSection;
   skill_ids_by_tool_changed?: boolean;
+  client_id?: string;
+  runs?: {
+    matched?: number;
+    updated?: number;
+    sample_ids?: string[];
+  };
+  actions?: {
+    matched?: number;
+    updated?: number;
+    sample_ids?: string[];
+  };
 };
 
 export type AgentRegistryAuditEvent = {

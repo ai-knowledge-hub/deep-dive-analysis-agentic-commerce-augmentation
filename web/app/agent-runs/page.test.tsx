@@ -122,6 +122,20 @@ describe("AgentRunsPage timeline presets", () => {
           registry_version: "agent-runtime-static-v1",
           registry_fingerprint: "abcdef1234567890",
         },
+        {
+          id: "registry-audit-2",
+          event_type: "registry_pin_backfill_applied",
+          previous_registry_fingerprint: null,
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "operator_backfill",
+          created_at: "2026-05-02T11:00:00Z",
+          diff: {
+            client_id: "client-a",
+            runs: { matched: 2, updated: 2, sample_ids: ["run-old"] },
+            actions: { matched: 3, updated: 3, sample_ids: ["action-old"] },
+          },
+        },
       ],
     });
     listExperimentsMock.mockResolvedValue({ experiments: [] });
@@ -256,6 +270,20 @@ describe("AgentRunsPage timeline presets", () => {
             capabilities: { added: [], removed: [], changed: [] },
             policy_profiles: { added: [], removed: [], changed: [] },
             skill_ids_by_tool_changed: true,
+          },
+        },
+        {
+          id: "registry-audit-2",
+          event_type: "registry_pin_backfill_applied",
+          previous_registry_fingerprint: null,
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "operator_backfill",
+          created_at: "2026-05-02T11:00:00Z",
+          diff: {
+            client_id: "client-a",
+            runs: { matched: 2, updated: 2, sample_ids: ["run-old"] },
+            actions: { matched: 3, updated: 3, sample_ids: ["action-old"] },
           },
         },
       ],
@@ -588,6 +616,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
+    expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();
     backfillAgentRuntimeRegistryPinsMock
       .mockResolvedValueOnce({
         client_id: "client-a",

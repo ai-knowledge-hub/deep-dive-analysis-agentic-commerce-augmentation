@@ -492,6 +492,15 @@ def test_registry_pin_backfill_supports_dry_run_and_scoped_update(
     assert updated_action["skill_id"] == "optimize-product-representation"
     assert updated_action["tool_version"] == "v1"
     assert updated_action["skill_version"] == "v1"
+    audit = client.get("/agent-runs/registry/audit").json()["events"]
+    backfill_event = next(
+        item for item in audit if item["event_type"] == "registry_pin_backfill_applied"
+    )
+    assert backfill_event["source"] == "operator_backfill"
+    assert backfill_event["registry_fingerprint"] == updated_run["registry_fingerprint"]
+    assert backfill_event["diff"]["client_id"] == CLIENT_ID
+    assert backfill_event["diff"]["runs"]["updated"] == 1
+    assert backfill_event["diff"]["actions"]["updated"] == 1
 
     second_apply = client.post(
         "/agent-runs/registry/backfill-pins",
