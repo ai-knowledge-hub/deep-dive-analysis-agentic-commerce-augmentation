@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 import types
 
@@ -19,6 +21,7 @@ if "google" not in sys.modules:
 
 from api.composition import default_deps
 from api.main import app
+from api.routes import agent_runs as agent_runs_route
 from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
 from shared.config.env import get_settings
@@ -313,6 +316,53 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
         "optimize-product-representation"
     ]
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+
+
+def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
+    client: TestClient, monkeypatch
+):
+    first = client.get("/agent-runs/registry").json()
+    changed_contract = agent_runs_route.registry_contract_payload()
+    changed_contract = {
+        **changed_contract,
+        "tools": [
+            *changed_contract["tools"],
+            {
+                "id": "test.synthetic_tool",
+                "capability_name": "synthetic_tool",
+                "summary": "Synthetic test tool.",
+                "default_version": "v-test",
+            },
+        ],
+    }
+    changed_fingerprint = hashlib.sha256(
+        json.dumps(
+            changed_contract,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    monkeypatch.setattr(
+        agent_runs_route, "registry_contract_payload", lambda: changed_contract
+    )
+    monkeypatch.setattr(agent_runs_route, "registry_fingerprint", lambda: changed_fingerprint)
+
+    changed = client.get("/agent-runs/registry").json()
+
+    assert changed["registry_fingerprint"] == changed_fingerprint
+    row = get_connection().execute(
+        """
+        SELECT previous_registry_fingerprint, registry_fingerprint, diff_json
+        FROM agent_registry_audit_events
+        WHERE registry_fingerprint = ?
+        """,
+        (changed_fingerprint,),
+    ).fetchone()
+    assert row is not None
+    assert row["previous_registry_fingerprint"] == first["registry_fingerprint"]
+    diff = json.loads(row["diff_json"])
+    assert diff["tools"]["added"] == ["test.synthetic_tool"]
 
 
 def test_operator_command_endpoint_records_receipt_and_delegates_approval(

@@ -32,6 +32,7 @@ The codebase now has the minimum spine for the pivot:
 - Static skills registry v1 for initial commerce workflows.
 - Static tools/capabilities registry v1 for executable runtime capabilities, with summaries, input/output schema metadata, required receipt fields, side-effect notes, owner/steward metadata, and operator review checklists.
 - Read API for the runtime registry: `GET /agent-runs/registry`, including registry version, deterministic fingerprint metadata, and persisted registry snapshot metadata for drift detection.
+- Registry fingerprint transitions now create audit events with coarse diff summaries across skills, tools, capabilities, policy profiles, and tool-skill mappings.
 - Runtime policy now validates registry-declared tool input types before execution, and runtime receipt checks validate registry-declared output types and required receipt fields after execution.
 - Agent actions now pin `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
@@ -78,14 +79,13 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill/fingerprint context.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill/fingerprint context.
 
 Next steps:
 
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
 - Move registry ownership into the persistent registry source and add richer skill selection when multiple skills can use the same tool.
 - Consider run-level registry version pins once persistent registry releases exist.
-- Add registry diff/audit events when definitions change.
 
 ### 2. Agent Chat As Primary Control Interface
 
@@ -154,6 +154,7 @@ Completed in this slice:
   - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
 - Persistence:
   - The registry endpoint now records the current registry payload in `agent_registry_versions`, keyed by deterministic fingerprint.
+  - Registry fingerprint changes create `agent_registry_audit_events` rows with diff summaries.
   - Agent Runs shows the active registry source alongside the fingerprint.
 - Policy enforcement:
   - Registry-declared input schemas are validated before tool execution.
@@ -176,6 +177,5 @@ Initial scope:
 
 - Backfill or migrate historical actions that predate registry/tool/skill version pins if needed.
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
-- Promote registry fingerprints into diff/audit events when definitions change.
 - Move owner/steward metadata into the persistent registry source.
 - Keep mock-auth Playwright smoke green.
