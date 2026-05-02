@@ -12,6 +12,7 @@ const getAgentRunEventsMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
+const preflightAgentRunCommandMock = vi.fn();
 let searchParamsValue = "";
 
 vi.mock("next/navigation", () => ({
@@ -54,6 +55,8 @@ vi.mock("../../lib/api", () => ({
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
+  preflightAgentRunCommand: (...args: unknown[]) =>
+    preflightAgentRunCommandMock(...args),
 }));
 
 describe("InterventionsPage", () => {
@@ -65,6 +68,7 @@ describe("InterventionsPage", () => {
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
     issueAgentRunCommandMock.mockReset();
+    preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "";
 
     listAgentRunsMock.mockResolvedValue({
@@ -221,6 +225,28 @@ describe("InterventionsPage", () => {
       },
       run: { id: "run-3" },
     });
+    preflightAgentRunCommandMock.mockResolvedValue({
+      preflight: {
+        allowed: true,
+        command_type: "change_plan",
+        risk_level: "medium",
+        requires_confirmation: true,
+        requires_approval: true,
+        effect_class: "recommend",
+        tool_id: "policy.recommend_next_action",
+        skill_id: "recommend",
+        side_effects: ["create_experiment_recommendation"],
+        blockers: [],
+        warnings: [
+          "Change-plan creates a proposed recovery action for operator review.",
+        ],
+        rollback_guidance:
+          "Low-risk writes can usually be superseded by a later action.",
+        summary: "Preflight passed with medium risk.",
+      },
+      run: { id: "run-3" },
+      action: null,
+    });
   });
 
   it("renders escalation, approval, retry, and pause queues", async () => {
@@ -294,6 +320,33 @@ describe("InterventionsPage", () => {
     await screen.findByText(/Compensating action: Ask policy for the safest/i);
     await user.click(
       screen.getByRole("button", { name: /Create compensating proposal/i }),
+    );
+
+    await waitFor(() => {
+      expect(preflightAgentRunCommandMock).toHaveBeenCalledWith(
+        "run-3",
+        {
+          command_type: "change_plan",
+          action_id: "act-failed-source",
+          message: "Ask policy for the safest compensating next action",
+          metadata: {
+            recovery_strategy: "compensating_action",
+            capability_name: "recommend_next_action",
+            source_event_id: "evt-recovery-proposed",
+            compensating_priority: undefined,
+            compensating_rationale: undefined,
+            inputs: { experiment_id: "exp-retry" },
+          },
+        },
+        "user-a",
+      );
+    });
+    expect(await screen.findByText(/Preflight passed with medium risk/i)).toBeInTheDocument();
+    expect(screen.getByText(/Click again to confirm proposal creation/i)).toBeInTheDocument();
+    expect(issueAgentRunCommandMock).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: /Confirm compensating proposal/i }),
     );
 
     await waitFor(() => {

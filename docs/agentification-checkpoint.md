@@ -43,7 +43,7 @@ The codebase now has the minimum spine for the pivot:
 - Recovery commands can target a specific allowed capability instead of always falling back to the default recommendation action.
 - Proposed recovery actions now persist side-effect metadata and rollback guidance for downstream approval review.
 - Recovery proposals now include compensating-action recommendations for high-risk and external-side-effect paths.
-- Interventions can now create audited compensating proposals directly from those recommendations.
+- Interventions can now preflight, confirm, and create audited compensating proposals directly from those recommendations.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -93,7 +93,7 @@ Current state: operator chat can explain, navigate execution context, preflight 
 Next steps:
 
 - Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
-- Add command preflight display before Interventions creates a compensating proposal.
+- Consider promoting compensating recommendation creation into a reusable control-plane component.
 
 ### 3. External Agent API Contracts
 
@@ -172,11 +172,12 @@ Completed in this slice:
   - High-risk proposals recommend readiness review and/or policy recommendation when allowed.
   - Interventions and operator chat surface the first compensating recommendation.
   - Interventions can create a compensating `change_plan` proposal through the audited command endpoint.
+  - Interventions shows command preflight risk/blockers/warnings/rollback before creating compensating proposals.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
 Next build should deepen this slice:
 
-- Add Interventions-side command preflight display before creating compensating proposals.
+- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
 - Keep mock-auth Playwright smoke green.

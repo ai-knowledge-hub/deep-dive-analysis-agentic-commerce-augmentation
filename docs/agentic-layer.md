@@ -397,7 +397,7 @@ Operator steering is exposed via:
 - change-plan emits `action_recovery_proposed`; operators can choose the target recovery capability, and Interventions surfaces command-originated retry/recovery work
 - proposed recovery actions persist capability side effects and rollback guidance so later approvals keep the safety context attached
 - high-risk and external-side-effect recovery proposals can carry compensating-action recommendations such as readiness review or policy recommendation follow-ups
-- Interventions can turn a compensating recommendation into an audited `change_plan` proposal without bypassing command receipts
+- Interventions can preflight, confirm, and turn a compensating recommendation into an audited `change_plan` proposal without bypassing command receipts
 - operator chat summarizes command outcomes with resulting run/action state after execution
 - command outcome summaries include artifact inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures
 
