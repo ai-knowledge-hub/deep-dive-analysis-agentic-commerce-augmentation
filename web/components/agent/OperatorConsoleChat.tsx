@@ -167,6 +167,10 @@ function buildCommandOutcome(
     if (response.action.rollback_guidance) {
       parts.push(`Rollback guidance: ${response.action.rollback_guidance}`);
     }
+    const compensatingAction = response.action.compensating_actions?.[0];
+    if (compensatingAction?.label) {
+      parts.push(`Compensating action: ${compensatingAction.label}.`);
+    }
     const guidance = buildArtifactGuidance(response.action);
     if (guidance.length > 0) {
       parts.push(`Next inspection: ${guidance.slice(0, 3).join(" ")}`);

@@ -42,6 +42,7 @@ The codebase now has the minimum spine for the pivot:
 - `change_plan` now creates a proposed recovery action instead of only recording a non-mutating receipt.
 - Recovery commands can target a specific allowed capability instead of always falling back to the default recommendation action.
 - Proposed recovery actions now persist side-effect metadata and rollback guidance for downstream approval review.
+- Recovery proposals now include compensating-action recommendations for high-risk and external-side-effect paths.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -90,8 +91,8 @@ Current state: operator chat can explain, navigate execution context, preflight 
 
 Next steps:
 
-- Add explicit compensating-action proposals for high-risk or externally irreversible side effects.
-- Make rollback guidance actionable from Interventions when a compensating capability exists.
+- Make compensating-action recommendations directly actionable from Interventions.
+- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
 
 ### 3. External Agent API Contracts
 
@@ -164,11 +165,16 @@ Completed in this slice:
   - Recovery/retry proposals persist capability side effects and rollback guidance on the action row.
   - `action_recovery_proposed` and `action_retry_proposed` events carry rollback guidance in anchors for Interventions visibility.
   - Operator chat includes rollback guidance in command outcomes.
+- Compensating actions:
+  - Recovery/retry proposals can persist recommended compensating follow-ups.
+  - External-side-effect proposals recommend `review_validation_readiness` when allowed.
+  - High-risk proposals recommend readiness review and/or policy recommendation when allowed.
+  - Interventions and operator chat surface the first compensating recommendation.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
 Next build should deepen this slice:
 
-- Add compensating-action recommendations for high-risk recovery paths, not only static rollback guidance.
+- Add direct Interventions controls for creating/triggering the recommended compensating action.
 - Keep mock-auth Playwright smoke green.

@@ -15,7 +15,12 @@ import {
   listAgentRuns,
 } from "../../lib/api";
 import { buildRunsHref } from "../../lib/routes";
-import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
+import type {
+  AgentAction,
+  AgentCompensatingAction,
+  AgentRun,
+  AgentRunEvent,
+} from "../../lib/types";
 
 type Priority = "critical" | "high" | "medium" | "low";
 type RiskLevel = "high" | "medium" | "low";
@@ -77,6 +82,7 @@ type CommandItem = {
   title: string;
   summary: string;
   rollbackGuidance?: string | null;
+  compensatingActions?: AgentCompensatingAction[];
 };
 
 const HIGH_RISK_CAPABILITIES = new Set([
@@ -133,6 +139,11 @@ function maxRisk(left: RiskLevel, right: RiskLevel): RiskLevel {
 function eventRollbackGuidance(event: AgentRunEvent): string | null {
   const value = event.anchors?.rollback_guidance;
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function eventCompensatingActions(event: AgentRunEvent): AgentCompensatingAction[] {
+  const value = event.anchors?.compensating_actions;
+  return Array.isArray(value) ? (value as AgentCompensatingAction[]) : [];
 }
 
 function badgeClassForPriority(priority: Priority): string {
@@ -358,6 +369,7 @@ function buildCommandItems(detail: InterventionDetail): CommandItem[] {
               ? "A chat-issued change-plan command created a proposed recovery action."
             : "A chat-issued command changed or inspected runtime state."),
         rollbackGuidance: eventRollbackGuidance(event),
+        compensatingActions: eventCompensatingActions(event),
       };
     })
     .filter(
@@ -694,6 +706,14 @@ function InterventionsPageContent() {
                       {item.rollbackGuidance ? (
                         <div className="list__meta">
                           Rollback: {item.rollbackGuidance}
+                        </div>
+                      ) : null}
+                      {item.compensatingActions?.length ? (
+                        <div className="list__meta">
+                          Compensating action:{" "}
+                          {item.compensatingActions[0].label ??
+                            item.compensatingActions[0].capability_name ??
+                            "Review next safe action"}
                         </div>
                       ) : null}
                       <div className="agent-ops-summary">

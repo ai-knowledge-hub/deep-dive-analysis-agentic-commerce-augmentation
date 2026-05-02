@@ -2277,6 +2277,21 @@ function AgentRunsPageContent() {
                           {selectedAction.rollback_guidance ||
                             "No rollback guidance captured for this action yet."}
                         </p>
+                        <p className="panel__subheading">Compensating actions</p>
+                        {selectedAction.compensating_actions?.length ? (
+                          <ul className="panel__list panel__list--compact">
+                            {selectedAction.compensating_actions.map((item, index) => (
+                              <li key={`${item.capability_name ?? item.label ?? "compensating"}-${index}`}>
+                                {item.label ?? item.capability_name ?? "Review compensating action"}
+                                {item.rationale ? `: ${item.rationale}` : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="panel__muted">
+                            No compensating action recommendation captured.
+                          </p>
+                        )}
                         <p className="panel__subheading">Rationale and confidence</p>
                         <p className="panel__muted">
                           {selectedAction.rationale || "No rationale captured."}

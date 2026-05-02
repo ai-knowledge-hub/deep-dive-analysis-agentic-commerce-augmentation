@@ -550,6 +550,89 @@ def test_retry_recovery_action_can_target_allowed_capability(client: TestClient)
     assert action["inputs"]["recovery_from_action_id"] == failed["id"]
 
 
+def test_recovery_action_includes_compensating_recommendations_for_external_side_effect(
+    client: TestClient,
+):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=[
+            "run_variant",
+            "request_synthetic_validation",
+            "review_validation_readiness",
+            "recommend_next_action",
+        ],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="failed",
+        status="failed",
+    )
+    failed = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="failed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1", "variant_selection": "top_1"},
+        outputs={},
+        inputs_hash="inputs-1",
+        outputs_hash=None,
+        rationale="Original variant run failed.",
+        confidence=0.55,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+        effect_class="write_low_risk",
+        error="Transient execution failure.",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "retry",
+            "action_id": failed["id"],
+            "metadata": {
+                "retry_strategy": "create_recovery_action",
+                "capability_name": "request_synthetic_validation",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    action = response.json()["action"]
+    assert action["capability_name"] == "request_synthetic_validation"
+    assert action["effect_class"] == "external_side_effect"
+    assert action["compensating_actions"][0]["capability_name"] == (
+        "review_validation_readiness"
+    )
+    assert action["compensating_actions"][0]["priority"] == "high"
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    recovery_event = next(
+        event
+        for event in events.json()["events"]
+        if event["event_type"] == "action_recovery_proposed"
+    )
+    assert recovery_event["anchors"]["compensating_actions"][0][
+        "capability_name"
+    ] == "review_validation_readiness"
+
+
 def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     deps = default_deps()
     run = deps.agent_runs.create_agent_run(

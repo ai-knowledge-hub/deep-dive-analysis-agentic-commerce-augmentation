@@ -185,6 +185,12 @@ describe("InterventionsPage", () => {
               anchors: {
                 rollback_guidance:
                   "Low-risk writes can usually be superseded by a later action.",
+                compensating_actions: [
+                  {
+                    label: "Ask policy for the safest compensating next action",
+                    capability_name: "recommend_next_action",
+                  },
+                ],
               },
               timestamp: "2026-03-18T11:31:00Z",
             },
@@ -225,6 +231,9 @@ describe("InterventionsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Rollback: Low-risk writes can usually be superseded/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Compensating action: Ask policy for the safest/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-acti is executing/i),

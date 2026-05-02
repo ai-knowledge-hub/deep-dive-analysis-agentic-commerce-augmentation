@@ -29,6 +29,7 @@ def create_agent_action(
     effect_class: Optional[str] = None,
     side_effects: Optional[List[str]] = None,
     rollback_guidance: Optional[str] = None,
+    compensating_actions: Optional[List[Dict[str, Any]]] = None,
     receipt_id: Optional[str] = None,
     retry_count: int = 0,
     dedupe_key: Optional[str] = None,
@@ -60,12 +61,13 @@ def create_agent_action(
             effect_class,
             side_effects_json,
             rollback_guidance,
+            compensating_actions_json,
             receipt_id,
             retry_count,
             dedupe_key,
             error_text
         )
-        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
         """,
         (
             action_id,
@@ -89,6 +91,7 @@ def create_agent_action(
             effect_class,
             to_json(side_effects or []) or to_json([]),
             rollback_guidance,
+            to_json(compensating_actions or []) or to_json([]),
             receipt_id,
             int(retry_count),
             dedupe_key,
@@ -230,6 +233,9 @@ def _row(row) -> Dict[str, Any]:
         "rollback_guidance": row["rollback_guidance"]
         if "rollback_guidance" in row.keys()
         else None,
+        "compensating_actions": from_json(row["compensating_actions_json"], default=[])
+        if "compensating_actions_json" in row.keys()
+        else [],
         "receipt_id": row["receipt_id"] if "receipt_id" in row.keys() else None,
         "retry_count": int(row["retry_count"] or 0)
         if "retry_count" in row.keys()

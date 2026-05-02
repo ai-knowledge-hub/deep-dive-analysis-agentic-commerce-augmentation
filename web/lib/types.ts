@@ -1007,12 +1007,22 @@ export type AgentAction = {
   effect_class?: string | null;
   side_effects?: string[];
   rollback_guidance?: string | null;
+  compensating_actions?: AgentCompensatingAction[];
   receipt_id?: string | null;
   retry_count?: number | null;
   dedupe_key?: string | null;
   error?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type AgentCompensatingAction = {
+  kind?: string;
+  command_type?: AgentRunCommandType | string;
+  capability_name?: string;
+  label?: string;
+  rationale?: string;
+  priority?: string;
 };
 
 export type AgentRunCreateResponse = {
@@ -1088,6 +1098,7 @@ export type AgentRunEvent = {
     metric_id?: string | null;
     side_effects?: string[];
     rollback_guidance?: string | null;
+    compensating_actions?: AgentCompensatingAction[];
   };
 };
 

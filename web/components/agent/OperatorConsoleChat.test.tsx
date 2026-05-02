@@ -523,6 +523,12 @@ describe("OperatorConsoleChat", () => {
         snapshot_version: 7,
         rollback_guidance:
           "Low-risk writes can usually be superseded by a later action.",
+        compensating_actions: [
+          {
+            label: "Ask policy for the safest compensating next action",
+            capability_name: "recommend_next_action",
+          },
+        ],
         outputs: {
           new_metric_id: "metric-1",
         },
@@ -568,6 +574,7 @@ describe("OperatorConsoleChat", () => {
     expect(screen.getByText(/Compare variant variant-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Open validation job job-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Rollback guidance: Low-risk writes/i)).toBeInTheDocument();
+    expect(screen.getByText(/Compensating action: Ask policy/i)).toBeInTheDocument();
   });
 
   it("preflights and confirms step and cancel commands", async () => {

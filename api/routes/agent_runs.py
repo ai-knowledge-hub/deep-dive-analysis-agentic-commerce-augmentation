@@ -388,6 +388,74 @@ def _capability_rollback_guidance(capability_name: str, effect_class: str | None
     )
 
 
+def _compensating_actions_for_capability(
+    *,
+    capability_name: str,
+    effect_class: str | None,
+    allowed_capabilities: List[str],
+) -> List[Dict[str, Any]]:
+    allowed = {
+        str(item).strip()
+        for item in list(allowed_capabilities or [])
+        if str(item).strip()
+    }
+    effect = str(effect_class or "").strip()
+    side_effects = _capability_side_effects(capability_name)
+    recommendations: List[Dict[str, Any]] = []
+
+    def add_capability(
+        *,
+        capability: str,
+        label: str,
+        rationale: str,
+        priority: str,
+    ) -> None:
+        if capability not in allowed:
+            return
+        recommendations.append(
+            {
+                "kind": "capability",
+                "command_type": "change_plan",
+                "capability_name": capability,
+                "label": label,
+                "rationale": rationale,
+                "priority": priority,
+            }
+        )
+
+    if effect == "external_side_effect":
+        add_capability(
+            capability="review_validation_readiness",
+            label="Review provider and validation state before retry",
+            rationale=(
+                "External validation jobs may keep running outside this system; "
+                "inspect provider/job state before creating another external request."
+            ),
+            priority="high",
+        )
+    if effect == "write_high_risk":
+        add_capability(
+            capability="review_validation_readiness",
+            label="Re-check promotion readiness before any further high-risk write",
+            rationale=(
+                "High-risk writes may need manual rollback or a compensating change; "
+                "re-run readiness gates before approving more promotion/publish work."
+            ),
+            priority="high",
+        )
+    if side_effects and effect not in {"read", "recommend"}:
+        add_capability(
+            capability="recommend_next_action",
+            label="Ask policy for the safest compensating next action",
+            rationale=(
+                "If the side effect is wrong or stale, create a recommendation "
+                "proposal instead of mutating the completed action."
+            ),
+            priority="medium" if effect == "write_low_risk" else "high",
+        )
+    return recommendations
+
+
 def _preflight_summary(
     *, command_type: str, risk_level: str, blockers: List[str], warnings: List[str]
 ) -> str:
@@ -515,6 +583,11 @@ def create_agent_run(
             side_effects=_capability_side_effects(action.capability_name),
             rollback_guidance=_capability_rollback_guidance(
                 action.capability_name, effect_class
+            ),
+            compensating_actions=_compensating_actions_for_capability(
+                capability_name=action.capability_name,
+                effect_class=effect_class,
+                allowed_capabilities=payload.allowed_capabilities or [],
             ),
         )
         deps.agent_events.create_agent_event(
@@ -864,6 +937,11 @@ def issue_agent_run_command(
                 rollback_guidance=_capability_rollback_guidance(
                     capability_name, effect_class
                 ),
+                compensating_actions=_compensating_actions_for_capability(
+                    capability_name=capability_name,
+                    effect_class=effect_class,
+                    allowed_capabilities=allowed,
+                ),
                 dedupe_key=f"change_plan:{receipt.get('id')}",
             )
             deps.agent_events.create_agent_event(
@@ -897,6 +975,9 @@ def issue_agent_run_command(
                     ),
                     "side_effects": recovery_action.get("side_effects"),
                     "rollback_guidance": recovery_action.get("rollback_guidance"),
+                    "compensating_actions": recovery_action.get(
+                        "compensating_actions"
+                    ),
                 },
             )
             result["action"] = recovery_action
@@ -981,6 +1062,11 @@ def issue_agent_run_command(
                 rollback_guidance=_capability_rollback_guidance(
                     capability_name, effect_class
                 ),
+                compensating_actions=_compensating_actions_for_capability(
+                    capability_name=capability_name,
+                    effect_class=effect_class,
+                    allowed_capabilities=allowed,
+                ),
                 retry_count=retry_count,
                 dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
             )
@@ -1017,6 +1103,7 @@ def issue_agent_run_command(
                     "retry_strategy": retry_strategy,
                     "side_effects": retry_action.get("side_effects"),
                     "rollback_guidance": retry_action.get("rollback_guidance"),
+                    "compensating_actions": retry_action.get("compensating_actions"),
                 },
             )
             result["action"] = retry_action
