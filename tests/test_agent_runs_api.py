@@ -422,6 +422,86 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     assert invalid_status.status_code == 400
 
 
+def test_registry_pin_backfill_supports_dry_run_and_scoped_update(
+    client: TestClient,
+):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="plan_only",
+        state="battery_ready",
+        status="planned",
+    )
+    action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="proposed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={},
+        outputs={},
+        inputs_hash=None,
+        outputs_hash=None,
+        rationale=None,
+        confidence=None,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    dry_run = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_payload = dry_run.json()
+    assert dry_payload["dry_run"] is True
+    assert dry_payload["runs"]["matched"] == 1
+    assert dry_payload["runs"]["updated"] == 0
+    assert dry_payload["actions"]["matched"] == 1
+    assert dry_payload["actions"]["updated"] == 0
+    assert deps.agent_runs.get_agent_run(run_id=run["id"])["registry_fingerprint"] is None
+    assert deps.agent_actions.get_agent_action(action["id"])["registry_fingerprint"] is None
+
+    applied = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": False},
+    )
+    assert applied.status_code == 200
+    applied_payload = applied.json()
+    assert applied_payload["dry_run"] is False
+    assert applied_payload["runs"]["updated"] == 1
+    assert applied_payload["actions"]["updated"] == 1
+    updated_run = deps.agent_runs.get_agent_run(run_id=run["id"])
+    updated_action = deps.agent_actions.get_agent_action(action["id"])
+    assert updated_run["registry_version"] == "agent-runtime-static-v1"
+    assert len(updated_run["registry_fingerprint"]) == 64
+    assert updated_action["registry_version"] == "agent-runtime-static-v1"
+    assert updated_action["registry_fingerprint"] == updated_run["registry_fingerprint"]
+    assert updated_action["tool_id"] == "experiment.run_variant"
+    assert updated_action["skill_id"] == "optimize-product-representation"
+    assert updated_action["tool_version"] == "v1"
+    assert updated_action["skill_version"] == "v1"
+
+    second_apply = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": False},
+    )
+    assert second_apply.status_code == 200
+    assert second_apply.json()["runs"]["matched"] == 0
+    assert second_apply.json()["actions"]["matched"] == 0
+
+
 def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     client: TestClient,
 ):
