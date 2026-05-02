@@ -306,7 +306,7 @@ def _command_preflight(
         "allowed": not blockers,
         "command_type": command_type,
         "risk_level": risk_level,
-        "requires_confirmation": command_type == "retry"
+        "requires_confirmation": command_type in {"retry", "step"}
         or risk_level == "high"
         or bool(blockers),
         "requires_approval": bool(run.get("requires_approval")) or risk_level == "high",

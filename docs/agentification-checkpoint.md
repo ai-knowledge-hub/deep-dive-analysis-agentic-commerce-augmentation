@@ -89,7 +89,7 @@ Current state: operator chat can explain, navigate execution context, preflight 
 Next steps:
 
 - Expand command controls in the UI beyond approve/reject/retry/start/pause into step and cancel.
-- Add richer command outcome summaries to the chat thread after execution.
+- Improve command outcome summaries with artifact/result-specific guidance after execution.
 - Add undo/rollback guidance where side effects cannot be reversed.
 
 ### 3. External Agent API Contracts
@@ -148,13 +148,16 @@ Completed in this slice:
   - Group command-originated work by urgency/risk.
 - Structured recovery:
   - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
+- Chat command controls:
+  - Operator chat now exposes step and cancel commands through the same preflight path.
+  - Command responses are summarized in the chat thread with resulting run/action state.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
 Next build should deepen this slice:
 
-- Add richer command outcome summaries to the chat thread.
-- Add step/cancel chat controls with preflight confirmation.
 - Add richer retry strategies: retry same action, retry from last safe checkpoint, or create a new recovery action.
+- Add artifact/result-specific command outcome guidance after execution.
+- Add direct chat affordances for `change_plan` recovery proposals.
 - Keep mock-auth Playwright smoke green.

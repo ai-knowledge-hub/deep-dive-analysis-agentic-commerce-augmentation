@@ -1005,6 +1005,9 @@ export type AgentAction = {
   tool_id?: string | null;
   skill_id?: string | null;
   effect_class?: string | null;
+  receipt_id?: string | null;
+  retry_count?: number | null;
+  dedupe_key?: string | null;
   error?: string | null;
   created_at?: string | null;
   updated_at?: string | null;

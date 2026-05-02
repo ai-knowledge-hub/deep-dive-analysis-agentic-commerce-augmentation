@@ -6,6 +6,7 @@ import type {
   AgentAction,
   AgentRun,
   AgentRunCommandPreflight,
+  AgentRunCommandResponse,
   AgentRunCommandType,
   AgentRunEvent,
 } from "../../lib/types";
@@ -49,7 +50,9 @@ type Props = {
   onFocusValidationLinked?: () => void;
   onJumpToNextAction?: () => void;
   onPreflightCommand?: (command: OperatorCommand) => Promise<AgentRunCommandPreflight>;
-  onIssueCommand?: (command: OperatorCommand) => Promise<void> | void;
+  onIssueCommand?: (
+    command: OperatorCommand,
+  ) => Promise<AgentRunCommandResponse | void> | AgentRunCommandResponse | void;
 };
 
 function formatRunLabel(run: AgentRun | null): string {
@@ -92,6 +95,36 @@ function actionRiskLabel(action: AgentAction | null): string {
     return "Medium risk";
   }
   return "Low risk";
+}
+
+function buildCommandOutcome(
+  commandType: AgentRunCommandType,
+  response?: AgentRunCommandResponse | void,
+): string {
+  if (!response) {
+    return `Command receipt recorded: ${commandType}. I refreshed the execution context so you can review the resulting run state and timeline.`;
+  }
+  const parts = [`Command completed: ${commandType}.`];
+  if (response.message) {
+    parts.push(response.message);
+  }
+  if (response.action) {
+    parts.push(
+      `Action ${response.action.capability_name ?? response.action.id} is now ${response.action.status ?? "updated"}.`,
+    );
+    if (response.action.retry_count && response.action.retry_count > 0) {
+      parts.push(`Retry count is ${response.action.retry_count}.`);
+    }
+  }
+  if (response.run) {
+    parts.push(
+      `Run is ${response.run.status ?? "unknown"} in ${response.run.state ?? "unknown"} state.`,
+    );
+  }
+  if (response.preflight?.risk_level) {
+    parts.push(`Preflight risk was ${response.preflight.risk_level}.`);
+  }
+  return parts.join(" ");
 }
 
 export function OperatorConsoleChat({
@@ -386,13 +419,13 @@ export function OperatorConsoleChat({
         }
       }
       setPendingCommandKey(null);
-      await onIssueCommand?.(command);
+      const response = await onIssueCommand?.(command);
       setMessages((current) => [
         ...current,
         {
           id: `assistant-${Date.now()}-${command_type}`,
           role: "assistant",
-          content: `Command receipt recorded: ${command_type}. I refreshed the execution context so you can review the resulting run state and timeline.`,
+          content: buildCommandOutcome(command_type, response),
         },
       ]);
     } catch (error) {
@@ -569,6 +602,22 @@ export function OperatorConsoleChat({
           disabled={!run}
         >
           Start run
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("step", "Step this run")}
+          disabled={!run}
+        >
+          Step run
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--sm"
+          onClick={() => issueCommand("cancel", "Cancel this run")}
+          disabled={!run}
+        >
+          Cancel run
         </button>
       </div>
 

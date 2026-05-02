@@ -390,8 +390,10 @@ Operator steering is exposed via:
 - structured recovery command: `change_plan`
 - command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
 - high-risk command preflight requires explicit confirmation in the operator chat before submission
+- step commands require explicit confirmation before execution
 - retry always requires explicit confirmation and emits `action_retry_proposed` for a new proposed action; the original failed action remains failed
 - change-plan emits `action_recovery_proposed`; Interventions surfaces command-originated retry/recovery work
+- operator chat summarizes command outcomes with resulting run/action state after execution
 
 ### 3.5 Version Registry (scientific reproducibility)
 

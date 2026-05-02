@@ -1300,9 +1300,10 @@ function AgentRunsPageContent() {
       setLoading(true);
       setError(null);
       try {
-        await issueAgentRunCommand(selectedRunId, command, userId);
+        const response = await issueAgentRunCommand(selectedRunId, command, userId);
         await loadSelected();
         await loadRuns();
+        return response;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to issue command.");
         throw err;

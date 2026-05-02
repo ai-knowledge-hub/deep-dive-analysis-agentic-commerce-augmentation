@@ -354,4 +354,138 @@ describe("OperatorConsoleChat", () => {
       }),
     );
   });
+
+  it("summarizes command outcomes from the runtime response", async () => {
+    const user = userEvent.setup();
+    const onIssueCommand = vi.fn().mockResolvedValue({
+      command: {
+        id: "evt-command",
+        run_id: "run-1",
+        sequence: 0,
+        event_type: "operator_command_start",
+        status: "completed",
+      },
+      run: {
+        id: "run-1",
+        status: "running",
+        state: "variants_ready",
+      },
+      message: "Run resumed.",
+      preflight: {
+        allowed: true,
+        command_type: "start",
+        risk_level: "low",
+        requires_confirmation: false,
+        requires_approval: true,
+        side_effects: [],
+        blockers: [],
+        warnings: [],
+        rollback_guidance: "Resume with start once the operator is ready.",
+        summary: "Preflight passed with low risk.",
+      },
+    });
+
+    render(
+      <OperatorConsoleChat
+        run={{
+          id: "run-1",
+          experiment_id: "exp-12345678",
+          status: "paused",
+          state: "variants_ready",
+          run_mode: "auto_execute_safe",
+        }}
+        actions={[]}
+        events={[]}
+        selectedAction={null}
+        nextRecommendedAction={{
+          action: null,
+          guardrails: [],
+          hint: "No next action.",
+        }}
+        onIssueCommand={onIssueCommand}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Start run/i }));
+
+    expect(await screen.findByText(/Command completed: start/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run resumed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run is running in variants_ready state/i)).toBeInTheDocument();
+  });
+
+  it("preflights and confirms step and cancel commands", async () => {
+    const user = userEvent.setup();
+    const onIssueCommand = vi.fn().mockResolvedValue(undefined);
+    const onPreflightCommand = vi.fn().mockResolvedValue({
+      allowed: true,
+      command_type: "step",
+      risk_level: "medium",
+      requires_confirmation: true,
+      requires_approval: true,
+      side_effects: [],
+      blockers: [],
+      warnings: [],
+      rollback_guidance: "Low-risk writes can usually be superseded by a later action.",
+      summary: "Preflight passed with medium risk.",
+    });
+
+    render(
+      <OperatorConsoleChat
+        run={{
+          id: "run-1",
+          experiment_id: "exp-12345678",
+          status: "running",
+          state: "variants_ready",
+          run_mode: "auto_execute_safe",
+        }}
+        actions={[]}
+        events={[]}
+        selectedAction={null}
+        nextRecommendedAction={{
+          action: null,
+          guardrails: [],
+          hint: "No next action.",
+        }}
+        onPreflightCommand={onPreflightCommand}
+        onIssueCommand={onIssueCommand}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Step run/i }));
+    expect(onIssueCommand).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Click the command again to confirm/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Step run/i }));
+    await waitFor(() =>
+      expect(onIssueCommand).toHaveBeenCalledWith({
+        command_type: "step",
+        action_id: undefined,
+        message: "Step this run",
+      }),
+    );
+
+    onPreflightCommand.mockResolvedValue({
+      allowed: true,
+      command_type: "cancel",
+      risk_level: "high",
+      requires_confirmation: true,
+      requires_approval: true,
+      side_effects: [],
+      blockers: [],
+      warnings: ["Canceling a run is terminal."],
+      rollback_guidance: "Cancel is terminal. Create a new run to continue.",
+      summary: "Preflight passed with high risk.",
+    });
+
+    await user.click(screen.getByRole("button", { name: /Cancel run/i }));
+    await user.click(screen.getByRole("button", { name: /Cancel run/i }));
+
+    await waitFor(() =>
+      expect(onIssueCommand).toHaveBeenCalledWith({
+        command_type: "cancel",
+        action_id: undefined,
+        message: "Cancel this run",
+      }),
+    );
+  });
 });
