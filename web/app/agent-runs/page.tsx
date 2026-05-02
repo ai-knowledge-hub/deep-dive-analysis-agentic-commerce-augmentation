@@ -6,6 +6,7 @@ import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
   AgentRegistryAuditEvent,
+  AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
   AgentRun,
   AgentRunCommandType,
@@ -14,6 +15,7 @@ import type {
   Experiment,
 } from "../../lib/types";
 import {
+  backfillAgentRuntimeRegistryPins,
   controlAgentRun,
   createAgentRun,
   decideAgentAction,
@@ -457,6 +459,10 @@ function AgentRunsPageContent() {
     AgentRegistryAuditEvent[]
   >([]);
   const [registryReleases, setRegistryReleases] = useState<AgentRegistryRelease[]>([]);
+  const [registryBackfillPreview, setRegistryBackfillPreview] =
+    useState<AgentRegistryPinBackfillResponse | null>(null);
+  const [registryBackfillBusy, setRegistryBackfillBusy] = useState(false);
+  const [registryBackfillNotice, setRegistryBackfillNotice] = useState<string | null>(null);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -560,6 +566,38 @@ function AgentRunsPageContent() {
       setLoading(false);
     }
   }, [experimentIdParam, runIdParam, selectedRunId, userId]);
+
+  const runRegistryBackfill = useCallback(
+    async (dryRun: boolean) => {
+      if (!userId) return;
+      setRegistryBackfillBusy(true);
+      setRegistryBackfillNotice(null);
+      try {
+        const response = await backfillAgentRuntimeRegistryPins(
+          { dry_run: dryRun, limit: 200 },
+          userId,
+        );
+        setRegistryBackfillPreview(response);
+        const matched = response.runs.matched + response.actions.matched;
+        const updated = response.runs.updated + response.actions.updated;
+        setRegistryBackfillNotice(
+          dryRun
+            ? `Preview found ${matched} records with missing registry pins.`
+            : `Backfill updated ${updated} records.`,
+        );
+        if (!dryRun) {
+          await Promise.all([loadRuntimeRegistry(), loadRuns()]);
+        }
+      } catch (err) {
+        setRegistryBackfillNotice(
+          err instanceof Error ? err.message : "Registry pin backfill failed.",
+        );
+      } finally {
+        setRegistryBackfillBusy(false);
+      }
+    },
+    [loadRuntimeRegistry, loadRuns, userId],
+  );
 
   const loadExperiments = useCallback(async () => {
     if (!userId) return;
@@ -1802,6 +1840,42 @@ function AgentRunsPageContent() {
                             No registry releases have been persisted in this environment yet.
                           </p>
                         )}
+                        <div className="panel__actions">
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            onClick={() => runRegistryBackfill(true)}
+                            disabled={registryBackfillBusy}
+                          >
+                            Preview missing pins
+                          </button>
+                          {registryBackfillPreview &&
+                          registryBackfillPreview.runs.matched +
+                            registryBackfillPreview.actions.matched >
+                            0 ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              onClick={() => runRegistryBackfill(false)}
+                              disabled={registryBackfillBusy}
+                            >
+                              Apply backfill
+                            </button>
+                          ) : null}
+                        </div>
+                        {registryBackfillPreview ? (
+                          <p className="panel__muted">
+                            Missing pins: {registryBackfillPreview.runs.matched} runs ·{" "}
+                            {registryBackfillPreview.actions.matched} actions. Updated:{" "}
+                            {registryBackfillPreview.runs.updated} runs ·{" "}
+                            {registryBackfillPreview.actions.updated} actions.
+                          </p>
+                        ) : null}
+                        {registryBackfillNotice ? (
+                          <div className="panel__notice panel__notice--info">
+                            {registryBackfillNotice}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="panel__card panel__card--secondary">
                         <div className="panel__header">

@@ -18,6 +18,7 @@ const controlAgentRunMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
 const listAgentRuntimeRegistryAuditMock = vi.fn();
 const listAgentRuntimeRegistryReleasesMock = vi.fn();
+const backfillAgentRuntimeRegistryPinsMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
@@ -70,6 +71,8 @@ vi.mock("../../lib/api", () => ({
     listAgentRuntimeRegistryAuditMock(...args),
   listAgentRuntimeRegistryReleases: (...args: unknown[]) =>
     listAgentRuntimeRegistryReleasesMock(...args),
+  backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
+    backfillAgentRuntimeRegistryPinsMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
@@ -97,6 +100,7 @@ describe("AgentRunsPage timeline presets", () => {
     listAgentRuntimeRegistryMock.mockReset();
     listAgentRuntimeRegistryAuditMock.mockReset();
     listAgentRuntimeRegistryReleasesMock.mockReset();
+    backfillAgentRuntimeRegistryPinsMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
@@ -274,6 +278,14 @@ describe("AgentRunsPage timeline presets", () => {
           },
         },
       ],
+    });
+    backfillAgentRuntimeRegistryPinsMock.mockResolvedValue({
+      client_id: "client-a",
+      dry_run: true,
+      registry_version: "agent-runtime-static-v1",
+      registry_fingerprint: "abcdef1234567890",
+      runs: { matched: 2, updated: 0, sample_ids: ["run-old"] },
+      actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
     });
   });
 
@@ -576,6 +588,36 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
+    backfillAgentRuntimeRegistryPinsMock
+      .mockResolvedValueOnce({
+        client_id: "client-a",
+        dry_run: true,
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        runs: { matched: 2, updated: 0, sample_ids: ["run-old"] },
+        actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
+      })
+      .mockResolvedValueOnce({
+        client_id: "client-a",
+        dry_run: false,
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        runs: { matched: 2, updated: 2, sample_ids: ["run-old"] },
+        actions: { matched: 3, updated: 3, sample_ids: ["action-old"] },
+      });
+    await userEvent.click(screen.getByRole("button", { name: /Preview missing pins/i }));
+    expect(backfillAgentRuntimeRegistryPinsMock).toHaveBeenCalledWith(
+      { dry_run: true, limit: 200 },
+      "user-a",
+    );
+    expect(await screen.findByText(/Preview found 5 records/i)).toBeInTheDocument();
+    expect(screen.getByText(/Missing pins: 2 runs · 3 actions/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Apply backfill/i }));
+    expect(backfillAgentRuntimeRegistryPinsMock).toHaveBeenCalledWith(
+      { dry_run: false, limit: 200 },
+      "user-a",
+    );
+    expect(await screen.findByText(/Backfill updated 5 records/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
     expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();

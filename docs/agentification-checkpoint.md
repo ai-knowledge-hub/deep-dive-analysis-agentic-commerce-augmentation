@@ -82,7 +82,7 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. One registry snapshot is explicitly active; previous active snapshots are retired on fingerprint transitions. `GET /agent-runs/registry/releases` exposes active/retired release metadata. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, new actions pin registry/tool/skill/fingerprint context, and client-scoped backfill can populate missing pins on older records.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. One registry snapshot is explicitly active; previous active snapshots are retired on fingerprint transitions. `GET /agent-runs/registry/releases` exposes active/retired release metadata. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, new actions pin registry/tool/skill/fingerprint context, and the Runs UI can preview/apply client-scoped backfill for missing pins on older records.
 
 Next steps:
 
@@ -160,7 +160,7 @@ Completed in this slice:
   - Registry snapshots now use explicit active/retired release status instead of relying on latest-observed ordering.
   - Registry releases are available through a compact read endpoint and Agent Runs release inventory panel.
   - Registry fingerprint changes create `agent_registry_audit_events` rows with diff summaries.
-  - Historical run/action registry pins can be backfilled per client with dry-run preview.
+  - Historical run/action registry pins can be backfilled per client with dry-run preview from the Agent Runs registry panel.
   - Agent Runs shows the active registry source, fingerprint, and recent registry release trail.
 - Policy enforcement:
   - Registry-declared input schemas are validated before tool execution.

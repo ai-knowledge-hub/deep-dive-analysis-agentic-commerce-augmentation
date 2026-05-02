@@ -11,6 +11,7 @@ import {
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
   AgentRegistryAuditListResponse,
+  AgentRegistryPinBackfillResponse,
   AgentRegistryReleaseListResponse,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
@@ -619,6 +620,22 @@ export async function listAgentRuntimeRegistryReleases(
   return request<AgentRegistryReleaseListResponse>(
     `/agent-runs/registry/releases${params.toString() ? `?${params.toString()}` : ""}`,
   );
+}
+
+export async function backfillAgentRuntimeRegistryPins(
+  payload: { dry_run?: boolean; limit?: number } = {},
+  userId?: string | null,
+): Promise<AgentRegistryPinBackfillResponse> {
+  const clientId = getClientId();
+  return request<AgentRegistryPinBackfillResponse>("/agent-runs/registry/backfill-pins", {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: userId ?? undefined,
+      dry_run: payload.dry_run ?? true,
+      limit: payload.limit ?? 200,
+    }),
+  });
 }
 
 export async function decideAgentAction(

@@ -1228,6 +1228,23 @@ export type AgentRegistryReleaseListResponse = {
   releases: AgentRegistryRelease[];
 };
 
+export type AgentRegistryPinBackfillResponse = {
+  client_id: string;
+  dry_run: boolean;
+  registry_version: string;
+  registry_fingerprint: string;
+  runs: {
+    matched: number;
+    updated: number;
+    sample_ids: string[];
+  };
+  actions: {
+    matched: number;
+    updated: number;
+    sample_ids: string[];
+  };
+};
+
 export type AgentRunEventListResponse = {
   events: AgentRunEvent[];
   page?: {
