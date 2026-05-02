@@ -31,9 +31,9 @@ The codebase now has the minimum spine for the pivot:
 - Compatibility from legacy `capability_name` to machine-facing `tool_id`.
 - Static skills registry v1 for initial commerce workflows.
 - Static tools/capabilities registry v1 for executable runtime capabilities, with summaries, input/output schema metadata, required receipt fields, side-effect notes, owner/steward metadata, and operator review checklists.
-- Read API for the runtime registry: `GET /agent-runs/registry`.
+- Read API for the runtime registry: `GET /agent-runs/registry`, including registry version, deterministic fingerprint metadata, and persisted registry snapshot metadata for drift detection.
 - Runtime policy now validates registry-declared tool input types before execution, and runtime receipt checks validate registry-declared output types and required receipt fields after execution.
-- Agent actions now pin `registry_version`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
+- Agent actions now pin `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
 - Operator chat can issue audited steering commands for approve, reject, pause, start, non-mutating focus/explain intents, and structured change-plan recovery proposals.
@@ -78,11 +78,10 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, and review checklists. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill versions.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill/fingerprint context.
 
 Next steps:
 
-- Add a persistent registry table or versioned config store.
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
 - Move registry ownership into the persistent registry source and add richer skill selection when multiple skills can use the same tool.
 - Consider run-level registry version pins once persistent registry releases exist.
@@ -149,9 +148,13 @@ Completed in this slice:
   - Tool and capability specs now expose summaries, input schemas, output schemas, side effects, and operator review checklists.
   - Default tool inputs are reflected into schema metadata so operators and API clients can see defaulted fields.
   - Tool and capability specs now expose `owner_principal_id` and `steward_team`.
+  - The registry endpoint now exposes `registry_version`, `registry_fingerprint`, and `registry_hash_algorithm` for deterministic drift detection.
 - Version pinning:
-  - New action proposals persist `registry_version`, `tool_version`, and `skill_version`.
+  - New action proposals persist `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version`.
   - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
+- Persistence:
+  - The registry endpoint now records the current registry payload in `agent_registry_versions`, keyed by deterministic fingerprint.
+  - Agent Runs shows the active registry source alongside the fingerprint.
 - Policy enforcement:
   - Registry-declared input schemas are validated before tool execution.
   - Registry-declared output schemas and required receipt fields are validated after capability execution.
@@ -160,19 +163,19 @@ Completed in this slice:
 - Control-plane UI:
   - Agent Runs selected-action detail now prefers registry-provided summaries, side effects, and review checklists over hardcoded fallback explanations.
   - Agent Runs selected-action detail shows registry owner and steward metadata.
+  - Agent Runs shows the active registry version and short fingerprint.
 - Verification:
   - Backend tests cover registry metadata exposure and invalid registry input failure handling.
   - Frontend tests cover registry-driven action explanation and review checklist rendering.
 
 ## Next Build Slice
 
-The next implementation slice should finish Registry Hardening v1 persistence/versioning.
+The next implementation slice should finish Registry Hardening v1 release management and ownership migration.
 
 Initial scope:
 
-- Add a persistent registry/version table or versioned config source.
 - Backfill or migrate historical actions that predate registry/tool/skill version pins if needed.
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
-- Add registry diff/audit events when definitions change.
+- Promote registry fingerprints into diff/audit events when definitions change.
 - Move owner/steward metadata into the persistent registry source.
 - Keep mock-auth Playwright smoke green.

@@ -1005,6 +1005,7 @@ export type AgentAction = {
   tool_id?: string | null;
   skill_id?: string | null;
   registry_version?: string | null;
+  registry_fingerprint?: string | null;
   tool_version?: string | null;
   skill_version?: string | null;
   effect_class?: string | null;
@@ -1162,6 +1163,12 @@ export type AgentRuntimePolicyProfile = {
 };
 
 export type AgentRuntimeRegistryResponse = {
+  registry_version?: string;
+  registry_fingerprint?: string;
+  registry_hash_algorithm?: string;
+  registry_snapshot_id?: string | null;
+  registry_snapshot_created_at?: string | null;
+  registry_source?: string | null;
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];

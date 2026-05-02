@@ -38,15 +38,15 @@ def test_registry_contains_core_capability_and_defaults():
         spec, {"metric_id": 123, "variant_id": "variant-1"}
     )[0]
     assert "variant_id" in validate_outputs(spec, {"metric_id": "metric-1"})[0]
-    assert version_context_for_capability(
+    version_context = version_context_for_capability(
         "run_variant",
         tool_id="experiment.run_variant",
         skill_id="optimize-product-representation",
-    ) == {
-        "registry_version": "agent-runtime-static-v1",
-        "tool_version": "v1",
-        "skill_version": "v1",
-    }
+    )
+    assert version_context["registry_version"] == "agent-runtime-static-v1"
+    assert len(str(version_context["registry_fingerprint"])) == 64
+    assert version_context["tool_version"] == "v1"
+    assert version_context["skill_version"] == "v1"
 
 
 def test_registry_support_and_next_state():

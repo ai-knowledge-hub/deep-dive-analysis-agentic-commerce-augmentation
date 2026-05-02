@@ -241,6 +241,7 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
     assert payload["actions"][0]["skill_id"] == "optimize-product-representation"
     assert payload["actions"][0]["registry_version"] == "agent-runtime-static-v1"
+    assert len(payload["actions"][0]["registry_fingerprint"]) == 64
     assert payload["actions"][0]["tool_version"] == "v1"
     assert payload["actions"][0]["skill_version"] == "v1"
     assert payload["actions"][0]["effect_class"] == "write_low_risk"
@@ -269,6 +270,26 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     response = client.get("/agent-runs/registry")
     assert response.status_code == 200
     payload = response.json()
+    assert payload["registry_version"] == "agent-runtime-static-v1"
+    assert payload["registry_hash_algorithm"] == "sha256"
+    assert len(payload["registry_fingerprint"]) == 64
+    assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
+    assert payload["registry_source"] == "static_code"
+    assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
+        "registry_fingerprint"
+    ]
+    row = get_connection().execute(
+        """
+        SELECT registry_version, registry_fingerprint, source, payload_json
+        FROM agent_registry_versions
+        WHERE registry_fingerprint = ?
+        """,
+        (payload["registry_fingerprint"],),
+    ).fetchone()
+    assert row is not None
+    assert row["registry_version"] == "agent-runtime-static-v1"
+    assert row["source"] == "static_code"
+    assert '"registry_version":"agent-runtime-static-v1"' in row["payload_json"].replace(" ", "")
     tool_ids = {tool["id"] for tool in payload["tools"]}
     skill_ids = {skill["id"] for skill in payload["skills"]}
     policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
@@ -429,6 +450,7 @@ def test_operator_retry_command_creates_new_proposed_retry_action(client: TestCl
     assert retry_action["retry_count"] == 1
     assert retry_action["dedupe_key"] == f"retry:{failed['id']}:same_action:1"
     assert retry_action["registry_version"] == "agent-runtime-static-v1"
+    assert len(retry_action["registry_fingerprint"]) == 64
     assert retry_action["tool_version"] == "v1"
     assert retry_action["skill_version"] == "v1"
     assert deps.agent_actions.get_agent_action(failed["id"])["status"] == "failed"
@@ -500,6 +522,7 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
     assert action["registry_version"] == "agent-runtime-static-v1"
+    assert len(action["registry_fingerprint"]) == 64
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
@@ -694,6 +717,7 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
     assert action["registry_version"] == "agent-runtime-static-v1"
+    assert len(action["registry_fingerprint"]) == 64
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",

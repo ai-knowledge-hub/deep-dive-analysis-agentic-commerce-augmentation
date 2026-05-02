@@ -27,6 +27,7 @@ def create_agent_action(
     tool_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     registry_version: Optional[str] = None,
+    registry_fingerprint: Optional[str] = None,
     tool_version: Optional[str] = None,
     skill_version: Optional[str] = None,
     effect_class: Optional[str] = None,
@@ -62,6 +63,7 @@ def create_agent_action(
             tool_id,
             skill_id,
             registry_version,
+            registry_fingerprint,
             tool_version,
             skill_version,
             effect_class,
@@ -73,7 +75,7 @@ def create_agent_action(
             dedupe_key,
             error_text
         )
-        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
         """,
         (
             action_id,
@@ -95,6 +97,7 @@ def create_agent_action(
             tool_id,
             skill_id,
             registry_version,
+            registry_fingerprint,
             tool_version,
             skill_version,
             effect_class,
@@ -237,6 +240,9 @@ def _row(row) -> Dict[str, Any]:
         "skill_id": row["skill_id"] if "skill_id" in row.keys() else None,
         "registry_version": row["registry_version"]
         if "registry_version" in row.keys()
+        else None,
+        "registry_fingerprint": row["registry_fingerprint"]
+        if "registry_fingerprint" in row.keys()
         else None,
         "tool_version": row["tool_version"] if "tool_version" in row.keys() else None,
         "skill_version": row["skill_version"] if "skill_version" in row.keys() else None,

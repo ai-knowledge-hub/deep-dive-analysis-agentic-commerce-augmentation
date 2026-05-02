@@ -1683,7 +1683,7 @@ function AgentRunsPageContent() {
                       <div className="panel__header">
                         <h4>Skills and tools</h4>
                         <span className="panel__badge panel__badge--secondary">
-                          {runtimeRegistry ? "Registry v1" : "Loading registry"}
+                          {runtimeRegistry?.registry_version ?? "Loading registry"}
                         </span>
                       </div>
                       <p className="panel__muted">
@@ -1700,6 +1700,15 @@ function AgentRunsPageContent() {
                         </span>
                         <span className="panel__badge panel__badge--secondary">
                           Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Fingerprint:{" "}
+                          {runtimeRegistry?.registry_fingerprint
+                            ? runtimeRegistry.registry_fingerprint.slice(0, 12)
+                            : "pending"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Registry source: {runtimeRegistry?.registry_source ?? "pending"}
                         </span>
                       </div>
                       <div className="agent-ops-summary">
@@ -2272,6 +2281,12 @@ function AgentRunsPageContent() {
                           </span>
                           <span className="panel__badge panel__badge--secondary">
                             Registry: {selectedAction.registry_version ?? "unpinned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Receipt fingerprint:{" "}
+                            {selectedAction.registry_fingerprint
+                              ? selectedAction.registry_fingerprint.slice(0, 12)
+                              : "unpinned"}
                           </span>
                           <span className="panel__badge panel__badge--secondary">
                             Tool version: {selectedAction.tool_version ?? "unpinned"}

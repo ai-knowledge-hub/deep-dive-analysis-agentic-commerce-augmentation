@@ -158,6 +158,12 @@ describe("AgentRunsPage timeline presets", () => {
       },
     });
     listAgentRuntimeRegistryMock.mockResolvedValue({
+      registry_version: "agent-runtime-static-v1",
+      registry_fingerprint: "abcdef1234567890",
+      registry_hash_algorithm: "sha256",
+      registry_snapshot_id: "abcdef1234567890",
+      registry_snapshot_created_at: "2026-05-02T10:00:00Z",
+      registry_source: "static_code",
       skills: [
         {
           id: "optimize-product-representation",
@@ -491,6 +497,7 @@ describe("AgentRunsPage timeline presets", () => {
           tool_id: "experiment.run_variant",
           skill_id: "optimize-product-representation",
           registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
           tool_version: "v1",
           skill_version: "v1",
           effect_class: "write_low_risk",
@@ -511,6 +518,9 @@ describe("AgentRunsPage timeline presets", () => {
       screen.getByText(/Compare the metric against control before promotion/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Registry: agent-runtime-static-v1/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
+    expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();
     expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();
