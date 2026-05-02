@@ -26,6 +26,10 @@ def create_agent_action(
     validation_job_id: Optional[str],
     tool_id: Optional[str] = None,
     skill_id: Optional[str] = None,
+    registry_version: Optional[str] = None,
+    registry_fingerprint: Optional[str] = None,
+    tool_version: Optional[str] = None,
+    skill_version: Optional[str] = None,
     effect_class: Optional[str] = None,
     side_effects: Optional[List[str]] = None,
     rollback_guidance: Optional[str] = None,
@@ -58,6 +62,10 @@ def create_agent_action(
             validation_job_id,
             tool_id,
             skill_id,
+            registry_version,
+            registry_fingerprint,
+            tool_version,
+            skill_version,
             effect_class,
             side_effects_json,
             rollback_guidance,
@@ -67,7 +75,7 @@ def create_agent_action(
             dedupe_key,
             error_text
         )
-        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
         """,
         (
             action_id,
@@ -88,6 +96,10 @@ def create_agent_action(
             validation_job_id,
             tool_id,
             skill_id,
+            registry_version,
+            registry_fingerprint,
+            tool_version,
+            skill_version,
             effect_class,
             to_json(side_effects or []) or to_json([]),
             rollback_guidance,
@@ -226,6 +238,14 @@ def _row(row) -> Dict[str, Any]:
         "validation_job_id": row["validation_job_id"],
         "tool_id": row["tool_id"] if "tool_id" in row.keys() else None,
         "skill_id": row["skill_id"] if "skill_id" in row.keys() else None,
+        "registry_version": row["registry_version"]
+        if "registry_version" in row.keys()
+        else None,
+        "registry_fingerprint": row["registry_fingerprint"]
+        if "registry_fingerprint" in row.keys()
+        else None,
+        "tool_version": row["tool_version"] if "tool_version" in row.keys() else None,
+        "skill_version": row["skill_version"] if "skill_version" in row.keys() else None,
         "effect_class": row["effect_class"] if "effect_class" in row.keys() else None,
         "side_effects": from_json(row["side_effects_json"], default=[])
         if "side_effects_json" in row.keys()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 import types
 
@@ -19,6 +21,7 @@ if "google" not in sys.modules:
 
 from api.composition import default_deps
 from api.main import app
+from api.routes import agent_runs as agent_runs_route
 from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
 from shared.config.env import get_settings
@@ -230,6 +233,8 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert run["policy_profile_id"] == "safe_auto"
     assert run["idempotency_key"] == "req-123"
     assert str(run["trace_id"]).startswith("trace_")
+    assert run["registry_version"] == "agent-runtime-static-v1"
+    assert len(run["registry_fingerprint"]) == 64
 
     detail = client.get(
         f"/agent-runs/{run['id']}",
@@ -238,8 +243,13 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert detail.status_code == 200
     payload = detail.json()
     assert payload["run"]["trace_id"] == run["trace_id"]
+    assert payload["run"]["registry_fingerprint"] == run["registry_fingerprint"]
     assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
     assert payload["actions"][0]["skill_id"] == "optimize-product-representation"
+    assert payload["actions"][0]["registry_version"] == "agent-runtime-static-v1"
+    assert len(payload["actions"][0]["registry_fingerprint"]) == 64
+    assert payload["actions"][0]["tool_version"] == "v1"
+    assert payload["actions"][0]["skill_version"] == "v1"
     assert payload["actions"][0]["effect_class"] == "write_low_risk"
 
     events = client.get(
@@ -266,6 +276,26 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     response = client.get("/agent-runs/registry")
     assert response.status_code == 200
     payload = response.json()
+    assert payload["registry_version"] == "agent-runtime-static-v1"
+    assert payload["registry_hash_algorithm"] == "sha256"
+    assert len(payload["registry_fingerprint"]) == 64
+    assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
+    assert payload["registry_source"] == "static_code"
+    assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
+        "registry_fingerprint"
+    ]
+    row = get_connection().execute(
+        """
+        SELECT registry_version, registry_fingerprint, source, payload_json
+        FROM agent_registry_versions
+        WHERE registry_fingerprint = ?
+        """,
+        (payload["registry_fingerprint"],),
+    ).fetchone()
+    assert row is not None
+    assert row["registry_version"] == "agent-runtime-static-v1"
+    assert row["source"] == "static_code"
+    assert '"registry_version":"agent-runtime-static-v1"' in row["payload_json"].replace(" ", "")
     tool_ids = {tool["id"] for tool in payload["tools"]}
     skill_ids = {skill["id"] for skill in payload["skills"]}
     policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
@@ -273,10 +303,84 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert "experiment.run_variant" in tool_ids
     assert "optimize-product-representation" in skill_ids
     assert "safe_auto" in policy_ids
+    run_variant = next(
+        capability
+        for capability in payload["capabilities"]
+        if capability["name"] == "run_variant"
+    )
+    assert run_variant["summary"]
+    assert run_variant["input_schema"]["properties"]["experiment_id"]["type"] == "string"
+    assert run_variant["output_schema"]["properties"]["metric_id"]["type"] == "string"
+    assert "variant_id" in run_variant["output_schema"]["required"]
+    assert run_variant["review_checklist"]
+    assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
+    assert run_variant["steward_team"] == "commerce-optimization"
     assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
     ]
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+
+
+def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
+    client: TestClient, monkeypatch
+):
+    first = client.get("/agent-runs/registry").json()
+    changed_contract = agent_runs_route.registry_contract_payload()
+    changed_contract = {
+        **changed_contract,
+        "tools": [
+            *changed_contract["tools"],
+            {
+                "id": "test.synthetic_tool",
+                "capability_name": "synthetic_tool",
+                "summary": "Synthetic test tool.",
+                "default_version": "v-test",
+            },
+        ],
+    }
+    changed_fingerprint = hashlib.sha256(
+        json.dumps(
+            changed_contract,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    monkeypatch.setattr(
+        agent_runs_route, "registry_contract_payload", lambda: changed_contract
+    )
+    monkeypatch.setattr(agent_runs_route, "registry_fingerprint", lambda: changed_fingerprint)
+
+    changed = client.get("/agent-runs/registry").json()
+
+    assert changed["registry_fingerprint"] == changed_fingerprint
+    row = get_connection().execute(
+        """
+        SELECT previous_registry_fingerprint, registry_fingerprint, diff_json
+        FROM agent_registry_audit_events
+        WHERE registry_fingerprint = ?
+        """,
+        (changed_fingerprint,),
+    ).fetchone()
+    assert row is not None
+    assert row["previous_registry_fingerprint"] == first["registry_fingerprint"]
+    diff = json.loads(row["diff_json"])
+    assert diff["tools"]["added"] == ["test.synthetic_tool"]
+
+    audit_response = client.get("/agent-runs/registry/audit", params={"limit": 5})
+    assert audit_response.status_code == 200
+    audit_payload = audit_response.json()
+    assert audit_payload["events"][0]["registry_fingerprint"] == changed_fingerprint
+    assert audit_payload["events"][0]["diff"]["tools"]["added"] == [
+        "test.synthetic_tool"
+    ]
+
+    filtered_response = client.get(
+        "/agent-runs/registry/audit",
+        params={"registry_fingerprint": changed_fingerprint},
+    )
+    assert filtered_response.status_code == 200
+    assert len(filtered_response.json()["events"]) == 1
 
 
 def test_operator_command_endpoint_records_receipt_and_delegates_approval(
@@ -413,6 +517,10 @@ def test_operator_retry_command_creates_new_proposed_retry_action(client: TestCl
     assert retry_action["status"] == "proposed"
     assert retry_action["retry_count"] == 1
     assert retry_action["dedupe_key"] == f"retry:{failed['id']}:same_action:1"
+    assert retry_action["registry_version"] == "agent-runtime-static-v1"
+    assert len(retry_action["registry_fingerprint"]) == 64
+    assert retry_action["tool_version"] == "v1"
+    assert retry_action["skill_version"] == "v1"
     assert deps.agent_actions.get_agent_action(failed["id"])["status"] == "failed"
 
     events = client.get(
@@ -481,6 +589,8 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     assert action["dedupe_key"] == f"retry:{failed['id']}:create_recovery_action:1"
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
+    assert action["registry_version"] == "agent-runtime-static-v1"
+    assert len(action["registry_fingerprint"]) == 64
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
@@ -674,6 +784,8 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert action["dedupe_key"].startswith("change_plan:")
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
+    assert action["registry_version"] == "agent-runtime-static-v1"
+    assert len(action["registry_fingerprint"]) == 64
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",

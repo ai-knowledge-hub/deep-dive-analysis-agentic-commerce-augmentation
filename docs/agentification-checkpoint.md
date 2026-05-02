@@ -30,8 +30,13 @@ The codebase now has the minimum spine for the pivot:
 - Runtime policy profiles mapped from run modes: `human_approval_required`, `safe_auto`, and `observe`.
 - Compatibility from legacy `capability_name` to machine-facing `tool_id`.
 - Static skills registry v1 for initial commerce workflows.
-- Static tools/capabilities registry v1 for executable runtime capabilities.
-- Read API for the runtime registry: `GET /agent-runs/registry`.
+- Static tools/capabilities registry v1 for executable runtime capabilities, with summaries, input/output schema metadata, required receipt fields, side-effect notes, owner/steward metadata, and operator review checklists.
+- Read API for the runtime registry: `GET /agent-runs/registry`, including registry version, deterministic fingerprint metadata, and persisted registry snapshot metadata for drift detection.
+- Read API for registry release history: `GET /agent-runs/registry/audit`, including recent fingerprint transition events and diff summaries.
+- Registry fingerprint transitions now create audit events with coarse diff summaries across skills, tools, capabilities, policy profiles, and tool-skill mappings.
+- Runtime policy now validates registry-declared tool input types before execution, and runtime receipt checks validate registry-declared output types and required receipt fields after execution.
+- Agent actions now pin `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
+- Agent runs now pin the active `registry_version` and `registry_fingerprint` at creation time so the whole run has a stable registry context before action planning.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
 - Operator chat can issue audited steering commands for approve, reject, pause, start, non-mutating focus/explain intents, and structured change-plan recovery proposals.
@@ -76,15 +81,12 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, and new actions pin registry/tool/skill/fingerprint context.
 
 Next steps:
 
-- Add a persistent registry table or versioned config store.
-- Add schema validation for tool inputs and outputs.
-- Add persistent registry ownership and richer skill selection when multiple skills can use the same tool.
-- Add skill/tool version pinning onto runs and actions.
-- Add registry diff/audit events when definitions change.
+- Expand required output receipt fields as more capabilities can guarantee stable IDs.
+- Move registry ownership into the persistent registry source and add richer skill selection when multiple skills can use the same tool.
 
 ### 2. Agent Chat As Primary Control Interface
 
@@ -137,47 +139,45 @@ Next steps:
 - Reduce duplicate dashboards.
 - Make all risky actions visible through Interventions.
 
-## Next Build Slice
+## Current Build Slice
 
-The current implementation slice covers the first command observability and structured recovery pass.
+The current implementation slice is Registry Hardening v1.
 
 Completed in this slice:
 
-- Timeline observability:
-  - `event_type=command` filtering for `operator_command_*`.
-  - `Commands (24h)` timeline preset in Agent Runs.
-- Interventions integration:
-  - Surface command-originated retry/recovery work in Interventions.
-  - Group command-originated work by urgency/risk.
-- Structured recovery:
-  - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
-  - Recovery target capabilities are validated by preflight against the run's allowed capabilities.
-  - Proposed recovery actions carry persisted side effects and rollback guidance.
-- Chat command controls:
-  - Operator chat now exposes step and cancel commands through the same preflight path.
-  - Operator chat exposes direct `change_plan` recovery proposal controls.
-  - Command responses are summarized in the chat thread with resulting run/action state.
-  - Command outcome summaries include artifact-specific inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures.
-- Retry strategies:
-  - `same_action` retries the failed capability with copied inputs.
-  - `last_safe_checkpoint` retries the failed capability with checkpoint intent stamped into inputs.
-  - `create_recovery_action` creates a targeted recovery proposal, defaulting to `recommend_next_action` when available.
-- Rollback guidance:
-  - Recovery/retry proposals persist capability side effects and rollback guidance on the action row.
-  - `action_recovery_proposed` and `action_retry_proposed` events carry rollback guidance in anchors for Interventions visibility.
-  - Operator chat includes rollback guidance in command outcomes.
-- Compensating actions:
-  - Recovery/retry proposals can persist recommended compensating follow-ups.
-  - External-side-effect proposals recommend `review_validation_readiness` when allowed.
-  - High-risk proposals recommend readiness review and/or policy recommendation when allowed.
-  - Interventions and operator chat surface the first compensating recommendation.
-  - Interventions can create a compensating `change_plan` proposal through the audited command endpoint.
-  - Interventions shows command preflight risk/blockers/warnings/rollback before creating compensating proposals.
+- Registry metadata:
+  - Tool and capability specs now expose summaries, input schemas, output schemas, side effects, and operator review checklists.
+  - Default tool inputs are reflected into schema metadata so operators and API clients can see defaulted fields.
+  - Tool and capability specs now expose `owner_principal_id` and `steward_team`.
+  - The registry endpoint now exposes `registry_version`, `registry_fingerprint`, and `registry_hash_algorithm` for deterministic drift detection.
+- Version pinning:
+  - New runs persist `registry_version` and `registry_fingerprint`.
+  - New action proposals persist `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version`.
+  - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
+- Persistence:
+  - The registry endpoint now records the current registry payload in `agent_registry_versions`, keyed by deterministic fingerprint.
+  - Registry fingerprint changes create `agent_registry_audit_events` rows with diff summaries.
+  - Agent Runs shows the active registry source, fingerprint, and recent registry release trail.
+- Policy enforcement:
+  - Registry-declared input schemas are validated before tool execution.
+  - Registry-declared output schemas and required receipt fields are validated after capability execution.
+  - Invalid schema inputs are caught by runtime policy handling, mark the action/run failed, and preserve an auditable failure path.
+  - Invalid output receipts mark the action/run failed before the malformed receipt is persisted as successful.
+- Control-plane UI:
+  - Agent Runs selected-action detail now prefers registry-provided summaries, side effects, and review checklists over hardcoded fallback explanations.
+  - Agent Runs selected-action detail shows registry owner and steward metadata.
+  - Agent Runs shows the active registry version and short fingerprint.
 - Verification:
-  - Backend tests for command event filtering and recovery action creation.
-  - Frontend tests for command timeline preset and Interventions visibility.
+  - Backend tests cover registry metadata exposure and invalid registry input failure handling.
+  - Frontend tests cover registry-driven action explanation and review checklist rendering.
 
-Next build should deepen this slice:
+## Next Build Slice
 
-- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
+The next implementation slice should finish Registry Hardening v1 release management and ownership migration.
+
+Initial scope:
+
+- Backfill or migrate historical runs/actions that predate registry/tool/skill version pins if needed.
+- Expand required output receipt fields as more capabilities can guarantee stable IDs.
+- Move owner/steward metadata into the persistent registry source.
 - Keep mock-auth Playwright smoke green.

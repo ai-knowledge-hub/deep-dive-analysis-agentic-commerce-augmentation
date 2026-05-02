@@ -32,6 +32,8 @@ def create_agent_run(
     trace_id: Optional[str] = None,
     root_run_id: Optional[str] = None,
     parent_run_id: Optional[str] = None,
+    registry_version: Optional[str] = None,
+    registry_fingerprint: Optional[str] = None,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     ensure_client(client_id)
@@ -61,9 +63,11 @@ def create_agent_run(
             idempotency_key,
             trace_id,
             root_run_id,
-            parent_run_id
+            parent_run_id,
+            registry_version,
+            registry_fingerprint
         )
-        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -89,6 +93,8 @@ def create_agent_run(
             trace_id,
             root_run_id,
             parent_run_id,
+            registry_version,
+            registry_fingerprint,
         ),
     )
     conn.commit()
@@ -316,6 +322,12 @@ def _row(row) -> Dict[str, Any]:
         "root_run_id": row["root_run_id"] if "root_run_id" in row.keys() else None,
         "parent_run_id": row["parent_run_id"]
         if "parent_run_id" in row.keys()
+        else None,
+        "registry_version": row["registry_version"]
+        if "registry_version" in row.keys()
+        else None,
+        "registry_fingerprint": row["registry_fingerprint"]
+        if "registry_fingerprint" in row.keys()
         else None,
         "error": row["error_text"],
         "created_at": row["created_at"],

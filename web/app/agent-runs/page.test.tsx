@@ -16,6 +16,7 @@ const createAgentRunMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
+const listAgentRuntimeRegistryAuditMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
@@ -64,6 +65,8 @@ vi.mock("../../lib/api", () => ({
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
   listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
+  listAgentRuntimeRegistryAudit: (...args: unknown[]) =>
+    listAgentRuntimeRegistryAuditMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
@@ -89,6 +92,7 @@ describe("AgentRunsPage timeline presets", () => {
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
     listAgentRuntimeRegistryMock.mockReset();
+    listAgentRuntimeRegistryAuditMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
@@ -107,6 +111,8 @@ describe("AgentRunsPage timeline presets", () => {
           allowed_capabilities: ["run_variant"],
           principal_type: "human",
           policy_profile_id: "human_approval_required",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
         },
       ],
     });
@@ -124,6 +130,8 @@ describe("AgentRunsPage timeline presets", () => {
         principal_type: "human",
         policy_profile_id: "human_approval_required",
         trace_id: "trace_1234567890",
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
       },
       actions: [],
     });
@@ -158,6 +166,12 @@ describe("AgentRunsPage timeline presets", () => {
       },
     });
     listAgentRuntimeRegistryMock.mockResolvedValue({
+      registry_version: "agent-runtime-static-v1",
+      registry_fingerprint: "abcdef1234567890",
+      registry_hash_algorithm: "sha256",
+      registry_snapshot_id: "abcdef1234567890",
+      registry_snapshot_created_at: "2026-05-02T10:00:00Z",
+      registry_source: "static_code",
       skills: [
         {
           id: "optimize-product-representation",
@@ -172,8 +186,21 @@ describe("AgentRunsPage timeline presets", () => {
         {
           id: "experiment.run_variant",
           capability_name: "run_variant",
+          summary: "Execute one candidate variant against frozen snapshots.",
           default_version: "v1",
+          input_schema: {
+            type: "object",
+            required: ["experiment_id"],
+            properties: { experiment_id: { type: "string" } },
+          },
+          output_schema: {
+            type: "object",
+            properties: { metric_id: { type: "string" } },
+          },
           side_effects: ["create_experiment_run"],
+          review_checklist: ["Compare the metric against control before promotion."],
+          owner_principal_id: "platform.commerce-optimization",
+          steward_team: "commerce-optimization",
           effect_class: "write_low_risk",
         },
       ],
@@ -181,8 +208,21 @@ describe("AgentRunsPage timeline presets", () => {
         {
           name: "run_variant",
           tool_id: "experiment.run_variant",
+          summary: "Execute one candidate variant against frozen snapshots.",
           default_version: "v1",
+          input_schema: {
+            type: "object",
+            required: ["experiment_id"],
+            properties: { experiment_id: { type: "string" } },
+          },
+          output_schema: {
+            type: "object",
+            properties: { metric_id: { type: "string" } },
+          },
           side_effects: ["create_experiment_run"],
+          review_checklist: ["Compare the metric against control before promotion."],
+          owner_principal_id: "platform.commerce-optimization",
+          steward_team: "commerce-optimization",
           effect_class: "write_low_risk",
         },
       ],
@@ -190,6 +230,26 @@ describe("AgentRunsPage timeline presets", () => {
         "experiment.run_variant": ["optimize-product-representation"],
       },
       policy_profiles: [],
+    });
+    listAgentRuntimeRegistryAuditMock.mockResolvedValue({
+      events: [
+        {
+          id: "registry-audit-1",
+          event_type: "registry_changed",
+          previous_registry_fingerprint: "1111111111111111",
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "static_code",
+          created_at: "2026-05-02T10:00:00Z",
+          diff: {
+            tools: { added: ["experiment.run_variant"], removed: [], changed: [] },
+            skills: { added: [], removed: [], changed: [] },
+            capabilities: { added: [], removed: [], changed: [] },
+            policy_profiles: { added: [], removed: [], changed: [] },
+            skill_ids_by_tool_changed: true,
+          },
+        },
+      ],
     });
   });
 
@@ -440,13 +500,64 @@ describe("AgentRunsPage timeline presets", () => {
   });
 
   it("shows the selected run skills and tool registry contract", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "planned",
+        state: "battery_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "plan_only",
+        allowed_capabilities: ["run_variant"],
+      },
+      actions: [
+        {
+          id: "action-1",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "proposed",
+          capability_name: "run_variant",
+          capability_version: "v1",
+          rationale: "Run variant.",
+          inputs: { experiment_id: "exp-1" },
+          outputs: {},
+          tool_id: "experiment.run_variant",
+          skill_id: "optimize-product-representation",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
+          tool_version: "v1",
+          skill_version: "v1",
+          effect_class: "write_low_risk",
+        },
+      ],
+    });
+
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
     expect(screen.getByText(/Optimize Product Representation/i)).toBeInTheDocument();
-    expect(screen.getByText(/experiment.run_variant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Execute one candidate variant against frozen snapshots/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Compare the metric against control before promotion/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Registry: agent-runtime-static-v1/)).toBeInTheDocument();
+    expect(screen.getByText(/Run registry: agent-runtime-static-v1/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
+    expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
+    expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
+    expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();
+    expect(screen.getByText(/Steward: commerce-optimization/i)).toBeInTheDocument();
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
+    expect(listAgentRuntimeRegistryAuditMock).toHaveBeenCalledWith({ limit: 5 });
   });
 
   it("routes operator chat steering commands through the command API", async () => {

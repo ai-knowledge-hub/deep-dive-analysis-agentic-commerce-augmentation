@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,7 +16,6 @@ from application.services.agent_runtime.capabilities import (
 )
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
-    list_skill_specs,
     new_trace_id,
     policy_profile_for_run_mode,
     skill_id_for_tool_id,
@@ -28,8 +26,9 @@ from application.services.agent_runtime.policy import PolicyEnforcer, PolicyErro
 from application.services.agent_runtime.planner import build_initial_plan
 from application.services.agent_runtime.registry import (
     get_capability_spec,
-    list_capability_specs,
-    list_tool_specs,
+    registry_contract_payload,
+    registry_fingerprint,
+    version_context_for_capability,
 )
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
@@ -40,6 +39,10 @@ from application.services.agent_runtime.runtime import (
     RunNotFoundError,
 )
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
+from infrastructure.db.agent.agent_registry import (
+    ensure_agent_registry_version,
+    list_agent_registry_audit_events,
+)
 
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
@@ -128,14 +131,6 @@ class AgentRunCommandRequest(BaseModel):
     action_id: Optional[str] = None
     message: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-def _serialize_spec(value: Any) -> Dict[str, Any]:
-    if is_dataclass(value):
-        return asdict(value)
-    if isinstance(value, dict):
-        return dict(value)
-    return dict(getattr(value, "__dict__", {}))
 
 
 def _hash_payload(value: Any) -> str:
@@ -475,38 +470,35 @@ def _requested_recovery_capability(metadata: Optional[Dict[str, Any]]) -> str:
 
 @router.get("/registry")
 def get_agent_runtime_registry() -> Dict[str, Any]:
-    skills = [_serialize_spec(skill) for skill in list_skill_specs()]
-    tools = [_serialize_spec(tool) for tool in list_tool_specs()]
-    capabilities = [_serialize_spec(capability) for capability in list_capability_specs()]
-    skill_ids_by_tool: Dict[str, List[str]] = {}
-    for skill in skills:
-        for tool_id in skill.get("tool_ids", []) or []:
-            skill_ids_by_tool.setdefault(str(tool_id), []).append(str(skill.get("id")))
+    registry_payload = registry_contract_payload()
+    fingerprint = registry_fingerprint()
+    snapshot = ensure_agent_registry_version(
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=fingerprint,
+        hash_algorithm="sha256",
+        payload=registry_payload,
+    )
     return {
-        "skills": skills,
-        "tools": tools,
-        "capabilities": capabilities,
-        "skill_ids_by_tool": skill_ids_by_tool,
-        "policy_profiles": [
-            {
-                "id": "human_approval_required",
-                "name": "Human Approval Required",
-                "description": "Plan-first profile; proposed actions require operator approval before execution.",
-                "auto_effect_classes": [],
-            },
-            {
-                "id": "safe_auto",
-                "name": "Safe Auto",
-                "description": "Allows bounded execution for low-risk approved work while preserving gates for risky effects.",
-                "auto_effect_classes": ["read", "recommend", "write_low_risk"],
-            },
-            {
-                "id": "observe",
-                "name": "Observe",
-                "description": "Read-only profile for inspection, explanation, and audit workflows.",
-                "auto_effect_classes": ["read", "recommend"],
-            },
-        ],
+        **registry_payload,
+        "registry_fingerprint": fingerprint,
+        "registry_hash_algorithm": "sha256",
+        "registry_snapshot_id": snapshot.get("id"),
+        "registry_snapshot_created_at": snapshot.get("created_at"),
+        "registry_source": snapshot.get("source"),
+    }
+
+
+@router.get("/registry/audit")
+def get_agent_runtime_registry_audit(
+    registry_fingerprint: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    bounded_limit = max(1, min(int(limit), 100))
+    return {
+        "events": list_agent_registry_audit_events(
+            registry_fingerprint=registry_fingerprint,
+            limit=bounded_limit,
+        )
     }
 
 
@@ -528,6 +520,14 @@ def create_agent_run(
     run_mode = str(payload.run_mode or "plan_only").strip().lower()
     policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(run_mode)
     trace_id = new_trace_id()
+    registry_payload = registry_contract_payload()
+    active_registry_fingerprint = registry_fingerprint()
+    ensure_agent_registry_version(
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=active_registry_fingerprint,
+        hash_algorithm="sha256",
+        payload=registry_payload,
+    )
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,
         brand_id=payload.brand_id,
@@ -549,6 +549,8 @@ def create_agent_run(
         policy_profile_id=policy_profile_id,
         idempotency_key=payload.idempotency_key,
         trace_id=trace_id,
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=active_registry_fingerprint,
     )
 
     # v0 behavior: seed a human-reviewable plan as proposed actions.
@@ -561,6 +563,9 @@ def create_agent_run(
         tool_id = capability_to_tool_id(action.capability_name)
         skill_id = skill_id_for_tool_id(tool_id)
         effect_class = tool_effect_class(tool_id)
+        version_context = version_context_for_capability(
+            action.capability_name, tool_id=tool_id, skill_id=skill_id
+        )
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
             sequence=idx,
@@ -579,6 +584,10 @@ def create_agent_run(
             validation_job_id=None,
             tool_id=tool_id,
             skill_id=skill_id,
+            registry_version=version_context["registry_version"],
+            registry_fingerprint=version_context["registry_fingerprint"],
+            tool_version=version_context["tool_version"],
+            skill_version=version_context["skill_version"],
             effect_class=effect_class,
             side_effects=_capability_side_effects(action.capability_name),
             rollback_guidance=_capability_rollback_guidance(
@@ -908,7 +917,11 @@ def issue_agent_run_command(
                 else allowed[0]
             )
             tool_id = capability_to_tool_id(capability_name)
+            skill_id = skill_id_for_tool_id(tool_id)
             effect_class = tool_effect_class(tool_id)
+            version_context = version_context_for_capability(
+                capability_name, tool_id=tool_id, skill_id=skill_id
+            )
             recovery_inputs = payload.metadata.get("inputs")
             inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
             if run.get("experiment_id") and not inputs.get("experiment_id"):
@@ -931,7 +944,11 @@ def issue_agent_run_command(
                 variant_id=action.get("variant_id") if action else None,
                 validation_job_id=action.get("validation_job_id") if action else None,
                 tool_id=tool_id,
-                skill_id=skill_id_for_tool_id(tool_id),
+                skill_id=skill_id,
+                registry_version=version_context["registry_version"],
+                registry_fingerprint=version_context["registry_fingerprint"],
+                tool_version=version_context["tool_version"],
+                skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
                 rollback_guidance=_capability_rollback_guidance(
@@ -1031,7 +1048,11 @@ def issue_agent_run_command(
             if retry_strategy == "create_recovery_action":
                 retry_inputs["recovery_from_action_id"] = action.get("id")
             tool_id = capability_to_tool_id(capability_name)
+            skill_id = skill_id_for_tool_id(tool_id)
             effect_class = tool_effect_class(tool_id)
+            version_context = version_context_for_capability(
+                capability_name, tool_id=tool_id, skill_id=skill_id
+            )
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -1056,7 +1077,11 @@ def issue_agent_run_command(
                 variant_id=action.get("variant_id"),
                 validation_job_id=action.get("validation_job_id"),
                 tool_id=tool_id,
-                skill_id=skill_id_for_tool_id(tool_id),
+                skill_id=skill_id,
+                registry_version=version_context["registry_version"],
+                registry_fingerprint=version_context["registry_fingerprint"],
+                tool_version=version_context["tool_version"],
+                skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
                 rollback_guidance=_capability_rollback_guidance(

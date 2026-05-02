@@ -19,15 +19,21 @@ if "google" not in sys.modules:
 from api.composition import default_deps
 from application.services.agent_runtime.capabilities import CapabilityExecutionError
 from application.services.agent_runtime.runtime import (
+    AgentRuntimeError,
     AgentRuntimeService,
     NoApprovedActionError,
     PlanOnlyModeError,
     RunBusyError,
 )
-from shared.db.connection import init_db, set_database_path
+from shared.db.connection import get_connection, init_db, set_database_path
 
 
-def _create_base_run(*, deps, run_mode: str = "auto_execute_safe") -> dict:
+def _create_base_run(
+    *,
+    deps,
+    run_mode: str = "auto_execute_safe",
+    allowed_capabilities: list[str] | None = None,
+) -> dict:
     deps.clients.create_client(client_id="client-a", name="Client A")
     return deps.agent_runs.create_agent_run(
         client_id="client-a",
@@ -35,7 +41,7 @@ def _create_base_run(*, deps, run_mode: str = "auto_execute_safe") -> dict:
         product_id=None,
         experiment_id=None,
         objective={},
-        allowed_capabilities=["freeze_retrieval_protocol"],
+        allowed_capabilities=allowed_capabilities or ["freeze_retrieval_protocol"],
         capability_versions={},
         budgets={},
         approval_policy={},
@@ -162,6 +168,63 @@ def test_step_once_marks_action_and_run_failed_on_capability_error(
     assert failed_run["status"] == "failed"
     assert "simulated failure" in str(failed_run["error"])
     assert failed_run["lock_token"] is None
+
+
+def test_step_once_marks_policy_failure_on_invalid_registry_input(tmp_path):
+    db_path = tmp_path / "agent-runtime-invalid-input.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(deps=deps, run_mode="auto_execute_safe")
+    action = _add_approved_action(deps=deps, run_id=run["id"])
+    conn = get_connection()
+    conn.execute(
+        "UPDATE agent_actions SET inputs_json = json(?) WHERE id = ?",
+        ('{"experiment_id":"exp-1","retrieval_max_results":"five"}', action["id"]),
+    )
+    conn.commit()
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="retrieval_max_results"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+    assert "retrieval_max_results" in str(failed_action["error"])
+
+
+def test_step_once_marks_failure_on_invalid_registry_output(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent-runtime-invalid-output.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["run_variant"],
+    )
+    action = _add_approved_action(
+        deps=deps, run_id=run["id"], capability_name="run_variant"
+    )
+
+    def _fake_execute_capability(**kwargs):
+        assert kwargs["capability_name"] == "run_variant"
+        return {"metric_id": 123, "status": "done"}
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _fake_execute_capability,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(CapabilityExecutionError, match="metric_id"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+    assert "metric_id" in str(failed_action["error"])
 
 
 def test_step_once_requires_approved_action(tmp_path):

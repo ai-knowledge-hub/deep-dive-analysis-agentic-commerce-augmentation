@@ -10,6 +10,7 @@ import {
   AgentRunCommandResponse,
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
+  AgentRegistryAuditListResponse,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
   CopyRevisionListResponse,
@@ -593,6 +594,19 @@ export async function getAgentRunEvents(
 
 export async function listAgentRuntimeRegistry(): Promise<AgentRuntimeRegistryResponse> {
   return request<AgentRuntimeRegistryResponse>("/agent-runs/registry");
+}
+
+export async function listAgentRuntimeRegistryAudit(
+  payload: { registry_fingerprint?: string | null; limit?: number } = {},
+): Promise<AgentRegistryAuditListResponse> {
+  const params = new URLSearchParams();
+  if (payload.registry_fingerprint) {
+    params.set("registry_fingerprint", payload.registry_fingerprint);
+  }
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<AgentRegistryAuditListResponse>(
+    `/agent-runs/registry/audit${params.toString() ? `?${params.toString()}` : ""}`,
+  );
 }
 
 export async function decideAgentAction(

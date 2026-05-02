@@ -262,6 +262,7 @@ def execute_capability(
             "mode": mode,
             "auto_run": auto_run,
             "job_id": job.get("id"),
+            "validation_job_id": job.get("id"),
             "job_status": job.get("status"),
             "result_id": (result or {}).get("id") if isinstance(result, dict) else None,
             "winner_id": (result or {}).get("winner_id")
@@ -760,6 +761,7 @@ def execute_capability(
             "experiment_id": experiment_id,
             "variant_id": variant_id,
             "revision_id": (updated_revision or {}).get("id"),
+            "copy_revision_id": (updated_revision or {}).get("id"),
             "product_id": experiment.get("product_id"),
             "product_description_updated": bool(updated_product),
             "analytics_event_id": event.get("id"),

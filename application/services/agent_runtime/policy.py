@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from application.services.agent_runtime.registry import CapabilitySpec
+from application.services.agent_runtime.registry import CapabilitySpec, validate_inputs
 
 
 class PolicyError(ValueError):
@@ -26,6 +26,7 @@ class PolicyEnforcer:
             effect_class=spec.effect_class,
         )
         self._assert_required_inputs(spec=spec, inputs=inputs)
+        self._assert_input_schema(spec=spec, inputs=inputs)
         self._assert_budgets(
             run=run,
             all_actions=list(all_actions),
@@ -128,6 +129,16 @@ class PolicyEnforcer:
                     f"consumed_cost_usd={consumed_cost:.4f}, "
                     f"max_cost_usd={max_cost_usd:.4f}"
                 )
+
+    def _assert_input_schema(
+        self,
+        *,
+        spec: CapabilitySpec,
+        inputs: Mapping[str, Any],
+    ) -> None:
+        errors = validate_inputs(spec, inputs)
+        if errors:
+            raise PolicyError("; ".join(errors))
 
 
 def _safe_int(value: Any) -> int | None:

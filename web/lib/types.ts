@@ -970,6 +970,8 @@ export type AgentRun = {
   policy_profile_id?: string | null;
   idempotency_key?: string | null;
   trace_id?: string | null;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
   objective?: Record<string, unknown>;
   allowed_capabilities?: string[];
   capability_versions?: Record<string, unknown>;
@@ -1004,6 +1006,10 @@ export type AgentAction = {
   validation_job_id?: string | null;
   tool_id?: string | null;
   skill_id?: string | null;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  tool_version?: string | null;
+  skill_version?: string | null;
   effect_class?: string | null;
   side_effects?: string[];
   rollback_guidance?: string | null;
@@ -1120,10 +1126,16 @@ export type AgentRuntimeSkillSpec = {
 export type AgentRuntimeToolSpec = {
   id: string;
   capability_name: string;
+  summary?: string;
   default_version?: string;
   required_inputs?: string[];
   default_inputs?: Record<string, unknown>;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
   side_effects?: string[];
+  review_checklist?: string[];
+  owner_principal_id?: string;
+  steward_team?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1131,10 +1143,16 @@ export type AgentRuntimeToolSpec = {
 export type AgentRuntimeCapabilitySpec = {
   name: string;
   tool_id: string;
+  summary?: string;
   default_version?: string;
   required_inputs?: string[];
   default_inputs?: Record<string, unknown>;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
   side_effects?: string[];
+  review_checklist?: string[];
+  owner_principal_id?: string;
+  steward_team?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1147,11 +1165,46 @@ export type AgentRuntimePolicyProfile = {
 };
 
 export type AgentRuntimeRegistryResponse = {
+  registry_version?: string;
+  registry_fingerprint?: string;
+  registry_hash_algorithm?: string;
+  registry_snapshot_id?: string | null;
+  registry_snapshot_created_at?: string | null;
+  registry_source?: string | null;
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];
   skill_ids_by_tool: Record<string, string[]>;
   policy_profiles: AgentRuntimePolicyProfile[];
+};
+
+export type AgentRegistryAuditDiffSection = {
+  added?: string[];
+  removed?: string[];
+  changed?: string[];
+};
+
+export type AgentRegistryAuditDiff = {
+  skills?: AgentRegistryAuditDiffSection;
+  tools?: AgentRegistryAuditDiffSection;
+  capabilities?: AgentRegistryAuditDiffSection;
+  policy_profiles?: AgentRegistryAuditDiffSection;
+  skill_ids_by_tool_changed?: boolean;
+};
+
+export type AgentRegistryAuditEvent = {
+  id: string;
+  event_type: string;
+  previous_registry_fingerprint?: string | null;
+  registry_fingerprint: string;
+  registry_version: string;
+  source: string;
+  diff: AgentRegistryAuditDiff;
+  created_at?: string | null;
+};
+
+export type AgentRegistryAuditListResponse = {
+  events: AgentRegistryAuditEvent[];
 };
 
 export type AgentRunEventListResponse = {

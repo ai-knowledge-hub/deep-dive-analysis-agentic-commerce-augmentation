@@ -6,6 +6,9 @@ from application.services.agent_runtime.registry import (
     get_tool_spec,
     next_state_for_capability,
     tool_supported,
+    validate_inputs,
+    validate_outputs,
+    version_context_for_capability,
 )
 from application.services.agent_runtime.agent_first import (
     skill_id_for_capability,
@@ -20,6 +23,30 @@ def test_registry_contains_core_capability_and_defaults():
     assert normalized["variant_selection"] == "top_1"
     assert normalized["retrieval_max_results"] == 5
     assert normalized["experiment_id"] == "exp-1"
+    assert spec.summary
+    assert spec.input_schema["properties"]["experiment_id"]["type"] == "string"
+    assert spec.output_schema["properties"]["metric_id"]["type"] == "string"
+    assert spec.review_checklist
+    assert spec.owner_principal_id == "platform.commerce-optimization"
+    assert spec.steward_team == "commerce-optimization"
+    assert validate_inputs(spec, normalized) == []
+    assert "retrieval_max_results" in validate_inputs(
+        spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
+    )[0]
+    assert validate_outputs(spec, {"metric_id": "metric-1", "variant_id": "variant-1"}) == []
+    assert "metric_id" in validate_outputs(
+        spec, {"metric_id": 123, "variant_id": "variant-1"}
+    )[0]
+    assert "variant_id" in validate_outputs(spec, {"metric_id": "metric-1"})[0]
+    version_context = version_context_for_capability(
+        "run_variant",
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+    )
+    assert version_context["registry_version"] == "agent-runtime-static-v1"
+    assert len(str(version_context["registry_fingerprint"])) == 64
+    assert version_context["tool_version"] == "v1"
+    assert version_context["skill_version"] == "v1"
 
 
 def test_registry_support_and_next_state():
@@ -34,6 +61,7 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert tool is not None
     assert tool.capability_name == "run_variant"
     assert tool.effect_class == "write_low_risk"
+    assert tool.owner_principal_id == "platform.commerce-optimization"
     normalized = tool.normalize_inputs({"experiment_id": "exp-1"})
     assert normalized["variant_selection"] == "top_1"
     assert normalized["retrieval_max_results"] == 5

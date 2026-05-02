@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
+  AgentRegistryAuditEvent,
   AgentRun,
   AgentRunCommandType,
   AgentRunEvent,
@@ -20,6 +21,7 @@ import {
   issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
+  listAgentRuntimeRegistryAudit,
   listAgentRuntimeRegistry,
   preflightAgentRunCommand,
 } from "../../lib/api";
@@ -218,6 +220,26 @@ function formatDateCompact(value?: string | null): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "unknown date";
   return parsed.toLocaleDateString();
+}
+
+function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
+  const sections = [
+    ["skills", event.diff.skills],
+    ["tools", event.diff.tools],
+    ["capabilities", event.diff.capabilities],
+    ["policies", event.diff.policy_profiles],
+  ] as const;
+  const changes = sections.flatMap(([label, section]) => {
+    const added = section?.added?.length ?? 0;
+    const removed = section?.removed?.length ?? 0;
+    const changed = section?.changed?.length ?? 0;
+    const total = added + removed + changed;
+    return total > 0 ? [`${label}: +${added} -${removed} ~${changed}`] : [];
+  });
+  if (event.diff.skill_ids_by_tool_changed) {
+    changes.push("tool-skill map changed");
+  }
+  return changes.length > 0 ? changes.join(" · ") : "No structural diff recorded";
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -429,6 +451,9 @@ function AgentRunsPageContent() {
   const [actions, setActions] = useState<AgentAction[]>([]);
   const [runtimeRegistry, setRuntimeRegistry] =
     useState<AgentRuntimeRegistryResponse | null>(null);
+  const [registryAuditEvents, setRegistryAuditEvents] = useState<
+    AgentRegistryAuditEvent[]
+  >([]);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -490,8 +515,11 @@ function AgentRunsPageContent() {
     try {
       const response = await listAgentRuntimeRegistry();
       setRuntimeRegistry(response);
+      const auditResponse = await listAgentRuntimeRegistryAudit({ limit: 5 });
+      setRegistryAuditEvents(auditResponse.events ?? []);
     } catch {
       setRuntimeRegistry(null);
+      setRegistryAuditEvents([]);
     }
   }, []);
 
@@ -861,6 +889,15 @@ function AgentRunsPageContent() {
       (skill.tool_ids ?? []).some((toolId) => allowedToolIds.has(toolId)),
     );
   }, [allowedRuntimeTools, runtimeRegistry]);
+
+  const selectedCapabilitySpec = useMemo(() => {
+    if (!runtimeRegistry || !selectedAction) return null;
+    return (
+      runtimeRegistry.capabilities.find(
+        (capability) => capability.name === selectedAction.capability_name,
+      ) ?? null
+    );
+  }, [runtimeRegistry, selectedAction]);
 
   const actionCounters = useMemo(() => {
     const counts = {
@@ -1674,7 +1711,7 @@ function AgentRunsPageContent() {
                       <div className="panel__header">
                         <h4>Skills and tools</h4>
                         <span className="panel__badge panel__badge--secondary">
-                          {runtimeRegistry ? "Registry v1" : "Loading registry"}
+                          {runtimeRegistry?.registry_version ?? "Loading registry"}
                         </span>
                       </div>
                       <p className="panel__muted">
@@ -1692,6 +1729,23 @@ function AgentRunsPageContent() {
                         <span className="panel__badge panel__badge--secondary">
                           Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
                         </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Run registry:{" "}
+                          {selectedRun.registry_version ??
+                            runtimeRegistry?.registry_version ??
+                            "unpinned"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Fingerprint:{" "}
+                          {selectedRun.registry_fingerprint
+                            ? selectedRun.registry_fingerprint.slice(0, 12)
+                            : runtimeRegistry?.registry_fingerprint
+                              ? runtimeRegistry.registry_fingerprint.slice(0, 12)
+                            : "pending"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Registry source: {runtimeRegistry?.registry_source ?? "pending"}
+                        </span>
                       </div>
                       <div className="agent-ops-summary">
                         {activeRuntimeSkills.slice(0, 4).map((skill) => (
@@ -1704,6 +1758,42 @@ function AgentRunsPageContent() {
                             No matching skills for allowed tools
                           </span>
                         ) : null}
+                      </div>
+                      <div className="panel__card panel__card--secondary">
+                        <div className="panel__header">
+                          <h4>Registry release trail</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {registryAuditEvents.length} recent changes
+                          </span>
+                        </div>
+                        {registryAuditEvents.length > 0 ? (
+                          <div className="run-event-list">
+                            {registryAuditEvents.slice(0, 3).map((event) => (
+                              <div key={event.id} className="run-event-list__item">
+                                <div>
+                                  <div className="table__strong">
+                                    {event.event_type.replaceAll("_", " ")}
+                                  </div>
+                                  <div className="table__muted">
+                                    {event.previous_registry_fingerprint
+                                      ? `${event.previous_registry_fingerprint.slice(0, 12)} -> `
+                                      : ""}
+                                    {event.registry_fingerprint.slice(0, 12)} ·{" "}
+                                    {formatDateCompact(event.created_at)}
+                                  </div>
+                                </div>
+                                <div className="table__muted">
+                                  {summarizeRegistryAuditDiff(event)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="panel__muted">
+                            No registry transitions recorded yet. The current release is the
+                            first observed contract for this environment.
+                          </p>
+                        )}
                       </div>
                       <div className="table">
                         <div className="table__header">
@@ -2247,7 +2337,8 @@ function AgentRunsPageContent() {
                           </span>
                         </div>
                         <p className="panel__muted">
-                          {CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
+                          {selectedCapabilitySpec?.summary ??
+                            CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
                             "Capability summary not yet documented."}
                         </p>
                         <div className="agent-ops-summary">
@@ -2260,18 +2351,56 @@ function AgentRunsPageContent() {
                           <span className="panel__badge panel__badge--secondary">
                             Effect: {selectedAction.effect_class ?? "unknown"}
                           </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Registry: {selectedAction.registry_version ?? "unpinned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Receipt fingerprint:{" "}
+                            {selectedAction.registry_fingerprint
+                              ? selectedAction.registry_fingerprint.slice(0, 12)
+                              : "unpinned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Tool version: {selectedAction.tool_version ?? "unpinned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Skill version: {selectedAction.skill_version ?? "unpinned"}
+                          </span>
                         </div>
                         <p className="panel__subheading">What it changes</p>
                         <ul className="panel__list panel__list--compact">
                           {(
                             selectedAction.side_effects?.length
                               ? selectedAction.side_effects
-                              : CAPABILITY_EXPLAIN[selectedAction.capability_name]
-                              ?.sideEffects ?? ["No side-effect metadata yet."]
+                              : selectedCapabilitySpec?.side_effects?.length
+                                ? selectedCapabilitySpec.side_effects
+                                : CAPABILITY_EXPLAIN[selectedAction.capability_name]
+                                  ?.sideEffects ?? ["No side-effect metadata yet."]
                           ).map((effect, index) => (
                             <li key={`${effect}-${index}`}>{effect}</li>
                           ))}
                         </ul>
+                        <p className="panel__subheading">Registry review checklist</p>
+                        {selectedCapabilitySpec?.review_checklist?.length ? (
+                          <ul className="panel__list panel__list--compact">
+                            {selectedCapabilitySpec.review_checklist.map((item, index) => (
+                              <li key={`${item}-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="panel__muted">
+                            No registry checklist captured for this capability yet.
+                          </p>
+                        )}
+                        <p className="panel__subheading">Registry ownership</p>
+                        <div className="agent-ops-summary">
+                          <span className="panel__badge panel__badge--secondary">
+                            Owner: {selectedCapabilitySpec?.owner_principal_id ?? "unassigned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Steward: {selectedCapabilitySpec?.steward_team ?? "unassigned"}
+                          </span>
+                        </div>
                         <p className="panel__subheading">Rollback guidance</p>
                         <p className="panel__muted">
                           {selectedAction.rollback_guidance ||
