@@ -11,6 +11,7 @@ const getAgentRunMock = vi.fn();
 const getAgentRunEventsMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
+const issueAgentRunCommandMock = vi.fn();
 let searchParamsValue = "";
 
 vi.mock("next/navigation", () => ({
@@ -52,6 +53,7 @@ vi.mock("../../lib/api", () => ({
   getAgentRunEvents: (...args: unknown[]) => getAgentRunEventsMock(...args),
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
+  issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
 }));
 
 describe("InterventionsPage", () => {
@@ -62,6 +64,7 @@ describe("InterventionsPage", () => {
     getAgentRunEventsMock.mockReset();
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
+    issueAgentRunCommandMock.mockReset();
     searchParamsValue = "";
 
     listAgentRunsMock.mockResolvedValue({
@@ -177,6 +180,7 @@ describe("InterventionsPage", () => {
             },
             {
               id: "evt-recovery-proposed",
+              action_id: "act-failed-source",
               event_type: "action_recovery_proposed",
               status: "proposed",
               capability_name: "recommend_next_action",
@@ -206,6 +210,16 @@ describe("InterventionsPage", () => {
     controlAgentRunMock.mockResolvedValue({
       run: { id: "run-3" },
       message: "Queued control action.",
+    });
+    issueAgentRunCommandMock.mockResolvedValue({
+      command: {
+        id: "evt-command",
+        run_id: "run-3",
+        sequence: 0,
+        event_type: "operator_command_change_plan",
+        status: "completed",
+      },
+      run: { id: "run-3" },
     });
   });
 
@@ -271,6 +285,39 @@ describe("InterventionsPage", () => {
     await waitFor(() => {
       expect(controlAgentRunMock).toHaveBeenCalledWith("run-4", "pause", "user-a");
     });
+  });
+
+  it("creates compensating proposals from command-originated recommendations", async () => {
+    const user = userEvent.setup();
+    render(<InterventionsPage />);
+
+    await screen.findByText(/Compensating action: Ask policy for the safest/i);
+    await user.click(
+      screen.getByRole("button", { name: /Create compensating proposal/i }),
+    );
+
+    await waitFor(() => {
+      expect(issueAgentRunCommandMock).toHaveBeenCalledWith(
+        "run-3",
+        {
+          command_type: "change_plan",
+          action_id: "act-failed-source",
+          message: "Ask policy for the safest compensating next action",
+          metadata: {
+            recovery_strategy: "compensating_action",
+            capability_name: "recommend_next_action",
+            source_event_id: "evt-recovery-proposed",
+            compensating_priority: undefined,
+            compensating_rationale: undefined,
+            inputs: { experiment_id: "exp-retry" },
+          },
+        },
+        "user-a",
+      );
+    });
+    expect(
+      await screen.findByText(/Compensating proposal created for recommend_next_action/i),
+    ).toBeInTheDocument();
   });
 
   it("scopes interventions to the selected run when run_id is provided", async () => {

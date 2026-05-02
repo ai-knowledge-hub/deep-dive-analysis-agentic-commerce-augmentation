@@ -1096,6 +1096,12 @@ export type AgentRunEvent = {
     hypothesis_id?: string | null;
     snapshot_version?: number | null;
     metric_id?: string | null;
+    source_command_id?: string | null;
+    source_action_id?: string | null;
+    original_action_id?: string | null;
+    retry_count?: number | null;
+    retry_strategy?: string | null;
+    recovery_strategy?: string | null;
     side_effects?: string[];
     rollback_guidance?: string | null;
     compensating_actions?: AgentCompensatingAction[];

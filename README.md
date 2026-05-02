@@ -153,6 +153,7 @@ Agent operator APIs:
   - `change_plan` creates a proposed recovery action instead of silently mutating plans
   - proposed recovery actions persist side-effect metadata and rollback guidance for later approval/review
   - recovery proposals can include compensating-action recommendations for high-risk or external side effects
+  - Interventions can create an audited compensating proposal directly from a recommendation
   - command outcomes guide operators to relevant metrics, variants, validation jobs, revisions, hypotheses, snapshots, and failures
   - records non-mutating explain and focus intents as command receipts
 - `POST /agent-runs/{run_id}/commands/preflight`

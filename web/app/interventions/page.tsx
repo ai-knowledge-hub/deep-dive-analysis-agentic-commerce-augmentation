@@ -12,6 +12,7 @@ import {
   decideAgentAction,
   getAgentRun,
   getAgentRunEvents,
+  issueAgentRunCommand,
   listAgentRuns,
 } from "../../lib/api";
 import { buildRunsHref } from "../../lib/routes";
@@ -144,6 +145,12 @@ function eventRollbackGuidance(event: AgentRunEvent): string | null {
 function eventCompensatingActions(event: AgentRunEvent): AgentCompensatingAction[] {
   const value = event.anchors?.compensating_actions;
   return Array.isArray(value) ? (value as AgentCompensatingAction[]) : [];
+}
+
+function sourceActionId(event: AgentRunEvent): string | null {
+  const source = event.anchors?.source_action_id;
+  if (typeof source === "string" && source.trim()) return source;
+  return event.action_id ?? null;
 }
 
 function badgeClassForPriority(priority: Priority): string {
@@ -565,6 +572,52 @@ function InterventionsPageContent() {
     [loadInterventions, userId],
   );
 
+  const handleCompensatingAction = useCallback(
+    async (item: CommandItem, recommendation: AgentCompensatingAction) => {
+      if (!userId || !recommendation.capability_name) return;
+      const busy = `compensate:${item.event.id}:${recommendation.capability_name}`;
+      setBusyKey(busy);
+      setError(null);
+      setStatusMessage(null);
+      try {
+        await issueAgentRunCommand(
+          item.run.id,
+          {
+            command_type: "change_plan",
+            action_id: sourceActionId(item.event),
+            message:
+              recommendation.label ||
+              `Create compensating proposal for ${recommendation.capability_name}`,
+            metadata: {
+              recovery_strategy: "compensating_action",
+              capability_name: recommendation.capability_name,
+              source_event_id: item.event.id,
+              compensating_priority: recommendation.priority,
+              compensating_rationale: recommendation.rationale,
+              inputs: item.run.experiment_id
+                ? { experiment_id: item.run.experiment_id }
+                : {},
+            },
+          },
+          userId,
+        );
+        setStatusMessage(
+          `Compensating proposal created for ${recommendation.capability_name}.`,
+        );
+        await loadInterventions();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create compensating proposal.",
+        );
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [loadInterventions, userId],
+  );
+
   function renderMeta(priority: Priority, risk: RiskLevel, run: AgentRun) {
     return (
       <div className="list__meta">
@@ -733,6 +786,27 @@ function InterventionsPageContent() {
                         </div>
                       ) : null}
                       <div className="detail__actions">
+                        {item.compensatingActions?.[0]?.capability_name ? (
+                          <button
+                            type="button"
+                            className="button button--primary button--sm"
+                            onClick={() =>
+                              void handleCompensatingAction(
+                                item,
+                                item.compensatingActions![0],
+                              )
+                            }
+                            disabled={
+                              busyKey ===
+                              `compensate:${item.event.id}:${item.compensatingActions[0].capability_name}`
+                            }
+                          >
+                            {busyKey ===
+                            `compensate:${item.event.id}:${item.compensatingActions[0].capability_name}`
+                              ? "Creating..."
+                              : "Create compensating proposal"}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="button button--ghost button--sm"
