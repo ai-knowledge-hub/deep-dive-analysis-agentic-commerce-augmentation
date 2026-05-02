@@ -105,6 +105,7 @@ Worker/ops entry points:
   - delegates approve/reject/start/pause/cancel/step to existing action/runtime controls
   - handles retry by creating a new proposed retry action with incremented `retry_count`
   - handles `change_plan` by creating a proposed recovery action for operator review
+  - validates requested recovery target capabilities against the run's allowed capability set
   - supports non-mutating explain/focus receipts for chat-led steering
 - API: `POST /agent-runs/{run_id}/commands/preflight`
   - returns whether a command is allowed before execution
@@ -392,8 +393,8 @@ Operator steering is exposed via:
 - high-risk command preflight requires explicit confirmation in the operator chat before submission
 - step commands require explicit confirmation before execution
 - retry always requires explicit confirmation and emits `action_retry_proposed` for a new proposed action; the original failed action remains failed
-- retry supports `same_action`, `last_safe_checkpoint`, and `create_recovery_action` strategies
-- change-plan emits `action_recovery_proposed`; Interventions surfaces command-originated retry/recovery work
+- retry supports `same_action`, `last_safe_checkpoint`, and target-capability-aware `create_recovery_action` strategies
+- change-plan emits `action_recovery_proposed`; operators can choose the target recovery capability, and Interventions surfaces command-originated retry/recovery work
 - operator chat summarizes command outcomes with resulting run/action state after execution
 - command outcome summaries include artifact inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures
 

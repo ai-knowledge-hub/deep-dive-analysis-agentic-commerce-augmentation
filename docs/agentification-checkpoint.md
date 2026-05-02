@@ -40,6 +40,7 @@ The codebase now has the minimum spine for the pivot:
 - Command events are first-class timeline filters through `event_type=command` and the Agent Runs `Commands (24h)` preset.
 - Interventions surfaces command-originated retry/recovery work.
 - `change_plan` now creates a proposed recovery action instead of only recording a non-mutating receipt.
+- Recovery commands can target a specific allowed capability instead of always falling back to the default recommendation action.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
@@ -148,6 +149,7 @@ Completed in this slice:
   - Group command-originated work by urgency/risk.
 - Structured recovery:
   - `change_plan` creates proposed recovery actions instead of only recording a non-mutating receipt.
+  - Recovery target capabilities are validated by preflight against the run's allowed capabilities.
 - Chat command controls:
   - Operator chat now exposes step and cancel commands through the same preflight path.
   - Operator chat exposes direct `change_plan` recovery proposal controls.
@@ -156,12 +158,12 @@ Completed in this slice:
 - Retry strategies:
   - `same_action` retries the failed capability with copied inputs.
   - `last_safe_checkpoint` retries the failed capability with checkpoint intent stamped into inputs.
-  - `create_recovery_action` creates a `recommend_next_action` recovery proposal when available.
+  - `create_recovery_action` creates a targeted recovery proposal, defaulting to `recommend_next_action` when available.
 - Verification:
   - Backend tests for command event filtering and recovery action creation.
   - Frontend tests for command timeline preset and Interventions visibility.
 
 Next build should deepen this slice:
 
-- Add direct chat affordances for choosing a target recovery capability, not only the default recommendation action.
+- Add undo/rollback guidance for proposed recovery actions, especially when external side effects cannot be reversed.
 - Keep mock-auth Playwright smoke green.

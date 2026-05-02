@@ -311,6 +311,10 @@ describe("OperatorConsoleChat", () => {
           status: "failed",
           state: "experiment_run_completed",
           run_mode: "auto_execute_safe",
+          allowed_capabilities: [
+            "recommend_next_action",
+            "review_validation_readiness",
+          ],
         }}
         actions={[
           {
@@ -368,6 +372,10 @@ describe("OperatorConsoleChat", () => {
           status: "failed",
           state: "experiment_run_completed",
           run_mode: "auto_execute_safe",
+          allowed_capabilities: [
+            "recommend_next_action",
+            "review_validation_readiness",
+          ],
         }}
         actions={[
           {
@@ -408,9 +416,16 @@ describe("OperatorConsoleChat", () => {
       command_type: "retry",
       action_id: "action-1",
       message: "Create recovery action for run_variant",
-      metadata: { retry_strategy: "create_recovery_action" },
+      metadata: {
+        retry_strategy: "create_recovery_action",
+        capability_name: "recommend_next_action",
+      },
     });
 
+    await user.selectOptions(
+      screen.getByLabelText(/Recovery target capability/i),
+      "review_validation_readiness",
+    );
     await user.click(screen.getByRole("button", { name: /Change plan/i }));
     expect(onIssueCommand).toHaveBeenCalledWith({
       command_type: "change_plan",
@@ -418,6 +433,7 @@ describe("OperatorConsoleChat", () => {
       message: "Create a recovery plan proposal",
       metadata: {
         recovery_strategy: "propose_next_action",
+        capability_name: "review_validation_readiness",
         inputs: { experiment_id: "exp-12345678" },
       },
     });

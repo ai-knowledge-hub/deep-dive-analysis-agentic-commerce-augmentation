@@ -234,8 +234,10 @@ describe("AgentRunsPage timeline presets", () => {
     await screen.findByRole("button", { name: /Policy failures \(24h\)/i });
 
     await userEvent.click(screen.getByRole("button", { name: /Policy failures \(24h\)/i }));
-    const filters = screen.getAllByRole("combobox");
-    await userEvent.selectOptions(filters[0], "executed");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Timeline status filter/i),
+      "executed",
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Custom view")).toBeInTheDocument();

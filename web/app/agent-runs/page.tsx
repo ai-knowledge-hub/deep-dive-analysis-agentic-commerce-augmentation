@@ -2055,6 +2055,7 @@ function AgentRunsPageContent() {
                           Executed
                         </button>
                         <select
+                          aria-label="Timeline status filter"
                           className="input"
                           style={{ minWidth: 170 }}
                           value={timelineStatusFilter}
@@ -2071,6 +2072,7 @@ function AgentRunsPageContent() {
                           <option value="rejected">Rejected</option>
                         </select>
                         <select
+                          aria-label="Timeline capability filter"
                           className="input"
                           style={{ minWidth: 220 }}
                           value={timelineCapabilityFilter}
@@ -2083,6 +2085,7 @@ function AgentRunsPageContent() {
                           ))}
                         </select>
                         <select
+                          aria-label="Timeline window filter"
                           className="input"
                           style={{ minWidth: 160 }}
                           value={timelineTimeWindow}

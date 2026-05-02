@@ -197,6 +197,7 @@ def _command_preflight(
     run: Dict[str, Any],
     command_type: str,
     action: Optional[Dict[str, Any]],
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     run_status = str(run.get("status") or "").lower()
     run_mode = str(run.get("run_mode") or "plan_only").lower()
@@ -238,11 +239,37 @@ def _command_preflight(
             for item in list(run.get("allowed_capabilities") or [])
             if str(item).strip()
         ]
+        requested_capability = _requested_recovery_capability(metadata)
         if not allowed:
             blockers.append("Change-plan needs at least one allowed recovery capability.")
+        elif requested_capability and requested_capability not in allowed:
+            blockers.append(
+                f"Recovery capability '{requested_capability}' is not allowed for this run."
+            )
+        if requested_capability and not get_capability_spec(requested_capability):
+            blockers.append(
+                f"Recovery capability '{requested_capability}' has no executable registry spec."
+            )
         warnings.append(
             "Change-plan creates a proposed recovery action for operator review; it does not execute immediately."
         )
+    if command_type == "retry" and action:
+        retry_strategy = str((metadata or {}).get("retry_strategy") or "").strip()
+        requested_capability = _requested_recovery_capability(metadata)
+        if retry_strategy == "create_recovery_action" and requested_capability:
+            allowed = [
+                str(item).strip()
+                for item in list(run.get("allowed_capabilities") or [])
+                if str(item).strip()
+            ]
+            if requested_capability not in allowed:
+                blockers.append(
+                    f"Recovery capability '{requested_capability}' is not allowed for this run."
+                )
+            elif not get_capability_spec(requested_capability):
+                blockers.append(
+                    f"Recovery capability '{requested_capability}' has no executable registry spec."
+                )
 
     if action and spec and command_type == "retry":
         inputs = spec.normalize_inputs(action.get("inputs") or {})
@@ -356,6 +383,13 @@ def _preflight_summary(
     if warnings:
         return f"Preflight passed with {risk_level} risk: {warnings[0]}"
     return f"Preflight passed with {risk_level} risk."
+
+
+def _requested_recovery_capability(metadata: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(metadata, dict):
+        return ""
+    raw = metadata.get("capability_name") or metadata.get("target_capability")
+    return str(raw or "").strip()
 
 
 @router.get("/registry")
@@ -695,6 +729,7 @@ def preflight_agent_run_command(
             run=run,
             command_type=command_type,
             action=action,
+            metadata=payload.metadata,
         ),
         "run": run,
         "action": action,
@@ -740,6 +775,7 @@ def issue_agent_run_command(
         run=run,
         command_type=command_type,
         action=action,
+        metadata=payload.metadata,
     )
     if not preflight["allowed"]:
         raise HTTPException(status_code=409, detail=preflight)
@@ -772,9 +808,7 @@ def issue_agent_run_command(
                 for item in list(run.get("allowed_capabilities") or [])
                 if str(item).strip()
             ]
-            requested_capability = str(
-                payload.metadata.get("capability_name") or ""
-            ).strip()
+            requested_capability = _requested_recovery_capability(payload.metadata)
             capability_name = (
                 requested_capability
                 if requested_capability in allowed
@@ -875,8 +909,11 @@ def issue_agent_run_command(
                 if str(item).strip()
             ]
             if retry_strategy == "create_recovery_action":
+                requested_capability = _requested_recovery_capability(payload.metadata)
                 capability_name = (
-                    "recommend_next_action"
+                    requested_capability
+                    if requested_capability in allowed
+                    else "recommend_next_action"
                     if "recommend_next_action" in allowed
                     else str(action.get("capability_name") or "")
                 )

@@ -149,6 +149,7 @@ Agent operator APIs:
   - step and high-risk commands are confirmed through command preflight before execution
   - `retry` creates a new proposed retry action with incremented `retry_count`; it does not mutate the failed action back to approved
   - retry supports same-action, last-safe-checkpoint, and recovery-action strategies
+  - recovery-action retry and `change_plan` can target a specific allowed capability
   - `change_plan` creates a proposed recovery action instead of silently mutating plans
   - command outcomes guide operators to relevant metrics, variants, validation jobs, revisions, hypotheses, snapshots, and failures
   - records non-mutating explain and focus intents as command receipts

@@ -180,6 +180,16 @@ function buildCommandOutcome(
   return parts.join(" ");
 }
 
+function recoveryCapabilityLabel(capabilityName: string): string {
+  return capabilityName.replaceAll("_", " ");
+}
+
+function preferredRecoveryCapability(capabilities: string[]): string {
+  return capabilities.includes("recommend_next_action")
+    ? "recommend_next_action"
+    : capabilities[0] ?? "";
+}
+
 export function OperatorConsoleChat({
   run,
   actions,
@@ -199,6 +209,7 @@ export function OperatorConsoleChat({
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingCommandKey, setPendingCommandKey] = useState<string | null>(null);
+  const [selectedRecoveryCapability, setSelectedRecoveryCapability] = useState("");
 
   const derived = useMemo(() => {
     const proposedActions = actions.filter(
@@ -225,6 +236,9 @@ export function OperatorConsoleChat({
       .reverse()
       .find((item) => Boolean(item.is_policy_event)) ?? null;
     const validationLinkedActions = actions.filter((item) => Boolean(item.validation_job_id));
+    const recoveryCapabilities = Array.from(
+      new Set((run?.allowed_capabilities ?? []).filter((item) => Boolean(item?.trim()))),
+    );
     return {
       proposedActions,
       approvedActions,
@@ -236,8 +250,19 @@ export function OperatorConsoleChat({
       latestFailureEvent,
       latestPolicyEvent,
       validationLinkedActions,
+      recoveryCapabilities,
     };
-  }, [actions, events]);
+  }, [actions, events, run?.allowed_capabilities]);
+
+  useEffect(() => {
+    const preferred = preferredRecoveryCapability(derived.recoveryCapabilities);
+    setSelectedRecoveryCapability((current) =>
+      current && derived.recoveryCapabilities.includes(current) ? current : preferred,
+    );
+  }, [derived.recoveryCapabilities]);
+
+  const activeRecoveryCapability =
+    selectedRecoveryCapability || preferredRecoveryCapability(derived.recoveryCapabilities);
 
   useEffect(() => {
     if (!run) {
@@ -668,10 +693,18 @@ export function OperatorConsoleChat({
               "retry",
               `Create recovery action for ${selectedAction?.capability_name ?? "selected action"}`,
               selectedAction?.id,
-              { retry_strategy: "create_recovery_action" },
+              {
+                retry_strategy: "create_recovery_action",
+                capability_name: activeRecoveryCapability || undefined,
+              },
             )
           }
-          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
+          disabled={
+            !run ||
+            !selectedAction ||
+            selectedAction.status !== "failed" ||
+            derived.recoveryCapabilities.length === 0
+          }
         >
           Recovery action
         </button>
@@ -685,14 +718,35 @@ export function OperatorConsoleChat({
               selectedAction?.id,
               {
                 recovery_strategy: "propose_next_action",
+                capability_name: activeRecoveryCapability || undefined,
                 inputs: run?.experiment_id ? { experiment_id: run.experiment_id } : {},
               },
             )
           }
-          disabled={!run}
+          disabled={!run || derived.recoveryCapabilities.length === 0}
         >
           Change plan
         </button>
+        <label className="field">
+          <span className="field__label">Recovery target</span>
+          <select
+            aria-label="Recovery target capability"
+            className="field__input"
+            value={activeRecoveryCapability}
+            onChange={(event) => setSelectedRecoveryCapability(event.target.value)}
+            disabled={!run || derived.recoveryCapabilities.length === 0}
+          >
+            {derived.recoveryCapabilities.length === 0 ? (
+              <option value="">No allowed capabilities</option>
+            ) : (
+              derived.recoveryCapabilities.map((capability) => (
+                <option key={capability} value={capability}>
+                  {recoveryCapabilityLabel(capability)}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
         <button
           type="button"
           className="button button--ghost button--sm"

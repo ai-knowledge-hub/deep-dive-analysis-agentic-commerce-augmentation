@@ -489,6 +489,65 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     ]
 
 
+def test_retry_recovery_action_can_target_allowed_capability(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant", "review_validation_readiness"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="failed",
+        status="failed",
+    )
+    failed = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="failed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1", "variant_selection": "top_1"},
+        outputs={},
+        inputs_hash="inputs-1",
+        outputs_hash=None,
+        rationale="Original variant run failed.",
+        confidence=0.55,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+        effect_class="write_low_risk",
+        error="Transient execution failure.",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "retry",
+            "action_id": failed["id"],
+            "metadata": {
+                "retry_strategy": "create_recovery_action",
+                "capability_name": "review_validation_readiness",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    action = response.json()["action"]
+    assert action["capability_name"] == "review_validation_readiness"
+    assert action["inputs"]["recovery_from_action_id"] == failed["id"]
+
+
 def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     deps = default_deps()
     run = deps.agent_runs.create_agent_run(
@@ -536,6 +595,42 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     event_types = [event["event_type"] for event in events.json()["events"]]
     assert "action_recovery_proposed" in event_types
     assert "operator_command_change_plan" in event_types
+
+
+def test_change_plan_preflight_blocks_unallowed_recovery_capability(
+    client: TestClient,
+):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["recommend_next_action"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="failed",
+        status="failed",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands/preflight",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "change_plan",
+            "metadata": {"capability_name": "run_variant"},
+        },
+    )
+
+    assert response.status_code == 200
+    preflight = response.json()["preflight"]
+    assert preflight["allowed"] is False
+    assert "not allowed" in preflight["blockers"][0]
 
 
 def test_create_agent_run_resolves_machine_principal_from_bearer_token(
