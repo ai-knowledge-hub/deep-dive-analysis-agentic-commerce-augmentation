@@ -152,6 +152,7 @@ Completed in this slice:
   - Operator chat now exposes step and cancel commands through the same preflight path.
   - Operator chat exposes direct `change_plan` recovery proposal controls.
   - Command responses are summarized in the chat thread with resulting run/action state.
+  - Command outcome summaries include artifact-specific inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures.
 - Retry strategies:
   - `same_action` retries the failed capability with copied inputs.
   - `last_safe_checkpoint` retries the failed capability with checkpoint intent stamped into inputs.
@@ -162,6 +163,5 @@ Completed in this slice:
 
 Next build should deepen this slice:
 
-- Add artifact/result-specific command outcome guidance after execution.
 - Add direct chat affordances for choosing a target recovery capability, not only the default recommendation action.
 - Keep mock-auth Playwright smoke green.

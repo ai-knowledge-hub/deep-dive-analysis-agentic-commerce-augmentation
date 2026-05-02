@@ -98,6 +98,54 @@ function actionRiskLabel(action: AgentAction | null): string {
   return "Low risk";
 }
 
+function outputString(outputs: Record<string, unknown> | undefined, key: string): string | null {
+  const value = outputs?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function buildArtifactGuidance(action: AgentAction): string[] {
+  const outputs = action.outputs;
+  const metricId =
+    outputString(outputs, "metric_id") ||
+    outputString(outputs, "new_metric_id") ||
+    outputString(outputs, "source_metric_id");
+  const revisionId =
+    outputString(outputs, "revision_id") ||
+    outputString(outputs, "copy_revision_id") ||
+    outputString(outputs, "published_revision_id");
+  const validationJobId =
+    action.validation_job_id || outputString(outputs, "validation_job_id");
+  const variantId = action.variant_id || outputString(outputs, "variant_id");
+  const hypothesisId = action.hypothesis_id || outputString(outputs, "hypothesis_id");
+
+  const guidance: string[] = [];
+  if (metricId) {
+    guidance.push(`Review metric ${metricId} in the experiment evidence before approving downstream promotion.`);
+  }
+  if (variantId) {
+    guidance.push(`Compare variant ${variantId} against the control and latest posterior.`);
+  }
+  if (validationJobId) {
+    guidance.push(`Open validation job ${validationJobId} to inspect synthetic/observed agreement.`);
+  }
+  if (revisionId) {
+    guidance.push(`Inspect copy revision ${revisionId} and confirm the published text/audit event.`);
+  }
+  if (hypothesisId) {
+    guidance.push(`Check hypothesis ${hypothesisId} to see which belief this action supports or challenges.`);
+  }
+  if (action.snapshot_version != null) {
+    guidance.push(`Use snapshot version ${action.snapshot_version} when comparing retrieval-backed results.`);
+  }
+  if (action.error) {
+    guidance.push(`Failure note: ${action.error}`);
+  }
+  if (guidance.length === 0 && Object.keys(outputs ?? {}).length > 0) {
+    guidance.push("Inspect the action output payload for generated artifacts and decision details.");
+  }
+  return guidance;
+}
+
 function buildCommandOutcome(
   commandType: AgentRunCommandType,
   response?: AgentRunCommandResponse | void,
@@ -115,6 +163,10 @@ function buildCommandOutcome(
     );
     if (response.action.retry_count && response.action.retry_count > 0) {
       parts.push(`Retry count is ${response.action.retry_count}.`);
+    }
+    const guidance = buildArtifactGuidance(response.action);
+    if (guidance.length > 0) {
+      parts.push(`Next inspection: ${guidance.slice(0, 3).join(" ")}`);
     }
   }
   if (response.run) {

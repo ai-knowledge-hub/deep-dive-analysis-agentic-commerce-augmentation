@@ -481,6 +481,76 @@ describe("OperatorConsoleChat", () => {
     expect(screen.getByText(/Run is running in variants_ready state/i)).toBeInTheDocument();
   });
 
+  it("adds artifact-specific guidance to command outcomes", async () => {
+    const user = userEvent.setup();
+    const onIssueCommand = vi.fn().mockResolvedValue({
+      command: {
+        id: "evt-command",
+        run_id: "run-1",
+        sequence: 0,
+        event_type: "operator_command_step",
+        status: "completed",
+      },
+      run: {
+        id: "run-1",
+        status: "planned",
+        state: "experiment_run_completed",
+      },
+      action: {
+        id: "action-1",
+        agent_run_id: "run-1",
+        sequence: 1,
+        status: "executed",
+        capability_name: "run_variant",
+        variant_id: "variant-1",
+        validation_job_id: "job-1",
+        snapshot_version: 7,
+        outputs: {
+          new_metric_id: "metric-1",
+        },
+      },
+      preflight: {
+        allowed: true,
+        command_type: "step",
+        risk_level: "medium",
+        requires_confirmation: true,
+        requires_approval: true,
+        side_effects: [],
+        blockers: [],
+        warnings: [],
+        rollback_guidance: "Low-risk writes can usually be superseded by a later action.",
+        summary: "Preflight passed with medium risk.",
+      },
+    });
+
+    render(
+      <OperatorConsoleChat
+        run={{
+          id: "run-1",
+          experiment_id: "exp-12345678",
+          status: "running",
+          state: "variants_ready",
+          run_mode: "auto_execute_safe",
+        }}
+        actions={[]}
+        events={[]}
+        selectedAction={null}
+        nextRecommendedAction={{
+          action: null,
+          guardrails: [],
+          hint: "No next action.",
+        }}
+        onIssueCommand={onIssueCommand}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Step run/i }));
+
+    expect(await screen.findByText(/Review metric metric-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Compare variant variant-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Open validation job job-1/i)).toBeInTheDocument();
+  });
+
   it("preflights and confirms step and cancel commands", async () => {
     const user = userEvent.setup();
     const onIssueCommand = vi.fn().mockResolvedValue(undefined);

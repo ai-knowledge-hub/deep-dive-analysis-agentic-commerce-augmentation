@@ -395,6 +395,7 @@ Operator steering is exposed via:
 - retry supports `same_action`, `last_safe_checkpoint`, and `create_recovery_action` strategies
 - change-plan emits `action_recovery_proposed`; Interventions surfaces command-originated retry/recovery work
 - operator chat summarizes command outcomes with resulting run/action state after execution
+- command outcome summaries include artifact inspection guidance for metrics, variants, validation jobs, copy revisions, hypotheses, snapshots, and failures
 
 ### 3.5 Version Registry (scientific reproducibility)
 
