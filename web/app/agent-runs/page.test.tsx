@@ -111,6 +111,8 @@ describe("AgentRunsPage timeline presets", () => {
           allowed_capabilities: ["run_variant"],
           principal_type: "human",
           policy_profile_id: "human_approval_required",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
         },
       ],
     });
@@ -128,6 +130,8 @@ describe("AgentRunsPage timeline presets", () => {
         principal_type: "human",
         policy_profile_id: "human_approval_required",
         trace_id: "trace_1234567890",
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
       },
       actions: [],
     });
@@ -541,7 +545,8 @@ describe("AgentRunsPage timeline presets", () => {
     expect(
       screen.getByText(/Compare the metric against control before promotion/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Registry: agent-runtime-static-v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Registry: agent-runtime-static-v1/)).toBeInTheDocument();
+    expect(screen.getByText(/Run registry: agent-runtime-static-v1/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();

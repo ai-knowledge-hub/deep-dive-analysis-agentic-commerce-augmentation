@@ -1730,9 +1730,17 @@ function AgentRunsPageContent() {
                           Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
                         </span>
                         <span className="panel__badge panel__badge--secondary">
+                          Run registry:{" "}
+                          {selectedRun.registry_version ??
+                            runtimeRegistry?.registry_version ??
+                            "unpinned"}
+                        </span>
+                        <span className="panel__badge panel__badge--secondary">
                           Fingerprint:{" "}
-                          {runtimeRegistry?.registry_fingerprint
-                            ? runtimeRegistry.registry_fingerprint.slice(0, 12)
+                          {selectedRun.registry_fingerprint
+                            ? selectedRun.registry_fingerprint.slice(0, 12)
+                            : runtimeRegistry?.registry_fingerprint
+                              ? runtimeRegistry.registry_fingerprint.slice(0, 12)
                             : "pending"}
                         </span>
                         <span className="panel__badge panel__badge--secondary">

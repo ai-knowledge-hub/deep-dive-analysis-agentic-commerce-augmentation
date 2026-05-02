@@ -36,6 +36,7 @@ The codebase now has the minimum spine for the pivot:
 - Registry fingerprint transitions now create audit events with coarse diff summaries across skills, tools, capabilities, policy profiles, and tool-skill mappings.
 - Runtime policy now validates registry-declared tool input types before execution, and runtime receipt checks validate registry-declared output types and required receipt fields after execution.
 - Agent actions now pin `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
+- Agent runs now pin the active `registry_version` and `registry_fingerprint` at creation time so the whole run has a stable registry context before action planning.
 - `skill_id` lineage now propagates from registry mapping into planned actions and agent events.
 - Runs UI now surfaces the selected run's skills, tools, principal, policy profile, and trace context.
 - Operator chat can issue audited steering commands for approve, reject, pause, start, non-mutating focus/explain intents, and structured change-plan recovery proposals.
@@ -80,13 +81,12 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill/fingerprint context.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, and new actions pin registry/tool/skill/fingerprint context.
 
 Next steps:
 
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
 - Move registry ownership into the persistent registry source and add richer skill selection when multiple skills can use the same tool.
-- Consider run-level registry version pins once persistent registry releases exist.
 
 ### 2. Agent Chat As Primary Control Interface
 
@@ -151,6 +151,7 @@ Completed in this slice:
   - Tool and capability specs now expose `owner_principal_id` and `steward_team`.
   - The registry endpoint now exposes `registry_version`, `registry_fingerprint`, and `registry_hash_algorithm` for deterministic drift detection.
 - Version pinning:
+  - New runs persist `registry_version` and `registry_fingerprint`.
   - New action proposals persist `registry_version`, `registry_fingerprint`, `tool_version`, and `skill_version`.
   - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
 - Persistence:
@@ -176,7 +177,7 @@ The next implementation slice should finish Registry Hardening v1 release manage
 
 Initial scope:
 
-- Backfill or migrate historical actions that predate registry/tool/skill version pins if needed.
+- Backfill or migrate historical runs/actions that predate registry/tool/skill version pins if needed.
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
 - Move owner/steward metadata into the persistent registry source.
 - Keep mock-auth Playwright smoke green.

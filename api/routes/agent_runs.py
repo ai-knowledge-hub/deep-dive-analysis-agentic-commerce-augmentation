@@ -520,6 +520,14 @@ def create_agent_run(
     run_mode = str(payload.run_mode or "plan_only").strip().lower()
     policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(run_mode)
     trace_id = new_trace_id()
+    registry_payload = registry_contract_payload()
+    active_registry_fingerprint = registry_fingerprint()
+    ensure_agent_registry_version(
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=active_registry_fingerprint,
+        hash_algorithm="sha256",
+        payload=registry_payload,
+    )
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,
         brand_id=payload.brand_id,
@@ -541,6 +549,8 @@ def create_agent_run(
         policy_profile_id=policy_profile_id,
         idempotency_key=payload.idempotency_key,
         trace_id=trace_id,
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=active_registry_fingerprint,
     )
 
     # v0 behavior: seed a human-reviewable plan as proposed actions.

@@ -233,6 +233,8 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert run["policy_profile_id"] == "safe_auto"
     assert run["idempotency_key"] == "req-123"
     assert str(run["trace_id"]).startswith("trace_")
+    assert run["registry_version"] == "agent-runtime-static-v1"
+    assert len(run["registry_fingerprint"]) == 64
 
     detail = client.get(
         f"/agent-runs/{run['id']}",
@@ -241,6 +243,7 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert detail.status_code == 200
     payload = detail.json()
     assert payload["run"]["trace_id"] == run["trace_id"]
+    assert payload["run"]["registry_fingerprint"] == run["registry_fingerprint"]
     assert payload["actions"][0]["tool_id"] == "experiment.run_variant"
     assert payload["actions"][0]["skill_id"] == "optimize-product-representation"
     assert payload["actions"][0]["registry_version"] == "agent-runtime-static-v1"

@@ -970,6 +970,8 @@ export type AgentRun = {
   policy_profile_id?: string | null;
   idempotency_key?: string | null;
   trace_id?: string | null;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
   objective?: Record<string, unknown>;
   allowed_capabilities?: string[];
   capability_versions?: Record<string, unknown>;
