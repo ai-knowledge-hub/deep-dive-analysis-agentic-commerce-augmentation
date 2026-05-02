@@ -65,6 +65,7 @@ def _tool(
     default_inputs: Dict[str, Any] | None = None,
     input_properties: Dict[str, Any] | None = None,
     output_properties: Dict[str, Any] | None = None,
+    output_required: tuple[str, ...] = (),
     side_effects: tuple[str, ...] = (),
     review_checklist: tuple[str, ...] = (),
     next_state: Optional[str] = None,
@@ -82,7 +83,10 @@ def _tool(
             required=required_inputs,
             properties={**_default_input_properties(defaults), **dict(input_properties or {})},
         ),
-        output_schema=_schema(required=(), properties=dict(output_properties or {})),
+        output_schema=_schema(
+            required=output_required,
+            properties=dict(output_properties or {}),
+        ),
         side_effects=side_effects,
         review_checklist=review_checklist,
         next_state=next_state,
@@ -133,7 +137,11 @@ _TOOLS: Dict[str, ToolSpec] = {
         summary="Run the control variant on frozen retrieval snapshots.",
         required_inputs=("experiment_id",),
         input_properties={"experiment_id": {"type": "string"}},
-        output_properties={"metric_id": {"type": "string"}},
+        output_properties={
+            "metric_id": {"type": "string"},
+            "variant_id": {"type": "string"},
+        },
+        output_required=("variant_id",),
         default_inputs={"retrieval_max_results": 5},
         side_effects=("create_experiment_run", "create_experiment_metric"),
         review_checklist=("Confirm retrieval snapshots are frozen.",),
@@ -159,6 +167,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "persist_count": {"type": "integer"},
         },
         output_properties={"created_variants": {"type": "array"}},
+        output_required=("created_variants",),
         default_inputs={
             "mode": "loop_evidence",
             "strategy": "both",
@@ -184,6 +193,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "variant_id": {"type": "string"},
             "snapshot_version": {"type": "integer"},
         },
+        output_required=("variant_id",),
         default_inputs={"variant_selection": "top_1", "retrieval_max_results": 5},
         side_effects=("create_experiment_run", "create_experiment_metric"),
         review_checklist=("Compare the metric against control before promotion.",),
@@ -200,6 +210,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "variant_id": {"type": "string"},
         },
         output_properties={"validation_job_id": {"type": "string"}},
+        output_required=("validation_job_id",),
         default_inputs={
             "provider": "openrouter",
             "mode": "in_app_byok",
@@ -221,7 +232,12 @@ _TOOLS: Dict[str, ToolSpec] = {
             "min_verified_runs": {"type": "integer"},
             "min_synthetic_results": {"type": "integer"},
         },
-        output_properties={"readiness": {"type": "object"}},
+        output_properties={
+            "variant_id": {"type": "string"},
+            "readiness_state": {"type": "string"},
+            "gates": {"type": "object"},
+        },
+        output_required=("variant_id", "readiness_state"),
         default_inputs={
             "variant_selection": "top_1",
             "prod_min_coverage": 0.2,
@@ -246,7 +262,8 @@ _TOOLS: Dict[str, ToolSpec] = {
         summary="Recommend the safest next action under current constraints.",
         required_inputs=("experiment_id",),
         input_properties={"experiment_id": {"type": "string"}},
-        output_properties={"recommendations": {"type": "array"}},
+        output_properties={"recommendation": {"type": "object"}},
+        output_required=("recommendation",),
         side_effects=("create_experiment_recommendation",),
         review_checklist=("Check recommendation rationale and risk class.",),
     ),
@@ -260,6 +277,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "require_promote_decision": {"type": "boolean"},
         },
         output_properties={"variant_id": {"type": "string"}},
+        output_required=("variant_id",),
         default_inputs={"variant_selection": "top_1", "require_promote_decision": True},
         side_effects=("create_analytics_event", "create_decision_event"),
         review_checklist=("Confirm the lab-promotion gate passed.",),
@@ -274,6 +292,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "require_promote_decision": {"type": "boolean"},
         },
         output_properties={"variant_id": {"type": "string"}},
+        output_required=("variant_id",),
         default_inputs={
             "variant_selection": "top_1",
             "require_promote_decision": True,
@@ -294,6 +313,7 @@ _TOOLS: Dict[str, ToolSpec] = {
             "require_prod_promotion": {"type": "boolean"},
         },
         output_properties={"copy_revision_id": {"type": "string"}},
+        output_required=("copy_revision_id",),
         default_inputs={"variant_selection": "top_1", "require_prod_promotion": True},
         side_effects=(
             "create_or_update_copy_revision",
@@ -406,6 +426,15 @@ def _validate_mapping_schema(
     if not isinstance(properties, dict):
         return []
     errors: list[str] = []
+    required = schema.get("required") if isinstance(schema, dict) else []
+    if isinstance(required, list):
+        for key in required:
+            key_text = str(key)
+            value = values.get(key_text)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                errors.append(
+                    f"{value_label} '{key_text}' for capability '{spec.name}' is required"
+                )
     for key, definition in properties.items():
         if key not in values:
             continue

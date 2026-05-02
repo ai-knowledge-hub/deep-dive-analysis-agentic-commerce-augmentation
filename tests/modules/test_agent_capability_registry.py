@@ -31,8 +31,11 @@ def test_registry_contains_core_capability_and_defaults():
     assert "retrieval_max_results" in validate_inputs(
         spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
     )[0]
-    assert validate_outputs(spec, {"metric_id": "metric-1"}) == []
-    assert "metric_id" in validate_outputs(spec, {"metric_id": 123})[0]
+    assert validate_outputs(spec, {"metric_id": "metric-1", "variant_id": "variant-1"}) == []
+    assert "metric_id" in validate_outputs(
+        spec, {"metric_id": 123, "variant_id": "variant-1"}
+    )[0]
+    assert "variant_id" in validate_outputs(spec, {"metric_id": "metric-1"})[0]
     assert version_context_for_capability(
         "run_variant",
         tool_id="experiment.run_variant",

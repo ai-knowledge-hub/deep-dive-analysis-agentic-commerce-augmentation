@@ -284,6 +284,7 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert run_variant["summary"]
     assert run_variant["input_schema"]["properties"]["experiment_id"]["type"] == "string"
     assert run_variant["output_schema"]["properties"]["metric_id"]["type"] == "string"
+    assert "variant_id" in run_variant["output_schema"]["required"]
     assert run_variant["review_checklist"]
     assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
