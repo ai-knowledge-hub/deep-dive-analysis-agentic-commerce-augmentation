@@ -42,6 +42,7 @@ from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 from infrastructure.db.agent.agent_registry import (
     ensure_agent_registry_version,
     list_agent_registry_audit_events,
+    list_agent_registry_versions,
 )
 
 
@@ -498,6 +499,23 @@ def get_agent_runtime_registry_audit(
     return {
         "events": list_agent_registry_audit_events(
             registry_fingerprint=registry_fingerprint,
+            limit=bounded_limit,
+        )
+    }
+
+
+@router.get("/registry/releases")
+def get_agent_runtime_registry_releases(
+    status: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    normalized_status = str(status).strip().lower() if status else None
+    if normalized_status and normalized_status not in {"active", "retired"}:
+        raise HTTPException(status_code=400, detail="Unsupported registry release status")
+    bounded_limit = max(1, min(int(limit), 100))
+    return {
+        "releases": list_agent_registry_versions(
+            status=normalized_status,
             limit=bounded_limit,
         )
     }

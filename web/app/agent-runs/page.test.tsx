@@ -17,6 +17,7 @@ const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
 const listAgentRuntimeRegistryAuditMock = vi.fn();
+const listAgentRuntimeRegistryReleasesMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
@@ -67,6 +68,8 @@ vi.mock("../../lib/api", () => ({
   listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
   listAgentRuntimeRegistryAudit: (...args: unknown[]) =>
     listAgentRuntimeRegistryAuditMock(...args),
+  listAgentRuntimeRegistryReleases: (...args: unknown[]) =>
+    listAgentRuntimeRegistryReleasesMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
@@ -93,6 +96,7 @@ describe("AgentRunsPage timeline presets", () => {
     controlAgentRunMock.mockReset();
     listAgentRuntimeRegistryMock.mockReset();
     listAgentRuntimeRegistryAuditMock.mockReset();
+    listAgentRuntimeRegistryReleasesMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
@@ -248,6 +252,25 @@ describe("AgentRunsPage timeline presets", () => {
             capabilities: { added: [], removed: [], changed: [] },
             policy_profiles: { added: [], removed: [], changed: [] },
             skill_ids_by_tool_changed: true,
+          },
+        },
+      ],
+    });
+    listAgentRuntimeRegistryReleasesMock.mockResolvedValue({
+      releases: [
+        {
+          id: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
+          hash_algorithm: "sha256",
+          source: "static_code",
+          status: "active",
+          created_at: "2026-05-02T10:00:00Z",
+          counts: {
+            skills: 3,
+            tools: 12,
+            capabilities: 12,
+            policy_profiles: 3,
           },
         },
       ],
@@ -551,6 +574,8 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
     expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();
@@ -560,6 +585,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Steward: commerce-optimization/i)).toBeInTheDocument();
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
     expect(listAgentRuntimeRegistryAuditMock).toHaveBeenCalledWith({ limit: 5 });
+    expect(listAgentRuntimeRegistryReleasesMock).toHaveBeenCalledWith({ limit: 5 });
   });
 
   it("routes operator chat steering commands through the command API", async () => {

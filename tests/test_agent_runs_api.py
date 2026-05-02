@@ -396,6 +396,31 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     assert filtered_response.status_code == 200
     assert len(filtered_response.json()["events"]) == 1
 
+    releases_response = client.get("/agent-runs/registry/releases")
+    assert releases_response.status_code == 200
+    releases = releases_response.json()["releases"]
+    assert releases[0]["registry_fingerprint"] == changed_fingerprint
+    assert releases[0]["status"] == "active"
+    assert releases[0]["counts"]["tools"] == len(changed_contract["tools"])
+    assert any(
+        item["registry_fingerprint"] == first["registry_fingerprint"]
+        and item["status"] == "retired"
+        for item in releases
+    )
+
+    active_response = client.get(
+        "/agent-runs/registry/releases",
+        params={"status": "active"},
+    )
+    assert active_response.status_code == 200
+    assert [item["status"] for item in active_response.json()["releases"]] == ["active"]
+
+    invalid_status = client.get(
+        "/agent-runs/registry/releases",
+        params={"status": "draft"},
+    )
+    assert invalid_status.status_code == 400
+
 
 def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     client: TestClient,

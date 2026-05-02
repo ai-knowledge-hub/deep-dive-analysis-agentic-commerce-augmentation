@@ -6,6 +6,7 @@ import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
   AgentRegistryAuditEvent,
+  AgentRegistryRelease,
   AgentRun,
   AgentRunCommandType,
   AgentRunEvent,
@@ -22,6 +23,7 @@ import {
   listExperiments,
   listAgentRuns,
   listAgentRuntimeRegistryAudit,
+  listAgentRuntimeRegistryReleases,
   listAgentRuntimeRegistry,
   preflightAgentRunCommand,
 } from "../../lib/api";
@@ -454,6 +456,7 @@ function AgentRunsPageContent() {
   const [registryAuditEvents, setRegistryAuditEvents] = useState<
     AgentRegistryAuditEvent[]
   >([]);
+  const [registryReleases, setRegistryReleases] = useState<AgentRegistryRelease[]>([]);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -515,11 +518,16 @@ function AgentRunsPageContent() {
     try {
       const response = await listAgentRuntimeRegistry();
       setRuntimeRegistry(response);
-      const auditResponse = await listAgentRuntimeRegistryAudit({ limit: 5 });
+      const [auditResponse, releasesResponse] = await Promise.all([
+        listAgentRuntimeRegistryAudit({ limit: 5 }),
+        listAgentRuntimeRegistryReleases({ limit: 5 }),
+      ]);
       setRegistryAuditEvents(auditResponse.events ?? []);
+      setRegistryReleases(releasesResponse.releases ?? []);
     } catch {
       setRuntimeRegistry(null);
       setRegistryAuditEvents([]);
+      setRegistryReleases([]);
     }
   }, []);
 
@@ -1761,6 +1769,39 @@ function AgentRunsPageContent() {
                             No matching skills for allowed tools
                           </span>
                         ) : null}
+                      </div>
+                      <div className="panel__card panel__card--secondary">
+                        <div className="panel__header">
+                          <h4>Registry releases</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {registryReleases.length} tracked
+                          </span>
+                        </div>
+                        {registryReleases.length > 0 ? (
+                          <div className="run-event-list">
+                            {registryReleases.slice(0, 3).map((release) => (
+                              <div key={release.id} className="run-event-list__item">
+                                <div>
+                                  <div className="table__strong">
+                                    {release.registry_version} · {release.status}
+                                  </div>
+                                  <div className="table__muted">
+                                    {release.registry_fingerprint.slice(0, 12)} ·{" "}
+                                    {release.source} · {formatDateCompact(release.created_at)}
+                                  </div>
+                                </div>
+                                <div className="table__muted">
+                                  {release.counts.skills} skills · {release.counts.tools} tools ·{" "}
+                                  {release.counts.capabilities} capabilities
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="panel__muted">
+                            No registry releases have been persisted in this environment yet.
+                          </p>
+                        )}
                       </div>
                       <div className="panel__card panel__card--secondary">
                         <div className="panel__header">

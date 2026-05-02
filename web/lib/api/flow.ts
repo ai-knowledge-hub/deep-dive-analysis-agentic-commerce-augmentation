@@ -11,6 +11,7 @@ import {
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
   AgentRegistryAuditListResponse,
+  AgentRegistryReleaseListResponse,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
   CopyRevisionListResponse,
@@ -606,6 +607,17 @@ export async function listAgentRuntimeRegistryAudit(
   if (payload.limit) params.set("limit", String(payload.limit));
   return request<AgentRegistryAuditListResponse>(
     `/agent-runs/registry/audit${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function listAgentRuntimeRegistryReleases(
+  payload: { status?: "active" | "retired" | string | null; limit?: number } = {},
+): Promise<AgentRegistryReleaseListResponse> {
+  const params = new URLSearchParams();
+  if (payload.status) params.set("status", payload.status);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<AgentRegistryReleaseListResponse>(
+    `/agent-runs/registry/releases${params.toString() ? `?${params.toString()}` : ""}`,
   );
 }
 

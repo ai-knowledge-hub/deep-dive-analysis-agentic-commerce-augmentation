@@ -138,6 +138,35 @@ def get_active_agent_registry_version() -> Optional[Dict[str, Any]]:
     return _row(row) if row else None
 
 
+def list_agent_registry_versions(
+    *, status: Optional[str] = None, limit: int = 20
+) -> list[Dict[str, Any]]:
+    filters: list[str] = []
+    params: list[Any] = []
+    if status:
+        filters.append("status = ?")
+        params.append(status)
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    rows = (
+        get_connection()
+        .execute(
+            f"""
+            SELECT *
+            FROM agent_registry_versions
+            {where_clause}
+            ORDER BY
+                CASE status WHEN 'active' THEN 0 ELSE 1 END,
+                created_at DESC,
+                registry_fingerprint ASC
+            LIMIT ?
+            """,
+            (*params, int(limit)),
+        )
+        .fetchall()
+    )
+    return [_release_row(row) for row in rows]
+
+
 def list_agent_registry_audit_events(
     *, registry_fingerprint: Optional[str] = None, limit: int = 50
 ) -> list[Dict[str, Any]]:
@@ -266,10 +295,30 @@ def _audit_row(row) -> Dict[str, Any]:
     }
 
 
+def _release_row(row) -> Dict[str, Any]:
+    payload = from_json(row["payload_json"], {})
+    return {
+        "id": row["id"],
+        "registry_version": row["registry_version"],
+        "registry_fingerprint": row["registry_fingerprint"],
+        "hash_algorithm": row["hash_algorithm"],
+        "source": row["source"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "counts": {
+            "skills": len(payload.get("skills") or []),
+            "tools": len(payload.get("tools") or []),
+            "capabilities": len(payload.get("capabilities") or []),
+            "policy_profiles": len(payload.get("policy_profiles") or []),
+        },
+    }
+
+
 __all__ = [
     "ensure_agent_registry_version",
     "get_active_agent_registry_version",
     "get_agent_registry_version",
     "get_latest_agent_registry_version",
     "list_agent_registry_audit_events",
+    "list_agent_registry_versions",
 ]

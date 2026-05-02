@@ -1208,6 +1208,26 @@ export type AgentRegistryAuditListResponse = {
   events: AgentRegistryAuditEvent[];
 };
 
+export type AgentRegistryRelease = {
+  id: string;
+  registry_version: string;
+  registry_fingerprint: string;
+  hash_algorithm: string;
+  source: string;
+  status: string;
+  created_at?: string | null;
+  counts: {
+    skills: number;
+    tools: number;
+    capabilities: number;
+    policy_profiles: number;
+  };
+};
+
+export type AgentRegistryReleaseListResponse = {
+  releases: AgentRegistryRelease[];
+};
+
 export type AgentRunEventListResponse = {
   events: AgentRunEvent[];
   page?: {
