@@ -1131,6 +1131,8 @@ export type AgentRuntimeToolSpec = {
   output_schema?: Record<string, unknown>;
   side_effects?: string[];
   review_checklist?: string[];
+  owner_principal_id?: string;
+  steward_team?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1146,6 +1148,8 @@ export type AgentRuntimeCapabilitySpec = {
   output_schema?: Record<string, unknown>;
   side_effects?: string[];
   review_checklist?: string[];
+  owner_principal_id?: string;
+  steward_team?: string;
   next_state?: string | null;
   effect_class?: string;
 };

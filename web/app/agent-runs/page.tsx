@@ -2305,6 +2305,15 @@ function AgentRunsPageContent() {
                             No registry checklist captured for this capability yet.
                           </p>
                         )}
+                        <p className="panel__subheading">Registry ownership</p>
+                        <div className="agent-ops-summary">
+                          <span className="panel__badge panel__badge--secondary">
+                            Owner: {selectedCapabilitySpec?.owner_principal_id ?? "unassigned"}
+                          </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Steward: {selectedCapabilitySpec?.steward_team ?? "unassigned"}
+                          </span>
+                        </div>
                         <p className="panel__subheading">Rollback guidance</p>
                         <p className="panel__muted">
                           {selectedAction.rollback_guidance ||

@@ -27,6 +27,8 @@ def test_registry_contains_core_capability_and_defaults():
     assert spec.input_schema["properties"]["experiment_id"]["type"] == "string"
     assert spec.output_schema["properties"]["metric_id"]["type"] == "string"
     assert spec.review_checklist
+    assert spec.owner_principal_id == "platform.commerce-optimization"
+    assert spec.steward_team == "commerce-optimization"
     assert validate_inputs(spec, normalized) == []
     assert "retrieval_max_results" in validate_inputs(
         spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
@@ -59,6 +61,7 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert tool is not None
     assert tool.capability_name == "run_variant"
     assert tool.effect_class == "write_low_risk"
+    assert tool.owner_principal_id == "platform.commerce-optimization"
     normalized = tool.normalize_inputs({"experiment_id": "exp-1"})
     assert normalized["variant_selection"] == "top_1"
     assert normalized["retrieval_max_results"] == 5

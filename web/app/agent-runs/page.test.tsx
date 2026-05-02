@@ -185,6 +185,8 @@ describe("AgentRunsPage timeline presets", () => {
           },
           side_effects: ["create_experiment_run"],
           review_checklist: ["Compare the metric against control before promotion."],
+          owner_principal_id: "platform.commerce-optimization",
+          steward_team: "commerce-optimization",
           effect_class: "write_low_risk",
         },
       ],
@@ -205,6 +207,8 @@ describe("AgentRunsPage timeline presets", () => {
           },
           side_effects: ["create_experiment_run"],
           review_checklist: ["Compare the metric against control before promotion."],
+          owner_principal_id: "platform.commerce-optimization",
+          steward_team: "commerce-optimization",
           effect_class: "write_low_risk",
         },
       ],
@@ -509,6 +513,8 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry: agent-runtime-static-v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();
+    expect(screen.getByText(/Steward: commerce-optimization/i)).toBeInTheDocument();
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
   });
 

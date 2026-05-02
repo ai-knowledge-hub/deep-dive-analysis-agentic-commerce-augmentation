@@ -24,6 +24,8 @@ class ToolSpec:
     output_schema: Dict[str, Any] = field(default_factory=dict)
     side_effects: tuple[str, ...] = ()
     review_checklist: tuple[str, ...] = ()
+    owner_principal_id: str = "platform.agent-runtime"
+    steward_team: str = "agent-runtime"
     next_state: Optional[str] = None
     effect_class: str = "write_low_risk"
 
@@ -46,6 +48,8 @@ class CapabilitySpec:
     output_schema: Dict[str, Any] = field(default_factory=dict)
     side_effects: tuple[str, ...] = ()
     review_checklist: tuple[str, ...] = ()
+    owner_principal_id: str = "platform.agent-runtime"
+    steward_team: str = "agent-runtime"
     next_state: Optional[str] = None
     effect_class: str = "write_low_risk"
 
@@ -72,6 +76,7 @@ def _tool(
 ) -> ToolSpec:
     tool_id = capability_to_tool_id(capability_name) or f"legacy.{capability_name}"
     defaults = dict(default_inputs or {})
+    owner_principal_id, steward_team = _ownership_for_tool(tool_id)
     return ToolSpec(
         id=tool_id,
         capability_name=capability_name,
@@ -89,6 +94,8 @@ def _tool(
         ),
         side_effects=side_effects,
         review_checklist=review_checklist,
+        owner_principal_id=owner_principal_id,
+        steward_team=steward_team,
         next_state=next_state,
         effect_class=tool_effect_class(tool_id) or "write_low_risk",
     )
@@ -115,6 +122,16 @@ def _property_for_value(value: Any) -> Dict[str, Any]:
     if isinstance(value, float):
         return {"type": "number", "default": value}
     return {"type": "string", "default": value}
+
+
+def _ownership_for_tool(tool_id: str) -> tuple[str, str]:
+    if tool_id.startswith("validation."):
+        return ("platform.validation", "validation-ops")
+    if tool_id.startswith("promotion.") or tool_id.startswith("copy."):
+        return ("platform.commerce-governance", "commerce-governance")
+    if tool_id.startswith("policy."):
+        return ("platform.agent-policy", "agent-policy")
+    return ("platform.commerce-optimization", "commerce-optimization")
 
 
 _TOOLS: Dict[str, ToolSpec] = {
@@ -337,6 +354,8 @@ _CAPABILITIES: Dict[str, CapabilitySpec] = {
         output_schema=tool.output_schema,
         side_effects=tool.side_effects,
         review_checklist=tool.review_checklist,
+        owner_principal_id=tool.owner_principal_id,
+        steward_team=tool.steward_team,
         next_state=tool.next_state,
         effect_class=tool.effect_class,
     )

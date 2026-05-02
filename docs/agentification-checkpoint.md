@@ -30,7 +30,7 @@ The codebase now has the minimum spine for the pivot:
 - Runtime policy profiles mapped from run modes: `human_approval_required`, `safe_auto`, and `observe`.
 - Compatibility from legacy `capability_name` to machine-facing `tool_id`.
 - Static skills registry v1 for initial commerce workflows.
-- Static tools/capabilities registry v1 for executable runtime capabilities, with summaries, input/output schema metadata, side-effect notes, and operator review checklists.
+- Static tools/capabilities registry v1 for executable runtime capabilities, with summaries, input/output schema metadata, required receipt fields, side-effect notes, owner/steward metadata, and operator review checklists.
 - Read API for the runtime registry: `GET /agent-runs/registry`.
 - Runtime policy now validates registry-declared tool input types before execution, and runtime receipt checks validate registry-declared output types and required receipt fields after execution.
 - Agent actions now pin `registry_version`, `tool_version`, and `skill_version` so execution receipts remain interpretable after registry evolution.
@@ -78,13 +78,13 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, side-effect metadata, and review checklists. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill versions.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with `skill_id` lineage stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, and review checklists. Runtime validates registry-declared input and output contracts around execution, the Runs UI uses registry metadata for selected-action explanations, and new actions pin registry/tool/skill versions.
 
 Next steps:
 
 - Add a persistent registry table or versioned config store.
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
-- Add persistent registry ownership and richer skill selection when multiple skills can use the same tool.
+- Move registry ownership into the persistent registry source and add richer skill selection when multiple skills can use the same tool.
 - Consider run-level registry version pins once persistent registry releases exist.
 - Add registry diff/audit events when definitions change.
 
@@ -148,6 +148,7 @@ Completed in this slice:
 - Registry metadata:
   - Tool and capability specs now expose summaries, input schemas, output schemas, side effects, and operator review checklists.
   - Default tool inputs are reflected into schema metadata so operators and API clients can see defaulted fields.
+  - Tool and capability specs now expose `owner_principal_id` and `steward_team`.
 - Version pinning:
   - New action proposals persist `registry_version`, `tool_version`, and `skill_version`.
   - Agent Runs selected-action detail shows the pinned registry/tool/skill versions.
@@ -158,6 +159,7 @@ Completed in this slice:
   - Invalid output receipts mark the action/run failed before the malformed receipt is persisted as successful.
 - Control-plane UI:
   - Agent Runs selected-action detail now prefers registry-provided summaries, side effects, and review checklists over hardcoded fallback explanations.
+  - Agent Runs selected-action detail shows registry owner and steward metadata.
 - Verification:
   - Backend tests cover registry metadata exposure and invalid registry input failure handling.
   - Frontend tests cover registry-driven action explanation and review checklist rendering.
@@ -172,5 +174,5 @@ Initial scope:
 - Backfill or migrate historical actions that predate registry/tool/skill version pins if needed.
 - Expand required output receipt fields as more capabilities can guarantee stable IDs.
 - Add registry diff/audit events when definitions change.
-- Add ownership/steward metadata for registry entries.
+- Move owner/steward metadata into the persistent registry source.
 - Keep mock-auth Playwright smoke green.
