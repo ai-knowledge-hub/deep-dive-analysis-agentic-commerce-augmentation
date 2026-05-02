@@ -195,6 +195,62 @@ def list_agent_runs(
     return [_row(r) for r in rows]
 
 
+def list_agent_runs_missing_registry_pins(
+    *, client_id: str, limit: int = 200
+) -> List[Dict[str, Any]]:
+    ensure_client(client_id)
+    rows = (
+        get_connection()
+        .execute(
+            """
+            SELECT *
+            FROM agent_runs
+            WHERE client_id = ?
+              AND (
+                  registry_version IS NULL
+                  OR registry_fingerprint IS NULL
+              )
+            ORDER BY created_at ASC
+            LIMIT ?
+            """,
+            (client_id, int(limit)),
+        )
+        .fetchall()
+    )
+    return [_row(r) for r in rows]
+
+
+def backfill_agent_run_registry_pins(
+    *,
+    client_id: str,
+    registry_version: str,
+    registry_fingerprint: str,
+    limit: int = 200,
+) -> int:
+    run_ids = [
+        item["id"]
+        for item in list_agent_runs_missing_registry_pins(
+            client_id=client_id, limit=limit
+        )
+    ]
+    if not run_ids:
+        return 0
+    placeholders = ", ".join("?" for _ in run_ids)
+    cursor = get_connection().execute(
+        f"""
+        UPDATE agent_runs
+        SET
+            registry_version = ?,
+            registry_fingerprint = ?,
+            updated_at = datetime('now')
+        WHERE id IN ({placeholders})
+        """,
+        (registry_version, registry_fingerprint, *run_ids),
+    )
+    get_connection().commit()
+    return int(cursor.rowcount or 0)
+
+
 def list_runnable_agent_runs(
     *,
     client_id: str,
@@ -348,6 +404,8 @@ __all__ = [
     "update_agent_run",
     "get_agent_run",
     "list_agent_runs",
+    "list_agent_runs_missing_registry_pins",
+    "backfill_agent_run_registry_pins",
     "list_runnable_agent_runs",
     "acquire_run_lock",
     "heartbeat_run_lock",

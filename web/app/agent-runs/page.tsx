@@ -6,6 +6,9 @@ import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
   AgentRegistryAuditEvent,
+  AgentRegistryPinBackfillResponse,
+  AgentRegistryRelease,
+  AgentRegistryReleaseDetail,
   AgentRun,
   AgentRunCommandType,
   AgentRunEvent,
@@ -13,15 +16,18 @@ import type {
   Experiment,
 } from "../../lib/types";
 import {
+  backfillAgentRuntimeRegistryPins,
   controlAgentRun,
   createAgentRun,
   decideAgentAction,
   getAgentRun,
   getAgentRunEvents,
+  getAgentRuntimeRegistryRelease,
   issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
   listAgentRuntimeRegistryAudit,
+  listAgentRuntimeRegistryReleases,
   listAgentRuntimeRegistry,
   preflightAgentRunCommand,
 } from "../../lib/api";
@@ -223,6 +229,11 @@ function formatDateCompact(value?: string | null): string {
 }
 
 function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
+  if (event.event_type === "registry_pin_backfill_applied") {
+    const runs = event.diff.runs?.updated ?? 0;
+    const actions = event.diff.actions?.updated ?? 0;
+    return `Backfilled ${runs} runs · ${actions} actions`;
+  }
   const sections = [
     ["skills", event.diff.skills],
     ["tools", event.diff.tools],
@@ -454,6 +465,14 @@ function AgentRunsPageContent() {
   const [registryAuditEvents, setRegistryAuditEvents] = useState<
     AgentRegistryAuditEvent[]
   >([]);
+  const [registryReleases, setRegistryReleases] = useState<AgentRegistryRelease[]>([]);
+  const [selectedRegistryRelease, setSelectedRegistryRelease] =
+    useState<AgentRegistryReleaseDetail | null>(null);
+  const [registryReleaseBusy, setRegistryReleaseBusy] = useState<string | null>(null);
+  const [registryBackfillPreview, setRegistryBackfillPreview] =
+    useState<AgentRegistryPinBackfillResponse | null>(null);
+  const [registryBackfillBusy, setRegistryBackfillBusy] = useState(false);
+  const [registryBackfillNotice, setRegistryBackfillNotice] = useState<string | null>(null);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -515,11 +534,16 @@ function AgentRunsPageContent() {
     try {
       const response = await listAgentRuntimeRegistry();
       setRuntimeRegistry(response);
-      const auditResponse = await listAgentRuntimeRegistryAudit({ limit: 5 });
+      const [auditResponse, releasesResponse] = await Promise.all([
+        listAgentRuntimeRegistryAudit({ limit: 5 }),
+        listAgentRuntimeRegistryReleases({ limit: 5 }),
+      ]);
       setRegistryAuditEvents(auditResponse.events ?? []);
+      setRegistryReleases(releasesResponse.releases ?? []);
     } catch {
       setRuntimeRegistry(null);
       setRegistryAuditEvents([]);
+      setRegistryReleases([]);
     }
   }, []);
 
@@ -552,6 +576,52 @@ function AgentRunsPageContent() {
       setLoading(false);
     }
   }, [experimentIdParam, runIdParam, selectedRunId, userId]);
+
+  const runRegistryBackfill = useCallback(
+    async (dryRun: boolean) => {
+      if (!userId) return;
+      setRegistryBackfillBusy(true);
+      setRegistryBackfillNotice(null);
+      try {
+        const response = await backfillAgentRuntimeRegistryPins(
+          { dry_run: dryRun, limit: 200 },
+          userId,
+        );
+        setRegistryBackfillPreview(response);
+        const matched = response.runs.matched + response.actions.matched;
+        const updated = response.runs.updated + response.actions.updated;
+        setRegistryBackfillNotice(
+          dryRun
+            ? `Preview found ${matched} records with missing registry pins.`
+            : `Backfill updated ${updated} records.`,
+        );
+        if (!dryRun) {
+          await Promise.all([loadRuntimeRegistry(), loadRuns()]);
+        }
+      } catch (err) {
+        setRegistryBackfillNotice(
+          err instanceof Error ? err.message : "Registry pin backfill failed.",
+        );
+      } finally {
+        setRegistryBackfillBusy(false);
+      }
+    },
+    [loadRuntimeRegistry, loadRuns, userId],
+  );
+
+  const loadRegistryReleaseDetail = useCallback(async (registryFingerprint: string) => {
+    setRegistryReleaseBusy(registryFingerprint);
+    try {
+      const response = await getAgentRuntimeRegistryRelease(registryFingerprint, {
+        audit_limit: 5,
+      });
+      setSelectedRegistryRelease(response.release);
+    } catch {
+      setSelectedRegistryRelease(null);
+    } finally {
+      setRegistryReleaseBusy(null);
+    }
+  }, []);
 
   const loadExperiments = useCallback(async () => {
     if (!userId) return;
@@ -1746,6 +1816,9 @@ function AgentRunsPageContent() {
                         <span className="panel__badge panel__badge--secondary">
                           Registry source: {runtimeRegistry?.registry_source ?? "pending"}
                         </span>
+                        <span className="panel__badge panel__badge--secondary">
+                          Release status: {runtimeRegistry?.registry_status ?? "pending"}
+                        </span>
                       </div>
                       <div className="agent-ops-summary">
                         {activeRuntimeSkills.slice(0, 4).map((skill) => (
@@ -1757,6 +1830,121 @@ function AgentRunsPageContent() {
                           <span className="panel__badge panel__badge--warning">
                             No matching skills for allowed tools
                           </span>
+                        ) : null}
+                      </div>
+                      <div className="panel__card panel__card--secondary">
+                        <div className="panel__header">
+                          <h4>Registry releases</h4>
+                          <span className="panel__badge panel__badge--secondary">
+                            {registryReleases.length} tracked
+                          </span>
+                        </div>
+                        {registryReleases.length > 0 ? (
+                          <div className="run-event-list">
+                            {registryReleases.slice(0, 3).map((release) => (
+                              <div key={release.id} className="run-event-list__item">
+                                <div>
+                                  <div className="table__strong">
+                                    {release.registry_version} · {release.status}
+                                  </div>
+                                  <div className="table__muted">
+                                    {release.registry_fingerprint.slice(0, 12)} ·{" "}
+                                    {release.source} · {formatDateCompact(release.created_at)}
+                                  </div>
+                                </div>
+                                <div className="table__muted">
+                                  {release.counts.skills} skills · {release.counts.tools} tools ·{" "}
+                                  {release.counts.capabilities} capabilities
+                                </div>
+                                <button
+                                  type="button"
+                                  className="button button--ghost button--sm"
+                                  onClick={() =>
+                                    loadRegistryReleaseDetail(release.registry_fingerprint)
+                                  }
+                                  disabled={
+                                    registryReleaseBusy === release.registry_fingerprint
+                                  }
+                                >
+                                  {registryReleaseBusy === release.registry_fingerprint
+                                    ? "Loading"
+                                    : "View details"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="panel__muted">
+                            No registry releases have been persisted in this environment yet.
+                          </p>
+                        )}
+                        {selectedRegistryRelease ? (
+                          <div className="panel__notice panel__notice--info">
+                            <div className="panel__eyebrow">Release detail</div>
+                            <div className="table__strong">
+                              {selectedRegistryRelease.registry_fingerprint.slice(0, 12)} ·{" "}
+                              {selectedRegistryRelease.status}
+                            </div>
+                            <p className="panel__muted">
+                              Payload contains{" "}
+                              {selectedRegistryRelease.payload.skills?.length ?? 0} skills,{" "}
+                              {selectedRegistryRelease.payload.tools?.length ?? 0} tools, and{" "}
+                              {selectedRegistryRelease.payload.policy_profiles?.length ?? 0}{" "}
+                              policy profiles.
+                            </p>
+                            <div className="agent-ops-summary">
+                              {(selectedRegistryRelease.payload.capabilities ?? [])
+                                .slice(0, 4)
+                                .map((capability) => (
+                                  <span
+                                    key={capability.name}
+                                    className="panel__badge panel__badge--secondary"
+                                  >
+                                    {capability.name} · {capability.effect_class}
+                                  </span>
+                                ))}
+                            </div>
+                            <p className="panel__muted">
+                              {selectedRegistryRelease.audit_events.length} audit events are tied
+                              to this release.
+                            </p>
+                          </div>
+                        ) : null}
+                        <div className="panel__actions">
+                          <button
+                            type="button"
+                            className="button button--ghost button--sm"
+                            onClick={() => runRegistryBackfill(true)}
+                            disabled={registryBackfillBusy}
+                          >
+                            Preview missing pins
+                          </button>
+                          {registryBackfillPreview &&
+                          registryBackfillPreview.runs.matched +
+                            registryBackfillPreview.actions.matched >
+                            0 ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--sm"
+                              onClick={() => runRegistryBackfill(false)}
+                              disabled={registryBackfillBusy}
+                            >
+                              Apply backfill
+                            </button>
+                          ) : null}
+                        </div>
+                        {registryBackfillPreview ? (
+                          <p className="panel__muted">
+                            Missing pins: {registryBackfillPreview.runs.matched} runs ·{" "}
+                            {registryBackfillPreview.actions.matched} actions. Updated:{" "}
+                            {registryBackfillPreview.runs.updated} runs ·{" "}
+                            {registryBackfillPreview.actions.updated} actions.
+                          </p>
+                        ) : null}
+                        {registryBackfillNotice ? (
+                          <div className="panel__notice panel__notice--info">
+                            {registryBackfillNotice}
+                          </div>
                         ) : null}
                       </div>
                       <div className="panel__card panel__card--secondary">

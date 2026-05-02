@@ -281,12 +281,13 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert len(payload["registry_fingerprint"]) == 64
     assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
     assert payload["registry_source"] == "static_code"
+    assert payload["registry_status"] == "active"
     assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
         "registry_fingerprint"
     ]
     row = get_connection().execute(
         """
-        SELECT registry_version, registry_fingerprint, source, payload_json
+        SELECT registry_version, registry_fingerprint, source, status, payload_json
         FROM agent_registry_versions
         WHERE registry_fingerprint = ?
         """,
@@ -295,6 +296,7 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert row is not None
     assert row["registry_version"] == "agent-runtime-static-v1"
     assert row["source"] == "static_code"
+    assert row["status"] == "active"
     assert '"registry_version":"agent-runtime-static-v1"' in row["payload_json"].replace(" ", "")
     tool_ids = {tool["id"] for tool in payload["tools"]}
     skill_ids = {skill["id"] for skill in payload["skills"]}
@@ -354,6 +356,7 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     changed = client.get("/agent-runs/registry").json()
 
     assert changed["registry_fingerprint"] == changed_fingerprint
+    assert changed["registry_status"] == "active"
     row = get_connection().execute(
         """
         SELECT previous_registry_fingerprint, registry_fingerprint, diff_json
@@ -366,6 +369,17 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     assert row["previous_registry_fingerprint"] == first["registry_fingerprint"]
     diff = json.loads(row["diff_json"])
     assert diff["tools"]["added"] == ["test.synthetic_tool"]
+    status_rows = get_connection().execute(
+        """
+        SELECT registry_fingerprint, status
+        FROM agent_registry_versions
+        WHERE registry_fingerprint IN (?, ?)
+        """,
+        (first["registry_fingerprint"], changed_fingerprint),
+    ).fetchall()
+    statuses = {item["registry_fingerprint"]: item["status"] for item in status_rows}
+    assert statuses[first["registry_fingerprint"]] == "retired"
+    assert statuses[changed_fingerprint] == "active"
 
     audit_response = client.get("/agent-runs/registry/audit", params={"limit": 5})
     assert audit_response.status_code == 200
@@ -381,6 +395,136 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     )
     assert filtered_response.status_code == 200
     assert len(filtered_response.json()["events"]) == 1
+
+    releases_response = client.get("/agent-runs/registry/releases")
+    assert releases_response.status_code == 200
+    releases = releases_response.json()["releases"]
+    assert releases[0]["registry_fingerprint"] == changed_fingerprint
+    assert releases[0]["status"] == "active"
+    assert releases[0]["counts"]["tools"] == len(changed_contract["tools"])
+    assert any(
+        item["registry_fingerprint"] == first["registry_fingerprint"]
+        and item["status"] == "retired"
+        for item in releases
+    )
+
+    active_response = client.get(
+        "/agent-runs/registry/releases",
+        params={"status": "active"},
+    )
+    assert active_response.status_code == 200
+    assert [item["status"] for item in active_response.json()["releases"]] == ["active"]
+
+    invalid_status = client.get(
+        "/agent-runs/registry/releases",
+        params={"status": "draft"},
+    )
+    assert invalid_status.status_code == 400
+
+    detail_response = client.get(
+        f"/agent-runs/registry/releases/{changed_fingerprint}",
+        params={"audit_limit": 5},
+    )
+    assert detail_response.status_code == 200
+    release_detail = detail_response.json()["release"]
+    assert release_detail["registry_fingerprint"] == changed_fingerprint
+    assert release_detail["payload"]["tools"][-1]["id"] == "test.synthetic_tool"
+    assert release_detail["counts"]["capabilities"] == len(
+        changed_contract["capabilities"]
+    )
+    assert release_detail["audit_events"][0]["registry_fingerprint"] == changed_fingerprint
+
+    missing_detail = client.get("/agent-runs/registry/releases/not-a-real-fingerprint")
+    assert missing_detail.status_code == 404
+
+
+def test_registry_pin_backfill_supports_dry_run_and_scoped_update(
+    client: TestClient,
+):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="plan_only",
+        state="battery_ready",
+        status="planned",
+    )
+    action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="proposed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={},
+        outputs={},
+        inputs_hash=None,
+        outputs_hash=None,
+        rationale=None,
+        confidence=None,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    dry_run = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_payload = dry_run.json()
+    assert dry_payload["dry_run"] is True
+    assert dry_payload["runs"]["matched"] == 1
+    assert dry_payload["runs"]["updated"] == 0
+    assert dry_payload["actions"]["matched"] == 1
+    assert dry_payload["actions"]["updated"] == 0
+    assert deps.agent_runs.get_agent_run(run_id=run["id"])["registry_fingerprint"] is None
+    assert deps.agent_actions.get_agent_action(action["id"])["registry_fingerprint"] is None
+
+    applied = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": False},
+    )
+    assert applied.status_code == 200
+    applied_payload = applied.json()
+    assert applied_payload["dry_run"] is False
+    assert applied_payload["runs"]["updated"] == 1
+    assert applied_payload["actions"]["updated"] == 1
+    updated_run = deps.agent_runs.get_agent_run(run_id=run["id"])
+    updated_action = deps.agent_actions.get_agent_action(action["id"])
+    assert updated_run["registry_version"] == "agent-runtime-static-v1"
+    assert len(updated_run["registry_fingerprint"]) == 64
+    assert updated_action["registry_version"] == "agent-runtime-static-v1"
+    assert updated_action["registry_fingerprint"] == updated_run["registry_fingerprint"]
+    assert updated_action["tool_id"] == "experiment.run_variant"
+    assert updated_action["skill_id"] == "optimize-product-representation"
+    assert updated_action["tool_version"] == "v1"
+    assert updated_action["skill_version"] == "v1"
+    audit = client.get("/agent-runs/registry/audit").json()["events"]
+    backfill_event = next(
+        item for item in audit if item["event_type"] == "registry_pin_backfill_applied"
+    )
+    assert backfill_event["source"] == "operator_backfill"
+    assert backfill_event["registry_fingerprint"] == updated_run["registry_fingerprint"]
+    assert backfill_event["diff"]["client_id"] == CLIENT_ID
+    assert backfill_event["diff"]["runs"]["updated"] == 1
+    assert backfill_event["diff"]["actions"]["updated"] == 1
+
+    second_apply = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": False},
+    )
+    assert second_apply.status_code == 200
+    assert second_apply.json()["runs"]["matched"] == 0
+    assert second_apply.json()["actions"]["matched"] == 0
 
 
 def test_operator_command_endpoint_records_receipt_and_delegates_approval(

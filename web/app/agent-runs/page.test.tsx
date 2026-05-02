@@ -17,6 +17,9 @@ const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
 const listAgentRuntimeRegistryAuditMock = vi.fn();
+const listAgentRuntimeRegistryReleasesMock = vi.fn();
+const getAgentRuntimeRegistryReleaseMock = vi.fn();
+const backfillAgentRuntimeRegistryPinsMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
@@ -67,6 +70,12 @@ vi.mock("../../lib/api", () => ({
   listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
   listAgentRuntimeRegistryAudit: (...args: unknown[]) =>
     listAgentRuntimeRegistryAuditMock(...args),
+  listAgentRuntimeRegistryReleases: (...args: unknown[]) =>
+    listAgentRuntimeRegistryReleasesMock(...args),
+  getAgentRuntimeRegistryRelease: (...args: unknown[]) =>
+    getAgentRuntimeRegistryReleaseMock(...args),
+  backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
+    backfillAgentRuntimeRegistryPinsMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
@@ -93,6 +102,9 @@ describe("AgentRunsPage timeline presets", () => {
     controlAgentRunMock.mockReset();
     listAgentRuntimeRegistryMock.mockReset();
     listAgentRuntimeRegistryAuditMock.mockReset();
+    listAgentRuntimeRegistryReleasesMock.mockReset();
+    getAgentRuntimeRegistryReleaseMock.mockReset();
+    backfillAgentRuntimeRegistryPinsMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
@@ -113,6 +125,20 @@ describe("AgentRunsPage timeline presets", () => {
           policy_profile_id: "human_approval_required",
           registry_version: "agent-runtime-static-v1",
           registry_fingerprint: "abcdef1234567890",
+        },
+        {
+          id: "registry-audit-2",
+          event_type: "registry_pin_backfill_applied",
+          previous_registry_fingerprint: null,
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "operator_backfill",
+          created_at: "2026-05-02T11:00:00Z",
+          diff: {
+            client_id: "client-a",
+            runs: { matched: 2, updated: 2, sample_ids: ["run-old"] },
+            actions: { matched: 3, updated: 3, sample_ids: ["action-old"] },
+          },
         },
       ],
     });
@@ -172,6 +198,7 @@ describe("AgentRunsPage timeline presets", () => {
       registry_snapshot_id: "abcdef1234567890",
       registry_snapshot_created_at: "2026-05-02T10:00:00Z",
       registry_source: "static_code",
+      registry_status: "active",
       skills: [
         {
           id: "optimize-product-representation",
@@ -249,7 +276,131 @@ describe("AgentRunsPage timeline presets", () => {
             skill_ids_by_tool_changed: true,
           },
         },
+        {
+          id: "registry-audit-2",
+          event_type: "registry_pin_backfill_applied",
+          previous_registry_fingerprint: null,
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "operator_backfill",
+          created_at: "2026-05-02T11:00:00Z",
+          diff: {
+            client_id: "client-a",
+            runs: { matched: 2, updated: 2, sample_ids: ["run-old"] },
+            actions: { matched: 3, updated: 3, sample_ids: ["action-old"] },
+          },
+        },
       ],
+    });
+    listAgentRuntimeRegistryReleasesMock.mockResolvedValue({
+      releases: [
+        {
+          id: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
+          hash_algorithm: "sha256",
+          source: "static_code",
+          status: "active",
+          created_at: "2026-05-02T10:00:00Z",
+          counts: {
+            skills: 3,
+            tools: 12,
+            capabilities: 12,
+            policy_profiles: 3,
+          },
+        },
+      ],
+    });
+    getAgentRuntimeRegistryReleaseMock.mockResolvedValue({
+      release: {
+        id: "abcdef1234567890",
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        hash_algorithm: "sha256",
+        source: "static_code",
+        status: "active",
+        created_at: "2026-05-02T10:00:00Z",
+        counts: {
+          skills: 1,
+          tools: 1,
+          capabilities: 1,
+          policy_profiles: 1,
+        },
+        payload: {
+          registry_version: "agent-runtime-static-v1",
+          skills: [
+            {
+              id: "optimize-product-representation",
+              name: "Optimize Product Representation",
+              description: "Improve product representation.",
+              version: "v1",
+              tool_ids: ["experiment.run_variant"],
+              risk_class: "write_low_risk",
+            },
+          ],
+          tools: [
+            {
+              id: "experiment.run_variant",
+              capability_name: "run_variant",
+              summary: "Execute one candidate variant against frozen snapshots.",
+              default_version: "v1",
+              input_schema: {},
+              output_schema: {},
+              side_effects: [],
+              review_checklist: [],
+              owner_principal_id: "platform.commerce-optimization",
+              steward_team: "commerce-optimization",
+              effect_class: "write_low_risk",
+            },
+          ],
+          capabilities: [
+            {
+              name: "run_variant",
+              tool_id: "experiment.run_variant",
+              summary: "Execute one candidate variant against frozen snapshots.",
+              default_version: "v1",
+              input_schema: {},
+              output_schema: {},
+              side_effects: [],
+              review_checklist: [],
+              owner_principal_id: "platform.commerce-optimization",
+              steward_team: "commerce-optimization",
+              effect_class: "write_low_risk",
+            },
+          ],
+          skill_ids_by_tool: {
+            "experiment.run_variant": ["optimize-product-representation"],
+          },
+          policy_profiles: [
+            {
+              id: "human_approval_required",
+              name: "Human approval",
+              description: "Require operator approval.",
+              auto_effect_classes: [],
+            },
+          ],
+        },
+        audit_events: [
+          {
+            id: "registry-audit-1",
+            event_type: "registry_changed",
+            previous_registry_fingerprint: "1111111111111111",
+            registry_fingerprint: "abcdef1234567890",
+            registry_version: "agent-runtime-static-v1",
+            source: "static_code",
+            created_at: "2026-05-02T10:00:00Z",
+            diff: {},
+          },
+        ],
+      },
+    });
+    backfillAgentRuntimeRegistryPinsMock.mockResolvedValue({
+      client_id: "client-a",
+      dry_run: true,
+      registry_version: "agent-runtime-static-v1",
+      registry_fingerprint: "abcdef1234567890",
+      runs: { matched: 2, updated: 0, sample_ids: ["run-old"] },
+      actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
     });
   });
 
@@ -549,6 +700,56 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Run registry: agent-runtime-static-v1/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
+    expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
+    expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /View details/i }));
+    expect(getAgentRuntimeRegistryReleaseMock).toHaveBeenCalledWith(
+      "abcdef1234567890",
+      { audit_limit: 5 },
+    );
+    expect(await screen.findByText(/Release detail/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(
+          node?.textContent?.includes(
+            "Payload contains 1 skills, 1 tools, and 1 policy profiles",
+          ),
+        ),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/1 audit events are tied to this release/i)).toBeInTheDocument();
+    backfillAgentRuntimeRegistryPinsMock
+      .mockResolvedValueOnce({
+        client_id: "client-a",
+        dry_run: true,
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        runs: { matched: 2, updated: 0, sample_ids: ["run-old"] },
+        actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
+      })
+      .mockResolvedValueOnce({
+        client_id: "client-a",
+        dry_run: false,
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        runs: { matched: 2, updated: 2, sample_ids: ["run-old"] },
+        actions: { matched: 3, updated: 3, sample_ids: ["action-old"] },
+      });
+    await userEvent.click(screen.getByRole("button", { name: /Preview missing pins/i }));
+    expect(backfillAgentRuntimeRegistryPinsMock).toHaveBeenCalledWith(
+      { dry_run: true, limit: 200 },
+      "user-a",
+    );
+    expect(await screen.findByText(/Preview found 5 records/i)).toBeInTheDocument();
+    expect(screen.getByText(/Missing pins: 2 runs · 3 actions/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Apply backfill/i }));
+    expect(backfillAgentRuntimeRegistryPinsMock).toHaveBeenCalledWith(
+      { dry_run: false, limit: 200 },
+      "user-a",
+    );
+    expect(await screen.findByText(/Backfill updated 5 records/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
     expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();
@@ -558,6 +759,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Steward: commerce-optimization/i)).toBeInTheDocument();
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
     expect(listAgentRuntimeRegistryAuditMock).toHaveBeenCalledWith({ limit: 5 });
+    expect(listAgentRuntimeRegistryReleasesMock).toHaveBeenCalledWith({ limit: 5 });
   });
 
   it("routes operator chat steering commands through the command API", async () => {

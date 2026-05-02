@@ -1171,6 +1171,7 @@ export type AgentRuntimeRegistryResponse = {
   registry_snapshot_id?: string | null;
   registry_snapshot_created_at?: string | null;
   registry_source?: string | null;
+  registry_status?: string | null;
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];
@@ -1190,6 +1191,17 @@ export type AgentRegistryAuditDiff = {
   capabilities?: AgentRegistryAuditDiffSection;
   policy_profiles?: AgentRegistryAuditDiffSection;
   skill_ids_by_tool_changed?: boolean;
+  client_id?: string;
+  runs?: {
+    matched?: number;
+    updated?: number;
+    sample_ids?: string[];
+  };
+  actions?: {
+    matched?: number;
+    updated?: number;
+    sample_ids?: string[];
+  };
 };
 
 export type AgentRegistryAuditEvent = {
@@ -1205,6 +1217,59 @@ export type AgentRegistryAuditEvent = {
 
 export type AgentRegistryAuditListResponse = {
   events: AgentRegistryAuditEvent[];
+};
+
+export type AgentRegistryRelease = {
+  id: string;
+  registry_version: string;
+  registry_fingerprint: string;
+  hash_algorithm: string;
+  source: string;
+  status: string;
+  created_at?: string | null;
+  counts: {
+    skills: number;
+    tools: number;
+    capabilities: number;
+    policy_profiles: number;
+  };
+};
+
+export type AgentRegistryReleaseDetail = AgentRegistryRelease & {
+  payload: {
+    registry_version?: string;
+    skills?: AgentRuntimeSkillSpec[];
+    tools?: AgentRuntimeToolSpec[];
+    capabilities?: AgentRuntimeCapabilitySpec[];
+    skill_ids_by_tool?: Record<string, string[]>;
+    policy_profiles?: AgentRuntimePolicyProfile[];
+  };
+  audit_events: AgentRegistryAuditEvent[];
+};
+
+export type AgentRegistryReleaseListResponse = {
+  releases: AgentRegistryRelease[];
+};
+
+export type AgentRegistryReleaseDetailResponse = {
+  release: AgentRegistryReleaseDetail;
+};
+
+export type AgentRegistryPinBackfillResponse = {
+  client_id: string;
+  dry_run: boolean;
+  registry_version: string;
+  registry_fingerprint: string;
+  runs: {
+    matched: number;
+    updated: number;
+    sample_ids: string[];
+  };
+  actions: {
+    matched: number;
+    updated: number;
+    sample_ids: string[];
+  };
 };
 
 export type AgentRunEventListResponse = {

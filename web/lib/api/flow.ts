@@ -11,6 +11,9 @@ import {
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
   AgentRegistryAuditListResponse,
+  AgentRegistryPinBackfillResponse,
+  AgentRegistryReleaseDetailResponse,
+  AgentRegistryReleaseListResponse,
   AgentRuntimeRegistryResponse,
   ConversationResponse,
   CopyRevisionListResponse,
@@ -607,6 +610,46 @@ export async function listAgentRuntimeRegistryAudit(
   return request<AgentRegistryAuditListResponse>(
     `/agent-runs/registry/audit${params.toString() ? `?${params.toString()}` : ""}`,
   );
+}
+
+export async function listAgentRuntimeRegistryReleases(
+  payload: { status?: "active" | "retired" | string | null; limit?: number } = {},
+): Promise<AgentRegistryReleaseListResponse> {
+  const params = new URLSearchParams();
+  if (payload.status) params.set("status", payload.status);
+  if (payload.limit) params.set("limit", String(payload.limit));
+  return request<AgentRegistryReleaseListResponse>(
+    `/agent-runs/registry/releases${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function getAgentRuntimeRegistryRelease(
+  registryFingerprint: string,
+  payload: { audit_limit?: number } = {},
+): Promise<AgentRegistryReleaseDetailResponse> {
+  const params = new URLSearchParams();
+  if (payload.audit_limit) params.set("audit_limit", String(payload.audit_limit));
+  return request<AgentRegistryReleaseDetailResponse>(
+    `/agent-runs/registry/releases/${encodeURIComponent(registryFingerprint)}${
+      params.toString() ? `?${params.toString()}` : ""
+    }`,
+  );
+}
+
+export async function backfillAgentRuntimeRegistryPins(
+  payload: { dry_run?: boolean; limit?: number } = {},
+  userId?: string | null,
+): Promise<AgentRegistryPinBackfillResponse> {
+  const clientId = getClientId();
+  return request<AgentRegistryPinBackfillResponse>("/agent-runs/registry/backfill-pins", {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: clientId ?? undefined,
+      user_id: userId ?? undefined,
+      dry_run: payload.dry_run ?? true,
+      limit: payload.limit ?? 200,
+    }),
+  });
 }
 
 export async function decideAgentAction(

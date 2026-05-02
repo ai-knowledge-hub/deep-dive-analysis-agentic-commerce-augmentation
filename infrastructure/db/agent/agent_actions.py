@@ -216,6 +216,73 @@ def list_agent_actions(
     return [_row(r) for r in rows]
 
 
+def list_agent_actions_missing_registry_pins(
+    *, client_id: str, limit: int = 200
+) -> List[Dict[str, Any]]:
+    rows = (
+        get_connection()
+        .execute(
+            """
+            SELECT a.*
+            FROM agent_actions a
+            JOIN agent_runs r ON r.id = a.agent_run_id
+            WHERE r.client_id = ?
+              AND (
+                  a.registry_version IS NULL
+                  OR a.registry_fingerprint IS NULL
+                  OR a.tool_version IS NULL
+                  OR a.skill_version IS NULL
+                  OR a.tool_id IS NULL
+                  OR a.skill_id IS NULL
+              )
+            ORDER BY r.created_at ASC, a.sequence ASC
+            LIMIT ?
+            """,
+            (client_id, int(limit)),
+        )
+        .fetchall()
+    )
+    return [_row(r) for r in rows]
+
+
+def update_agent_action_registry_pins(
+    *,
+    action_id: str,
+    tool_id: Optional[str],
+    skill_id: Optional[str],
+    registry_version: str,
+    registry_fingerprint: str,
+    tool_version: Optional[str],
+    skill_version: Optional[str],
+) -> Dict[str, Any] | None:
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE agent_actions
+        SET
+            tool_id = ?,
+            skill_id = ?,
+            registry_version = ?,
+            registry_fingerprint = ?,
+            tool_version = ?,
+            skill_version = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (
+            tool_id,
+            skill_id,
+            registry_version,
+            registry_fingerprint,
+            tool_version,
+            skill_version,
+            action_id,
+        ),
+    )
+    conn.commit()
+    return get_agent_action(action_id)
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -273,4 +340,6 @@ __all__ = [
     "transition_agent_action_status",
     "get_agent_action",
     "list_agent_actions",
+    "list_agent_actions_missing_registry_pins",
+    "update_agent_action_registry_pins",
 ]

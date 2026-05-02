@@ -40,8 +40,11 @@ from application.services.agent_runtime.runtime import (
 )
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 from infrastructure.db.agent.agent_registry import (
+    create_agent_registry_audit_event,
     ensure_agent_registry_version,
+    get_agent_registry_release_detail,
     list_agent_registry_audit_events,
+    list_agent_registry_versions,
 )
 
 
@@ -115,6 +118,13 @@ class AgentActionDecisionRequest(BaseModel):
 class AgentRunControlRequest(BaseModel):
     user_id: Optional[str] = None
     client_id: Optional[str] = None
+
+
+class AgentRegistryBackfillPinsRequest(BaseModel):
+    user_id: Optional[str] = None
+    client_id: Optional[str] = None
+    dry_run: bool = True
+    limit: int = 200
 
 
 class AgentRunTickRequest(BaseModel):
@@ -485,6 +495,7 @@ def get_agent_runtime_registry() -> Dict[str, Any]:
         "registry_snapshot_id": snapshot.get("id"),
         "registry_snapshot_created_at": snapshot.get("created_at"),
         "registry_source": snapshot.get("source"),
+        "registry_status": snapshot.get("status"),
     }
 
 
@@ -499,6 +510,127 @@ def get_agent_runtime_registry_audit(
             registry_fingerprint=registry_fingerprint,
             limit=bounded_limit,
         )
+    }
+
+
+@router.get("/registry/releases")
+def get_agent_runtime_registry_releases(
+    status: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    normalized_status = str(status).strip().lower() if status else None
+    if normalized_status and normalized_status not in {"active", "retired"}:
+        raise HTTPException(status_code=400, detail="Unsupported registry release status")
+    bounded_limit = max(1, min(int(limit), 100))
+    return {
+        "releases": list_agent_registry_versions(
+            status=normalized_status,
+            limit=bounded_limit,
+        )
+    }
+
+
+@router.get("/registry/releases/{registry_fingerprint}")
+def get_agent_runtime_registry_release_detail(
+    registry_fingerprint: str,
+    audit_limit: int = 20,
+) -> Dict[str, Any]:
+    bounded_audit_limit = max(1, min(int(audit_limit), 100))
+    release = get_agent_registry_release_detail(
+        registry_fingerprint=registry_fingerprint,
+        audit_limit=bounded_audit_limit,
+    )
+    if not release:
+        raise HTTPException(status_code=404, detail="Registry release not found")
+    return {"release": release}
+
+
+@router.post("/registry/backfill-pins")
+def backfill_agent_runtime_registry_pins(
+    payload: AgentRegistryBackfillPinsRequest,
+    deps: AppDeps = Depends(_deps),
+) -> Dict[str, Any]:
+    client_id = require_client_id(payload.client_id, payload.user_id)
+    bounded_limit = max(1, min(int(payload.limit), 500))
+    registry_payload = registry_contract_payload()
+    active_registry_fingerprint = registry_fingerprint()
+    snapshot = ensure_agent_registry_version(
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=active_registry_fingerprint,
+        hash_algorithm="sha256",
+        payload=registry_payload,
+    )
+    run_candidates = deps.agent_runs.list_agent_runs_missing_registry_pins(
+        client_id=client_id,
+        limit=bounded_limit,
+    )
+    action_candidates = deps.agent_actions.list_agent_actions_missing_registry_pins(
+        client_id=client_id,
+        limit=bounded_limit,
+    )
+    updated_runs = 0
+    updated_actions = 0
+    if not payload.dry_run:
+        updated_runs = deps.agent_runs.backfill_agent_run_registry_pins(
+            client_id=client_id,
+            registry_version=str(snapshot["registry_version"]),
+            registry_fingerprint=str(snapshot["registry_fingerprint"]),
+            limit=bounded_limit,
+        )
+        for action in action_candidates:
+            capability_name = str(action.get("capability_name") or "")
+            tool_id = action.get("tool_id") or capability_to_tool_id(capability_name)
+            skill_id = action.get("skill_id") or skill_id_for_tool_id(tool_id)
+            version_context = version_context_for_capability(
+                capability_name,
+                tool_id=tool_id,
+                skill_id=skill_id,
+            )
+            deps.agent_actions.update_agent_action_registry_pins(
+                action_id=str(action["id"]),
+                tool_id=tool_id,
+                skill_id=skill_id,
+                registry_version=str(snapshot["registry_version"]),
+                registry_fingerprint=str(snapshot["registry_fingerprint"]),
+                tool_version=version_context["tool_version"],
+                skill_version=version_context["skill_version"],
+            )
+            updated_actions += 1
+        if updated_runs or updated_actions:
+            create_agent_registry_audit_event(
+                event_type="registry_pin_backfill_applied",
+                registry_version=str(snapshot["registry_version"]),
+                registry_fingerprint=str(snapshot["registry_fingerprint"]),
+                source="operator_backfill",
+                diff={
+                    "client_id": client_id,
+                    "runs": {
+                        "matched": len(run_candidates),
+                        "updated": updated_runs,
+                        "sample_ids": [item["id"] for item in run_candidates[:10]],
+                    },
+                    "actions": {
+                        "matched": len(action_candidates),
+                        "updated": updated_actions,
+                        "sample_ids": [item["id"] for item in action_candidates[:10]],
+                    },
+                },
+            )
+    return {
+        "client_id": client_id,
+        "dry_run": bool(payload.dry_run),
+        "registry_version": snapshot["registry_version"],
+        "registry_fingerprint": snapshot["registry_fingerprint"],
+        "runs": {
+            "matched": len(run_candidates),
+            "updated": updated_runs,
+            "sample_ids": [item["id"] for item in run_candidates[:10]],
+        },
+        "actions": {
+            "matched": len(action_candidates),
+            "updated": updated_actions,
+            "sample_ids": [item["id"] for item in action_candidates[:10]],
+        },
     }
 
 

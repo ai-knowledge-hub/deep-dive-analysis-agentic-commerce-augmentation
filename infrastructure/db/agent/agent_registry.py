@@ -18,7 +18,8 @@ def ensure_agent_registry_version(
     status: str = "active",
 ) -> Dict[str, Any]:
     conn = get_connection()
-    latest_before = get_latest_agent_registry_version()
+    release_status = status or "active"
+    active_before = get_active_agent_registry_version()
     conn.execute(
         """
         INSERT OR IGNORE INTO agent_registry_versions (
@@ -39,15 +40,44 @@ def ensure_agent_registry_version(
             hash_algorithm,
             source,
             to_json(payload) or to_json({}),
-            status,
+            release_status,
+        ),
+    )
+    conn.execute(
+        """
+        UPDATE agent_registry_versions
+        SET
+            registry_version = ?,
+            hash_algorithm = ?,
+            source = ?,
+            payload_json = json(?),
+            status = ?
+        WHERE registry_fingerprint = ?
+        """,
+        (
+            registry_version,
+            hash_algorithm,
+            source,
+            to_json(payload) or to_json({}),
+            release_status,
+            registry_fingerprint,
         ),
     )
     if (
-        latest_before
-        and latest_before["registry_fingerprint"] != registry_fingerprint
+        release_status == "active"
+        and active_before
+        and active_before["registry_fingerprint"] != registry_fingerprint
     ):
+        conn.execute(
+            """
+            UPDATE agent_registry_versions
+            SET status = 'retired'
+            WHERE status = 'active' AND registry_fingerprint != ?
+            """,
+            (registry_fingerprint,),
+        )
         _create_registry_transition_event(
-            previous=latest_before,
+            previous=active_before,
             registry_version=registry_version,
             registry_fingerprint=registry_fingerprint,
             payload=payload,
@@ -75,6 +105,23 @@ def get_agent_registry_version(
     return _row(row) if row else None
 
 
+def get_agent_registry_release_detail(
+    *, registry_fingerprint: str, audit_limit: int = 20
+) -> Optional[Dict[str, Any]]:
+    release = get_agent_registry_version(registry_fingerprint=registry_fingerprint)
+    if not release:
+        return None
+    payload = release.get("payload") or {}
+    return {
+        **_release_payload_summary(release, payload),
+        "payload": payload,
+        "audit_events": list_agent_registry_audit_events(
+            registry_fingerprint=registry_fingerprint,
+            limit=audit_limit,
+        ),
+    }
+
+
 def get_latest_agent_registry_version() -> Optional[Dict[str, Any]]:
     row = (
         get_connection()
@@ -89,6 +136,52 @@ def get_latest_agent_registry_version() -> Optional[Dict[str, Any]]:
         .fetchone()
     )
     return _row(row) if row else None
+
+
+def get_active_agent_registry_version() -> Optional[Dict[str, Any]]:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT *
+            FROM agent_registry_versions
+            WHERE status = 'active'
+            ORDER BY created_at DESC, registry_fingerprint ASC
+            LIMIT 1
+            """
+        )
+        .fetchone()
+    )
+    return _row(row) if row else None
+
+
+def list_agent_registry_versions(
+    *, status: Optional[str] = None, limit: int = 20
+) -> list[Dict[str, Any]]:
+    filters: list[str] = []
+    params: list[Any] = []
+    if status:
+        filters.append("status = ?")
+        params.append(status)
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    rows = (
+        get_connection()
+        .execute(
+            f"""
+            SELECT *
+            FROM agent_registry_versions
+            {where_clause}
+            ORDER BY
+                CASE status WHEN 'active' THEN 0 ELSE 1 END,
+                created_at DESC,
+                registry_fingerprint ASC
+            LIMIT ?
+            """,
+            (*params, int(limit)),
+        )
+        .fetchall()
+    )
+    return [_release_row(row) for row in rows]
 
 
 def list_agent_registry_audit_events(
@@ -115,6 +208,50 @@ def list_agent_registry_audit_events(
         .fetchall()
     )
     return [_audit_row(row) for row in rows]
+
+
+def create_agent_registry_audit_event(
+    *,
+    event_type: str,
+    registry_fingerprint: str,
+    registry_version: str,
+    diff: Dict[str, Any],
+    previous_registry_fingerprint: Optional[str] = None,
+    source: str = "system",
+) -> Dict[str, Any]:
+    event_id = str(uuid.uuid4())
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO agent_registry_audit_events (
+            id,
+            event_type,
+            previous_registry_fingerprint,
+            registry_fingerprint,
+            registry_version,
+            source,
+            diff_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, json(?))
+        """,
+        (
+            event_id,
+            event_type,
+            previous_registry_fingerprint,
+            registry_fingerprint,
+            registry_version,
+            source,
+            to_json(diff) or to_json({}),
+        ),
+    )
+    conn.commit()
+    row = (
+        conn.execute(
+            "SELECT * FROM agent_registry_audit_events WHERE id = ?",
+            (event_id,),
+        ).fetchone()
+    )
+    return _audit_row(row) if row else {}
 
 
 def _create_registry_transition_event(
@@ -219,9 +356,38 @@ def _audit_row(row) -> Dict[str, Any]:
     }
 
 
+def _release_row(row) -> Dict[str, Any]:
+    payload = from_json(row["payload_json"], {})
+    return _release_payload_summary(_row(row), payload)
+
+
+def _release_payload_summary(
+    release: Dict[str, Any], payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    return {
+        "id": release["id"],
+        "registry_version": release["registry_version"],
+        "registry_fingerprint": release["registry_fingerprint"],
+        "hash_algorithm": release["hash_algorithm"],
+        "source": release["source"],
+        "status": release["status"],
+        "created_at": release["created_at"],
+        "counts": {
+            "skills": len(payload.get("skills") or []),
+            "tools": len(payload.get("tools") or []),
+            "capabilities": len(payload.get("capabilities") or []),
+            "policy_profiles": len(payload.get("policy_profiles") or []),
+        },
+    }
+
+
 __all__ = [
+    "create_agent_registry_audit_event",
     "ensure_agent_registry_version",
+    "get_active_agent_registry_version",
+    "get_agent_registry_release_detail",
     "get_agent_registry_version",
     "get_latest_agent_registry_version",
     "list_agent_registry_audit_events",
+    "list_agent_registry_versions",
 ]
