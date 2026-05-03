@@ -262,6 +262,62 @@ function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
   return changes.length > 0 ? changes.join(" · ") : "No structural diff recorded";
 }
 
+type RegistryAuditDiffRow = { label: string; value: string };
+
+function registryAuditDiffRows(event: AgentRegistryAuditEvent): RegistryAuditDiffRow[] {
+  if (event.event_type === "registry_ownership_approved") {
+    const receipt = event.diff.approval_receipt;
+    const toolId = String(event.diff.tool_id || receipt?.tool_id || "unknown tool");
+    return [
+      { label: "Tool", value: toolId },
+      {
+        label: "Receipt",
+        value: String(receipt?.receipt_id || "unsigned receipt metadata unavailable"),
+      },
+      {
+        label: "Actor",
+        value: String(receipt?.actor_user_id || "unknown actor"),
+      },
+    ];
+  }
+  if (event.event_type === "registry_pin_backfill_applied") {
+    return [
+      {
+        label: "Runs",
+        value: `${event.diff.runs?.updated ?? 0}/${event.diff.runs?.matched ?? 0} updated`,
+      },
+      {
+        label: "Actions",
+        value: `${event.diff.actions?.updated ?? 0}/${event.diff.actions?.matched ?? 0} updated`,
+      },
+      {
+        label: "Client",
+        value: String(event.diff.client_id || "unknown client"),
+      },
+    ];
+  }
+  const sections = [
+    ["Skills", event.diff.skills],
+    ["Tools", event.diff.tools],
+    ["Capabilities", event.diff.capabilities],
+    ["Policies", event.diff.policy_profiles],
+  ] as const;
+  const rows: RegistryAuditDiffRow[] = sections.flatMap(([label, section]) => {
+    const values = [
+      ...(section?.added ?? []).map((item) => `+${item}`),
+      ...(section?.removed ?? []).map((item) => `-${item}`),
+      ...(section?.changed ?? []).map((item) => `~${item}`),
+    ];
+    return values.length > 0
+      ? [{ label, value: values.slice(0, 5).join(", ") }]
+      : [];
+  });
+  if (event.diff.skill_ids_by_tool_changed) {
+    rows.push({ label: "Tool-skill map", value: "Changed" });
+  }
+  return rows.length > 0 ? rows : [{ label: "Diff", value: "No structural diff recorded" }];
+}
+
 function approvalReceiptForEvent(event: AgentRegistryAuditEvent): Record<string, unknown> | null {
   const receipt = event.diff.approval_receipt;
   return receipt && typeof receipt === "object" ? receipt : null;
@@ -2023,6 +2079,44 @@ function AgentRunsPageContent() {
                               {selectedRegistryRelease.audit_events.length} audit events are tied
                               to this release.
                             </p>
+                            {selectedRegistryRelease.audit_events.length > 0 ? (
+                              <div className="panel__card panel__card--secondary">
+                                <div className="panel__eyebrow">Release diff</div>
+                                <div className="run-event-list">
+                                  {selectedRegistryRelease.audit_events
+                                    .slice(0, 4)
+                                    .map((event) => (
+                                      <div key={event.id} className="run-event-list__item">
+                                        <div>
+                                          <div className="table__strong">
+                                            {event.event_type.replaceAll("_", " ")}
+                                          </div>
+                                          <div className="table__muted">
+                                            {event.previous_registry_fingerprint
+                                              ? `${event.previous_registry_fingerprint.slice(
+                                                  0,
+                                                  12,
+                                                )} -> `
+                                              : ""}
+                                            {event.registry_fingerprint.slice(0, 12)} ·{" "}
+                                            {formatDateCompact(event.created_at)}
+                                          </div>
+                                        </div>
+                                        <div className="agent-ops-summary">
+                                          {registryAuditDiffRows(event).map((row) => (
+                                            <span
+                                              key={`${event.id}-${row.label}`}
+                                              className="panel__badge panel__badge--secondary"
+                                            >
+                                              {row.label}: {row.value}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            ) : null}
                             {selectedRegistryRelease.audit_events.some((event) =>
                               Boolean(approvalReceiptForEvent(event)),
                             ) ? (

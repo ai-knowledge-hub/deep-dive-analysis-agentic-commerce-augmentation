@@ -85,11 +85,11 @@ Historical reference:
 
 ### 1. Skills And Tools Registry v1 Hardening
 
-Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. One registry snapshot is explicitly active; previous active snapshots are retired on fingerprint transitions. Tool ownership metadata is now seeded into a persistent registry ownership source and folded back into the registry payload so owner/steward changes can become auditable registry changes instead of hidden code-only metadata. Operators can update owner/steward metadata from the Runs control plane via `PATCH /agent-runs/registry/ownership/{tool_id}`; the endpoint supports dry-run preflight, requires confirmation before mutation, rejects no-op approvals, emits signed approval receipts, verifies approval receipts through `POST /agent-runs/registry/approval-receipts/verify`, and successful confirmed changes produce a new active registry fingerprint plus transition/approval audit events. Shared-tool skill selection is now deterministic: the registry exposes candidate skills and default skill per tool, while runtime action creation can honor an allowed/preferred skill when commands provide one. Operator chat recovery controls can now pass a preferred skill for shared-tool recovery and change-plan proposals. `GET /agent-runs/registry/releases` exposes active/retired release metadata, and `GET /agent-runs/registry/releases/{fingerprint}` exposes a persisted release payload plus related audit events for drill-down, including operator-triggered receipt verification for signed ownership approvals. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, including stable metric/variant/posterior receipt IDs where capabilities can guarantee them. The Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, new actions pin registry/tool/skill/fingerprint context, and the Runs UI can preview/apply client-scoped backfill for missing pins on older records with audit events for applied backfills.
+Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. One registry snapshot is explicitly active; previous active snapshots are retired on fingerprint transitions. Tool ownership metadata is now seeded into a persistent registry ownership source and folded back into the registry payload so owner/steward changes can become auditable registry changes instead of hidden code-only metadata. Operators can update owner/steward metadata from the Runs control plane via `PATCH /agent-runs/registry/ownership/{tool_id}`; the endpoint supports dry-run preflight, requires confirmation before mutation, rejects no-op approvals, emits signed approval receipts, verifies approval receipts through `POST /agent-runs/registry/approval-receipts/verify`, and successful confirmed changes produce a new active registry fingerprint plus transition/approval audit events. Shared-tool skill selection is now deterministic: the registry exposes candidate skills and default skill per tool, while runtime action creation can honor an allowed/preferred skill when commands provide one. Operator chat recovery controls can now pass a preferred skill for shared-tool recovery and change-plan proposals. `GET /agent-runs/registry/releases` exposes active/retired release metadata, and `GET /agent-runs/registry/releases/{fingerprint}` exposes a persisted release payload plus related audit events for drill-down, including concrete release diff rows and operator-triggered receipt verification for signed ownership approvals. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, including stable metric/variant/posterior receipt IDs where capabilities can guarantee them. The Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, new actions pin registry/tool/skill/fingerprint context, and the Runs UI can preview/apply client-scoped backfill for missing pins on older records with audit events for applied backfills.
 
 Next steps:
 
-- Add deeper release diff visualization before this becomes production-facing.
+- Start richer capability-specific recovery templates.
 
 ### 2. Agent Chat As Primary Control Interface
 
@@ -178,6 +178,7 @@ Completed in this slice:
   - Agent Runs selected-action detail now prefers registry-provided summaries, side effects, and review checklists over hardcoded fallback explanations.
   - Agent Runs selected-action detail shows registry owner, steward, and ownership source metadata, with a gated ownership edit form and approval receipt confirmation for the selected tool.
   - Agent Runs release details can verify signed registry ownership approval receipts against the backend signature/audit verifier.
+  - Agent Runs release details show concrete release diff rows for structural registry changes, pin backfills, and signed ownership approvals.
   - Agent Runs shows the active registry version and short fingerprint.
 - Verification:
   - Backend tests cover registry metadata exposure and invalid registry input failure handling.
@@ -185,9 +186,9 @@ Completed in this slice:
 
 ## Next Build Slice
 
-The next implementation slice should finish Registry Hardening v1 release management and ownership migration.
+The next implementation slice should move into capability-specific recovery templates.
 
 Initial scope:
 
-- Add deeper release diff visualization.
+- Add richer recovery templates per capability/effect class.
 - Keep mock-auth Playwright smoke green.

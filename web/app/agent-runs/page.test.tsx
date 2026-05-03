@@ -412,7 +412,25 @@ describe("AgentRunsPage timeline presets", () => {
             registry_version: "agent-runtime-static-v1",
             source: "static_code",
             created_at: "2026-05-02T10:00:00Z",
-            diff: {},
+            diff: {
+              tools: {
+                added: ["experiment.run_variant"],
+                removed: [],
+                changed: ["validation.review_readiness"],
+              },
+              skills: {
+                added: ["optimize-product-representation"],
+                removed: [],
+                changed: [],
+              },
+              capabilities: {
+                added: ["run_variant"],
+                removed: [],
+                changed: [],
+              },
+              policy_profiles: { added: [], removed: [], changed: [] },
+              skill_ids_by_tool_changed: true,
+            },
           },
           {
             id: "registry-approval-1",
@@ -889,6 +907,13 @@ describe("AgentRunsPage timeline presets", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(screen.getByText(/2 audit events are tied to this release/i)).toBeInTheDocument();
+    expect(screen.getByText(/Release diff/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Tools: \+experiment.run_variant, ~validation.review_readiness/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Receipt: receipt-12345678/i),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
     expect(verifyAgentRuntimeRegistryApprovalReceiptMock).toHaveBeenCalledWith({
       approval_receipt: {
