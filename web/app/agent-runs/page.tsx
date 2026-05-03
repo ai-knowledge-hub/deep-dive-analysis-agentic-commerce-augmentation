@@ -2588,6 +2588,9 @@ function AgentRunsPageContent() {
                           <span className="panel__badge panel__badge--secondary">
                             Steward: {selectedCapabilitySpec?.steward_team ?? "unassigned"}
                           </span>
+                          <span className="panel__badge panel__badge--secondary">
+                            Source: {selectedCapabilitySpec?.ownership_source ?? "static_code"}
+                          </span>
                         </div>
                         <p className="panel__subheading">Rollback guidance</p>
                         <p className="panel__muted">

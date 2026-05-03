@@ -1136,6 +1136,7 @@ export type AgentRuntimeToolSpec = {
   review_checklist?: string[];
   owner_principal_id?: string;
   steward_team?: string;
+  ownership_source?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1153,6 +1154,7 @@ export type AgentRuntimeCapabilitySpec = {
   review_checklist?: string[];
   owner_principal_id?: string;
   steward_team?: string;
+  ownership_source?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1172,6 +1174,7 @@ export type AgentRuntimeRegistryResponse = {
   registry_snapshot_created_at?: string | null;
   registry_source?: string | null;
   registry_status?: string | null;
+  registry_ownership_source?: string | null;
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];

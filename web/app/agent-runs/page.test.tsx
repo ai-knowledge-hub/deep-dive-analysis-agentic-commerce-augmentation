@@ -199,6 +199,7 @@ describe("AgentRunsPage timeline presets", () => {
       registry_snapshot_created_at: "2026-05-02T10:00:00Z",
       registry_source: "static_code",
       registry_status: "active",
+      registry_ownership_source: "persistent",
       skills: [
         {
           id: "optimize-product-representation",
@@ -228,6 +229,7 @@ describe("AgentRunsPage timeline presets", () => {
           review_checklist: ["Compare the metric against control before promotion."],
           owner_principal_id: "platform.commerce-optimization",
           steward_team: "commerce-optimization",
+          ownership_source: "registry_default",
           effect_class: "write_low_risk",
         },
       ],
@@ -250,6 +252,7 @@ describe("AgentRunsPage timeline presets", () => {
           review_checklist: ["Compare the metric against control before promotion."],
           owner_principal_id: "platform.commerce-optimization",
           steward_team: "commerce-optimization",
+          ownership_source: "registry_default",
           effect_class: "write_low_risk",
         },
       ],
@@ -701,6 +704,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();

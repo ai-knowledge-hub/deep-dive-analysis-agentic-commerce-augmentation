@@ -210,6 +210,52 @@ def list_agent_registry_audit_events(
     return [_audit_row(row) for row in rows]
 
 
+def ensure_agent_registry_tool_ownership(
+    *, ownership: list[Dict[str, Any]], source: str = "registry_default"
+) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    for item in ownership:
+        tool_id = str(item.get("tool_id") or "").strip()
+        owner_principal_id = str(item.get("owner_principal_id") or "").strip()
+        steward_team = str(item.get("steward_team") or "").strip()
+        if not tool_id or not owner_principal_id or not steward_team:
+            continue
+        conn.execute(
+            """
+            INSERT INTO agent_registry_tool_ownership (
+                tool_id,
+                owner_principal_id,
+                steward_team,
+                source
+            )
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(tool_id) DO UPDATE SET
+                owner_principal_id = agent_registry_tool_ownership.owner_principal_id,
+                steward_team = agent_registry_tool_ownership.steward_team,
+                source = agent_registry_tool_ownership.source,
+                updated_at = agent_registry_tool_ownership.updated_at
+            """,
+            (tool_id, owner_principal_id, steward_team, source),
+        )
+    conn.commit()
+    return list_agent_registry_tool_ownership()
+
+
+def list_agent_registry_tool_ownership() -> list[Dict[str, Any]]:
+    rows = (
+        get_connection()
+        .execute(
+            """
+            SELECT *
+            FROM agent_registry_tool_ownership
+            ORDER BY tool_id ASC
+            """
+        )
+        .fetchall()
+    )
+    return [_ownership_row(row) for row in rows]
+
+
 def create_agent_registry_audit_event(
     *,
     event_type: str,
@@ -381,13 +427,26 @@ def _release_payload_summary(
     }
 
 
+def _ownership_row(row) -> Dict[str, Any]:
+    return {
+        "tool_id": row["tool_id"],
+        "owner_principal_id": row["owner_principal_id"],
+        "steward_team": row["steward_team"],
+        "source": row["source"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
 __all__ = [
     "create_agent_registry_audit_event",
+    "ensure_agent_registry_tool_ownership",
     "ensure_agent_registry_version",
     "get_active_agent_registry_version",
     "get_agent_registry_release_detail",
     "get_agent_registry_version",
     "get_latest_agent_registry_version",
     "list_agent_registry_audit_events",
+    "list_agent_registry_tool_ownership",
     "list_agent_registry_versions",
 ]

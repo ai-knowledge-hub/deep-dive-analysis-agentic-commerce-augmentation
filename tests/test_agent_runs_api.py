@@ -282,6 +282,7 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
     assert payload["registry_source"] == "static_code"
     assert payload["registry_status"] == "active"
+    assert payload["registry_ownership_source"] == "persistent"
     assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
         "registry_fingerprint"
     ]
@@ -317,6 +318,19 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert run_variant["review_checklist"]
     assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
     assert run_variant["steward_team"] == "commerce-optimization"
+    assert run_variant["ownership_source"] == "registry_default"
+    ownership_row = get_connection().execute(
+        """
+        SELECT owner_principal_id, steward_team, source
+        FROM agent_registry_tool_ownership
+        WHERE tool_id = ?
+        """,
+        ("experiment.run_variant",),
+    ).fetchone()
+    assert ownership_row is not None
+    assert ownership_row["owner_principal_id"] == "platform.commerce-optimization"
+    assert ownership_row["steward_team"] == "commerce-optimization"
+    assert ownership_row["source"] == "registry_default"
     assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
     ]
