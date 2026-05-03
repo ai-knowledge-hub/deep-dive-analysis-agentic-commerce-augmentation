@@ -19,6 +19,7 @@ const listAgentRuntimeRegistryMock = vi.fn();
 const listAgentRuntimeRegistryAuditMock = vi.fn();
 const listAgentRuntimeRegistryReleasesMock = vi.fn();
 const getAgentRuntimeRegistryReleaseMock = vi.fn();
+const updateAgentRuntimeRegistryOwnershipMock = vi.fn();
 const backfillAgentRuntimeRegistryPinsMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
@@ -74,6 +75,8 @@ vi.mock("../../lib/api", () => ({
     listAgentRuntimeRegistryReleasesMock(...args),
   getAgentRuntimeRegistryRelease: (...args: unknown[]) =>
     getAgentRuntimeRegistryReleaseMock(...args),
+  updateAgentRuntimeRegistryOwnership: (...args: unknown[]) =>
+    updateAgentRuntimeRegistryOwnershipMock(...args),
   backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
     backfillAgentRuntimeRegistryPinsMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
@@ -104,6 +107,7 @@ describe("AgentRunsPage timeline presets", () => {
     listAgentRuntimeRegistryAuditMock.mockReset();
     listAgentRuntimeRegistryReleasesMock.mockReset();
     getAgentRuntimeRegistryReleaseMock.mockReset();
+    updateAgentRuntimeRegistryOwnershipMock.mockReset();
     backfillAgentRuntimeRegistryPinsMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
@@ -199,6 +203,7 @@ describe("AgentRunsPage timeline presets", () => {
       registry_snapshot_created_at: "2026-05-02T10:00:00Z",
       registry_source: "static_code",
       registry_status: "active",
+      registry_ownership_source: "persistent",
       skills: [
         {
           id: "optimize-product-representation",
@@ -228,6 +233,7 @@ describe("AgentRunsPage timeline presets", () => {
           review_checklist: ["Compare the metric against control before promotion."],
           owner_principal_id: "platform.commerce-optimization",
           steward_team: "commerce-optimization",
+          ownership_source: "registry_default",
           effect_class: "write_low_risk",
         },
       ],
@@ -250,11 +256,18 @@ describe("AgentRunsPage timeline presets", () => {
           review_checklist: ["Compare the metric against control before promotion."],
           owner_principal_id: "platform.commerce-optimization",
           steward_team: "commerce-optimization",
+          ownership_source: "registry_default",
           effect_class: "write_low_risk",
         },
       ],
       skill_ids_by_tool: {
         "experiment.run_variant": ["optimize-product-representation"],
+      },
+      skill_selection_by_tool: {
+        "experiment.run_variant": {
+          default_skill_id: "optimize-product-representation",
+          candidate_skill_ids: ["optimize-product-representation"],
+        },
       },
       policy_profiles: [],
     });
@@ -371,6 +384,12 @@ describe("AgentRunsPage timeline presets", () => {
           skill_ids_by_tool: {
             "experiment.run_variant": ["optimize-product-representation"],
           },
+          skill_selection_by_tool: {
+            "experiment.run_variant": {
+              default_skill_id: "optimize-product-representation",
+              candidate_skill_ids: ["optimize-product-representation"],
+            },
+          },
           policy_profiles: [
             {
               id: "human_approval_required",
@@ -401,6 +420,17 @@ describe("AgentRunsPage timeline presets", () => {
       registry_fingerprint: "abcdef1234567890",
       runs: { matched: 2, updated: 0, sample_ids: ["run-old"] },
       actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
+    });
+    updateAgentRuntimeRegistryOwnershipMock.mockResolvedValue({
+      ownership: {
+        tool_id: "experiment.run_variant",
+        owner_principal_id: "platform.growth",
+        steward_team: "growth-ops",
+        source: "operator_override",
+      },
+      registry_version: "agent-runtime-static-v1",
+      registry_fingerprint: "fedcba9876543210",
+      registry_status: "active",
     });
   });
 
@@ -687,7 +717,7 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
-    expect(screen.getByText(/Optimize Product Representation/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Optimize Product Representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
     expect(
@@ -701,6 +731,21 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText(/Owner principal/i));
+    await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
+    await userEvent.clear(screen.getByLabelText(/Steward team/i));
+    await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
+    await userEvent.click(screen.getByRole("button", { name: /Save ownership/i }));
+    expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenCalledWith(
+      "experiment.run_variant",
+      {
+        owner_principal_id: "platform.growth",
+        steward_team: "growth-ops",
+      },
+      "user-a",
+    );
+    expect(await screen.findByText(/Ownership saved/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();

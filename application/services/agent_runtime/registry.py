@@ -3,11 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
     list_skill_specs,
+    select_skill_for_tool_id,
+    skill_specs_for_tool_id,
     tool_effect_class,
 )
 
@@ -389,6 +391,17 @@ def list_capability_specs() -> list[CapabilitySpec]:
     return list(_CAPABILITIES.values())
 
 
+def default_tool_ownership_records() -> list[Dict[str, str]]:
+    return [
+        {
+            "tool_id": tool.id,
+            "owner_principal_id": tool.owner_principal_id,
+            "steward_team": tool.steward_team,
+        }
+        for tool in list_tool_specs()
+    ]
+
+
 def list_policy_profiles() -> list[Dict[str, Any]]:
     return [
         {
@@ -412,26 +425,47 @@ def list_policy_profiles() -> list[Dict[str, Any]]:
     ]
 
 
-def registry_contract_payload() -> Dict[str, Any]:
+def registry_contract_payload(
+    ownership_by_tool: Mapping[str, Mapping[str, Any]]
+    | Sequence[Mapping[str, Any]]
+    | None = None,
+) -> Dict[str, Any]:
+    ownership = _normalize_ownership_by_tool(ownership_by_tool)
     skills = [_serialize_spec(skill) for skill in list_skill_specs()]
-    tools = [_serialize_spec(tool) for tool in list_tool_specs()]
-    capabilities = [_serialize_spec(capability) for capability in list_capability_specs()]
+    tools = [_serialize_tool(tool, ownership) for tool in list_tool_specs()]
+    capabilities = [
+        _serialize_capability(capability, ownership)
+        for capability in list_capability_specs()
+    ]
     skill_ids_by_tool: Dict[str, list[str]] = {}
     for skill in skills:
         for tool_id in skill.get("tool_ids", []) or []:
             skill_ids_by_tool.setdefault(str(tool_id), []).append(str(skill.get("id")))
+    skill_selection_by_tool: Dict[str, Dict[str, Any]] = {}
+    for tool_id in sorted(skill_ids_by_tool):
+        selected = select_skill_for_tool_id(tool_id)
+        skill_selection_by_tool[tool_id] = {
+            "default_skill_id": selected.id if selected else None,
+            "candidate_skill_ids": [skill.id for skill in skill_specs_for_tool_id(tool_id)],
+        }
     return {
         "registry_version": REGISTRY_VERSION,
+        "registry_ownership_source": "persistent" if ownership else "static_code",
         "skills": skills,
         "tools": tools,
         "capabilities": capabilities,
         "skill_ids_by_tool": skill_ids_by_tool,
+        "skill_selection_by_tool": skill_selection_by_tool,
         "policy_profiles": list_policy_profiles(),
     }
 
 
-def registry_fingerprint() -> str:
-    return _hash_payload(registry_contract_payload())
+def registry_fingerprint(
+    ownership_by_tool: Mapping[str, Mapping[str, Any]]
+    | Sequence[Mapping[str, Any]]
+    | None = None,
+) -> str:
+    return _hash_payload(registry_contract_payload(ownership_by_tool=ownership_by_tool))
 
 
 def _serialize_spec(value: Any) -> Dict[str, Any]:
@@ -440,6 +474,65 @@ def _serialize_spec(value: Any) -> Dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return dict(getattr(value, "__dict__", {}))
+
+
+def _serialize_tool(
+    tool: ToolSpec, ownership_by_tool: Mapping[str, Mapping[str, Any]]
+) -> Dict[str, Any]:
+    payload = _serialize_spec(tool)
+    ownership = ownership_by_tool.get(tool.id)
+    if ownership:
+        payload["owner_principal_id"] = str(
+            ownership.get("owner_principal_id") or payload["owner_principal_id"]
+        )
+        payload["steward_team"] = str(
+            ownership.get("steward_team") or payload["steward_team"]
+        )
+        payload["ownership_source"] = str(ownership.get("source") or "persistent")
+    else:
+        payload["ownership_source"] = "static_code"
+    return payload
+
+
+def _serialize_capability(
+    capability: CapabilitySpec, ownership_by_tool: Mapping[str, Mapping[str, Any]]
+) -> Dict[str, Any]:
+    payload = _serialize_spec(capability)
+    ownership = ownership_by_tool.get(capability.tool_id)
+    if ownership:
+        payload["owner_principal_id"] = str(
+            ownership.get("owner_principal_id") or payload["owner_principal_id"]
+        )
+        payload["steward_team"] = str(
+            ownership.get("steward_team") or payload["steward_team"]
+        )
+        payload["ownership_source"] = str(ownership.get("source") or "persistent")
+    else:
+        payload["ownership_source"] = "static_code"
+    return payload
+
+
+def _normalize_ownership_by_tool(
+    ownership_by_tool: Mapping[str, Mapping[str, Any]]
+    | Sequence[Mapping[str, Any]]
+    | None,
+) -> Dict[str, Dict[str, Any]]:
+    if not ownership_by_tool:
+        return {}
+    if isinstance(ownership_by_tool, Mapping):
+        return {
+            str(tool_id): dict(value)
+            for tool_id, value in ownership_by_tool.items()
+            if isinstance(value, Mapping)
+        }
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for item in ownership_by_tool:
+        if not isinstance(item, Mapping):
+            continue
+        tool_id = str(item.get("tool_id") or "").strip()
+        if tool_id:
+            normalized[tool_id] = dict(item)
+    return normalized
 
 
 def _hash_payload(value: Any) -> str:
@@ -452,6 +545,8 @@ def version_context_for_capability(
     *,
     tool_id: str | None = None,
     skill_id: str | None = None,
+    registry_version_override: str | None = None,
+    registry_fingerprint_override: str | None = None,
 ) -> Dict[str, str | None]:
     resolved_tool_id = str(tool_id or "").strip() or capability_to_tool_id(capability_name)
     spec = get_capability_spec(str(capability_name or ""))
@@ -465,8 +560,8 @@ def version_context_for_capability(
             skill_version = skill.version
             break
     return {
-        "registry_version": REGISTRY_VERSION,
-        "registry_fingerprint": registry_fingerprint(),
+        "registry_version": registry_version_override or REGISTRY_VERSION,
+        "registry_fingerprint": registry_fingerprint_override or registry_fingerprint(),
         "tool_version": spec.default_version if spec else None,
         "skill_version": skill_version,
     }
@@ -553,6 +648,7 @@ __all__ = [
     "CapabilitySpec",
     "REGISTRY_VERSION",
     "ToolSpec",
+    "default_tool_ownership_records",
     "get_tool_spec",
     "tool_supported",
     "list_tool_specs",

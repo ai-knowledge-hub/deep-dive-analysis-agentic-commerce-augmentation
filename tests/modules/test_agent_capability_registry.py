@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from application.services.agent_runtime.registry import (
     capability_supported,
+    default_tool_ownership_records,
     get_capability_spec,
     get_tool_spec,
     next_state_for_capability,
+    registry_contract_payload,
     tool_supported,
     validate_inputs,
     validate_outputs,
     version_context_for_capability,
 )
 from application.services.agent_runtime.agent_first import (
+    select_skill_for_tool_id,
     skill_id_for_capability,
     skill_id_for_tool_id,
+    skill_specs_for_tool_id,
 )
 
 
@@ -69,11 +73,62 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert tool_supported("not.real") is False
 
 
+def test_registry_payload_can_use_persistent_tool_ownership():
+    payload = registry_contract_payload(
+        ownership_by_tool=[
+            {
+                "tool_id": "experiment.run_variant",
+                "owner_principal_id": "principal.registry-owner",
+                "steward_team": "registry-stewards",
+                "source": "registry_test",
+            }
+        ]
+    )
+    tool = next(
+        item for item in payload["tools"] if item["id"] == "experiment.run_variant"
+    )
+    capability = next(
+        item for item in payload["capabilities"] if item["name"] == "run_variant"
+    )
+    assert payload["registry_ownership_source"] == "persistent"
+    assert tool["owner_principal_id"] == "principal.registry-owner"
+    assert tool["steward_team"] == "registry-stewards"
+    assert tool["ownership_source"] == "registry_test"
+    assert capability["owner_principal_id"] == "principal.registry-owner"
+    assert capability["steward_team"] == "registry-stewards"
+    assert any(
+        item["tool_id"] == "experiment.run_variant"
+        for item in default_tool_ownership_records()
+    )
+
+
 def test_runtime_tools_resolve_to_skill_lineage():
     assert skill_id_for_tool_id("experiment.run_variant") == "optimize-product-representation"
     assert (
         skill_id_for_capability("request_synthetic_validation")
         == "request-validation-and-ingest-result"
+    )
+    review_candidates = skill_specs_for_tool_id("validation.review_readiness")
+    assert [skill.id for skill in review_candidates] == [
+        "request-validation-and-ingest-result",
+        "promote-and-publish-approved-copy",
+    ]
+    assert skill_id_for_tool_id("validation.review_readiness") == (
+        "request-validation-and-ingest-result"
+    )
+    assert (
+        skill_id_for_tool_id(
+            "validation.review_readiness",
+            allowed_skill_ids={"promote-and-publish-approved-copy"},
+        )
+        == "promote-and-publish-approved-copy"
+    )
+    assert (
+        select_skill_for_tool_id(
+            "validation.review_readiness",
+            preferred_skill_id="promote-and-publish-approved-copy",
+        ).id
+        == "promote-and-publish-approved-copy"
     )
     assert skill_id_for_tool_id("copy.publish_revision") == "promote-and-publish-approved-copy"
     assert skill_id_for_tool_id("not.real") is None

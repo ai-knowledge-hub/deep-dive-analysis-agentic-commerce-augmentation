@@ -1136,6 +1136,7 @@ export type AgentRuntimeToolSpec = {
   review_checklist?: string[];
   owner_principal_id?: string;
   steward_team?: string;
+  ownership_source?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1153,6 +1154,7 @@ export type AgentRuntimeCapabilitySpec = {
   review_checklist?: string[];
   owner_principal_id?: string;
   steward_team?: string;
+  ownership_source?: string;
   next_state?: string | null;
   effect_class?: string;
 };
@@ -1172,11 +1174,35 @@ export type AgentRuntimeRegistryResponse = {
   registry_snapshot_created_at?: string | null;
   registry_source?: string | null;
   registry_status?: string | null;
+  registry_ownership_source?: string | null;
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];
   skill_ids_by_tool: Record<string, string[]>;
+  skill_selection_by_tool?: Record<
+    string,
+    {
+      default_skill_id?: string | null;
+      candidate_skill_ids?: string[];
+    }
+  >;
   policy_profiles: AgentRuntimePolicyProfile[];
+};
+
+export type AgentRegistryToolOwnership = {
+  tool_id: string;
+  owner_principal_id: string;
+  steward_team: string;
+  source: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AgentRegistryOwnershipUpdateResponse = {
+  ownership: AgentRegistryToolOwnership;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  registry_status?: string | null;
 };
 
 export type AgentRegistryAuditDiffSection = {

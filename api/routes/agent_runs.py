@@ -25,6 +25,7 @@ from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
 from application.services.agent_runtime.planner import build_initial_plan
 from application.services.agent_runtime.registry import (
+    default_tool_ownership_records,
     get_capability_spec,
     registry_contract_payload,
     registry_fingerprint,
@@ -41,10 +42,13 @@ from application.services.agent_runtime.runtime import (
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 from infrastructure.db.agent.agent_registry import (
     create_agent_registry_audit_event,
+    ensure_agent_registry_tool_ownership,
     ensure_agent_registry_version,
     get_agent_registry_release_detail,
     list_agent_registry_audit_events,
+    list_agent_registry_tool_ownership,
     list_agent_registry_versions,
+    update_agent_registry_tool_ownership,
 )
 
 
@@ -68,6 +72,27 @@ def _require_scoped_run(*, deps: AppDeps, run_id: str, client_id: str) -> Dict[s
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
+
+
+def _registry_ownership() -> List[Dict[str, Any]]:
+    ownership = ensure_agent_registry_tool_ownership(
+        ownership=default_tool_ownership_records(),
+        source="registry_default",
+    )
+    return ownership or list_agent_registry_tool_ownership()
+
+
+def _registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
+    ownership = _registry_ownership()
+    try:
+        registry_payload = registry_contract_payload(ownership_by_tool=ownership)
+    except TypeError:
+        registry_payload = registry_contract_payload()
+    try:
+        fingerprint = registry_fingerprint(ownership_by_tool=ownership)
+    except TypeError:
+        fingerprint = registry_fingerprint()
+    return registry_payload, fingerprint
 
 
 class AgentRunCreateRequest(BaseModel):
@@ -125,6 +150,12 @@ class AgentRegistryBackfillPinsRequest(BaseModel):
     client_id: Optional[str] = None
     dry_run: bool = True
     limit: int = 200
+
+
+class AgentRegistryOwnershipUpdateRequest(BaseModel):
+    user_id: Optional[str] = None
+    owner_principal_id: str = Field(..., min_length=1)
+    steward_team: str = Field(..., min_length=1)
 
 
 class AgentRunTickRequest(BaseModel):
@@ -480,8 +511,7 @@ def _requested_recovery_capability(metadata: Optional[Dict[str, Any]]) -> str:
 
 @router.get("/registry")
 def get_agent_runtime_registry() -> Dict[str, Any]:
-    registry_payload = registry_contract_payload()
-    fingerprint = registry_fingerprint()
+    registry_payload, fingerprint = _registry_payload_and_fingerprint()
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=fingerprint,
@@ -545,6 +575,39 @@ def get_agent_runtime_registry_release_detail(
     return {"release": release}
 
 
+@router.patch("/registry/ownership/{tool_id:path}")
+def update_agent_runtime_registry_tool_ownership(
+    tool_id: str,
+    payload: AgentRegistryOwnershipUpdateRequest,
+) -> Dict[str, Any]:
+    existing_tool_ids = {
+        item["tool_id"] for item in default_tool_ownership_records()
+    }
+    if tool_id not in existing_tool_ids:
+        raise HTTPException(status_code=404, detail="Registry tool not found")
+    ownership = update_agent_registry_tool_ownership(
+        tool_id=tool_id,
+        owner_principal_id=payload.owner_principal_id,
+        steward_team=payload.steward_team,
+        source="operator_override",
+    )
+    if not ownership:
+        raise HTTPException(status_code=400, detail="Invalid registry ownership payload")
+    registry_payload, fingerprint = _registry_payload_and_fingerprint()
+    snapshot = ensure_agent_registry_version(
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=fingerprint,
+        hash_algorithm="sha256",
+        payload=registry_payload,
+    )
+    return {
+        "ownership": ownership,
+        "registry_version": snapshot.get("registry_version"),
+        "registry_fingerprint": snapshot.get("registry_fingerprint"),
+        "registry_status": snapshot.get("status"),
+    }
+
+
 @router.post("/registry/backfill-pins")
 def backfill_agent_runtime_registry_pins(
     payload: AgentRegistryBackfillPinsRequest,
@@ -552,8 +615,7 @@ def backfill_agent_runtime_registry_pins(
 ) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
     bounded_limit = max(1, min(int(payload.limit), 500))
-    registry_payload = registry_contract_payload()
-    active_registry_fingerprint = registry_fingerprint()
+    registry_payload, active_registry_fingerprint = _registry_payload_and_fingerprint()
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=active_registry_fingerprint,
@@ -585,6 +647,8 @@ def backfill_agent_runtime_registry_pins(
                 capability_name,
                 tool_id=tool_id,
                 skill_id=skill_id,
+                registry_version_override=str(snapshot["registry_version"]),
+                registry_fingerprint_override=str(snapshot["registry_fingerprint"]),
             )
             deps.agent_actions.update_agent_action_registry_pins(
                 action_id=str(action["id"]),
@@ -652,8 +716,7 @@ def create_agent_run(
     run_mode = str(payload.run_mode or "plan_only").strip().lower()
     policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(run_mode)
     trace_id = new_trace_id()
-    registry_payload = registry_contract_payload()
-    active_registry_fingerprint = registry_fingerprint()
+    registry_payload, active_registry_fingerprint = _registry_payload_and_fingerprint()
     ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=active_registry_fingerprint,
@@ -696,7 +759,11 @@ def create_agent_run(
         skill_id = skill_id_for_tool_id(tool_id)
         effect_class = tool_effect_class(tool_id)
         version_context = version_context_for_capability(
-            action.capability_name, tool_id=tool_id, skill_id=skill_id
+            action.capability_name,
+            tool_id=tool_id,
+            skill_id=skill_id,
+            registry_version_override=str(registry_payload["registry_version"]),
+            registry_fingerprint_override=active_registry_fingerprint,
         )
         created_action = deps.agent_actions.create_agent_action(
             agent_run_id=run.get("id"),
@@ -1049,10 +1116,18 @@ def issue_agent_run_command(
                 else allowed[0]
             )
             tool_id = capability_to_tool_id(capability_name)
-            skill_id = skill_id_for_tool_id(tool_id)
+            skill_id = skill_id_for_tool_id(
+                tool_id,
+                preferred_skill_id=payload.metadata.get("skill_id")
+                or payload.metadata.get("preferred_skill_id"),
+            )
             effect_class = tool_effect_class(tool_id)
             version_context = version_context_for_capability(
-                capability_name, tool_id=tool_id, skill_id=skill_id
+                capability_name,
+                tool_id=tool_id,
+                skill_id=skill_id,
+                registry_version_override=run.get("registry_version"),
+                registry_fingerprint_override=run.get("registry_fingerprint"),
             )
             recovery_inputs = payload.metadata.get("inputs")
             inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
@@ -1180,10 +1255,18 @@ def issue_agent_run_command(
             if retry_strategy == "create_recovery_action":
                 retry_inputs["recovery_from_action_id"] = action.get("id")
             tool_id = capability_to_tool_id(capability_name)
-            skill_id = skill_id_for_tool_id(tool_id)
+            skill_id = skill_id_for_tool_id(
+                tool_id,
+                preferred_skill_id=payload.metadata.get("skill_id")
+                or payload.metadata.get("preferred_skill_id"),
+            )
             effect_class = tool_effect_class(tool_id)
             version_context = version_context_for_capability(
-                capability_name, tool_id=tool_id, skill_id=skill_id
+                capability_name,
+                tool_id=tool_id,
+                skill_id=skill_id,
+                registry_version_override=run.get("registry_version"),
+                registry_fingerprint_override=run.get("registry_fingerprint"),
             )
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,

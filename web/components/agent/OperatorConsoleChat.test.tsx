@@ -363,6 +363,50 @@ describe("OperatorConsoleChat", () => {
   it("issues checkpoint retry and change-plan recovery commands with metadata", async () => {
     const user = userEvent.setup();
     const onIssueCommand = vi.fn().mockResolvedValue(undefined);
+    const runtimeRegistry = {
+      registry_version: "agent-runtime-static-v1",
+      skills: [
+        {
+          id: "request-validation-and-ingest-result",
+          name: "Request Validation And Ingest Result",
+          description: "Request validation and ingest result.",
+          version: "v1",
+          tool_ids: ["validation.review_readiness"],
+          risk_class: "external_side_effect",
+        },
+        {
+          id: "promote-and-publish-approved-copy",
+          name: "Promote And Publish Approved Copy",
+          description: "Promote validated variants and publish approved copy changes.",
+          version: "v1",
+          tool_ids: ["validation.review_readiness"],
+          risk_class: "write_high_risk",
+        },
+      ],
+      tools: [],
+      capabilities: [
+        {
+          name: "review_validation_readiness",
+          tool_id: "validation.review_readiness",
+        },
+      ],
+      skill_ids_by_tool: {
+        "validation.review_readiness": [
+          "request-validation-and-ingest-result",
+          "promote-and-publish-approved-copy",
+        ],
+      },
+      skill_selection_by_tool: {
+        "validation.review_readiness": {
+          default_skill_id: "request-validation-and-ingest-result",
+          candidate_skill_ids: [
+            "request-validation-and-ingest-result",
+            "promote-and-publish-approved-copy",
+          ],
+        },
+      },
+      policy_profiles: [],
+    };
 
     render(
       <OperatorConsoleChat
@@ -387,6 +431,7 @@ describe("OperatorConsoleChat", () => {
           },
         ]}
         events={[]}
+        runtimeRegistry={runtimeRegistry}
         selectedAction={{
           id: "action-1",
           agent_run_id: "run-1",
@@ -426,6 +471,10 @@ describe("OperatorConsoleChat", () => {
       screen.getByLabelText(/Recovery target capability/i),
       "review_validation_readiness",
     );
+    await user.selectOptions(
+      screen.getByLabelText(/Preferred recovery skill/i),
+      "promote-and-publish-approved-copy",
+    );
     await user.click(screen.getByRole("button", { name: /Change plan/i }));
     expect(onIssueCommand).toHaveBeenCalledWith({
       command_type: "change_plan",
@@ -434,6 +483,8 @@ describe("OperatorConsoleChat", () => {
       metadata: {
         recovery_strategy: "propose_next_action",
         capability_name: "review_validation_readiness",
+        skill_id: "promote-and-publish-approved-copy",
+        preferred_skill_id: "promote-and-publish-approved-copy",
         inputs: { experiment_id: "exp-12345678" },
       },
     });

@@ -282,6 +282,7 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
     assert payload["registry_source"] == "static_code"
     assert payload["registry_status"] == "active"
+    assert payload["registry_ownership_source"] == "persistent"
     assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
         "registry_fingerprint"
     ]
@@ -317,10 +318,82 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert run_variant["review_checklist"]
     assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
     assert run_variant["steward_team"] == "commerce-optimization"
+    assert run_variant["ownership_source"] == "registry_default"
+    ownership_row = get_connection().execute(
+        """
+        SELECT owner_principal_id, steward_team, source
+        FROM agent_registry_tool_ownership
+        WHERE tool_id = ?
+        """,
+        ("experiment.run_variant",),
+    ).fetchone()
+    assert ownership_row is not None
+    assert ownership_row["owner_principal_id"] == "platform.commerce-optimization"
+    assert ownership_row["steward_team"] == "commerce-optimization"
+    assert ownership_row["source"] == "registry_default"
     assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
     ]
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+    assert payload["skill_ids_by_tool"]["validation.review_readiness"] == [
+        "request-validation-and-ingest-result",
+        "promote-and-publish-approved-copy",
+    ]
+    assert payload["skill_selection_by_tool"]["validation.review_readiness"] == {
+        "default_skill_id": "request-validation-and-ingest-result",
+        "candidate_skill_ids": [
+            "request-validation-and-ingest-result",
+            "promote-and-publish-approved-copy",
+        ],
+    }
+
+
+def test_agent_runtime_registry_ownership_update_creates_new_release(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry").json()
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ownership"]["owner_principal_id"] == "platform.growth"
+    assert payload["ownership"]["steward_team"] == "growth-ops"
+    assert payload["ownership"]["source"] == "operator_override"
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+
+    refreshed = client.get("/agent-runs/registry").json()
+    run_variant = next(
+        capability
+        for capability in refreshed["capabilities"]
+        if capability["name"] == "run_variant"
+    )
+    assert refreshed["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert run_variant["owner_principal_id"] == "platform.growth"
+    assert run_variant["steward_team"] == "growth-ops"
+    assert run_variant["ownership_source"] == "operator_override"
+
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params={"registry_fingerprint": payload["registry_fingerprint"]},
+    ).json()["events"]
+    assert audit
+    assert audit[0]["event_type"] == "registry_changed"
+    assert audit[0]["previous_registry_fingerprint"] == first["registry_fingerprint"]
+
+    missing = client.patch(
+        "/agent-runs/registry/ownership/not.real",
+        json={
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+        },
+    )
+    assert missing.status_code == 404
 
 
 def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
