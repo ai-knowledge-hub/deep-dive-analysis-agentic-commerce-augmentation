@@ -156,6 +156,8 @@ class AgentRegistryOwnershipUpdateRequest(BaseModel):
     user_id: Optional[str] = None
     owner_principal_id: str = Field(..., min_length=1)
     steward_team: str = Field(..., min_length=1)
+    dry_run: bool = True
+    preflight_confirmed: bool = False
 
 
 class AgentRunTickRequest(BaseModel):
@@ -182,6 +184,63 @@ def _hash_payload(value: Any) -> str:
     except Exception:
         encoded = str(value).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _registry_ownership_preflight(
+    *,
+    tool_id: str,
+    owner_principal_id: str,
+    steward_team: str,
+    current_ownership: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    current = next(
+        (item for item in current_ownership if item.get("tool_id") == tool_id),
+        {},
+    )
+    current_owner = str(current.get("owner_principal_id") or "").strip()
+    current_steward = str(current.get("steward_team") or "").strip()
+    proposed_owner = str(owner_principal_id or "").strip()
+    proposed_steward = str(steward_team or "").strip()
+    changes = {
+        "owner_principal_id": {
+            "from": current_owner or None,
+            "to": proposed_owner,
+            "changed": current_owner != proposed_owner,
+        },
+        "steward_team": {
+            "from": current_steward or None,
+            "to": proposed_steward,
+            "changed": current_steward != proposed_steward,
+        },
+    }
+    changed_fields = [
+        key for key, value in changes.items() if bool(value.get("changed"))
+    ]
+    blockers: List[str] = []
+    warnings: List[str] = []
+    if not changed_fields:
+        warnings.append("No ownership metadata fields will change.")
+    if "." not in proposed_owner:
+        warnings.append("Owner principal does not look namespace-qualified.")
+    if "-" not in proposed_steward:
+        warnings.append("Steward team does not use the expected dashed team format.")
+    return {
+        "allowed": True,
+        "requires_confirmation": True,
+        "risk_level": "medium" if changed_fields else "low",
+        "effect_class": "registry_metadata_change",
+        "tool_id": tool_id,
+        "blockers": blockers,
+        "warnings": warnings,
+        "changes": changes,
+        "changed_fields": changed_fields,
+        "rollback_guidance": "Re-apply the previous owner and steward values to produce a compensating registry release.",
+        "summary": (
+            "Registry ownership update will create a new active registry release."
+            if changed_fields
+            else "Registry ownership update has no effective metadata changes."
+        ),
+    }
 
 
 def _record_command_event(
@@ -585,6 +644,27 @@ def update_agent_runtime_registry_tool_ownership(
     }
     if tool_id not in existing_tool_ids:
         raise HTTPException(status_code=404, detail="Registry tool not found")
+    current_ownership = _registry_ownership()
+    preflight = _registry_ownership_preflight(
+        tool_id=tool_id,
+        owner_principal_id=payload.owner_principal_id,
+        steward_team=payload.steward_team,
+        current_ownership=current_ownership,
+    )
+    if payload.dry_run:
+        return {
+            "dry_run": True,
+            "preflight": preflight,
+            "ownership": next(
+                (item for item in current_ownership if item.get("tool_id") == tool_id),
+                {},
+            ),
+        }
+    if not payload.preflight_confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail="Registry ownership preflight confirmation required",
+        )
     ownership = update_agent_registry_tool_ownership(
         tool_id=tool_id,
         owner_principal_id=payload.owner_principal_id,
@@ -601,6 +681,8 @@ def update_agent_runtime_registry_tool_ownership(
         payload=registry_payload,
     )
     return {
+        "dry_run": False,
+        "preflight": preflight,
         "ownership": ownership,
         "registry_version": snapshot.get("registry_version"),
         "registry_fingerprint": snapshot.get("registry_fingerprint"),

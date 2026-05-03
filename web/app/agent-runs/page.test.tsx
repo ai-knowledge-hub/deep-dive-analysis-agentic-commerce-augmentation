@@ -422,15 +422,25 @@ describe("AgentRunsPage timeline presets", () => {
       actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
     });
     updateAgentRuntimeRegistryOwnershipMock.mockResolvedValue({
+      dry_run: true,
+      preflight: {
+        allowed: true,
+        requires_confirmation: true,
+        risk_level: "medium",
+        effect_class: "registry_metadata_change",
+        tool_id: "experiment.run_variant",
+        blockers: [],
+        warnings: [],
+        changed_fields: ["owner_principal_id", "steward_team"],
+        rollback_guidance: "Re-apply previous ownership values.",
+        summary: "Registry ownership update will create a new active registry release.",
+      },
       ownership: {
         tool_id: "experiment.run_variant",
-        owner_principal_id: "platform.growth",
-        steward_team: "growth-ops",
-        source: "operator_override",
+        owner_principal_id: "platform.commerce-optimization",
+        steward_team: "commerce-optimization",
+        source: "registry_default",
       },
-      registry_version: "agent-runtime-static-v1",
-      registry_fingerprint: "fedcba9876543210",
-      registry_status: "active",
     });
   });
 
@@ -732,16 +742,76 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
+    updateAgentRuntimeRegistryOwnershipMock
+      .mockResolvedValueOnce({
+        dry_run: true,
+        preflight: {
+          allowed: true,
+          requires_confirmation: true,
+          risk_level: "medium",
+          effect_class: "registry_metadata_change",
+          tool_id: "experiment.run_variant",
+          blockers: [],
+          warnings: [],
+          changed_fields: ["owner_principal_id", "steward_team"],
+          rollback_guidance: "Re-apply previous ownership values.",
+          summary: "Registry ownership update will create a new active registry release.",
+        },
+        ownership: {
+          tool_id: "experiment.run_variant",
+          owner_principal_id: "platform.commerce-optimization",
+          steward_team: "commerce-optimization",
+          source: "registry_default",
+        },
+      })
+      .mockResolvedValueOnce({
+        dry_run: false,
+        preflight: {
+          allowed: true,
+          requires_confirmation: true,
+          risk_level: "medium",
+          effect_class: "registry_metadata_change",
+          tool_id: "experiment.run_variant",
+          blockers: [],
+          warnings: [],
+          changed_fields: ["owner_principal_id", "steward_team"],
+          rollback_guidance: "Re-apply previous ownership values.",
+          summary: "Registry ownership update will create a new active registry release.",
+        },
+        ownership: {
+          tool_id: "experiment.run_variant",
+          owner_principal_id: "platform.growth",
+          steward_team: "growth-ops",
+          source: "operator_override",
+        },
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "fedcba9876543210",
+        registry_status: "active",
+      });
     await userEvent.clear(screen.getByLabelText(/Owner principal/i));
     await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
     await userEvent.clear(screen.getByLabelText(/Steward team/i));
     await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
-    await userEvent.click(screen.getByRole("button", { name: /Save ownership/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Preflight ownership/i }));
     expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenCalledWith(
       "experiment.run_variant",
       {
         owner_principal_id: "platform.growth",
         steward_team: "growth-ops",
+        dry_run: true,
+        preflight_confirmed: false,
+      },
+      "user-a",
+    );
+    expect(await screen.findByText(/Preflight: medium risk/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Apply ownership/i }));
+    expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenLastCalledWith(
+      "experiment.run_variant",
+      {
+        owner_principal_id: "platform.growth",
+        steward_team: "growth-ops",
+        dry_run: false,
+        preflight_confirmed: true,
       },
       "user-a",
     );

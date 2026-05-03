@@ -352,7 +352,7 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
     client: TestClient,
 ):
     first = client.get("/agent-runs/registry").json()
-    response = client.patch(
+    preflight_response = client.patch(
         "/agent-runs/registry/ownership/experiment.run_variant",
         json={
             "user_id": USER_ID,
@@ -360,8 +360,42 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
             "steward_team": "growth-ops",
         },
     )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["requires_confirmation"] is True
+    assert preflight_payload["preflight"]["risk_level"] == "medium"
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "owner_principal_id",
+        "steward_team",
+    ]
+    assert preflight_payload["ownership"]["source"] == "registry_default"
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
     assert response.status_code == 200
     payload = response.json()
+    assert payload["dry_run"] is False
+    assert payload["preflight"]["requires_confirmation"] is True
     assert payload["ownership"]["owner_principal_id"] == "platform.growth"
     assert payload["ownership"]["steward_team"] == "growth-ops"
     assert payload["ownership"]["source"] == "operator_override"

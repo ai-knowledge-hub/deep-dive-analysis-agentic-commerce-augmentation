@@ -639,7 +639,12 @@ export async function getAgentRuntimeRegistryRelease(
 
 export async function updateAgentRuntimeRegistryOwnership(
   toolId: string,
-  payload: { owner_principal_id: string; steward_team: string },
+  payload: {
+    owner_principal_id: string;
+    steward_team: string;
+    dry_run?: boolean;
+    preflight_confirmed?: boolean;
+  },
   userId?: string | null,
 ): Promise<AgentRegistryOwnershipUpdateResponse> {
   return request<AgentRegistryOwnershipUpdateResponse>(
@@ -650,6 +655,8 @@ export async function updateAgentRuntimeRegistryOwnership(
         user_id: userId ?? undefined,
         owner_principal_id: payload.owner_principal_id,
         steward_team: payload.steward_team,
+        dry_run: payload.dry_run ?? true,
+        preflight_confirmed: payload.preflight_confirmed ?? false,
       }),
     },
   );

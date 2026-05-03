@@ -1199,6 +1199,27 @@ export type AgentRegistryToolOwnership = {
 };
 
 export type AgentRegistryOwnershipUpdateResponse = {
+  dry_run?: boolean;
+  preflight?: {
+    allowed?: boolean;
+    requires_confirmation?: boolean;
+    risk_level?: string;
+    effect_class?: string;
+    tool_id?: string;
+    blockers?: string[];
+    warnings?: string[];
+    changes?: Record<
+      string,
+      {
+        from?: string | null;
+        to?: string | null;
+        changed?: boolean;
+      }
+    >;
+    changed_fields?: string[];
+    rollback_guidance?: string;
+    summary?: string;
+  };
   ownership: AgentRegistryToolOwnership;
   registry_version?: string | null;
   registry_fingerprint?: string | null;

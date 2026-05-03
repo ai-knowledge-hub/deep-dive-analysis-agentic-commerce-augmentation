@@ -6,6 +6,7 @@ import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
   AgentRegistryAuditEvent,
+  AgentRegistryOwnershipUpdateResponse,
   AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
   AgentRegistryReleaseDetail,
@@ -480,6 +481,9 @@ function AgentRunsPageContent() {
   });
   const [ownershipBusy, setOwnershipBusy] = useState(false);
   const [ownershipNotice, setOwnershipNotice] = useState<string | null>(null);
+  const [ownershipPreflight, setOwnershipPreflight] = useState<
+    AgentRegistryOwnershipUpdateResponse["preflight"] | null
+  >(null);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -982,27 +986,40 @@ function AgentRunsPageContent() {
       steward_team: selectedCapabilitySpec?.steward_team ?? "",
     });
     setOwnershipNotice(null);
+    setOwnershipPreflight(null);
   }, [
     selectedCapabilitySpec?.owner_principal_id,
     selectedCapabilitySpec?.steward_team,
     selectedCapabilitySpec?.tool_id,
   ]);
 
-  const saveRegistryOwnership = useCallback(async () => {
+  const submitRegistryOwnership = useCallback(async (dryRun: boolean) => {
     if (!userId || !selectedCapabilitySpec?.tool_id) return;
     setOwnershipBusy(true);
     setOwnershipNotice(null);
     try {
       const response = await updateAgentRuntimeRegistryOwnership(
         selectedCapabilitySpec.tool_id,
-        ownershipForm,
+        {
+          ...ownershipForm,
+          dry_run: dryRun,
+          preflight_confirmed: !dryRun,
+        },
         userId,
       );
+      if (dryRun) {
+        setOwnershipPreflight(response.preflight ?? null);
+        setOwnershipNotice(
+          response.preflight?.summary ?? "Registry ownership preflight completed.",
+        );
+        return;
+      }
       setOwnershipNotice(
         `Ownership saved. Active registry ${String(
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now ${response.registry_status ?? "updated"}.`,
       );
+      setOwnershipPreflight(null);
       await loadRuntimeRegistry();
     } catch (err) {
       setOwnershipNotice(
@@ -2649,6 +2666,7 @@ function AgentRunsPageContent() {
                                     owner_principal_id: event.target.value,
                                   }))
                                 }
+                                onInput={() => setOwnershipPreflight(null)}
                               />
                             </label>
                             <label>
@@ -2661,20 +2679,57 @@ function AgentRunsPageContent() {
                                     steward_team: event.target.value,
                                   }))
                                 }
+                                onInput={() => setOwnershipPreflight(null)}
                               />
                             </label>
+                            {ownershipPreflight ? (
+                              <div className="panel__notice panel__notice--info">
+                                <strong>
+                                  Preflight: {ownershipPreflight.risk_level ?? "unknown"} risk
+                                </strong>
+                                <p>
+                                  {ownershipPreflight.summary ??
+                                    "Review this registry ownership change before applying it."}
+                                </p>
+                                {ownershipPreflight.warnings?.length ? (
+                                  <ul className="panel__list panel__list--compact">
+                                    {ownershipPreflight.warnings.map((warning, index) => (
+                                      <li key={`${warning}-${index}`}>{warning}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                                {ownershipPreflight.rollback_guidance ? (
+                                  <p className="panel__muted">
+                                    Rollback: {ownershipPreflight.rollback_guidance}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
                             <div className="panel__actions">
                               <button
                                 type="button"
                                 className="button button--ghost button--sm"
-                                onClick={saveRegistryOwnership}
+                                onClick={() => submitRegistryOwnership(true)}
                                 disabled={
                                   ownershipBusy ||
                                   !ownershipForm.owner_principal_id.trim() ||
                                   !ownershipForm.steward_team.trim()
                                 }
                               >
-                                {ownershipBusy ? "Saving ownership" : "Save ownership"}
+                                {ownershipBusy ? "Checking ownership" : "Preflight ownership"}
+                              </button>
+                              <button
+                                type="button"
+                                className="button button--primary button--sm"
+                                onClick={() => submitRegistryOwnership(false)}
+                                disabled={
+                                  ownershipBusy ||
+                                  !ownershipPreflight?.requires_confirmation ||
+                                  !ownershipForm.owner_principal_id.trim() ||
+                                  !ownershipForm.steward_team.trim()
+                                }
+                              >
+                                {ownershipBusy ? "Saving ownership" : "Apply ownership"}
                               </button>
                             </div>
                           </div>
