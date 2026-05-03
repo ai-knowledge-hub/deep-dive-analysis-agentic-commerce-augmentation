@@ -13,8 +13,10 @@ from application.services.agent_runtime.registry import (
     version_context_for_capability,
 )
 from application.services.agent_runtime.agent_first import (
+    select_skill_for_tool_id,
     skill_id_for_capability,
     skill_id_for_tool_id,
+    skill_specs_for_tool_id,
 )
 
 
@@ -105,6 +107,28 @@ def test_runtime_tools_resolve_to_skill_lineage():
     assert (
         skill_id_for_capability("request_synthetic_validation")
         == "request-validation-and-ingest-result"
+    )
+    review_candidates = skill_specs_for_tool_id("validation.review_readiness")
+    assert [skill.id for skill in review_candidates] == [
+        "request-validation-and-ingest-result",
+        "promote-and-publish-approved-copy",
+    ]
+    assert skill_id_for_tool_id("validation.review_readiness") == (
+        "request-validation-and-ingest-result"
+    )
+    assert (
+        skill_id_for_tool_id(
+            "validation.review_readiness",
+            allowed_skill_ids={"promote-and-publish-approved-copy"},
+        )
+        == "promote-and-publish-approved-copy"
+    )
+    assert (
+        select_skill_for_tool_id(
+            "validation.review_readiness",
+            preferred_skill_id="promote-and-publish-approved-copy",
+        ).id
+        == "promote-and-publish-approved-copy"
     )
     assert skill_id_for_tool_id("copy.publish_revision") == "promote-and-publish-approved-copy"
     assert skill_id_for_tool_id("not.real") is None

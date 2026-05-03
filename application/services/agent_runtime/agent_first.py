@@ -71,6 +71,8 @@ class SkillSpec:
     version: str
     tool_ids: tuple[str, ...]
     risk_class: str
+    selection_priority: int = 100
+    intent_tags: tuple[str, ...] = ()
 
 
 _SKILL_SPECS: tuple[SkillSpec, ...] = (
@@ -86,6 +88,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
             "product.read",
         ),
         risk_class="read",
+        selection_priority=20,
+        intent_tags=("discovery", "protocol"),
     ),
     SkillSpec(
         id="optimize-product-representation",
@@ -106,6 +110,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
             "policy.recommend_next_action",
         ),
         risk_class="write_low_risk",
+        selection_priority=30,
+        intent_tags=("optimization", "experimentation"),
     ),
     SkillSpec(
         id="request-validation-and-ingest-result",
@@ -120,6 +126,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
             "evidence.ingest",
         ),
         risk_class="external_side_effect",
+        selection_priority=40,
+        intent_tags=("validation", "learning"),
     ),
     SkillSpec(
         id="promote-and-publish-approved-copy",
@@ -127,11 +135,14 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         description="Promote validated variants and publish approved copy changes.",
         version="v1",
         tool_ids=(
+            "validation.review_readiness",
             "promotion.promote_lab",
             "promotion.promote_prod",
             "copy.publish_revision",
         ),
         risk_class="write_high_risk",
+        selection_priority=70,
+        intent_tags=("promotion", "publishing"),
     ),
     SkillSpec(
         id="triage-failed-run",
@@ -140,6 +151,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         version="v1",
         tool_ids=("run.read", "event.read", "policy.inspect", "run.retry_safe"),
         risk_class="recommend",
+        selection_priority=10,
+        intent_tags=("recovery", "triage"),
     ),
     SkillSpec(
         id="run-safe-browser-fallback-check",
@@ -148,6 +161,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         version="v1",
         tool_ids=("browser.open", "browser.extract", "browser.assert"),
         risk_class="external_side_effect",
+        selection_priority=90,
+        intent_tags=("browser_fallback",),
     ),
 )
 
@@ -156,18 +171,67 @@ def list_skill_specs() -> list[SkillSpec]:
     return list(_SKILL_SPECS)
 
 
-def skill_id_for_tool_id(tool_id: str | None) -> str | None:
+def skill_specs_for_tool_id(tool_id: str | None) -> list[SkillSpec]:
     key = str(tool_id or "").strip()
     if not key:
+        return []
+    return sorted(
+        [skill for skill in _SKILL_SPECS if key in skill.tool_ids],
+        key=lambda skill: (skill.selection_priority, skill.id),
+    )
+
+
+def select_skill_for_tool_id(
+    tool_id: str | None,
+    *,
+    allowed_skill_ids: tuple[str, ...] | list[str] | set[str] | None = None,
+    preferred_skill_id: str | None = None,
+) -> SkillSpec | None:
+    candidates = skill_specs_for_tool_id(tool_id)
+    if not candidates:
         return None
-    for skill in _SKILL_SPECS:
-        if key in skill.tool_ids:
-            return skill.id
-    return None
+    allowed = {
+        str(skill_id).strip()
+        for skill_id in (allowed_skill_ids or [])
+        if str(skill_id).strip()
+    }
+    if allowed:
+        candidates = [skill for skill in candidates if skill.id in allowed]
+        if not candidates:
+            return None
+    preferred = str(preferred_skill_id or "").strip()
+    if preferred:
+        for skill in candidates:
+            if skill.id == preferred:
+                return skill
+    return candidates[0]
 
 
-def skill_id_for_capability(capability_name: str | None) -> str | None:
-    return skill_id_for_tool_id(capability_to_tool_id(capability_name))
+def skill_id_for_tool_id(
+    tool_id: str | None,
+    *,
+    allowed_skill_ids: tuple[str, ...] | list[str] | set[str] | None = None,
+    preferred_skill_id: str | None = None,
+) -> str | None:
+    selected = select_skill_for_tool_id(
+        tool_id,
+        allowed_skill_ids=allowed_skill_ids,
+        preferred_skill_id=preferred_skill_id,
+    )
+    return selected.id if selected else None
+
+
+def skill_id_for_capability(
+    capability_name: str | None,
+    *,
+    allowed_skill_ids: tuple[str, ...] | list[str] | set[str] | None = None,
+    preferred_skill_id: str | None = None,
+) -> str | None:
+    return skill_id_for_tool_id(
+        capability_to_tool_id(capability_name),
+        allowed_skill_ids=allowed_skill_ids,
+        preferred_skill_id=preferred_skill_id,
+    )
 
 
 __all__ = [
@@ -176,7 +240,9 @@ __all__ = [
     "list_skill_specs",
     "new_trace_id",
     "policy_profile_for_run_mode",
+    "select_skill_for_tool_id",
     "skill_id_for_capability",
     "skill_id_for_tool_id",
+    "skill_specs_for_tool_id",
     "tool_effect_class",
 ]

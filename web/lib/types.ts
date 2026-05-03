@@ -1179,6 +1179,13 @@ export type AgentRuntimeRegistryResponse = {
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];
   skill_ids_by_tool: Record<string, string[]>;
+  skill_selection_by_tool?: Record<
+    string,
+    {
+      default_skill_id?: string | null;
+      candidate_skill_ids?: string[];
+    }
+  >;
   policy_profiles: AgentRuntimePolicyProfile[];
 };
 

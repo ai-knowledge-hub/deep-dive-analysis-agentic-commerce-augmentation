@@ -263,6 +263,12 @@ describe("AgentRunsPage timeline presets", () => {
       skill_ids_by_tool: {
         "experiment.run_variant": ["optimize-product-representation"],
       },
+      skill_selection_by_tool: {
+        "experiment.run_variant": {
+          default_skill_id: "optimize-product-representation",
+          candidate_skill_ids: ["optimize-product-representation"],
+        },
+      },
       policy_profiles: [],
     });
     listAgentRuntimeRegistryAuditMock.mockResolvedValue({
@@ -377,6 +383,12 @@ describe("AgentRunsPage timeline presets", () => {
           ],
           skill_ids_by_tool: {
             "experiment.run_variant": ["optimize-product-representation"],
+          },
+          skill_selection_by_tool: {
+            "experiment.run_variant": {
+              default_skill_id: "optimize-product-representation",
+              candidate_skill_ids: ["optimize-product-representation"],
+            },
           },
           policy_profiles: [
             {

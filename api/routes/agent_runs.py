@@ -1116,7 +1116,11 @@ def issue_agent_run_command(
                 else allowed[0]
             )
             tool_id = capability_to_tool_id(capability_name)
-            skill_id = skill_id_for_tool_id(tool_id)
+            skill_id = skill_id_for_tool_id(
+                tool_id,
+                preferred_skill_id=payload.metadata.get("skill_id")
+                or payload.metadata.get("preferred_skill_id"),
+            )
             effect_class = tool_effect_class(tool_id)
             version_context = version_context_for_capability(
                 capability_name,
@@ -1251,7 +1255,11 @@ def issue_agent_run_command(
             if retry_strategy == "create_recovery_action":
                 retry_inputs["recovery_from_action_id"] = action.get("id")
             tool_id = capability_to_tool_id(capability_name)
-            skill_id = skill_id_for_tool_id(tool_id)
+            skill_id = skill_id_for_tool_id(
+                tool_id,
+                preferred_skill_id=payload.metadata.get("skill_id")
+                or payload.metadata.get("preferred_skill_id"),
+            )
             effect_class = tool_effect_class(tool_id)
             version_context = version_context_for_capability(
                 capability_name,

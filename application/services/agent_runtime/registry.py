@@ -8,6 +8,8 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
     list_skill_specs,
+    select_skill_for_tool_id,
+    skill_specs_for_tool_id,
     tool_effect_class,
 )
 
@@ -439,6 +441,13 @@ def registry_contract_payload(
     for skill in skills:
         for tool_id in skill.get("tool_ids", []) or []:
             skill_ids_by_tool.setdefault(str(tool_id), []).append(str(skill.get("id")))
+    skill_selection_by_tool: Dict[str, Dict[str, Any]] = {}
+    for tool_id in sorted(skill_ids_by_tool):
+        selected = select_skill_for_tool_id(tool_id)
+        skill_selection_by_tool[tool_id] = {
+            "default_skill_id": selected.id if selected else None,
+            "candidate_skill_ids": [skill.id for skill in skill_specs_for_tool_id(tool_id)],
+        }
     return {
         "registry_version": REGISTRY_VERSION,
         "registry_ownership_source": "persistent" if ownership else "static_code",
@@ -446,6 +455,7 @@ def registry_contract_payload(
         "tools": tools,
         "capabilities": capabilities,
         "skill_ids_by_tool": skill_ids_by_tool,
+        "skill_selection_by_tool": skill_selection_by_tool,
         "policy_profiles": list_policy_profiles(),
     }
 

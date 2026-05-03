@@ -335,6 +335,17 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
         "optimize-product-representation"
     ]
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+    assert payload["skill_ids_by_tool"]["validation.review_readiness"] == [
+        "request-validation-and-ingest-result",
+        "promote-and-publish-approved-copy",
+    ]
+    assert payload["skill_selection_by_tool"]["validation.review_readiness"] == {
+        "default_skill_id": "request-validation-and-ingest-result",
+        "candidate_skill_ids": [
+            "request-validation-and-ingest-result",
+            "promote-and-publish-approved-copy",
+        ],
+    }
 
 
 def test_agent_runtime_registry_ownership_update_creates_new_release(
