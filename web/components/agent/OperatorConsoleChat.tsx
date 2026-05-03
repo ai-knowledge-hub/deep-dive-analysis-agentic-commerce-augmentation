@@ -9,6 +9,8 @@ import type {
   AgentRunCommandResponse,
   AgentRunCommandType,
   AgentRunEvent,
+  AgentRuntimeRegistryResponse,
+  AgentRuntimeSkillSpec,
 } from "../../lib/types";
 
 type PromptId =
@@ -36,6 +38,7 @@ type Props = {
   run: AgentRun | null;
   actions: AgentAction[];
   events: AgentRunEvent[];
+  runtimeRegistry?: AgentRuntimeRegistryResponse | null;
   selectedAction: AgentAction | null;
   nextRecommendedAction: {
     action: AgentAction | null;
@@ -201,6 +204,7 @@ export function OperatorConsoleChat({
   run,
   actions,
   events,
+  runtimeRegistry,
   selectedAction,
   nextRecommendedAction,
   onOpenExperiment,
@@ -217,6 +221,7 @@ export function OperatorConsoleChat({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingCommandKey, setPendingCommandKey] = useState<string | null>(null);
   const [selectedRecoveryCapability, setSelectedRecoveryCapability] = useState("");
+  const [selectedRecoverySkill, setSelectedRecoverySkill] = useState("");
 
   const derived = useMemo(() => {
     const proposedActions = actions.filter(
@@ -270,6 +275,50 @@ export function OperatorConsoleChat({
 
   const activeRecoveryCapability =
     selectedRecoveryCapability || preferredRecoveryCapability(derived.recoveryCapabilities);
+
+  const recoverySkillOptions = useMemo(() => {
+    if (!runtimeRegistry || !activeRecoveryCapability) return [];
+    const capability = runtimeRegistry.capabilities.find(
+      (item) => item.name === activeRecoveryCapability,
+    );
+    const toolId = capability?.tool_id;
+    if (!toolId) return [];
+    const selection = runtimeRegistry.skill_selection_by_tool?.[toolId];
+    const candidateIds = selection?.candidate_skill_ids ?? [];
+    return candidateIds
+      .map((skillId) => runtimeRegistry.skills.find((skill) => skill.id === skillId))
+      .filter((skill): skill is AgentRuntimeSkillSpec => Boolean(skill));
+  }, [activeRecoveryCapability, runtimeRegistry]);
+
+  const defaultRecoverySkillId = useMemo(() => {
+    if (!runtimeRegistry || !activeRecoveryCapability) return "";
+    const capability = runtimeRegistry.capabilities.find(
+      (item) => item.name === activeRecoveryCapability,
+    );
+    const toolId = capability?.tool_id;
+    return toolId
+      ? runtimeRegistry.skill_selection_by_tool?.[toolId]?.default_skill_id ?? ""
+      : "";
+  }, [activeRecoveryCapability, runtimeRegistry]);
+
+  const activeRecoverySkill =
+    selectedRecoverySkill || defaultRecoverySkillId || recoverySkillOptions[0]?.id || "";
+
+  useEffect(() => {
+    setSelectedRecoverySkill((current) =>
+      current && recoverySkillOptions.some((skill) => skill.id === current)
+        ? current
+        : defaultRecoverySkillId,
+    );
+  }, [defaultRecoverySkillId, recoverySkillOptions]);
+
+  const recoverySkillMetadata =
+    activeRecoverySkill && recoverySkillOptions.length > 0
+      ? {
+          skill_id: activeRecoverySkill,
+          preferred_skill_id: activeRecoverySkill,
+        }
+      : {};
 
   useEffect(() => {
     if (!run) {
@@ -703,6 +752,7 @@ export function OperatorConsoleChat({
               {
                 retry_strategy: "create_recovery_action",
                 capability_name: activeRecoveryCapability || undefined,
+                ...recoverySkillMetadata,
               },
             )
           }
@@ -726,6 +776,7 @@ export function OperatorConsoleChat({
               {
                 recovery_strategy: "propose_next_action",
                 capability_name: activeRecoveryCapability || undefined,
+                ...recoverySkillMetadata,
                 inputs: run?.experiment_id ? { experiment_id: run.experiment_id } : {},
               },
             )
@@ -749,6 +800,26 @@ export function OperatorConsoleChat({
               derived.recoveryCapabilities.map((capability) => (
                 <option key={capability} value={capability}>
                   {recoveryCapabilityLabel(capability)}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">Preferred skill</span>
+          <select
+            aria-label="Preferred recovery skill"
+            className="field__input"
+            value={activeRecoverySkill}
+            onChange={(event) => setSelectedRecoverySkill(event.target.value)}
+            disabled={!run || recoverySkillOptions.length === 0}
+          >
+            {recoverySkillOptions.length === 0 ? (
+              <option value="">Default skill</option>
+            ) : (
+              recoverySkillOptions.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
                 </option>
               ))
             )}

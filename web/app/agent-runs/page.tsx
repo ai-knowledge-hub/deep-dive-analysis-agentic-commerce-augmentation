@@ -1597,6 +1597,7 @@ function AgentRunsPageContent() {
                 run={selectedRun}
                 actions={actions}
                 events={runEvents}
+                runtimeRegistry={runtimeRegistry}
                 selectedAction={selectedAction}
                 nextRecommendedAction={nextRecommendedAction}
                 onJumpToNextAction={() => {
