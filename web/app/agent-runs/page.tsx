@@ -6,6 +6,7 @@ import { useAppUser } from "../../lib/auth";
 import type {
   AgentAction,
   AgentRegistryAuditEvent,
+  AgentRegistryApprovalReceiptVerifyResponse,
   AgentRegistryOwnershipUpdateResponse,
   AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
@@ -32,6 +33,7 @@ import {
   listAgentRuntimeRegistry,
   preflightAgentRunCommand,
   updateAgentRuntimeRegistryOwnership,
+  verifyAgentRuntimeRegistryApprovalReceipt,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
@@ -231,6 +233,11 @@ function formatDateCompact(value?: string | null): string {
 }
 
 function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
+  if (event.event_type === "registry_ownership_approved") {
+    const receipt = event.diff.approval_receipt;
+    const toolId = String(event.diff.tool_id || receipt?.tool_id || "registry tool");
+    return `Ownership approval receipt for ${toolId}`;
+  }
   if (event.event_type === "registry_pin_backfill_applied") {
     const runs = event.diff.runs?.updated ?? 0;
     const actions = event.diff.actions?.updated ?? 0;
@@ -253,6 +260,11 @@ function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
     changes.push("tool-skill map changed");
   }
   return changes.length > 0 ? changes.join(" · ") : "No structural diff recorded";
+}
+
+function approvalReceiptForEvent(event: AgentRegistryAuditEvent): Record<string, unknown> | null {
+  const receipt = event.diff.approval_receipt;
+  return receipt && typeof receipt === "object" ? receipt : null;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -475,6 +487,12 @@ function AgentRunsPageContent() {
     useState<AgentRegistryPinBackfillResponse | null>(null);
   const [registryBackfillBusy, setRegistryBackfillBusy] = useState(false);
   const [registryBackfillNotice, setRegistryBackfillNotice] = useState<string | null>(null);
+  const [registryReceiptVerification, setRegistryReceiptVerification] = useState<{
+    eventId: string;
+    result: AgentRegistryApprovalReceiptVerifyResponse["verification"];
+  } | null>(null);
+  const [registryReceiptVerificationBusy, setRegistryReceiptVerificationBusy] =
+    useState<string | null>(null);
   const [ownershipForm, setOwnershipForm] = useState({
     owner_principal_id: "",
     steward_team: "",
@@ -622,6 +640,7 @@ function AgentRunsPageContent() {
 
   const loadRegistryReleaseDetail = useCallback(async (registryFingerprint: string) => {
     setRegistryReleaseBusy(registryFingerprint);
+    setRegistryReceiptVerification(null);
     try {
       const response = await getAgentRuntimeRegistryRelease(registryFingerprint, {
         audit_limit: 5,
@@ -631,6 +650,39 @@ function AgentRunsPageContent() {
       setSelectedRegistryRelease(null);
     } finally {
       setRegistryReleaseBusy(null);
+    }
+  }, []);
+
+  const verifyRegistryApprovalReceipt = useCallback(async (event: AgentRegistryAuditEvent) => {
+    const approvalReceipt = approvalReceiptForEvent(event);
+    if (!approvalReceipt) return;
+    setRegistryReceiptVerificationBusy(event.id);
+    try {
+      const response = await verifyAgentRuntimeRegistryApprovalReceipt({
+        approval_receipt: approvalReceipt,
+        registry_fingerprint: event.registry_fingerprint,
+        audit_event_id: event.id,
+        require_audit_event: true,
+      });
+      setRegistryReceiptVerification({
+        eventId: event.id,
+        result: response.verification,
+      });
+    } catch (err) {
+      setRegistryReceiptVerification({
+        eventId: event.id,
+        result: {
+          valid: false,
+          valid_signature: false,
+          valid_payload: false,
+          valid_audit_event: false,
+          blockers: [
+            err instanceof Error ? err.message : "Unable to verify registry approval receipt.",
+          ],
+        },
+      });
+    } finally {
+      setRegistryReceiptVerificationBusy(null);
     }
   }, []);
 
@@ -1971,6 +2023,53 @@ function AgentRunsPageContent() {
                               {selectedRegistryRelease.audit_events.length} audit events are tied
                               to this release.
                             </p>
+                            {selectedRegistryRelease.audit_events.some((event) =>
+                              Boolean(approvalReceiptForEvent(event)),
+                            ) ? (
+                              <div className="run-event-list">
+                                {selectedRegistryRelease.audit_events
+                                  .filter((event) => Boolean(approvalReceiptForEvent(event)))
+                                  .slice(0, 3)
+                                  .map((event) => (
+                                    <div key={event.id} className="run-event-list__item">
+                                      <div>
+                                        <div className="table__strong">
+                                          Signed ownership receipt
+                                        </div>
+                                        <div className="table__muted">
+                                          {event.id.slice(0, 12)} ·{" "}
+                                          {event.registry_fingerprint.slice(0, 12)}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="button button--ghost button--sm"
+                                        onClick={() => verifyRegistryApprovalReceipt(event)}
+                                        disabled={registryReceiptVerificationBusy === event.id}
+                                      >
+                                        {registryReceiptVerificationBusy === event.id
+                                          ? "Verifying"
+                                          : "Verify receipt"}
+                                      </button>
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : null}
+                            {registryReceiptVerification ? (
+                              <div
+                                className={`panel__notice ${
+                                  registryReceiptVerification.result.valid
+                                    ? "panel__notice--info"
+                                    : "panel__notice--error"
+                                }`}
+                              >
+                                {registryReceiptVerification.result.valid
+                                  ? "Receipt verified against signature and registry audit trail."
+                                  : `Receipt verification failed: ${
+                                      registryReceiptVerification.result.blockers.join(" ")
+                                    }`}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div className="panel__actions">
@@ -2036,6 +2135,18 @@ function AgentRunsPageContent() {
                                 <div className="table__muted">
                                   {summarizeRegistryAuditDiff(event)}
                                 </div>
+                                {approvalReceiptForEvent(event) ? (
+                                  <button
+                                    type="button"
+                                    className="button button--ghost button--sm"
+                                    onClick={() => verifyRegistryApprovalReceipt(event)}
+                                    disabled={registryReceiptVerificationBusy === event.id}
+                                  >
+                                    {registryReceiptVerificationBusy === event.id
+                                      ? "Verifying"
+                                      : "Verify receipt"}
+                                  </button>
+                                ) : null}
                               </div>
                             ))}
                           </div>
@@ -2045,6 +2156,21 @@ function AgentRunsPageContent() {
                             first observed contract for this environment.
                           </p>
                         )}
+                        {registryReceiptVerification && !selectedRegistryRelease ? (
+                          <div
+                            className={`panel__notice ${
+                              registryReceiptVerification.result.valid
+                                ? "panel__notice--info"
+                                : "panel__notice--error"
+                            }`}
+                          >
+                            {registryReceiptVerification.result.valid
+                              ? "Receipt verified against signature and registry audit trail."
+                              : `Receipt verification failed: ${
+                                  registryReceiptVerification.result.blockers.join(" ")
+                                }`}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="table">
                         <div className="table__header">

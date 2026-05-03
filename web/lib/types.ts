@@ -1281,6 +1281,9 @@ export type AgentRegistryAuditDiff = {
     updated?: number;
     sample_ids?: string[];
   };
+  tool_id?: string;
+  approval_receipt?: Record<string, unknown>;
+  preflight?: AgentRegistryOwnershipPreflight;
 };
 
 export type AgentRegistryAuditEvent = {

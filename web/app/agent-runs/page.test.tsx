@@ -20,6 +20,7 @@ const listAgentRuntimeRegistryAuditMock = vi.fn();
 const listAgentRuntimeRegistryReleasesMock = vi.fn();
 const getAgentRuntimeRegistryReleaseMock = vi.fn();
 const updateAgentRuntimeRegistryOwnershipMock = vi.fn();
+const verifyAgentRuntimeRegistryApprovalReceiptMock = vi.fn();
 const backfillAgentRuntimeRegistryPinsMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
@@ -77,6 +78,8 @@ vi.mock("../../lib/api", () => ({
     getAgentRuntimeRegistryReleaseMock(...args),
   updateAgentRuntimeRegistryOwnership: (...args: unknown[]) =>
     updateAgentRuntimeRegistryOwnershipMock(...args),
+  verifyAgentRuntimeRegistryApprovalReceipt: (...args: unknown[]) =>
+    verifyAgentRuntimeRegistryApprovalReceiptMock(...args),
   backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
     backfillAgentRuntimeRegistryPinsMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
@@ -108,6 +111,7 @@ describe("AgentRunsPage timeline presets", () => {
     listAgentRuntimeRegistryReleasesMock.mockReset();
     getAgentRuntimeRegistryReleaseMock.mockReset();
     updateAgentRuntimeRegistryOwnershipMock.mockReset();
+    verifyAgentRuntimeRegistryApprovalReceiptMock.mockReset();
     backfillAgentRuntimeRegistryPinsMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
@@ -410,6 +414,28 @@ describe("AgentRunsPage timeline presets", () => {
             created_at: "2026-05-02T10:00:00Z",
             diff: {},
           },
+          {
+            id: "registry-approval-1",
+            event_type: "registry_ownership_approved",
+            previous_registry_fingerprint: null,
+            registry_fingerprint: "abcdef1234567890",
+            registry_version: "agent-runtime-static-v1",
+            source: "operator_approval",
+            created_at: "2026-05-02T10:05:00Z",
+            diff: {
+              tool_id: "experiment.run_variant",
+              approval_receipt: {
+                receipt_id: "receipt-12345678",
+                receipt_type: "registry_ownership_approval",
+                actor_user_id: "user-a",
+                tool_id: "experiment.run_variant",
+                registry_version: "agent-runtime-static-v1",
+                registry_fingerprint: "abcdef1234567890",
+                signature: "payload.signature",
+                signature_algorithm: "hmac-sha256",
+              },
+            },
+          },
         ],
       },
     });
@@ -440,6 +466,24 @@ describe("AgentRunsPage timeline presets", () => {
         owner_principal_id: "platform.commerce-optimization",
         steward_team: "commerce-optimization",
         source: "registry_default",
+      },
+    });
+    verifyAgentRuntimeRegistryApprovalReceiptMock.mockResolvedValue({
+      verification: {
+        valid: true,
+        valid_signature: true,
+        valid_payload: true,
+        valid_audit_event: true,
+        blockers: [],
+        receipt_payload: {},
+        audit_event: {
+          id: "registry-approval-1",
+          event_type: "registry_ownership_approved",
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "operator_approval",
+          diff: {},
+        },
       },
     });
   });
@@ -844,7 +888,24 @@ describe("AgentRunsPage timeline presets", () => {
         ),
       ).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/1 audit events are tied to this release/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 audit events are tied to this release/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    expect(verifyAgentRuntimeRegistryApprovalReceiptMock).toHaveBeenCalledWith({
+      approval_receipt: {
+        receipt_id: "receipt-12345678",
+        receipt_type: "registry_ownership_approval",
+        actor_user_id: "user-a",
+        tool_id: "experiment.run_variant",
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        signature: "payload.signature",
+        signature_algorithm: "hmac-sha256",
+      },
+      registry_fingerprint: "abcdef1234567890",
+      audit_event_id: "registry-approval-1",
+      require_audit_event: true,
+    });
+    expect(await screen.findByText(/Receipt verified against signature/i)).toBeInTheDocument();
     backfillAgentRuntimeRegistryPinsMock
       .mockResolvedValueOnce({
         client_id: "client-a",
