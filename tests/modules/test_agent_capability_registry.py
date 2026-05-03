@@ -42,6 +42,21 @@ def test_registry_contains_core_capability_and_defaults():
         spec, {"metric_id": 123, "variant_id": "variant-1"}
     )[0]
     assert "variant_id" in validate_outputs(spec, {"metric_id": "metric-1"})[0]
+    assert "metric_id" in validate_outputs(spec, {"variant_id": "variant-1"})[0]
+    baseline = get_capability_spec("run_control_baseline")
+    assert baseline is not None
+    assert set(baseline.output_schema["required"]) == {"metric_id", "variant_id"}
+    posterior = get_capability_spec("update_posterior_and_decisions")
+    assert posterior is not None
+    assert set(posterior.output_schema["required"]) == {"new_metric_id", "variant_id"}
+    assert validate_outputs(
+        posterior,
+        {
+            "new_metric_id": "metric-2",
+            "source_metric_id": "metric-1",
+            "variant_id": "variant-1",
+        },
+    ) == []
     version_context = version_context_for_capability(
         "run_variant",
         tool_id="experiment.run_variant",

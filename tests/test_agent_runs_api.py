@@ -315,7 +315,15 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert run_variant["summary"]
     assert run_variant["input_schema"]["properties"]["experiment_id"]["type"] == "string"
     assert run_variant["output_schema"]["properties"]["metric_id"]["type"] == "string"
+    assert "metric_id" in run_variant["output_schema"]["required"]
     assert "variant_id" in run_variant["output_schema"]["required"]
+    posterior = next(
+        capability
+        for capability in payload["capabilities"]
+        if capability["name"] == "update_posterior_and_decisions"
+    )
+    assert "new_metric_id" in posterior["output_schema"]["required"]
+    assert "variant_id" in posterior["output_schema"]["required"]
     assert run_variant["review_checklist"]
     assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
     assert run_variant["steward_team"] == "commerce-optimization"
