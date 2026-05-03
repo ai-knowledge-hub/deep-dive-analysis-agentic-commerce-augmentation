@@ -1198,32 +1198,64 @@ export type AgentRegistryToolOwnership = {
   updated_at?: string | null;
 };
 
+export type AgentRegistryOwnershipPreflight = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  tool_id?: string;
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | null;
+      to?: string | null;
+      changed?: boolean;
+    }
+  >;
+  changed_fields?: string[];
+  rollback_guidance?: string;
+  summary?: string;
+};
+
 export type AgentRegistryOwnershipUpdateResponse = {
   dry_run?: boolean;
-  preflight?: {
-    allowed?: boolean;
-    requires_confirmation?: boolean;
-    risk_level?: string;
-    effect_class?: string;
-    tool_id?: string;
-    blockers?: string[];
-    warnings?: string[];
-    changes?: Record<
-      string,
-      {
-        from?: string | null;
-        to?: string | null;
-        changed?: boolean;
-      }
-    >;
-    changed_fields?: string[];
-    rollback_guidance?: string;
-    summary?: string;
-  };
+  preflight?: AgentRegistryOwnershipPreflight;
   ownership: AgentRegistryToolOwnership;
+  approval_receipt?: {
+    receipt_id?: string;
+    receipt_type?: string;
+    actor_user_id?: string | null;
+    tool_id?: string;
+    approved_at?: string;
+    registry_version?: string;
+    registry_fingerprint?: string;
+    ownership?: {
+      owner_principal_id?: string | null;
+      steward_team?: string | null;
+      source?: string | null;
+    };
+    preflight?: AgentRegistryOwnershipPreflight;
+    signature?: string;
+    signature_algorithm?: string;
+  };
+  approval_event?: AgentRegistryAuditEvent;
   registry_version?: string | null;
   registry_fingerprint?: string | null;
   registry_status?: string | null;
+};
+
+export type AgentRegistryApprovalReceiptVerifyResponse = {
+  verification: {
+    valid: boolean;
+    valid_signature: boolean;
+    valid_payload: boolean;
+    valid_audit_event: boolean;
+    blockers: string[];
+    receipt_payload?: Record<string, unknown>;
+    audit_event?: AgentRegistryAuditEvent | null;
+  };
 };
 
 export type AgentRegistryAuditDiffSection = {

@@ -147,6 +147,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("AGENT_PRINCIPAL_SIGNING_SECRET"),
     )
+    registry_approval_signing_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("REGISTRY_APPROVAL_SIGNING_SECRET"),
+    )
     admin_user_ids: str = Field(
         default="", validation_alias=AliasChoices("ADMIN_USER_IDS")
     )

@@ -1014,8 +1014,9 @@ function AgentRunsPageContent() {
         );
         return;
       }
+      const receiptId = response.approval_receipt?.receipt_id;
       setOwnershipNotice(
-        `Ownership saved. Active registry ${String(
+        `Ownership saved${receiptId ? ` with receipt ${receiptId.slice(0, 8)}` : ""}. Active registry ${String(
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now ${response.registry_status ?? "updated"}.`,
       );
@@ -2725,6 +2726,7 @@ function AgentRunsPageContent() {
                                 disabled={
                                   ownershipBusy ||
                                   !ownershipPreflight?.requires_confirmation ||
+                                  !ownershipPreflight?.allowed ||
                                   !ownershipForm.owner_principal_id.trim() ||
                                   !ownershipForm.steward_team.trim()
                                 }

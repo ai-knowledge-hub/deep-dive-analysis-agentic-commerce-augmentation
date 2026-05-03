@@ -784,6 +784,16 @@ describe("AgentRunsPage timeline presets", () => {
           steward_team: "growth-ops",
           source: "operator_override",
         },
+        approval_receipt: {
+          receipt_id: "receipt-12345678",
+          receipt_type: "registry_ownership_approval",
+          actor_user_id: "user-a",
+          tool_id: "experiment.run_variant",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "fedcba9876543210",
+          signature: "payload.signature",
+          signature_algorithm: "hmac-sha256",
+        },
         registry_version: "agent-runtime-static-v1",
         registry_fingerprint: "fedcba9876543210",
         registry_status: "active",
@@ -815,7 +825,7 @@ describe("AgentRunsPage timeline presets", () => {
       },
       "user-a",
     );
-    expect(await screen.findByText(/Ownership saved/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Ownership saved with receipt receipt-/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();

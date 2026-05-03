@@ -10,6 +10,7 @@ import {
   AgentRunCommandResponse,
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
+  AgentRegistryApprovalReceiptVerifyResponse,
   AgentRegistryAuditListResponse,
   AgentRegistryOwnershipUpdateResponse,
   AgentRegistryPinBackfillResponse,
@@ -657,6 +658,28 @@ export async function updateAgentRuntimeRegistryOwnership(
         steward_team: payload.steward_team,
         dry_run: payload.dry_run ?? true,
         preflight_confirmed: payload.preflight_confirmed ?? false,
+      }),
+    },
+  );
+}
+
+export async function verifyAgentRuntimeRegistryApprovalReceipt(
+  payload: {
+    approval_receipt: Record<string, unknown>;
+    registry_fingerprint?: string | null;
+    audit_event_id?: string | null;
+    require_audit_event?: boolean;
+  },
+): Promise<AgentRegistryApprovalReceiptVerifyResponse> {
+  return request<AgentRegistryApprovalReceiptVerifyResponse>(
+    "/agent-runs/registry/approval-receipts/verify",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        approval_receipt: payload.approval_receipt,
+        registry_fingerprint: payload.registry_fingerprint ?? undefined,
+        audit_event_id: payload.audit_event_id ?? undefined,
+        require_audit_event: payload.require_audit_event ?? false,
       }),
     },
   );
