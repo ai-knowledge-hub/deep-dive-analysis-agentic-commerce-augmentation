@@ -19,6 +19,7 @@ const listAgentRuntimeRegistryMock = vi.fn();
 const listAgentRuntimeRegistryAuditMock = vi.fn();
 const listAgentRuntimeRegistryReleasesMock = vi.fn();
 const getAgentRuntimeRegistryReleaseMock = vi.fn();
+const updateAgentRuntimeRegistryOwnershipMock = vi.fn();
 const backfillAgentRuntimeRegistryPinsMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
@@ -74,6 +75,8 @@ vi.mock("../../lib/api", () => ({
     listAgentRuntimeRegistryReleasesMock(...args),
   getAgentRuntimeRegistryRelease: (...args: unknown[]) =>
     getAgentRuntimeRegistryReleaseMock(...args),
+  updateAgentRuntimeRegistryOwnership: (...args: unknown[]) =>
+    updateAgentRuntimeRegistryOwnershipMock(...args),
   backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
     backfillAgentRuntimeRegistryPinsMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
@@ -104,6 +107,7 @@ describe("AgentRunsPage timeline presets", () => {
     listAgentRuntimeRegistryAuditMock.mockReset();
     listAgentRuntimeRegistryReleasesMock.mockReset();
     getAgentRuntimeRegistryReleaseMock.mockReset();
+    updateAgentRuntimeRegistryOwnershipMock.mockReset();
     backfillAgentRuntimeRegistryPinsMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
@@ -405,6 +409,17 @@ describe("AgentRunsPage timeline presets", () => {
       runs: { matched: 2, updated: 0, sample_ids: ["run-old"] },
       actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
     });
+    updateAgentRuntimeRegistryOwnershipMock.mockResolvedValue({
+      ownership: {
+        tool_id: "experiment.run_variant",
+        owner_principal_id: "platform.growth",
+        steward_team: "growth-ops",
+        source: "operator_override",
+      },
+      registry_version: "agent-runtime-static-v1",
+      registry_fingerprint: "fedcba9876543210",
+      registry_status: "active",
+    });
   });
 
   it("applies Policy failures preset to event query payload", async () => {
@@ -705,6 +720,20 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText(/Owner principal/i));
+    await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
+    await userEvent.clear(screen.getByLabelText(/Steward team/i));
+    await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
+    await userEvent.click(screen.getByRole("button", { name: /Save ownership/i }));
+    expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenCalledWith(
+      "experiment.run_variant",
+      {
+        owner_principal_id: "platform.growth",
+        steward_team: "growth-ops",
+      },
+      "user-a",
+    );
+    expect(await screen.findByText(/Ownership saved/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();

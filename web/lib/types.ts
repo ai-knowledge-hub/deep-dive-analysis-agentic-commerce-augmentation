@@ -1182,6 +1182,22 @@ export type AgentRuntimeRegistryResponse = {
   policy_profiles: AgentRuntimePolicyProfile[];
 };
 
+export type AgentRegistryToolOwnership = {
+  tool_id: string;
+  owner_principal_id: string;
+  steward_team: string;
+  source: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AgentRegistryOwnershipUpdateResponse = {
+  ownership: AgentRegistryToolOwnership;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  registry_status?: string | null;
+};
+
 export type AgentRegistryAuditDiffSection = {
   added?: string[];
   removed?: string[];

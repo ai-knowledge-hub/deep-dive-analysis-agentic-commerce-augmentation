@@ -11,6 +11,7 @@ import {
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
   AgentRegistryAuditListResponse,
+  AgentRegistryOwnershipUpdateResponse,
   AgentRegistryPinBackfillResponse,
   AgentRegistryReleaseDetailResponse,
   AgentRegistryReleaseListResponse,
@@ -633,6 +634,24 @@ export async function getAgentRuntimeRegistryRelease(
     `/agent-runs/registry/releases/${encodeURIComponent(registryFingerprint)}${
       params.toString() ? `?${params.toString()}` : ""
     }`,
+  );
+}
+
+export async function updateAgentRuntimeRegistryOwnership(
+  toolId: string,
+  payload: { owner_principal_id: string; steward_team: string },
+  userId?: string | null,
+): Promise<AgentRegistryOwnershipUpdateResponse> {
+  return request<AgentRegistryOwnershipUpdateResponse>(
+    `/agent-runs/registry/ownership/${encodeURIComponent(toolId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        user_id: userId ?? undefined,
+        owner_principal_id: payload.owner_principal_id,
+        steward_team: payload.steward_team,
+      }),
+    },
   );
 }
 

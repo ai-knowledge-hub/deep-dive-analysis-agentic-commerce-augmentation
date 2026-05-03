@@ -337,6 +337,54 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
 
 
+def test_agent_runtime_registry_ownership_update_creates_new_release(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry").json()
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ownership"]["owner_principal_id"] == "platform.growth"
+    assert payload["ownership"]["steward_team"] == "growth-ops"
+    assert payload["ownership"]["source"] == "operator_override"
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+
+    refreshed = client.get("/agent-runs/registry").json()
+    run_variant = next(
+        capability
+        for capability in refreshed["capabilities"]
+        if capability["name"] == "run_variant"
+    )
+    assert refreshed["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert run_variant["owner_principal_id"] == "platform.growth"
+    assert run_variant["steward_team"] == "growth-ops"
+    assert run_variant["ownership_source"] == "operator_override"
+
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params={"registry_fingerprint": payload["registry_fingerprint"]},
+    ).json()["events"]
+    assert audit
+    assert audit[0]["event_type"] == "registry_changed"
+    assert audit[0]["previous_registry_fingerprint"] == first["registry_fingerprint"]
+
+    missing = client.patch(
+        "/agent-runs/registry/ownership/not.real",
+        json={
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+        },
+    )
+    assert missing.status_code == 404
+
+
 def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     client: TestClient, monkeypatch
 ):

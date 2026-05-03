@@ -30,6 +30,7 @@ import {
   listAgentRuntimeRegistryReleases,
   listAgentRuntimeRegistry,
   preflightAgentRunCommand,
+  updateAgentRuntimeRegistryOwnership,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
@@ -473,6 +474,12 @@ function AgentRunsPageContent() {
     useState<AgentRegistryPinBackfillResponse | null>(null);
   const [registryBackfillBusy, setRegistryBackfillBusy] = useState(false);
   const [registryBackfillNotice, setRegistryBackfillNotice] = useState<string | null>(null);
+  const [ownershipForm, setOwnershipForm] = useState({
+    owner_principal_id: "",
+    steward_team: "",
+  });
+  const [ownershipBusy, setOwnershipBusy] = useState(false);
+  const [ownershipNotice, setOwnershipNotice] = useState<string | null>(null);
   const [runEvents, setRunEvents] = useState<AgentRunEvent[]>([]);
   const [eventsPage, setEventsPage] = useState<{
     before_cursor?: string | null;
@@ -968,6 +975,43 @@ function AgentRunsPageContent() {
       ) ?? null
     );
   }, [runtimeRegistry, selectedAction]);
+
+  useEffect(() => {
+    setOwnershipForm({
+      owner_principal_id: selectedCapabilitySpec?.owner_principal_id ?? "",
+      steward_team: selectedCapabilitySpec?.steward_team ?? "",
+    });
+    setOwnershipNotice(null);
+  }, [
+    selectedCapabilitySpec?.owner_principal_id,
+    selectedCapabilitySpec?.steward_team,
+    selectedCapabilitySpec?.tool_id,
+  ]);
+
+  const saveRegistryOwnership = useCallback(async () => {
+    if (!userId || !selectedCapabilitySpec?.tool_id) return;
+    setOwnershipBusy(true);
+    setOwnershipNotice(null);
+    try {
+      const response = await updateAgentRuntimeRegistryOwnership(
+        selectedCapabilitySpec.tool_id,
+        ownershipForm,
+        userId,
+      );
+      setOwnershipNotice(
+        `Ownership saved. Active registry ${String(
+          response.registry_fingerprint ?? "",
+        ).slice(0, 12)} is now ${response.registry_status ?? "updated"}.`,
+      );
+      await loadRuntimeRegistry();
+    } catch (err) {
+      setOwnershipNotice(
+        err instanceof Error ? err.message : "Unable to update registry ownership.",
+      );
+    } finally {
+      setOwnershipBusy(false);
+    }
+  }, [loadRuntimeRegistry, ownershipForm, selectedCapabilitySpec?.tool_id, userId]);
 
   const actionCounters = useMemo(() => {
     const counts = {
@@ -2592,6 +2636,53 @@ function AgentRunsPageContent() {
                             Source: {selectedCapabilitySpec?.ownership_source ?? "static_code"}
                           </span>
                         </div>
+                        {selectedCapabilitySpec ? (
+                          <div className="form-grid">
+                            <label>
+                              Owner principal
+                              <input
+                                value={ownershipForm.owner_principal_id}
+                                onChange={(event) =>
+                                  setOwnershipForm((current) => ({
+                                    ...current,
+                                    owner_principal_id: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label>
+                              Steward team
+                              <input
+                                value={ownershipForm.steward_team}
+                                onChange={(event) =>
+                                  setOwnershipForm((current) => ({
+                                    ...current,
+                                    steward_team: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <div className="panel__actions">
+                              <button
+                                type="button"
+                                className="button button--ghost button--sm"
+                                onClick={saveRegistryOwnership}
+                                disabled={
+                                  ownershipBusy ||
+                                  !ownershipForm.owner_principal_id.trim() ||
+                                  !ownershipForm.steward_team.trim()
+                                }
+                              >
+                                {ownershipBusy ? "Saving ownership" : "Save ownership"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {ownershipNotice ? (
+                          <div className="panel__notice panel__notice--info">
+                            {ownershipNotice}
+                          </div>
+                        ) : null}
                         <p className="panel__subheading">Rollback guidance</p>
                         <p className="panel__muted">
                           {selectedAction.rollback_guidance ||

@@ -48,6 +48,7 @@ from infrastructure.db.agent.agent_registry import (
     list_agent_registry_audit_events,
     list_agent_registry_tool_ownership,
     list_agent_registry_versions,
+    update_agent_registry_tool_ownership,
 )
 
 
@@ -149,6 +150,12 @@ class AgentRegistryBackfillPinsRequest(BaseModel):
     client_id: Optional[str] = None
     dry_run: bool = True
     limit: int = 200
+
+
+class AgentRegistryOwnershipUpdateRequest(BaseModel):
+    user_id: Optional[str] = None
+    owner_principal_id: str = Field(..., min_length=1)
+    steward_team: str = Field(..., min_length=1)
 
 
 class AgentRunTickRequest(BaseModel):
@@ -566,6 +573,39 @@ def get_agent_runtime_registry_release_detail(
     if not release:
         raise HTTPException(status_code=404, detail="Registry release not found")
     return {"release": release}
+
+
+@router.patch("/registry/ownership/{tool_id:path}")
+def update_agent_runtime_registry_tool_ownership(
+    tool_id: str,
+    payload: AgentRegistryOwnershipUpdateRequest,
+) -> Dict[str, Any]:
+    existing_tool_ids = {
+        item["tool_id"] for item in default_tool_ownership_records()
+    }
+    if tool_id not in existing_tool_ids:
+        raise HTTPException(status_code=404, detail="Registry tool not found")
+    ownership = update_agent_registry_tool_ownership(
+        tool_id=tool_id,
+        owner_principal_id=payload.owner_principal_id,
+        steward_team=payload.steward_team,
+        source="operator_override",
+    )
+    if not ownership:
+        raise HTTPException(status_code=400, detail="Invalid registry ownership payload")
+    registry_payload, fingerprint = _registry_payload_and_fingerprint()
+    snapshot = ensure_agent_registry_version(
+        registry_version=str(registry_payload["registry_version"]),
+        registry_fingerprint=fingerprint,
+        hash_algorithm="sha256",
+        payload=registry_payload,
+    )
+    return {
+        "ownership": ownership,
+        "registry_version": snapshot.get("registry_version"),
+        "registry_fingerprint": snapshot.get("registry_fingerprint"),
+        "registry_status": snapshot.get("status"),
+    }
 
 
 @router.post("/registry/backfill-pins")

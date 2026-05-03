@@ -256,6 +256,50 @@ def list_agent_registry_tool_ownership() -> list[Dict[str, Any]]:
     return [_ownership_row(row) for row in rows]
 
 
+def update_agent_registry_tool_ownership(
+    *,
+    tool_id: str,
+    owner_principal_id: str,
+    steward_team: str,
+    source: str = "operator_override",
+) -> Dict[str, Any]:
+    normalized_tool_id = str(tool_id or "").strip()
+    normalized_owner = str(owner_principal_id or "").strip()
+    normalized_steward = str(steward_team or "").strip()
+    if not normalized_tool_id or not normalized_owner or not normalized_steward:
+        return {}
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO agent_registry_tool_ownership (
+            tool_id,
+            owner_principal_id,
+            steward_team,
+            source
+        )
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(tool_id) DO UPDATE SET
+            owner_principal_id = excluded.owner_principal_id,
+            steward_team = excluded.steward_team,
+            source = excluded.source,
+            updated_at = datetime('now')
+        """,
+        (normalized_tool_id, normalized_owner, normalized_steward, source),
+    )
+    conn.commit()
+    row = (
+        conn.execute(
+            """
+            SELECT *
+            FROM agent_registry_tool_ownership
+            WHERE tool_id = ?
+            """,
+            (normalized_tool_id,),
+        ).fetchone()
+    )
+    return _ownership_row(row) if row else {}
+
+
 def create_agent_registry_audit_event(
     *,
     event_type: str,
@@ -449,4 +493,5 @@ __all__ = [
     "list_agent_registry_audit_events",
     "list_agent_registry_tool_ownership",
     "list_agent_registry_versions",
+    "update_agent_registry_tool_ownership",
 ]
