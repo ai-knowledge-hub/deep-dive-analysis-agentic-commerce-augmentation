@@ -290,6 +290,7 @@ Required env vars:
 - `ENABLE_PROVIDER_VALIDATION_INTEGRATIONS=true`
 - `BACKEND_PUBLIC_URL` (public backend base used to build callback URL)
 - `VALIDATION_CALLBACK_SIGNING_SECRET` (HMAC signing key for callback verification)
+- `REGISTRY_APPROVAL_SIGNING_SECRET` (HMAC signing key for registry ownership approval receipts; falls back to `AGENT_PRINCIPAL_SIGNING_SECRET` outside production)
 
 Optional env vars:
 - `VALIDATION_CALLBACK_TTL_SECONDS` (default `900`)

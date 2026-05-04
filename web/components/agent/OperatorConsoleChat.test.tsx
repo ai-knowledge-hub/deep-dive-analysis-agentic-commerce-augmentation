@@ -405,6 +405,20 @@ describe("OperatorConsoleChat", () => {
           ],
         },
       },
+      recovery_templates: [
+        {
+          id: "recovery.review_validation_readiness",
+          capability_name: "review_validation_readiness",
+          tool_id: "validation.review_readiness",
+          effect_class: "read",
+          summary: "Re-check readiness gates before creating more recovery work.",
+          default_inputs: {},
+          operator_notes: [
+            "Recovery proposals are created for operator review; they do not execute immediately.",
+          ],
+          side_effects: ["read_validation_and_metrics"],
+        },
+      ],
       policy_profiles: [],
     };
 
@@ -471,6 +485,12 @@ describe("OperatorConsoleChat", () => {
       screen.getByLabelText(/Recovery target capability/i),
       "review_validation_readiness",
     );
+    expect(
+      screen.getByText(/Recovery template: recovery.review_validation_readiness/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Re-check readiness gates before creating more recovery work/i),
+    ).toBeInTheDocument();
     await user.selectOptions(
       screen.getByLabelText(/Preferred recovery skill/i),
       "promote-and-publish-approved-copy",

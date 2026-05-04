@@ -10,6 +10,7 @@ import {
   AgentRunCommandResponse,
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
+  AgentRegistryApprovalReceiptVerifyResponse,
   AgentRegistryAuditListResponse,
   AgentRegistryOwnershipUpdateResponse,
   AgentRegistryPinBackfillResponse,
@@ -639,7 +640,12 @@ export async function getAgentRuntimeRegistryRelease(
 
 export async function updateAgentRuntimeRegistryOwnership(
   toolId: string,
-  payload: { owner_principal_id: string; steward_team: string },
+  payload: {
+    owner_principal_id: string;
+    steward_team: string;
+    dry_run?: boolean;
+    preflight_confirmed?: boolean;
+  },
   userId?: string | null,
 ): Promise<AgentRegistryOwnershipUpdateResponse> {
   return request<AgentRegistryOwnershipUpdateResponse>(
@@ -650,6 +656,30 @@ export async function updateAgentRuntimeRegistryOwnership(
         user_id: userId ?? undefined,
         owner_principal_id: payload.owner_principal_id,
         steward_team: payload.steward_team,
+        dry_run: payload.dry_run ?? true,
+        preflight_confirmed: payload.preflight_confirmed ?? false,
+      }),
+    },
+  );
+}
+
+export async function verifyAgentRuntimeRegistryApprovalReceipt(
+  payload: {
+    approval_receipt: Record<string, unknown>;
+    registry_fingerprint?: string | null;
+    audit_event_id?: string | null;
+    require_audit_event?: boolean;
+  },
+): Promise<AgentRegistryApprovalReceiptVerifyResponse> {
+  return request<AgentRegistryApprovalReceiptVerifyResponse>(
+    "/agent-runs/registry/approval-receipts/verify",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        approval_receipt: payload.approval_receipt,
+        registry_fingerprint: payload.registry_fingerprint ?? undefined,
+        audit_event_id: payload.audit_event_id ?? undefined,
+        require_audit_event: payload.require_audit_event ?? false,
       }),
     },
   );

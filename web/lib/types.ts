@@ -1166,6 +1166,17 @@ export type AgentRuntimePolicyProfile = {
   auto_effect_classes: string[];
 };
 
+export type AgentRuntimeRecoveryTemplate = {
+  id: string;
+  capability_name: string;
+  tool_id?: string;
+  effect_class?: string;
+  summary?: string;
+  default_inputs?: Record<string, unknown>;
+  operator_notes?: string[];
+  side_effects?: string[];
+};
+
 export type AgentRuntimeRegistryResponse = {
   registry_version?: string;
   registry_fingerprint?: string;
@@ -1186,6 +1197,7 @@ export type AgentRuntimeRegistryResponse = {
       candidate_skill_ids?: string[];
     }
   >;
+  recovery_templates?: AgentRuntimeRecoveryTemplate[];
   policy_profiles: AgentRuntimePolicyProfile[];
 };
 
@@ -1198,11 +1210,64 @@ export type AgentRegistryToolOwnership = {
   updated_at?: string | null;
 };
 
+export type AgentRegistryOwnershipPreflight = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  tool_id?: string;
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | null;
+      to?: string | null;
+      changed?: boolean;
+    }
+  >;
+  changed_fields?: string[];
+  rollback_guidance?: string;
+  summary?: string;
+};
+
 export type AgentRegistryOwnershipUpdateResponse = {
+  dry_run?: boolean;
+  preflight?: AgentRegistryOwnershipPreflight;
   ownership: AgentRegistryToolOwnership;
+  approval_receipt?: {
+    receipt_id?: string;
+    receipt_type?: string;
+    actor_user_id?: string | null;
+    tool_id?: string;
+    approved_at?: string;
+    registry_version?: string;
+    registry_fingerprint?: string;
+    ownership?: {
+      owner_principal_id?: string | null;
+      steward_team?: string | null;
+      source?: string | null;
+    };
+    preflight?: AgentRegistryOwnershipPreflight;
+    signature?: string;
+    signature_algorithm?: string;
+  };
+  approval_event?: AgentRegistryAuditEvent;
   registry_version?: string | null;
   registry_fingerprint?: string | null;
   registry_status?: string | null;
+};
+
+export type AgentRegistryApprovalReceiptVerifyResponse = {
+  verification: {
+    valid: boolean;
+    valid_signature: boolean;
+    valid_payload: boolean;
+    valid_audit_event: boolean;
+    blockers: string[];
+    receipt_payload?: Record<string, unknown>;
+    audit_event?: AgentRegistryAuditEvent | null;
+  };
 };
 
 export type AgentRegistryAuditDiffSection = {
@@ -1228,6 +1293,9 @@ export type AgentRegistryAuditDiff = {
     updated?: number;
     sample_ids?: string[];
   };
+  tool_id?: string;
+  approval_receipt?: Record<string, unknown>;
+  preflight?: AgentRegistryOwnershipPreflight;
 };
 
 export type AgentRegistryAuditEvent = {

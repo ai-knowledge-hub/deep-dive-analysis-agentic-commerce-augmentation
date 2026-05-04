@@ -20,6 +20,7 @@ const listAgentRuntimeRegistryAuditMock = vi.fn();
 const listAgentRuntimeRegistryReleasesMock = vi.fn();
 const getAgentRuntimeRegistryReleaseMock = vi.fn();
 const updateAgentRuntimeRegistryOwnershipMock = vi.fn();
+const verifyAgentRuntimeRegistryApprovalReceiptMock = vi.fn();
 const backfillAgentRuntimeRegistryPinsMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
@@ -77,6 +78,8 @@ vi.mock("../../lib/api", () => ({
     getAgentRuntimeRegistryReleaseMock(...args),
   updateAgentRuntimeRegistryOwnership: (...args: unknown[]) =>
     updateAgentRuntimeRegistryOwnershipMock(...args),
+  verifyAgentRuntimeRegistryApprovalReceipt: (...args: unknown[]) =>
+    verifyAgentRuntimeRegistryApprovalReceiptMock(...args),
   backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
     backfillAgentRuntimeRegistryPinsMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
@@ -108,6 +111,7 @@ describe("AgentRunsPage timeline presets", () => {
     listAgentRuntimeRegistryReleasesMock.mockReset();
     getAgentRuntimeRegistryReleaseMock.mockReset();
     updateAgentRuntimeRegistryOwnershipMock.mockReset();
+    verifyAgentRuntimeRegistryApprovalReceiptMock.mockReset();
     backfillAgentRuntimeRegistryPinsMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
@@ -408,7 +412,47 @@ describe("AgentRunsPage timeline presets", () => {
             registry_version: "agent-runtime-static-v1",
             source: "static_code",
             created_at: "2026-05-02T10:00:00Z",
-            diff: {},
+            diff: {
+              tools: {
+                added: ["experiment.run_variant"],
+                removed: [],
+                changed: ["validation.review_readiness"],
+              },
+              skills: {
+                added: ["optimize-product-representation"],
+                removed: [],
+                changed: [],
+              },
+              capabilities: {
+                added: ["run_variant"],
+                removed: [],
+                changed: [],
+              },
+              policy_profiles: { added: [], removed: [], changed: [] },
+              skill_ids_by_tool_changed: true,
+            },
+          },
+          {
+            id: "registry-approval-1",
+            event_type: "registry_ownership_approved",
+            previous_registry_fingerprint: null,
+            registry_fingerprint: "abcdef1234567890",
+            registry_version: "agent-runtime-static-v1",
+            source: "operator_approval",
+            created_at: "2026-05-02T10:05:00Z",
+            diff: {
+              tool_id: "experiment.run_variant",
+              approval_receipt: {
+                receipt_id: "receipt-12345678",
+                receipt_type: "registry_ownership_approval",
+                actor_user_id: "user-a",
+                tool_id: "experiment.run_variant",
+                registry_version: "agent-runtime-static-v1",
+                registry_fingerprint: "abcdef1234567890",
+                signature: "payload.signature",
+                signature_algorithm: "hmac-sha256",
+              },
+            },
           },
         ],
       },
@@ -422,15 +466,43 @@ describe("AgentRunsPage timeline presets", () => {
       actions: { matched: 3, updated: 0, sample_ids: ["action-old"] },
     });
     updateAgentRuntimeRegistryOwnershipMock.mockResolvedValue({
+      dry_run: true,
+      preflight: {
+        allowed: true,
+        requires_confirmation: true,
+        risk_level: "medium",
+        effect_class: "registry_metadata_change",
+        tool_id: "experiment.run_variant",
+        blockers: [],
+        warnings: [],
+        changed_fields: ["owner_principal_id", "steward_team"],
+        rollback_guidance: "Re-apply previous ownership values.",
+        summary: "Registry ownership update will create a new active registry release.",
+      },
       ownership: {
         tool_id: "experiment.run_variant",
-        owner_principal_id: "platform.growth",
-        steward_team: "growth-ops",
-        source: "operator_override",
+        owner_principal_id: "platform.commerce-optimization",
+        steward_team: "commerce-optimization",
+        source: "registry_default",
       },
-      registry_version: "agent-runtime-static-v1",
-      registry_fingerprint: "fedcba9876543210",
-      registry_status: "active",
+    });
+    verifyAgentRuntimeRegistryApprovalReceiptMock.mockResolvedValue({
+      verification: {
+        valid: true,
+        valid_signature: true,
+        valid_payload: true,
+        valid_audit_event: true,
+        blockers: [],
+        receipt_payload: {},
+        audit_event: {
+          id: "registry-approval-1",
+          event_type: "registry_ownership_approved",
+          registry_fingerprint: "abcdef1234567890",
+          registry_version: "agent-runtime-static-v1",
+          source: "operator_approval",
+          diff: {},
+        },
+      },
     });
   });
 
@@ -732,20 +804,90 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
+    updateAgentRuntimeRegistryOwnershipMock
+      .mockResolvedValueOnce({
+        dry_run: true,
+        preflight: {
+          allowed: true,
+          requires_confirmation: true,
+          risk_level: "medium",
+          effect_class: "registry_metadata_change",
+          tool_id: "experiment.run_variant",
+          blockers: [],
+          warnings: [],
+          changed_fields: ["owner_principal_id", "steward_team"],
+          rollback_guidance: "Re-apply previous ownership values.",
+          summary: "Registry ownership update will create a new active registry release.",
+        },
+        ownership: {
+          tool_id: "experiment.run_variant",
+          owner_principal_id: "platform.commerce-optimization",
+          steward_team: "commerce-optimization",
+          source: "registry_default",
+        },
+      })
+      .mockResolvedValueOnce({
+        dry_run: false,
+        preflight: {
+          allowed: true,
+          requires_confirmation: true,
+          risk_level: "medium",
+          effect_class: "registry_metadata_change",
+          tool_id: "experiment.run_variant",
+          blockers: [],
+          warnings: [],
+          changed_fields: ["owner_principal_id", "steward_team"],
+          rollback_guidance: "Re-apply previous ownership values.",
+          summary: "Registry ownership update will create a new active registry release.",
+        },
+        ownership: {
+          tool_id: "experiment.run_variant",
+          owner_principal_id: "platform.growth",
+          steward_team: "growth-ops",
+          source: "operator_override",
+        },
+        approval_receipt: {
+          receipt_id: "receipt-12345678",
+          receipt_type: "registry_ownership_approval",
+          actor_user_id: "user-a",
+          tool_id: "experiment.run_variant",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "fedcba9876543210",
+          signature: "payload.signature",
+          signature_algorithm: "hmac-sha256",
+        },
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "fedcba9876543210",
+        registry_status: "active",
+      });
     await userEvent.clear(screen.getByLabelText(/Owner principal/i));
     await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
     await userEvent.clear(screen.getByLabelText(/Steward team/i));
     await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
-    await userEvent.click(screen.getByRole("button", { name: /Save ownership/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Preflight ownership/i }));
     expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenCalledWith(
       "experiment.run_variant",
       {
         owner_principal_id: "platform.growth",
         steward_team: "growth-ops",
+        dry_run: true,
+        preflight_confirmed: false,
       },
       "user-a",
     );
-    expect(await screen.findByText(/Ownership saved/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Preflight: medium risk/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Apply ownership/i }));
+    expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenLastCalledWith(
+      "experiment.run_variant",
+      {
+        owner_principal_id: "platform.growth",
+        steward_team: "growth-ops",
+        dry_run: false,
+        preflight_confirmed: true,
+      },
+      "user-a",
+    );
+    expect(await screen.findByText(/Ownership saved with receipt receipt-/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();
@@ -764,7 +906,31 @@ describe("AgentRunsPage timeline presets", () => {
         ),
       ).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/1 audit events are tied to this release/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 audit events are tied to this release/i)).toBeInTheDocument();
+    expect(screen.getByText(/Release diff/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Tools: \+experiment.run_variant, ~validation.review_readiness/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Receipt: receipt-12345678/i),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    expect(verifyAgentRuntimeRegistryApprovalReceiptMock).toHaveBeenCalledWith({
+      approval_receipt: {
+        receipt_id: "receipt-12345678",
+        receipt_type: "registry_ownership_approval",
+        actor_user_id: "user-a",
+        tool_id: "experiment.run_variant",
+        registry_version: "agent-runtime-static-v1",
+        registry_fingerprint: "abcdef1234567890",
+        signature: "payload.signature",
+        signature_algorithm: "hmac-sha256",
+      },
+      registry_fingerprint: "abcdef1234567890",
+      audit_event_id: "registry-approval-1",
+      require_audit_event: true,
+    });
+    expect(await screen.findByText(/Receipt verified against signature/i)).toBeInTheDocument();
     backfillAgentRuntimeRegistryPinsMock
       .mockResolvedValueOnce({
         client_id: "client-a",

@@ -10,6 +10,7 @@ import type {
   AgentRunCommandType,
   AgentRunEvent,
   AgentRuntimeRegistryResponse,
+  AgentRuntimeRecoveryTemplate,
   AgentRuntimeSkillSpec,
 } from "../../lib/types";
 
@@ -303,6 +304,15 @@ export function OperatorConsoleChat({
 
   const activeRecoverySkill =
     selectedRecoverySkill || defaultRecoverySkillId || recoverySkillOptions[0]?.id || "";
+
+  const activeRecoveryTemplate = useMemo<AgentRuntimeRecoveryTemplate | null>(() => {
+    if (!runtimeRegistry || !activeRecoveryCapability) return null;
+    return (
+      runtimeRegistry.recovery_templates?.find(
+        (template) => template.capability_name === activeRecoveryCapability,
+      ) ?? null
+    );
+  }, [activeRecoveryCapability, runtimeRegistry]);
 
   useEffect(() => {
     setSelectedRecoverySkill((current) =>
@@ -825,6 +835,24 @@ export function OperatorConsoleChat({
             )}
           </select>
         </label>
+        {activeRecoveryTemplate ? (
+          <div className="panel__notice panel__notice--info">
+            <strong>Recovery template: {activeRecoveryTemplate.id}</strong>
+            <p>{activeRecoveryTemplate.summary}</p>
+            {Object.keys(activeRecoveryTemplate.default_inputs ?? {}).length > 0 ? (
+              <p className="panel__muted">
+                Defaults: {JSON.stringify(activeRecoveryTemplate.default_inputs)}
+              </p>
+            ) : null}
+            {activeRecoveryTemplate.operator_notes?.length ? (
+              <ul className="panel__list panel__list--compact">
+                {activeRecoveryTemplate.operator_notes.slice(0, 2).map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         <button
           type="button"
           className="button button--ghost button--sm"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import sys
 import types
@@ -314,7 +315,21 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert run_variant["summary"]
     assert run_variant["input_schema"]["properties"]["experiment_id"]["type"] == "string"
     assert run_variant["output_schema"]["properties"]["metric_id"]["type"] == "string"
+    assert "metric_id" in run_variant["output_schema"]["required"]
     assert "variant_id" in run_variant["output_schema"]["required"]
+    posterior = next(
+        capability
+        for capability in payload["capabilities"]
+        if capability["name"] == "update_posterior_and_decisions"
+    )
+    assert "new_metric_id" in posterior["output_schema"]["required"]
+    assert "variant_id" in posterior["output_schema"]["required"]
+    validation_template = next(
+        item
+        for item in payload["recovery_templates"]
+        if item["capability_name"] == "request_synthetic_validation"
+    )
+    assert validation_template["default_inputs"]["auto_run"] is False
     assert run_variant["review_checklist"]
     assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
     assert run_variant["steward_team"] == "commerce-optimization"
@@ -352,7 +367,7 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
     client: TestClient,
 ):
     first = client.get("/agent-runs/registry").json()
-    response = client.patch(
+    preflight_response = client.patch(
         "/agent-runs/registry/ownership/experiment.run_variant",
         json={
             "user_id": USER_ID,
@@ -360,8 +375,55 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
             "steward_team": "growth-ops",
         },
     )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["requires_confirmation"] is True
+    assert preflight_payload["preflight"]["risk_level"] == "medium"
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "owner_principal_id",
+        "steward_team",
+    ]
+    assert preflight_payload["ownership"]["source"] == "registry_default"
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
     assert response.status_code == 200
     payload = response.json()
+    assert payload["dry_run"] is False
+    assert payload["preflight"]["requires_confirmation"] is True
+    receipt = payload["approval_receipt"]
+    assert receipt["receipt_type"] == "registry_ownership_approval"
+    assert receipt["actor_user_id"] == USER_ID
+    assert receipt["tool_id"] == "experiment.run_variant"
+    assert receipt["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert receipt["signature_algorithm"] == "hmac-sha256"
+    payload_b64, signature = receipt["signature"].rsplit(".", 1)
+    expected_signature = hmac.new(
+        b"test-agent-secret",
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    assert hmac.compare_digest(signature, expected_signature)
     assert payload["ownership"]["owner_principal_id"] == "platform.growth"
     assert payload["ownership"]["steward_team"] == "growth-ops"
     assert payload["ownership"]["source"] == "operator_override"
@@ -383,8 +445,52 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
         params={"registry_fingerprint": payload["registry_fingerprint"]},
     ).json()["events"]
     assert audit
-    assert audit[0]["event_type"] == "registry_changed"
-    assert audit[0]["previous_registry_fingerprint"] == first["registry_fingerprint"]
+    approval_events = [
+        item for item in audit if item["event_type"] == "registry_ownership_approved"
+    ]
+    assert approval_events
+    assert (
+        approval_events[0]["diff"]["approval_receipt"]["signature"]
+        == receipt["signature"]
+    )
+    changed_events = [item for item in audit if item["event_type"] == "registry_changed"]
+    assert changed_events
+    assert changed_events[0]["previous_registry_fingerprint"] == first["registry_fingerprint"]
+
+    verify_response = client.post(
+        "/agent-runs/registry/approval-receipts/verify",
+        json={
+            "approval_receipt": receipt,
+            "registry_fingerprint": payload["registry_fingerprint"],
+            "audit_event_id": approval_events[0]["id"],
+            "require_audit_event": True,
+        },
+    )
+    assert verify_response.status_code == 200
+    verification = verify_response.json()["verification"]
+    assert verification["valid"] is True
+    assert verification["valid_signature"] is True
+    assert verification["valid_payload"] is True
+    assert verification["valid_audit_event"] is True
+    assert verification["audit_event"]["id"] == approval_events[0]["id"]
+
+    tampered_receipt = {
+        **receipt,
+        "ownership": {
+            **receipt["ownership"],
+            "steward_team": "unexpected-team",
+        },
+    }
+    tampered_response = client.post(
+        "/agent-runs/registry/approval-receipts/verify",
+        json={"approval_receipt": tampered_receipt},
+    )
+    assert tampered_response.status_code == 200
+    tampered = tampered_response.json()["verification"]
+    assert tampered["valid"] is False
+    assert tampered["valid_signature"] is True
+    assert tampered["valid_payload"] is False
+    assert "Receipt payload does not match the signed payload." in tampered["blockers"]
 
     missing = client.patch(
         "/agent-runs/registry/ownership/not.real",
@@ -803,6 +909,10 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     action = response.json()["action"]
     assert action["capability_name"] == "recommend_next_action"
     assert action["inputs"]["recovery_from_action_id"] == failed["id"]
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.recommend_next_action"
+    )
+    assert action["inputs"]["recovery_context"]["source_action_id"] == failed["id"]
     assert action["dedupe_key"] == f"retry:{failed['id']}:create_recovery_action:1"
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
@@ -875,6 +985,9 @@ def test_retry_recovery_action_can_target_allowed_capability(client: TestClient)
     action = response.json()["action"]
     assert action["capability_name"] == "review_validation_readiness"
     assert action["inputs"]["recovery_from_action_id"] == failed["id"]
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.review_validation_readiness"
+    )
 
 
 def test_recovery_action_includes_compensating_recommendations_for_external_side_effect(
@@ -941,6 +1054,11 @@ def test_recovery_action_includes_compensating_recommendations_for_external_side
     action = response.json()["action"]
     assert action["capability_name"] == "request_synthetic_validation"
     assert action["effect_class"] == "external_side_effect"
+    assert action["inputs"]["auto_run"] is False
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.request_synthetic_validation"
+    )
+    assert "auto_run disabled" in action["rollback_guidance"]
     assert action["compensating_actions"][0]["capability_name"] == (
         "review_validation_readiness"
     )
@@ -958,6 +1076,9 @@ def test_recovery_action_includes_compensating_recommendations_for_external_side
     assert recovery_event["anchors"]["compensating_actions"][0][
         "capability_name"
     ] == "review_validation_readiness"
+    assert recovery_event["anchors"]["recovery_template_id"] == (
+        "recovery.request_synthetic_validation"
+    )
 
 
 def test_change_plan_command_creates_recovery_proposal(client: TestClient):
@@ -998,6 +1119,9 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert action["status"] == "proposed"
     assert action["capability_name"] == "recommend_next_action"
     assert action["inputs"]["experiment_id"] == "exp-1"
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.recommend_next_action"
+    )
     assert action["dedupe_key"].startswith("change_plan:")
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
@@ -1019,6 +1143,9 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert recovery_event["anchors"]["side_effects"] == [
         "create_experiment_recommendation"
     ]
+    assert recovery_event["anchors"]["recovery_template_id"] == (
+        "recovery.recommend_next_action"
+    )
     assert "superseded by a later action" in recovery_event["anchors"][
         "rollback_guidance"
     ]

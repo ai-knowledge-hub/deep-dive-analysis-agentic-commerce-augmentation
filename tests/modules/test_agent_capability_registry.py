@@ -6,6 +6,7 @@ from application.services.agent_runtime.registry import (
     get_capability_spec,
     get_tool_spec,
     next_state_for_capability,
+    recovery_template_for_capability,
     registry_contract_payload,
     tool_supported,
     validate_inputs,
@@ -42,6 +43,21 @@ def test_registry_contains_core_capability_and_defaults():
         spec, {"metric_id": 123, "variant_id": "variant-1"}
     )[0]
     assert "variant_id" in validate_outputs(spec, {"metric_id": "metric-1"})[0]
+    assert "metric_id" in validate_outputs(spec, {"variant_id": "variant-1"})[0]
+    baseline = get_capability_spec("run_control_baseline")
+    assert baseline is not None
+    assert set(baseline.output_schema["required"]) == {"metric_id", "variant_id"}
+    posterior = get_capability_spec("update_posterior_and_decisions")
+    assert posterior is not None
+    assert set(posterior.output_schema["required"]) == {"new_metric_id", "variant_id"}
+    assert validate_outputs(
+        posterior,
+        {
+            "new_metric_id": "metric-2",
+            "source_metric_id": "metric-1",
+            "variant_id": "variant-1",
+        },
+    ) == []
     version_context = version_context_for_capability(
         "run_variant",
         tool_id="experiment.run_variant",
@@ -51,6 +67,11 @@ def test_registry_contains_core_capability_and_defaults():
     assert len(str(version_context["registry_fingerprint"])) == 64
     assert version_context["tool_version"] == "v1"
     assert version_context["skill_version"] == "v1"
+    validation_template = recovery_template_for_capability(
+        "request_synthetic_validation"
+    )
+    assert validation_template is not None
+    assert validation_template["default_inputs"]["auto_run"] is False
 
 
 def test_registry_support_and_next_state():
@@ -91,6 +112,13 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         item for item in payload["capabilities"] if item["name"] == "run_variant"
     )
     assert payload["registry_ownership_source"] == "persistent"
+    template = next(
+        item
+        for item in payload["recovery_templates"]
+        if item["capability_name"] == "request_synthetic_validation"
+    )
+    assert template["id"] == "recovery.request_synthetic_validation"
+    assert template["default_inputs"]["auto_run"] is False
     assert tool["owner_principal_id"] == "principal.registry-owner"
     assert tool["steward_team"] == "registry-stewards"
     assert tool["ownership_source"] == "registry_test"

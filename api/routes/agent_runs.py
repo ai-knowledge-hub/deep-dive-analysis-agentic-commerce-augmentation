@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import json
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -50,6 +54,7 @@ from infrastructure.db.agent.agent_registry import (
     list_agent_registry_versions,
     update_agent_registry_tool_ownership,
 )
+from shared.config.env import get_settings
 
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
@@ -156,6 +161,15 @@ class AgentRegistryOwnershipUpdateRequest(BaseModel):
     user_id: Optional[str] = None
     owner_principal_id: str = Field(..., min_length=1)
     steward_team: str = Field(..., min_length=1)
+    dry_run: bool = True
+    preflight_confirmed: bool = False
+
+
+class AgentRegistryApprovalReceiptVerifyRequest(BaseModel):
+    approval_receipt: Dict[str, Any] = Field(default_factory=dict)
+    registry_fingerprint: Optional[str] = None
+    audit_event_id: Optional[str] = None
+    require_audit_event: bool = False
 
 
 class AgentRunTickRequest(BaseModel):
@@ -182,6 +196,219 @@ def _hash_payload(value: Any) -> str:
     except Exception:
         encoded = str(value).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _urlsafe_b64encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+
+
+def _registry_approval_signing_secret() -> str:
+    settings = get_settings()
+    secret = (
+        settings.registry_approval_signing_secret
+        or settings.agent_principal_signing_secret
+    )
+    if secret:
+        return secret
+    if settings.app_env != "prod":
+        return "local-development-registry-approval-secret"
+    raise HTTPException(
+        status_code=500,
+        detail="REGISTRY_APPROVAL_SIGNING_SECRET is not configured",
+    )
+
+
+def _sign_registry_approval_receipt(payload: Dict[str, Any]) -> str:
+    payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    payload_b64 = _urlsafe_b64encode(payload_json)
+    signature = hmac.new(
+        _registry_approval_signing_secret().encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+
+def _decode_registry_approval_receipt_signature(
+    signature: str,
+) -> tuple[Dict[str, Any], bool]:
+    try:
+        payload_b64, provided_signature = signature.rsplit(".", 1)
+    except ValueError:
+        return {}, False
+    expected_signature = hmac.new(
+        _registry_approval_signing_secret().encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(provided_signature, expected_signature):
+        return {}, False
+    try:
+        padding = "=" * (-len(payload_b64) % 4)
+        payload_raw = base64.urlsafe_b64decode(payload_b64 + padding)
+        payload = json.loads(payload_raw.decode("utf-8"))
+    except Exception:
+        return {}, False
+    return payload if isinstance(payload, dict) else {}, True
+
+
+def _unsigned_registry_approval_receipt(receipt: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: value
+        for key, value in dict(receipt or {}).items()
+        if key not in {"signature", "signature_algorithm"}
+    }
+
+
+def _registry_approval_audit_event_for_receipt(
+    *,
+    signature: str,
+    registry_fingerprint: Optional[str],
+    audit_event_id: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    if not registry_fingerprint:
+        return None
+    events = list_agent_registry_audit_events(
+        registry_fingerprint=registry_fingerprint,
+        limit=100,
+    )
+    for event in events:
+        if event.get("event_type") != "registry_ownership_approved":
+            continue
+        if audit_event_id and event.get("id") != audit_event_id:
+            continue
+        receipt = (event.get("diff") or {}).get("approval_receipt") or {}
+        if receipt.get("signature") == signature:
+            return event
+    return None
+
+
+def _verify_registry_approval_receipt(
+    *,
+    receipt: Dict[str, Any],
+    registry_fingerprint: Optional[str] = None,
+    audit_event_id: Optional[str] = None,
+    require_audit_event: bool = False,
+) -> Dict[str, Any]:
+    signature = str(receipt.get("signature") or "")
+    decoded_payload, valid_signature = _decode_registry_approval_receipt_signature(
+        signature
+    )
+    unsigned_receipt = _unsigned_registry_approval_receipt(receipt)
+    valid_payload = bool(valid_signature and decoded_payload == unsigned_receipt)
+    expected_fingerprint = registry_fingerprint or receipt.get("registry_fingerprint")
+    audit_event = _registry_approval_audit_event_for_receipt(
+        signature=signature,
+        registry_fingerprint=expected_fingerprint,
+        audit_event_id=audit_event_id,
+    )
+    valid_audit_event = bool(audit_event)
+    blockers: List[str] = []
+    if not valid_signature:
+        blockers.append("Receipt signature is invalid.")
+    if valid_signature and not valid_payload:
+        blockers.append("Receipt payload does not match the signed payload.")
+    if require_audit_event and not valid_audit_event:
+        blockers.append("No matching registry approval audit event was found.")
+    return {
+        "valid": not blockers,
+        "valid_signature": valid_signature,
+        "valid_payload": valid_payload,
+        "valid_audit_event": valid_audit_event,
+        "blockers": blockers,
+        "receipt_payload": decoded_payload,
+        "audit_event": audit_event,
+    }
+
+
+def _registry_ownership_approval_receipt(
+    *,
+    tool_id: str,
+    actor_user_id: Optional[str],
+    ownership: Dict[str, Any],
+    preflight: Dict[str, Any],
+    registry_version: str,
+    registry_fingerprint: str,
+) -> Dict[str, Any]:
+    receipt_payload: Dict[str, Any] = {
+        "receipt_id": str(uuid.uuid4()),
+        "receipt_type": "registry_ownership_approval",
+        "actor_user_id": actor_user_id,
+        "tool_id": tool_id,
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+        "registry_version": registry_version,
+        "registry_fingerprint": registry_fingerprint,
+        "ownership": {
+            "owner_principal_id": ownership.get("owner_principal_id"),
+            "steward_team": ownership.get("steward_team"),
+            "source": ownership.get("source"),
+        },
+        "preflight": preflight,
+    }
+    return {
+        **receipt_payload,
+        "signature": _sign_registry_approval_receipt(receipt_payload),
+        "signature_algorithm": "hmac-sha256",
+    }
+
+
+def _registry_ownership_preflight(
+    *,
+    tool_id: str,
+    owner_principal_id: str,
+    steward_team: str,
+    current_ownership: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    current = next(
+        (item for item in current_ownership if item.get("tool_id") == tool_id),
+        {},
+    )
+    current_owner = str(current.get("owner_principal_id") or "").strip()
+    current_steward = str(current.get("steward_team") or "").strip()
+    proposed_owner = str(owner_principal_id or "").strip()
+    proposed_steward = str(steward_team or "").strip()
+    changes = {
+        "owner_principal_id": {
+            "from": current_owner or None,
+            "to": proposed_owner,
+            "changed": current_owner != proposed_owner,
+        },
+        "steward_team": {
+            "from": current_steward or None,
+            "to": proposed_steward,
+            "changed": current_steward != proposed_steward,
+        },
+    }
+    changed_fields = [
+        key for key, value in changes.items() if bool(value.get("changed"))
+    ]
+    blockers: List[str] = []
+    warnings: List[str] = []
+    if not changed_fields:
+        blockers.append("No ownership metadata fields will change.")
+    if "." not in proposed_owner:
+        warnings.append("Owner principal does not look namespace-qualified.")
+    if "-" not in proposed_steward:
+        warnings.append("Steward team does not use the expected dashed team format.")
+    return {
+        "allowed": not blockers,
+        "requires_confirmation": True,
+        "risk_level": "medium" if changed_fields else "low",
+        "effect_class": "registry_metadata_change",
+        "tool_id": tool_id,
+        "blockers": blockers,
+        "warnings": warnings,
+        "changes": changes,
+        "changed_fields": changed_fields,
+        "rollback_guidance": "Re-apply the previous owner and steward values to produce a compensating registry release.",
+        "summary": (
+            "Registry ownership update will create a new active registry release."
+            if changed_fields
+            else "Registry ownership update has no effective metadata changes."
+        ),
+    }
 
 
 def _record_command_event(
@@ -492,6 +719,97 @@ def _compensating_actions_for_capability(
     return recommendations
 
 
+def _recovery_template_for_capability(
+    *,
+    capability_name: str,
+    run: Dict[str, Any],
+    source_action: Optional[Dict[str, Any]],
+    strategy: str,
+) -> Dict[str, Any]:
+    source_capability = str((source_action or {}).get("capability_name") or "").strip()
+    source_error = str((source_action or {}).get("error") or "").strip()
+    variant_id = str((source_action or {}).get("variant_id") or "").strip()
+    validation_job_id = str((source_action or {}).get("validation_job_id") or "").strip()
+    template: Dict[str, Any] = {
+        "id": f"recovery.{capability_name}",
+        "strategy": strategy,
+        "inputs": {
+            "recovery_context": {
+                "source_action_id": (source_action or {}).get("id"),
+                "source_capability_name": source_capability or None,
+                "source_error": source_error or None,
+                "strategy": strategy,
+            }
+        },
+        "rationale": "Use the registry recovery template for this capability.",
+        "rollback_guidance": None,
+    }
+    if run.get("experiment_id"):
+        template["inputs"]["experiment_id"] = run.get("experiment_id")
+    if variant_id and capability_name in {
+        "review_validation_readiness",
+        "request_synthetic_validation",
+        "update_posterior_and_decisions",
+        "promote_variant_lab",
+        "promote_variant_prod",
+        "publish_copy_revision",
+    }:
+        template["inputs"]["variant_id"] = variant_id
+    if validation_job_id:
+        template["inputs"]["validation_job_id"] = validation_job_id
+
+    if capability_name == "request_synthetic_validation":
+        template["inputs"]["auto_run"] = False
+        template["rationale"] = (
+            "Prepare a validation recovery request without auto-running the provider; "
+            "the operator should inspect provider/job state before execution."
+        )
+        template["rollback_guidance"] = (
+            "Because this may create external provider work, keep auto_run disabled until "
+            "provider state and duplicate-job risk are reviewed."
+        )
+    elif capability_name == "review_validation_readiness":
+        template["rationale"] = (
+            "Re-check readiness gates before creating more recovery work or promotion actions."
+        )
+    elif capability_name == "recommend_next_action":
+        template["rationale"] = (
+            "Ask policy for the safest next action using the failed action as recovery context."
+        )
+    elif capability_name in {"promote_variant_lab", "promote_variant_prod"}:
+        template["rationale"] = (
+            "Recreate promotion as a proposed action only after readiness and rollback context are reviewed."
+        )
+    elif capability_name == "publish_copy_revision":
+        template["rationale"] = (
+            "Recreate publish as a proposed action only after copy diff, promotion evidence, and rollback owner are reviewed."
+        )
+    return template
+
+
+def _apply_recovery_template(
+    *,
+    capability_name: str,
+    inputs: Dict[str, Any],
+    run: Dict[str, Any],
+    source_action: Optional[Dict[str, Any]],
+    strategy: str,
+) -> Dict[str, Any]:
+    template = _recovery_template_for_capability(
+        capability_name=capability_name,
+        run=run,
+        source_action=source_action,
+        strategy=strategy,
+    )
+    merged_inputs = dict(template.get("inputs") or {})
+    merged_inputs.update(inputs)
+    recovery_context = dict(merged_inputs.get("recovery_context") or {})
+    recovery_context.setdefault("template_id", template.get("id"))
+    recovery_context.setdefault("strategy", strategy)
+    merged_inputs["recovery_context"] = recovery_context
+    return {**template, "inputs": merged_inputs}
+
+
 def _preflight_summary(
     *, command_type: str, risk_level: str, blockers: List[str], warnings: List[str]
 ) -> str:
@@ -585,6 +903,35 @@ def update_agent_runtime_registry_tool_ownership(
     }
     if tool_id not in existing_tool_ids:
         raise HTTPException(status_code=404, detail="Registry tool not found")
+    current_ownership = _registry_ownership()
+    preflight = _registry_ownership_preflight(
+        tool_id=tool_id,
+        owner_principal_id=payload.owner_principal_id,
+        steward_team=payload.steward_team,
+        current_ownership=current_ownership,
+    )
+    if payload.dry_run:
+        return {
+            "dry_run": True,
+            "preflight": preflight,
+            "ownership": next(
+                (item for item in current_ownership if item.get("tool_id") == tool_id),
+                {},
+            ),
+        }
+    if not payload.preflight_confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail="Registry ownership preflight confirmation required",
+        )
+    if not preflight.get("allowed"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Registry ownership preflight blocked this update",
+                "preflight": preflight,
+            },
+        )
     ownership = update_agent_registry_tool_ownership(
         tool_id=tool_id,
         owner_principal_id=payload.owner_principal_id,
@@ -600,11 +947,50 @@ def update_agent_runtime_registry_tool_ownership(
         hash_algorithm="sha256",
         payload=registry_payload,
     )
+    approval_receipt = _registry_ownership_approval_receipt(
+        tool_id=tool_id,
+        actor_user_id=payload.user_id,
+        ownership=ownership,
+        preflight=preflight,
+        registry_version=str(snapshot.get("registry_version") or ""),
+        registry_fingerprint=str(snapshot.get("registry_fingerprint") or ""),
+    )
+    approval_event = create_agent_registry_audit_event(
+        event_type="registry_ownership_approved",
+        registry_version=str(snapshot.get("registry_version") or ""),
+        registry_fingerprint=str(snapshot.get("registry_fingerprint") or ""),
+        source="operator_approval",
+        diff={
+            "tool_id": tool_id,
+            "approval_receipt": approval_receipt,
+            "preflight": preflight,
+        },
+    )
     return {
+        "dry_run": False,
+        "preflight": preflight,
         "ownership": ownership,
+        "approval_receipt": approval_receipt,
+        "approval_event": approval_event,
         "registry_version": snapshot.get("registry_version"),
         "registry_fingerprint": snapshot.get("registry_fingerprint"),
         "registry_status": snapshot.get("status"),
+    }
+
+
+@router.post("/registry/approval-receipts/verify")
+def verify_agent_runtime_registry_approval_receipt(
+    payload: AgentRegistryApprovalReceiptVerifyRequest,
+) -> Dict[str, Any]:
+    if not payload.approval_receipt:
+        raise HTTPException(status_code=400, detail="Missing approval receipt")
+    return {
+        "verification": _verify_registry_approval_receipt(
+            receipt=payload.approval_receipt,
+            registry_fingerprint=payload.registry_fingerprint,
+            audit_event_id=payload.audit_event_id,
+            require_audit_event=payload.require_audit_event,
+        )
     }
 
 
@@ -1133,6 +1519,20 @@ def issue_agent_run_command(
             inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
             if run.get("experiment_id") and not inputs.get("experiment_id"):
                 inputs["experiment_id"] = run.get("experiment_id")
+            recovery_template = _apply_recovery_template(
+                capability_name=capability_name,
+                inputs=inputs,
+                run=run,
+                source_action=action,
+                strategy=str(
+                    payload.metadata.get("recovery_strategy") or "propose_next_action"
+                ),
+            )
+            inputs = dict(recovery_template.get("inputs") or {})
+            rollback_guidance = (
+                recovery_template.get("rollback_guidance")
+                or _capability_rollback_guidance(capability_name, effect_class)
+            )
             recovery_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -1144,6 +1544,7 @@ def issue_agent_run_command(
                 inputs_hash=_hash_payload(inputs),
                 outputs_hash=None,
                 rationale=payload.message
+                or str(recovery_template.get("rationale") or "")
                 or "Recovery action proposed from operator change-plan command.",
                 confidence=0.5,
                 snapshot_version=action.get("snapshot_version") if action else None,
@@ -1158,9 +1559,7 @@ def issue_agent_run_command(
                 skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
-                rollback_guidance=_capability_rollback_guidance(
-                    capability_name, effect_class
-                ),
+                rollback_guidance=str(rollback_guidance),
                 compensating_actions=_compensating_actions_for_capability(
                     capability_name=capability_name,
                     effect_class=effect_class,
@@ -1197,6 +1596,7 @@ def issue_agent_run_command(
                     "recovery_strategy": payload.metadata.get(
                         "recovery_strategy", "propose_next_action"
                     ),
+                    "recovery_template_id": recovery_template.get("id"),
                     "side_effects": recovery_action.get("side_effects"),
                     "rollback_guidance": recovery_action.get("rollback_guidance"),
                     "compensating_actions": recovery_action.get(
@@ -1268,6 +1668,20 @@ def issue_agent_run_command(
                 registry_version_override=run.get("registry_version"),
                 registry_fingerprint_override=run.get("registry_fingerprint"),
             )
+            recovery_template = {}
+            if retry_strategy == "create_recovery_action":
+                recovery_template = _apply_recovery_template(
+                    capability_name=capability_name,
+                    inputs=retry_inputs,
+                    run=run,
+                    source_action=action,
+                    strategy=retry_strategy,
+                )
+                retry_inputs = dict(recovery_template.get("inputs") or retry_inputs)
+            rollback_guidance = (
+                recovery_template.get("rollback_guidance")
+                or _capability_rollback_guidance(capability_name, effect_class)
+            )
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -1284,7 +1698,7 @@ def issue_agent_run_command(
                 outputs_hash=None,
                 rationale=(
                     f"{retry_strategy} proposed from failed action {str(action.get('id') or '')[:8]}. "
-                    f"{action.get('error') or action.get('rationale') or ''}"
+                    f"{recovery_template.get('rationale') or action.get('error') or action.get('rationale') or ''}"
                 ).strip(),
                 confidence=action.get("confidence"),
                 snapshot_version=action.get("snapshot_version"),
@@ -1299,9 +1713,7 @@ def issue_agent_run_command(
                 skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
-                rollback_guidance=_capability_rollback_guidance(
-                    capability_name, effect_class
-                ),
+                rollback_guidance=str(rollback_guidance),
                 compensating_actions=_compensating_actions_for_capability(
                     capability_name=capability_name,
                     effect_class=effect_class,
@@ -1341,6 +1753,7 @@ def issue_agent_run_command(
                     "original_action_id": action.get("id"),
                     "retry_count": retry_count,
                     "retry_strategy": retry_strategy,
+                    "recovery_template_id": recovery_template.get("id"),
                     "side_effects": retry_action.get("side_effects"),
                     "rollback_guidance": retry_action.get("rollback_guidance"),
                     "compensating_actions": retry_action.get("compensating_actions"),
