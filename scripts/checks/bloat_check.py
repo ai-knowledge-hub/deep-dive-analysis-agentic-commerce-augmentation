@@ -51,6 +51,8 @@ FILE_MAX_LINES = {
     "application/services/agent_runtime/recovery.py": 650,
     "application/services/agent_runtime/registry.py": 340,
     "application/services/agent_runtime/registry_catalog.py": 560,
+    "application/services/agent_runtime/runtime.py": 400,
+    "application/services/agent_runtime/runtime_audit.py": 140,
     "application/services/agent_runtime/runs.py": 280,
     "tests/test_agent_runs_api.py": 1400,
     "web/app/experiments/page.tsx": 5200,
