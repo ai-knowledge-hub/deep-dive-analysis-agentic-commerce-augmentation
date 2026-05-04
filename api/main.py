@@ -38,6 +38,7 @@ from api.routes import memory as memory_route
 from api.routes import calibration as calibration_route
 from api.routes import agent_runs_registry as agent_runs_registry_route
 from api.routes import agent_runs_control as agent_runs_control_route
+from api.routes import agent_runs_commands as agent_runs_commands_route
 from api.routes import agent_runs as agent_runs_route
 
 if FastAPI:
@@ -75,6 +76,7 @@ if FastAPI:
     app.include_router(calibration_route.router)
     app.include_router(agent_runs_registry_route.router)
     app.include_router(agent_runs_control_route.router)
+    app.include_router(agent_runs_commands_route.router)
     app.include_router(agent_runs_route.router)
     if replay_route.router:
         app.include_router(replay_route.router)
