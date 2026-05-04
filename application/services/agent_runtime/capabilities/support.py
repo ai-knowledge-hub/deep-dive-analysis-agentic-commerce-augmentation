@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from application.ports.deps import AppDeps
-from application.services.agent_runtime.capability_types import (
+from application.services.agent_runtime.capabilities.types import (
     CapabilityContext,
     CapabilityExecutionError,
 )

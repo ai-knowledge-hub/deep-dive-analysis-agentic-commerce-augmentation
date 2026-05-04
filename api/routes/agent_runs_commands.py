@@ -10,16 +10,12 @@ from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities import CapabilityExecutionError
 from application.services.agent_runtime.commands import (
-    _command_preflight,
-    _record_command_event,
+    AgentRunCommandError,
+    issue_agent_run_command as issue_agent_run_command_service,
+    preflight_agent_run_command as preflight_agent_run_command_service,
 )
-from application.services.agent_runtime.decisions import (
-    apply_command_action_decision,
+from application.services.agent_runtime.commands.decisions import (
     decide_agent_action,
-)
-from application.services.agent_runtime.recovery import (
-    create_change_plan_recovery_action,
-    create_retry_action,
 )
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
@@ -40,15 +36,6 @@ def _deps() -> AppDeps:
 
 def _runtime(deps: AppDeps = Depends(_deps)) -> AgentRuntimeService:
     return AgentRuntimeService(deps=deps)
-
-
-def _require_scoped_run(
-    *, deps: AppDeps, run_id: str, client_id: str
-) -> Dict[str, Any]:
-    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    return run
 
 
 class AgentActionDecisionRequest(BaseModel):
@@ -73,43 +60,17 @@ def preflight_agent_run_command(
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
-    command_type = str(payload.command_type or "").strip().lower()
-    allowed_commands = {
-        "explain",
-        "focus",
-        "change_plan",
-        "start",
-        "pause",
-        "cancel",
-        "step",
-        "approve",
-        "reject",
-        "retry",
-    }
-    if command_type not in allowed_commands:
-        raise HTTPException(status_code=400, detail="Unsupported command")
-
-    action = None
-    if payload.action_id:
-        action = deps.agent_actions.get_agent_action(
-            action_id=payload.action_id,
-            client_id=scoped_client_id,
-        )
-        if not action or str(action.get("agent_run_id") or "") != run_id:
-            raise HTTPException(status_code=404, detail="Agent action not found")
-
-    return {
-        "preflight": _command_preflight(
+    try:
+        return preflight_agent_run_command_service(
             deps=deps,
-            run=run,
-            command_type=command_type,
-            action=action,
+            run_id=run_id,
+            client_id=scoped_client_id,
+            command_type=payload.command_type,
+            action_id=payload.action_id,
             metadata=payload.metadata,
-        ),
-        "run": run,
-        "action": action,
-    }
+        )
+    except AgentRunCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 @router.post("/{run_id}/commands")
@@ -120,101 +81,20 @@ def issue_agent_run_command(
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
-    command_type = str(payload.command_type or "").strip().lower()
-    allowed_commands = {
-        "explain",
-        "focus",
-        "change_plan",
-        "start",
-        "pause",
-        "cancel",
-        "step",
-        "approve",
-        "reject",
-        "retry",
-    }
-    if command_type not in allowed_commands:
-        raise HTTPException(status_code=400, detail="Unsupported command")
-
-    action = None
-    if payload.action_id:
-        action = deps.agent_actions.get_agent_action(
-            action_id=payload.action_id,
-            client_id=scoped_client_id,
-        )
-        if not action or str(action.get("agent_run_id") or "") != run_id:
-            raise HTTPException(status_code=404, detail="Agent action not found")
-
-    preflight = _command_preflight(
-        deps=deps,
-        run=run,
-        command_type=command_type,
-        action=action,
-        metadata=payload.metadata,
-    )
-    if not preflight["allowed"]:
-        raise HTTPException(status_code=409, detail=preflight)
-
-    receipt = _record_command_event(
-        deps=deps,
-        run=run,
-        command_type=command_type,
-        status="received",
-        action=action,
-        note=payload.message or f"Operator chat command: {command_type}",
-        metadata=payload.metadata,
-    )
-    result: Dict[str, Any] = {"command": receipt, "run": run, "preflight": preflight}
-
-    if command_type in {"explain", "focus"}:
-        return result
-
     try:
-        if command_type == "change_plan":
-            result["action"] = create_change_plan_recovery_action(
-                deps=deps,
-                run_id=run_id,
-                run=run,
-                source_action=action,
-                command_receipt=receipt,
-                message=payload.message,
-                metadata=payload.metadata,
-            )
-        elif command_type == "start":
-            runtime_result = runtime.start_run(run_id=run_id)
-            result["run"] = runtime_result.run
-            result["message"] = runtime_result.message
-        elif command_type == "pause":
-            runtime_result = runtime.pause_run(run_id=run_id)
-            result["run"] = runtime_result.run
-        elif command_type == "cancel":
-            runtime_result = runtime.cancel_run(run_id=run_id)
-            result["run"] = runtime_result.run
-        elif command_type == "step":
-            runtime_result = runtime.step_once(run_id=run_id, user_id=payload.user_id)
-            result["run"] = runtime_result.run
-            result["action"] = runtime_result.action
-        elif command_type == "retry":
-            if not action:
-                raise HTTPException(status_code=400, detail="Action id is required")
-            result["action"] = create_retry_action(
-                deps=deps,
-                run_id=run_id,
-                run=run,
-                action=action,
-                metadata=payload.metadata,
-            )
-        elif command_type in {"approve", "reject"}:
-            if not action:
-                raise HTTPException(status_code=400, detail="Action id is required")
-            result["action"] = apply_command_action_decision(
-                deps=deps,
-                run_id=run_id,
-                run=run,
-                action=action,
-                command_type=command_type,
-            )
+        return issue_agent_run_command_service(
+            deps=deps,
+            runtime=runtime,
+            run_id=run_id,
+            client_id=scoped_client_id,
+            user_id=payload.user_id,
+            command_type=payload.command_type,
+            action_id=payload.action_id,
+            message=payload.message,
+            metadata=payload.metadata,
+        )
+    except AgentRunCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (PlanOnlyModeError, NoApprovedActionError, RunBusyError) as exc:
@@ -223,17 +103,6 @@ def issue_agent_run_command(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AgentRuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    _record_command_event(
-        deps=deps,
-        run=result.get("run") or run,
-        command_type=command_type,
-        status="completed",
-        action=result.get("action") or action,
-        note=f"Operator chat command completed: {command_type}",
-        metadata=payload.metadata,
-    )
-    return result
 
 
 @router.post("/actions/{action_id}/decision")

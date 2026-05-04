@@ -8,7 +8,7 @@ from application.ports.deps import AppDeps
 from application.services.experiment.orchestrator import ExperimentOrchestrator
 from application.services.experiment.runner import ExperimentRunner
 from application.services.experiment.variant_generator import ExperimentVariantGenerator
-from application.services.agent_runtime.capability_support import (
+from application.services.agent_runtime.capabilities.support import (
     build_experiment_validation_payload as _build_experiment_validation_payload,
     compute_validation_readiness as _compute_validation_readiness,
     find_draft_experiment_revision_for_variant as _find_draft_experiment_revision_for_variant,
@@ -20,7 +20,7 @@ from application.services.agent_runtime.capability_support import (
     select_candidate_variant_id as _select_candidate_variant_id,
     variant_candidate_description as _variant_candidate_description,
 )
-from application.services.agent_runtime.capability_types import (
+from application.services.agent_runtime.capabilities.types import (
     CapabilityContext,
     CapabilityExecutionError,
 )

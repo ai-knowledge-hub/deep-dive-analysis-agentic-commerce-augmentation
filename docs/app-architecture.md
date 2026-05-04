@@ -194,11 +194,11 @@ The agentic module is implemented as an orchestration layer over the same experi
 ### Scope and boundaries
 - UI workspace: `web/app/agent-runs/page.tsx`
 - API boundary: `api/routes/agent_runs.py`
-- Runtime boundary: `application/services/agent_runtime/runtime.py`
+- Runtime boundary: `application/services/agent_runtime/runtime/service.py`
 - Worker boundary: `application/services/agent_runtime/worker.py`
 - Event mapping boundary: `application/services/agent_runtime/events.py`
-- Capability execution boundary: `application/services/agent_runtime/capabilities.py`
-- Capability contract registry: `application/services/agent_runtime/registry.py`
+- Capability execution boundary: `application/services/agent_runtime/capabilities/executor.py`
+- Capability contract registry: `application/services/agent_runtime/registry/contracts.py`
 - Policy checks: `application/services/agent_runtime/policy.py`
 
 ### Runtime behavior

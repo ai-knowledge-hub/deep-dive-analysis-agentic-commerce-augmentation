@@ -118,7 +118,7 @@ Worker/ops entry points:
 ### 3.2 Capability Registry (the key abstraction)
 
 Implemented in v0:
-- centralized capability specs in `application/services/agent_runtime/registry.py`
+- centralized capability specs in `application/services/agent_runtime/registry/catalog.py`
 - per-capability defaults, required inputs, side effects, and state transition mapping
 - runtime + execution entrypoints validate against the same registry contract
 - machine-facing `tool_id` values mapped from legacy `capability_name`

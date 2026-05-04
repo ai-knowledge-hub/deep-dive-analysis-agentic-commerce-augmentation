@@ -79,7 +79,9 @@ def _intent_agent() -> IntentAgent:
 
 
 def _goal_agent() -> GoalClarificationAgent:
-    return GoalClarificationAgent(chat_fn=chat, prompt_template=VALUES_CLARIFICATION_PROMPT)
+    return GoalClarificationAgent(
+        chat_fn=chat, prompt_template=VALUES_CLARIFICATION_PROMPT
+    )
 
 
 def _explain_agent() -> ExplainAgent:

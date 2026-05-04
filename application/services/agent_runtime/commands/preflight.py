@@ -8,7 +8,7 @@ from application.services.agent_runtime.policy import PolicyEnforcer, PolicyErro
 from application.services.agent_runtime.registry import (
     get_capability_spec,
 )
-from application.services.agent_runtime.recovery import (
+from application.services.agent_runtime.commands.recovery import (
     _requested_recovery_capability,
     _rollback_guidance,
 )

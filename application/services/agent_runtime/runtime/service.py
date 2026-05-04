@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -12,7 +13,7 @@ from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
     execute_capability,
 )
-from application.services.agent_runtime.runtime_audit import (
+from application.services.agent_runtime.runtime.audit import (
     record_action_event,
     record_run_event,
 )
@@ -185,7 +186,7 @@ class AgentRuntimeService:
                     client_id=str(run.get("client_id") or ""),
                     user_id=user_id,
                 )
-                outputs = execute_capability(
+                outputs = _execute_capability(
                     deps=self._deps,
                     context=context,
                     capability_name=capability_name,
@@ -343,6 +344,12 @@ class AgentRuntimeService:
         if statuses and statuses.issubset({"executed", "rejected"}):
             return "completed"
         return "running"
+
+
+def _execute_capability(**kwargs: Any) -> Dict[str, Any]:
+    runtime_package = sys.modules.get("application.services.agent_runtime.runtime")
+    patched = getattr(runtime_package, "execute_capability", execute_capability)
+    return patched(**kwargs)
 
 
 __all__ = [

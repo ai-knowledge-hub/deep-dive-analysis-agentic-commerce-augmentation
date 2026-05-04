@@ -222,7 +222,9 @@ def _verify_agent_principal_token(token: str) -> dict[str, Any]:
     try:
         payload_b64, provided_signature = token.rsplit(".", 1)
     except ValueError as exc:
-        raise HTTPException(status_code=401, detail="Malformed agent principal token") from exc
+        raise HTTPException(
+            status_code=401, detail="Malformed agent principal token"
+        ) from exc
     expected_signature = hmac.new(
         secret.encode("utf-8"),
         payload_b64.encode("utf-8"),
@@ -233,7 +235,9 @@ def _verify_agent_principal_token(token: str) -> dict[str, Any]:
     try:
         payload = json.loads(_urlsafe_b64decode(payload_b64).decode("utf-8"))
     except Exception as exc:
-        raise HTTPException(status_code=401, detail="Invalid agent principal token payload") from exc
+        raise HTTPException(
+            status_code=401, detail="Invalid agent principal token payload"
+        ) from exc
     exp = payload.get("exp")
     if exp is not None and int(exp) < int(time.time()):
         raise HTTPException(status_code=401, detail="Expired agent principal token")

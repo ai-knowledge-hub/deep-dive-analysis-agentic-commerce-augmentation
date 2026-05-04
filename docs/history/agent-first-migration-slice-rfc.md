@@ -63,7 +63,7 @@ Relevant files:
 - [shared/db/migrations/026_agent_events.sql](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/shared/db/migrations/026_agent_events.sql)
 - [shared/db/schema.sql](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/shared/db/schema.sql)
 - [api/routes/agent_runs.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/api/routes/agent_runs.py)
-- [application/services/agent_runtime/runtime.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/application/services/agent_runtime/runtime.py)
+- [application/services/agent_runtime/runtime/service.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/application/services/agent_runtime/runtime/service.py)
 - [application/services/agent_runtime/policy.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/application/services/agent_runtime/policy.py)
 
 ## Slice Goals
