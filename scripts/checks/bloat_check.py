@@ -43,6 +43,7 @@ FILE_MAX_LINES = {
     "web/app/experiments/page.tsx": 5200,
     "web/app/agent-runs/page.tsx": 2600,
     "web/app/admin/page.tsx": 2800,
+    "web/components/agent/OperatorConsoleChat.tsx": 700,
     "application/services/experiment/runner.py": 1800,
     "web/lib/types.ts": 1700,
 }

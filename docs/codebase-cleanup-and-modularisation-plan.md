@@ -125,7 +125,8 @@ docs/
 - The follow-up Agent Runs modularisation extracted the artifact diff drawer into `web/components/agent-runs/ActionDiffDrawer.tsx`.
 - The next Agent Runs slice extracted budget guardrails, counters, and the action table into `web/components/agent-runs/RunActionsPanel.tsx`.
 - The final slice in this PR extracted registry-aware selected-action details into `web/components/agent-runs/SelectedActionDetailPanel.tsx`.
-- Continue extracting `OperatorConsoleChat` into command composer, recovery controls, and preflight panel.
+- The Operator Chat split extracted summary, quick prompts, transcript rendering, command/recovery controls, and navigation/focus controls into smaller components under `web/components/agent/`.
+- Continue extracting deeper chat orchestration helpers only if the parent starts growing again.
 - Keep behavior unchanged and rely on existing Vitest coverage.
 
 ### PR 5: Backend Agent Runtime Modularisation

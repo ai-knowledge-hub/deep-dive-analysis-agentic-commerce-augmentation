@@ -13,27 +13,12 @@ import type {
   AgentRuntimeRecoveryTemplate,
   AgentRuntimeSkillSpec,
 } from "../../lib/types";
-
-type PromptId =
-  | "brief"
-  | "explain_run"
-  | "summarize_failures"
-  | "blocked_action"
-  | "recommend_next"
-  | "open_context";
-
-type ChatMessage = {
-  id: string;
-  role: "assistant" | "user";
-  content: string;
-};
-
-type OperatorCommand = {
-  command_type: AgentRunCommandType;
-  action_id?: string | null;
-  message?: string | null;
-  metadata?: Record<string, unknown>;
-};
+import { OperatorChatPrompts } from "./OperatorChatPrompts";
+import { OperatorChatSummary } from "./OperatorChatSummary";
+import { OperatorChatThread } from "./OperatorChatThread";
+import { OperatorCommandControls } from "./OperatorCommandControls";
+import { OperatorNavigationControls } from "./OperatorNavigationControls";
+import type { ChatMessage, OperatorCommand, PromptId } from "./operatorChatTypes";
 
 type Props = {
   run: AgentRun | null;
@@ -189,10 +174,6 @@ function buildCommandOutcome(
     parts.push(`Preflight risk was ${response.preflight.risk_level}.`);
   }
   return parts.join(" ");
-}
-
-function recoveryCapabilityLabel(capabilityName: string): string {
-  return capabilityName.replaceAll("_", " ");
 }
 
 function preferredRecoveryCapability(capabilities: string[]): string {
@@ -593,379 +574,49 @@ export function OperatorConsoleChat({
 
   return (
     <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
-        <div className="panel__meta panel__meta--stack">
-          <h3>Operator chat</h3>
-          <div className="panel__subtitle">
-            Chat-led guidance over the selected execution workspace.
-          </div>
-        </div>
-        <span className="panel__badge panel__badge--secondary">
-          {run ? "Context aware" : "Awaiting run"}
-        </span>
-      </div>
-
-      <div className="panel__notice panel__notice--info">{briefing}</div>
-
-      {run ? (
-        <div className="agent-ops-summary">
-          <span className="panel__badge panel__badge--secondary">
-            Proposed: {derived.proposedActions.length}
-          </span>
-          <span className="panel__badge panel__badge--secondary">
-            Approved: {derived.approvedActions.length}
-          </span>
-          <span className="panel__badge panel__badge--secondary">
-            Failed: {derived.failedActions.length}
-          </span>
-          <span className="panel__badge panel__badge--secondary">
-            Policy: {derived.policyEvents.length}
-          </span>
-          {selectedAction ? (
-            <span className="panel__badge panel__badge--warning">
-              Selection: {selectedAction.capability_name}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="panel__actions">
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => sendPrompt("explain_run")}
-        >
-          Explain run
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => sendPrompt("summarize_failures")}
-        >
-          Summarize failures
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => sendPrompt("blocked_action")}
-        >
-          {selectedAction ? "Explain selected action" : "Explain blocked action"}
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => sendPrompt("recommend_next")}
-        >
-          Recommend next step
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("recommend_next");
-            onJumpToNextAction?.();
-          }}
-          disabled={!nextRecommendedAction.action}
-        >
-          Jump to next action
-        </button>
-      </div>
-
-      <div className="operator-chat__thread">
-        {messages.length === 0 ? (
-          <div className="panel__muted">
-            Ask through the quick prompts first. This first slice focuses on explain,
-            summarize, navigate, and recommendation flows.
-          </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`operator-chat__message operator-chat__message--${message.role}`}
-            >
-              <div className="operator-chat__role">
-                {message.role === "assistant" ? "Execution agent" : "Operator"}
-              </div>
-              <div>{message.content}</div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="panel__actions">
-        <button
-          type="button"
-          className="button button--primary button--sm"
-          onClick={() =>
-            issueCommand(
-              "approve",
-              `Approve ${selectedAction?.capability_name ?? "selected action"}`,
-              selectedAction?.id,
-            )
-          }
-          disabled={!run || !selectedAction || selectedAction.status !== "proposed"}
-        >
-          Approve selected
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() =>
-            issueCommand(
-              "reject",
-              `Reject ${selectedAction?.capability_name ?? "selected action"}`,
-              selectedAction?.id,
-            )
-          }
-          disabled={!run || !selectedAction || selectedAction.status !== "proposed"}
-        >
-          Reject selected
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() =>
-            issueCommand(
-              "retry",
-              `Retry ${selectedAction?.capability_name ?? "selected action"}`,
-              selectedAction?.id,
-              { retry_strategy: "same_action" },
-            )
-          }
-          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
-        >
-          Retry selected
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() =>
-            issueCommand(
-              "retry",
-              `Retry ${selectedAction?.capability_name ?? "selected action"} from checkpoint`,
-              selectedAction?.id,
-              { retry_strategy: "last_safe_checkpoint" },
-            )
-          }
-          disabled={!run || !selectedAction || selectedAction.status !== "failed"}
-        >
-          Retry checkpoint
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() =>
-            issueCommand(
-              "retry",
-              `Create recovery action for ${selectedAction?.capability_name ?? "selected action"}`,
-              selectedAction?.id,
-              {
-                retry_strategy: "create_recovery_action",
-                capability_name: activeRecoveryCapability || undefined,
-                ...recoverySkillMetadata,
-              },
-            )
-          }
-          disabled={
-            !run ||
-            !selectedAction ||
-            selectedAction.status !== "failed" ||
-            derived.recoveryCapabilities.length === 0
-          }
-        >
-          Recovery action
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() =>
-            issueCommand(
-              "change_plan",
-              "Create a recovery plan proposal",
-              selectedAction?.id,
-              {
-                recovery_strategy: "propose_next_action",
-                capability_name: activeRecoveryCapability || undefined,
-                ...recoverySkillMetadata,
-                inputs: run?.experiment_id ? { experiment_id: run.experiment_id } : {},
-              },
-            )
-          }
-          disabled={!run || derived.recoveryCapabilities.length === 0}
-        >
-          Change plan
-        </button>
-        <label className="field">
-          <span className="field__label">Recovery target</span>
-          <select
-            aria-label="Recovery target capability"
-            className="field__input"
-            value={activeRecoveryCapability}
-            onChange={(event) => setSelectedRecoveryCapability(event.target.value)}
-            disabled={!run || derived.recoveryCapabilities.length === 0}
-          >
-            {derived.recoveryCapabilities.length === 0 ? (
-              <option value="">No allowed capabilities</option>
-            ) : (
-              derived.recoveryCapabilities.map((capability) => (
-                <option key={capability} value={capability}>
-                  {recoveryCapabilityLabel(capability)}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field__label">Preferred skill</span>
-          <select
-            aria-label="Preferred recovery skill"
-            className="field__input"
-            value={activeRecoverySkill}
-            onChange={(event) => setSelectedRecoverySkill(event.target.value)}
-            disabled={!run || recoverySkillOptions.length === 0}
-          >
-            {recoverySkillOptions.length === 0 ? (
-              <option value="">Default skill</option>
-            ) : (
-              recoverySkillOptions.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.name}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-        {activeRecoveryTemplate ? (
-          <div className="panel__notice panel__notice--info">
-            <strong>Recovery template: {activeRecoveryTemplate.id}</strong>
-            <p>{activeRecoveryTemplate.summary}</p>
-            {Object.keys(activeRecoveryTemplate.default_inputs ?? {}).length > 0 ? (
-              <p className="panel__muted">
-                Defaults: {JSON.stringify(activeRecoveryTemplate.default_inputs)}
-              </p>
-            ) : null}
-            {activeRecoveryTemplate.operator_notes?.length ? (
-              <ul className="panel__list panel__list--compact">
-                {activeRecoveryTemplate.operator_notes.slice(0, 2).map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => issueCommand("pause", "Pause this run")}
-          disabled={!run}
-        >
-          Pause run
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => issueCommand("start", "Start or resume this run")}
-          disabled={!run}
-        >
-          Start run
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => issueCommand("step", "Step this run")}
-          disabled={!run}
-        >
-          Step run
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => issueCommand("cancel", "Cancel this run")}
-          disabled={!run}
-        >
-          Cancel run
-        </button>
-      </div>
-
-      <div className="panel__actions">
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("open_context");
-            onOpenExperiment?.();
-          }}
-          disabled={!run?.experiment_id}
-        >
-          Open experiment context
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("open_context");
-            onOpenValidation?.();
-          }}
-          disabled={!actions.some((item) => item.validation_job_id)}
-        >
-          Open validation
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("recommend_next");
-            onOpenInterventionsForRun?.();
-          }}
-          disabled={!run}
-        >
-          Open interventions
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("summarize_failures");
-            onFocusFailures?.();
-          }}
-          disabled={!run}
-        >
-          Focus failures
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("blocked_action");
-            onFocusApprovals?.();
-          }}
-          disabled={derived.proposedActions.length === 0}
-        >
-          Focus approvals
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("summarize_failures");
-            onFocusPolicy?.();
-          }}
-          disabled={derived.policyEvents.length === 0}
-        >
-          Focus policy events
-        </button>
-        <button
-          type="button"
-          className="button button--ghost button--sm"
-          onClick={() => {
-            sendPrompt("open_context");
-            onFocusValidationLinked?.();
-          }}
-          disabled={derived.validationLinkedActions.length === 0}
-        >
-          Focus validation-linked
-        </button>
-      </div>
+      <OperatorChatSummary
+        run={run}
+        briefing={briefing}
+        proposedCount={derived.proposedActions.length}
+        approvedCount={derived.approvedActions.length}
+        failedCount={derived.failedActions.length}
+        policyCount={derived.policyEvents.length}
+        selectedAction={selectedAction}
+      />
+      <OperatorChatPrompts
+        selectedAction={selectedAction}
+        hasNextAction={Boolean(nextRecommendedAction.action)}
+        onPrompt={sendPrompt}
+        onJumpToNextAction={onJumpToNextAction}
+      />
+      <OperatorChatThread messages={messages} />
+      <OperatorCommandControls
+        run={run}
+        selectedAction={selectedAction}
+        recoveryCapabilities={derived.recoveryCapabilities}
+        activeRecoveryCapability={activeRecoveryCapability}
+        recoverySkillOptions={recoverySkillOptions}
+        activeRecoverySkill={activeRecoverySkill}
+        activeRecoveryTemplate={activeRecoveryTemplate}
+        recoverySkillMetadata={recoverySkillMetadata}
+        onRecoveryCapabilityChange={setSelectedRecoveryCapability}
+        onRecoverySkillChange={setSelectedRecoverySkill}
+        onIssueCommand={issueCommand}
+      />
+      <OperatorNavigationControls
+        run={run}
+        proposedCount={derived.proposedActions.length}
+        policyCount={derived.policyEvents.length}
+        validationLinkedCount={derived.validationLinkedActions.length}
+        onPrompt={sendPrompt}
+        onOpenExperiment={onOpenExperiment}
+        onOpenValidation={onOpenValidation}
+        onOpenInterventionsForRun={onOpenInterventionsForRun}
+        onFocusFailures={onFocusFailures}
+        onFocusApprovals={onFocusApprovals}
+        onFocusPolicy={onFocusPolicy}
+        onFocusValidationLinked={onFocusValidationLinked}
+      />
     </section>
   );
 }
