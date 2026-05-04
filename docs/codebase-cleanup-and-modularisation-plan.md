@@ -126,6 +126,7 @@ docs/
 - The next Agent Runs slice extracted budget guardrails, counters, and the action table into `web/components/agent-runs/RunActionsPanel.tsx`.
 - The final slice in this PR extracted registry-aware selected-action details into `web/components/agent-runs/SelectedActionDetailPanel.tsx`.
 - The Operator Chat split extracted summary, quick prompts, transcript rendering, command/recovery controls, and navigation/focus controls into smaller components under `web/components/agent/`.
+- The follow-up Operator Chat cleanup moved reusable chat labels, risk labels, recovery preferences, and command outcome formatting into `operatorChatLogic.ts`, removed unused duplicate prompt/type modules, and lowered the parent bloat cap.
 - Continue extracting deeper chat orchestration helpers only if the parent starts growing again.
 - Keep behavior unchanged and rely on existing Vitest coverage.
 
