@@ -123,6 +123,8 @@ docs/
 - Split `web/app/agent-runs/page.tsx` into run list, run detail, registry, release, and action panels.
 - PR4 started this by extracting the registry/release/backfill surface into `web/components/agent-runs/RegistryPanel.tsx`.
 - The follow-up Agent Runs modularisation extracted the artifact diff drawer into `web/components/agent-runs/ActionDiffDrawer.tsx`.
+- The next Agent Runs slice extracted budget guardrails, counters, and the action table into `web/components/agent-runs/RunActionsPanel.tsx`.
+- The final slice in this PR extracted registry-aware selected-action details into `web/components/agent-runs/SelectedActionDetailPanel.tsx`.
 - Continue extracting `OperatorConsoleChat` into command composer, recovery controls, and preflight panel.
 - Keep behavior unchanged and rely on existing Vitest coverage.
 

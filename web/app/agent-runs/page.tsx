@@ -41,6 +41,8 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
 import { ActionDiffDrawer } from "../../components/agent-runs/ActionDiffDrawer";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
+import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
+import { SelectedActionDetailPanel } from "../../components/agent-runs/SelectedActionDetailPanel";
 import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
 const RUNS_ROUTE = "/runs";
@@ -70,64 +72,6 @@ const AGENT_FLOW_STEPS: { id: AgentRun["state"] | string; label: string }[] = [
   { id: "validation_completed", label: "Validation completed" },
   { id: "posterior_updated", label: "Posterior updated" },
 ];
-
-const CAPABILITY_EXPLAIN: Record<
-  string,
-  { summary: string; sideEffects: string[] }
-> = {
-  freeze_retrieval_protocol: {
-    summary: "Freezes retrieval snapshots for stable, fair variant comparison.",
-    sideEffects: ["Writes retrieval snapshots", "Pins snapshot version"],
-  },
-  run_control_baseline: {
-    summary: "Runs control on frozen snapshots to establish baseline gate.",
-    sideEffects: ["Creates run row", "Creates baseline metric row"],
-  },
-  seed_hypotheses: {
-    summary: "Builds hypotheses from baseline gaps and winner-signal deltas.",
-    sideEffects: ["Creates hypothesis rows"],
-  },
-  generate_variants: {
-    summary: "Generates and persists candidate variants from loop/cold-start evidence.",
-    sideEffects: ["Creates variant rows", "Stores generation provenance"],
-  },
-  run_variant: {
-    summary: "Executes candidate variant on frozen snapshots.",
-    sideEffects: ["Creates run row", "Creates metric row with decision fields"],
-  },
-  request_synthetic_validation: {
-    summary: "Requests synthetic validation jobs and optionally auto-runs in-app.",
-    sideEffects: ["Creates validation job", "May create validation result"],
-  },
-  review_validation_readiness: {
-    summary: "Evaluates readiness gates for lab/prod promotion tiers.",
-    sideEffects: ["Reads validation/metrics state", "Returns explicit gate statuses"],
-  },
-  update_posterior_and_decisions: {
-    summary: "Recomputes posterior and decision outputs from latest evidence.",
-    sideEffects: ["Creates decision-refresh metric row"],
-  },
-  recommend_next_action: {
-    summary: "Produces constrained next-step recommendation.",
-    sideEffects: ["Creates recommendation history row"],
-  },
-  promote_variant_lab: {
-    summary: "Promotes variant to lab tier under policy checks.",
-    sideEffects: ["Creates analytics event", "Creates decision event"],
-  },
-  promote_variant_prod: {
-    summary: "Promotes variant to prod tier when observed gates pass.",
-    sideEffects: ["Creates analytics event", "Creates decision event"],
-  },
-  publish_copy_revision: {
-    summary: "Publishes revision to product description after prod promotion.",
-    sideEffects: [
-      "Updates product description",
-      "Marks revision as published",
-      "Creates audit events",
-    ],
-  },
-};
 
 const TIMELINE_PRESET_STORAGE_KEY = "agent_runs.timeline_preset.v1";
 
@@ -1972,224 +1916,18 @@ function AgentRunsPageContent() {
                       onVerifyRegistryApprovalReceipt={verifyRegistryApprovalReceipt}
                       onRunRegistryBackfill={runRegistryBackfill}
                     />
-                    <div className="agent-budget-grid">
-                      <div
-                        className={`agent-budget-card ${
-                          budgetState.actionSeverity === "warn"
-                            ? "is-warn"
-                            : budgetState.actionSeverity === "danger"
-                              ? "is-danger"
-                              : ""
-                        }`}
-                      >
-                        <div className="agent-budget-card__header">
-                          <strong>Action budget</strong>
-                          <span>
-                            {budgetTelemetry.executedActions}/
-                            {budgetTelemetry.maxActions ?? "—"}
-                          </span>
-                        </div>
-                        <div className="agent-budget-card__bar">
-                          <div
-                            className="agent-budget-card__fill"
-                            style={{
-                              width:
-                                budgetTelemetry.actionPct == null
-                                  ? "0%"
-                                  : `${budgetTelemetry.actionPct}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div
-                        className={`agent-budget-card ${
-                          budgetState.variantSeverity === "warn"
-                            ? "is-warn"
-                            : budgetState.variantSeverity === "danger"
-                              ? "is-danger"
-                              : ""
-                        }`}
-                      >
-                        <div className="agent-budget-card__header">
-                          <strong>Variant run budget</strong>
-                          <span>
-                            {budgetTelemetry.executedVariantRuns}/
-                            {budgetTelemetry.maxVariantRuns ?? "—"}
-                          </span>
-                        </div>
-                        <div className="agent-budget-card__bar">
-                          <div
-                            className="agent-budget-card__fill"
-                            style={{
-                              width:
-                                budgetTelemetry.variantPct == null
-                                  ? "0%"
-                                  : `${budgetTelemetry.variantPct}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div
-                        className={`agent-budget-card ${
-                          budgetState.costSeverity === "warn"
-                            ? "is-warn"
-                            : budgetState.costSeverity === "danger"
-                              ? "is-danger"
-                              : ""
-                        }`}
-                      >
-                        <div className="agent-budget-card__header">
-                          <strong>Estimated spend</strong>
-                          <span>
-                            ${budgetTelemetry.totalCostUsd.toFixed(2)}
-                            {budgetTelemetry.maxCostUsd != null
-                              ? ` / $${budgetTelemetry.maxCostUsd.toFixed(2)}`
-                              : ""}
-                          </span>
-                        </div>
-                        <div className="agent-budget-card__bar">
-                          <div
-                            className="agent-budget-card__fill"
-                            style={{
-                              width:
-                                budgetTelemetry.costPct == null
-                                  ? "0%"
-                                  : `${budgetTelemetry.costPct}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    {budgetState.actionBlocked ||
-                    budgetState.variantBlocked ||
-                    budgetState.costBlocked ? (
-                      <div className="panel__notice panel__notice--warning">
-                        Budget guardrail active:{" "}
-                        {budgetState.actionBlocked
-                          ? "max actions reached."
-                          : budgetState.variantBlocked
-                            ? "max variant runs reached for run_variant."
-                            : "max cost reached."}{" "}
-                        Proposed risky approvals are disabled until budget changes.
-                      </div>
-                    ) : null}
-
-                    <div className="agent-ops-summary">
-                      <span className="panel__badge panel__badge--secondary">
-                        Proposed: {actionCounters.proposed}
-                      </span>
-                      <span className="panel__badge panel__badge--secondary">
-                        Approved: {actionCounters.approved}
-                      </span>
-                      <span className="panel__badge panel__badge--secondary">
-                        Executing: {actionCounters.executing}
-                      </span>
-                      <span className="panel__badge panel__badge--secondary">
-                        Executed: {actionCounters.executed}
-                      </span>
-                      <span className="panel__badge panel__badge--secondary">
-                        Failed: {actionCounters.failed}
-                      </span>
-                    </div>
-
-                    <div className="table">
-                      <div className="table__header">
-                        <div className="table__cell">#</div>
-                        <div className="table__cell">Capability</div>
-                        <div className="table__cell">Status</div>
-                        <div className="table__cell">Rationale</div>
-                        <div className="table__cell">Actions</div>
-                      </div>
-                      {(actions ?? []).map((a) => {
-                        const guardrailReasons = getGuardrailReasonsForAction(a);
-                        const hasGuardrailBlock = guardrailReasons.length > 0;
-                        return (
-                        <div
-                          key={a.id}
-                          className={`table__row ${selectedAction?.id === a.id ? "is-active" : ""}`}
-                          onClick={() => setSelectedActionId(a.id)}
-                        >
-                          <div className="table__cell" data-label="#">
-                            {a.sequence}
-                          </div>
-                          <div className="table__cell" data-label="Capability">
-                            <div className="table__strong">{a.capability_name}</div>
-                            {a.capability_version && (
-                              <div className="table__muted">{a.capability_version}</div>
-                            )}
-                            {a.skill_id || a.tool_id ? (
-                              <div className="table__muted">
-                                {a.skill_id ? `Skill: ${a.skill_id}` : null}
-                                {a.skill_id && a.tool_id ? " · " : null}
-                                {a.tool_id ? `Tool: ${a.tool_id}` : null}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="table__cell" data-label="Status">
-                            {a.status}
-                          </div>
-                          <div
-                            className="table__cell table__cell--rationale table__muted"
-                            data-label="Rationale"
-                          >
-                            {a.rationale || (a.error ? `Error: ${a.error}` : "—")}
-                          </div>
-                          <div className="table__cell table__actions" data-label="Actions">
-                            {a.status === "proposed" ? (
-                              <>
-                                <button
-                                  type="button"
-                                  className="button button--ghost button--sm"
-                                  onClick={() => handleDecision(a.id, "approve")}
-                                  disabled={loading || hasGuardrailBlock}
-                                  title={guardrailReasons[0] || undefined}
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  className="button button--ghost button--sm"
-                                  onClick={() => handleDecision(a.id, "reject")}
-                                  disabled={loading}
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                className="button button--ghost button--sm"
-                                onClick={() => {
-                                  const payload = formatJsonPreview({
-                                    inputs: a.inputs,
-                                    outputs: a.outputs,
-                                  });
-                                  window.navigator.clipboard?.writeText(payload);
-                                }}
-                                disabled={loading}
-                              >
-                                Copy I/O
-                              </button>
-                            )}
-                            {hasGuardrailBlock ? (
-                              <div className="agent-guardrail-list">
-                                {guardrailReasons.map((reason) => (
-                                  <span key={`${a.id}-${reason}`} className="panel__badge panel__badge--warning">
-                                    {reason}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                        );
-                      })}
-                      {actions.length === 0 && (
-                        <div className="panel__muted">
-                          No actions recorded yet. Next: we’ll add plan generation and execution ticks.
-                        </div>
-                      )}
-                    </div>
+                    <RunActionsPanel
+                      actions={actions}
+                      selectedAction={selectedAction}
+                      actionCounters={actionCounters}
+                      budgetTelemetry={budgetTelemetry}
+                      budgetState={budgetState}
+                      loading={loading}
+                      getGuardrailReasonsForAction={getGuardrailReasonsForAction}
+                      onSelectAction={setSelectedActionId}
+                      onDecision={handleDecision}
+                      formatJsonPreview={formatJsonPreview}
+                    />
                     <section className="agent-timeline">
                       <div className="panel__header">
                         <h4>Execution timeline</h4>
@@ -2470,323 +2208,39 @@ function AgentRunsPageContent() {
                         </div>
                       )}
                     </section>
-                    {selectedAction ? (
-                      <section className="agent-action-detail">
-                        <div className="panel__header">
-                          <h4>Selected action details</h4>
-                          <span className="panel__badge panel__badge--secondary">
-                            {selectedAction.capability_name}
-                          </span>
-                        </div>
-                        <p className="panel__muted">
-                          {selectedCapabilitySpec?.summary ??
-                            CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
-                            "Capability summary not yet documented."}
-                        </p>
-                        <div className="agent-ops-summary">
-                          <span className="panel__badge panel__badge--secondary">
-                            Skill: {selectedAction.skill_id ?? "unmapped"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Tool: {selectedAction.tool_id ?? "legacy"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Effect: {selectedAction.effect_class ?? "unknown"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Registry: {selectedAction.registry_version ?? "unpinned"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Receipt fingerprint:{" "}
-                            {selectedAction.registry_fingerprint
-                              ? selectedAction.registry_fingerprint.slice(0, 12)
-                              : "unpinned"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Tool version: {selectedAction.tool_version ?? "unpinned"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Skill version: {selectedAction.skill_version ?? "unpinned"}
-                          </span>
-                        </div>
-                        <p className="panel__subheading">What it changes</p>
-                        <ul className="panel__list panel__list--compact">
-                          {(
-                            selectedAction.side_effects?.length
-                              ? selectedAction.side_effects
-                              : selectedCapabilitySpec?.side_effects?.length
-                                ? selectedCapabilitySpec.side_effects
-                                : CAPABILITY_EXPLAIN[selectedAction.capability_name]
-                                  ?.sideEffects ?? ["No side-effect metadata yet."]
-                          ).map((effect, index) => (
-                            <li key={`${effect}-${index}`}>{effect}</li>
-                          ))}
-                        </ul>
-                        <p className="panel__subheading">Registry review checklist</p>
-                        {selectedCapabilitySpec?.review_checklist?.length ? (
-                          <ul className="panel__list panel__list--compact">
-                            {selectedCapabilitySpec.review_checklist.map((item, index) => (
-                              <li key={`${item}-${index}`}>{item}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="panel__muted">
-                            No registry checklist captured for this capability yet.
-                          </p>
-                        )}
-                        <p className="panel__subheading">Registry ownership</p>
-                        <div className="agent-ops-summary">
-                          <span className="panel__badge panel__badge--secondary">
-                            Owner: {selectedCapabilitySpec?.owner_principal_id ?? "unassigned"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Steward: {selectedCapabilitySpec?.steward_team ?? "unassigned"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Source: {selectedCapabilitySpec?.ownership_source ?? "static_code"}
-                          </span>
-                        </div>
-                        {selectedCapabilitySpec ? (
-                          <div className="form-grid">
-                            <label>
-                              Owner principal
-                              <input
-                                value={ownershipForm.owner_principal_id}
-                                onChange={(event) =>
-                                  setOwnershipForm((current) => ({
-                                    ...current,
-                                    owner_principal_id: event.target.value,
-                                  }))
-                                }
-                                onInput={() => setOwnershipPreflight(null)}
-                              />
-                            </label>
-                            <label>
-                              Steward team
-                              <input
-                                value={ownershipForm.steward_team}
-                                onChange={(event) =>
-                                  setOwnershipForm((current) => ({
-                                    ...current,
-                                    steward_team: event.target.value,
-                                  }))
-                                }
-                                onInput={() => setOwnershipPreflight(null)}
-                              />
-                            </label>
-                            {ownershipPreflight ? (
-                              <div className="panel__notice panel__notice--info">
-                                <strong>
-                                  Preflight: {ownershipPreflight.risk_level ?? "unknown"} risk
-                                </strong>
-                                <p>
-                                  {ownershipPreflight.summary ??
-                                    "Review this registry ownership change before applying it."}
-                                </p>
-                                {ownershipPreflight.warnings?.length ? (
-                                  <ul className="panel__list panel__list--compact">
-                                    {ownershipPreflight.warnings.map((warning, index) => (
-                                      <li key={`${warning}-${index}`}>{warning}</li>
-                                    ))}
-                                  </ul>
-                                ) : null}
-                                {ownershipPreflight.rollback_guidance ? (
-                                  <p className="panel__muted">
-                                    Rollback: {ownershipPreflight.rollback_guidance}
-                                  </p>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            <div className="panel__actions">
-                              <button
-                                type="button"
-                                className="button button--ghost button--sm"
-                                onClick={() => submitRegistryOwnership(true)}
-                                disabled={
-                                  ownershipBusy ||
-                                  !ownershipForm.owner_principal_id.trim() ||
-                                  !ownershipForm.steward_team.trim()
-                                }
-                              >
-                                {ownershipBusy ? "Checking ownership" : "Preflight ownership"}
-                              </button>
-                              <button
-                                type="button"
-                                className="button button--primary button--sm"
-                                onClick={() => submitRegistryOwnership(false)}
-                                disabled={
-                                  ownershipBusy ||
-                                  !ownershipPreflight?.requires_confirmation ||
-                                  !ownershipPreflight?.allowed ||
-                                  !ownershipForm.owner_principal_id.trim() ||
-                                  !ownershipForm.steward_team.trim()
-                                }
-                              >
-                                {ownershipBusy ? "Saving ownership" : "Apply ownership"}
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                        {ownershipNotice ? (
-                          <div className="panel__notice panel__notice--info">
-                            {ownershipNotice}
-                          </div>
-                        ) : null}
-                        <p className="panel__subheading">Rollback guidance</p>
-                        <p className="panel__muted">
-                          {selectedAction.rollback_guidance ||
-                            "No rollback guidance captured for this action yet."}
-                        </p>
-                        <p className="panel__subheading">Compensating actions</p>
-                        {selectedAction.compensating_actions?.length ? (
-                          <ul className="panel__list panel__list--compact">
-                            {selectedAction.compensating_actions.map((item, index) => (
-                              <li key={`${item.capability_name ?? item.label ?? "compensating"}-${index}`}>
-                                {item.label ?? item.capability_name ?? "Review compensating action"}
-                                {item.rationale ? `: ${item.rationale}` : ""}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="panel__muted">
-                            No compensating action recommendation captured.
-                          </p>
-                        )}
-                        <p className="panel__subheading">Rationale and confidence</p>
-                        <p className="panel__muted">
-                          {selectedAction.rationale || "No rationale captured."}
-                        </p>
-                        <p className="panel__muted">
-                          Confidence:{" "}
-                          {typeof selectedAction.confidence === "number"
-                            ? selectedAction.confidence.toFixed(2)
-                            : "—"}
-                        </p>
-                        <p className="panel__subheading">Linked artifacts</p>
-                        <div className="panel__actions">
-                          {selectedAction.variant_id ? (
-                            <button
-                              type="button"
-                              className="button button--ghost button--sm"
-                              onClick={() =>
-                                selectedRun?.experiment_id
-                                  ? router.push(
-                                      buildExperimentHref(
-                                        selectedRun.experiment_id,
-                                        { runId: selectedRun.id },
-                                      ),
-                                    )
-                                  : null
-                              }
-                            >
-                              Variant: {selectedAction.variant_id.slice(0, 8)}
-                            </button>
-                          ) : null}
-                          {selectedAction.validation_job_id ? (
-                            <button
-                              type="button"
-                              className="button button--ghost button--sm"
-                              onClick={() =>
-                                router.push(
-                                  buildValidationHref(
-                                    {
-                                      experimentId: selectedRun?.experiment_id,
-                                      runId: selectedRun?.id,
-                                    },
-                                  ),
-                                )
-                              }
-                            >
-                              Validation job:{" "}
-                              {selectedAction.validation_job_id.slice(0, 8)}
-                            </button>
-                          ) : null}
-                          {(() => {
-                            const outputs = (selectedAction.outputs ??
-                              {}) as Record<string, unknown>;
-                            const metricId =
-                              typeof outputs.metric_id === "string"
-                                ? outputs.metric_id
-                                : null;
-                            if (!metricId) return null;
-                            return (
-                              <button
-                                type="button"
-                                className="button button--ghost button--sm"
-                                onClick={() =>
-                                  selectedRun?.experiment_id
-                                    ? router.push(
-                                        buildExperimentHref(
-                                          selectedRun.experiment_id,
-                                          { runId: selectedRun.id },
-                                        ),
-                                      )
-                                    : null
-                                }
-                              >
-                                Metric: {metricId.slice(0, 8)}
-                              </button>
-                            );
-                          })()}
-                        </div>
-                        <p className="panel__subheading">Artifact diff preview</p>
-                        <div className="agent-diff-grid">
-                          <div className="agent-diff-card">
-                            <div className="agent-diff-card__title">
-                              vs previous action
-                              {actionDiffs?.previousAction
-                                ? ` #${actionDiffs.previousAction.sequence}`
-                                : ""}
-                            </div>
-                            <div className="agent-diff-card__meta">
-                              Added:{" "}
-                              {shortKeyList(actionDiffs?.vsPreviousAction.added ?? [])}
-                            </div>
-                            <div className="agent-diff-card__meta">
-                              Changed:{" "}
-                              {shortKeyList(actionDiffs?.vsPreviousAction.changed ?? [])}
-                            </div>
-                            <div className="agent-diff-card__meta">
-                              Removed:{" "}
-                              {shortKeyList(actionDiffs?.vsPreviousAction.removed ?? [])}
-                            </div>
-                          </div>
-                          <div className="agent-diff-card">
-                            <div className="agent-diff-card__title">
-                              vs previous same capability
-                              {actionDiffs?.previousSameCapability
-                                ? ` #${actionDiffs.previousSameCapability.sequence}`
-                                : ""}
-                            </div>
-                            <div className="agent-diff-card__meta">
-                              Added:{" "}
-                              {shortKeyList(actionDiffs?.vsPreviousCapability.added ?? [])}
-                            </div>
-                            <div className="agent-diff-card__meta">
-                              Changed:{" "}
-                              {shortKeyList(actionDiffs?.vsPreviousCapability.changed ?? [])}
-                            </div>
-                            <div className="agent-diff-card__meta">
-                              Removed:{" "}
-                              {shortKeyList(actionDiffs?.vsPreviousCapability.removed ?? [])}
-                            </div>
-                          </div>
-                        </div>
-                        <p className="panel__muted">
-                          Diff compares output payload keys, so operators can audit what changed
-                          before approving downstream actions.
-                        </p>
-                        <div className="panel__actions">
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => setDiffDrawerOpen(true)}
-                          >
-                            Open detailed diff
-                          </button>
-                        </div>
-                      </section>
-                    ) : null}
+                    <SelectedActionDetailPanel
+                      selectedAction={selectedAction}
+                      selectedCapabilitySpec={selectedCapabilitySpec}
+                      ownershipForm={ownershipForm}
+                      ownershipPreflight={ownershipPreflight ?? null}
+                      ownershipBusy={ownershipBusy}
+                      ownershipNotice={ownershipNotice}
+                      actionDiffs={actionDiffs}
+                      shortKeyList={shortKeyList}
+                      onOwnershipFormChange={(patch) =>
+                        setOwnershipForm((current) => ({ ...current, ...patch }))
+                      }
+                      onClearOwnershipPreflight={() => setOwnershipPreflight(null)}
+                      onSubmitRegistryOwnership={submitRegistryOwnership}
+                      onOpenExperimentArtifact={() =>
+                        selectedRun?.experiment_id
+                          ? router.push(
+                              buildExperimentHref(selectedRun.experiment_id, {
+                                runId: selectedRun.id,
+                              }),
+                            )
+                          : null
+                      }
+                      onOpenValidationArtifact={() =>
+                        router.push(
+                          buildValidationHref({
+                            experimentId: selectedRun?.experiment_id,
+                            runId: selectedRun?.id,
+                          }),
+                        )
+                      }
+                      onOpenDetailedDiff={() => setDiffDrawerOpen(true)}
+                    />
                   </>
                 )}
               </div>
