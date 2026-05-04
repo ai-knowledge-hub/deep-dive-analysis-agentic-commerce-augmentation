@@ -7,11 +7,17 @@ import { useAppUser } from "../../lib/auth";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { Sidebar } from "../../components/layout/Sidebar";
-import { CompensatingProposalControl } from "../../components/agent/CompensatingProposalControl";
 import {
   buildCompensatingProposalCommand,
   compensatingProposalKey,
 } from "../../components/agent/compensatingProposal";
+import {
+  ApprovalsSection,
+  CommandWorkSection,
+  EscalationsSection,
+  PausesSection,
+  RetriesSection,
+} from "../../components/interventions/InterventionQueueSections";
 import {
   buildApprovalItems,
   buildCommandItems,
@@ -19,8 +25,6 @@ import {
   buildEscalationItem,
   buildPauseItem,
   buildRetryItem,
-  formatEventTime,
-  formatRunLabel,
   sortByPriorityAndRisk,
 } from "../../components/interventions/interventionLogic";
 import type {
@@ -28,9 +32,7 @@ import type {
   CommandItem,
   EscalationItem,
   PauseItem,
-  Priority,
   RetryItem,
-  RiskLevel,
 } from "../../components/interventions/interventionTypes";
 import {
   controlAgentRun,
@@ -44,29 +46,8 @@ import {
 import { buildRunsHref } from "../../lib/routes";
 import type {
   AgentCompensatingAction,
-  AgentRun,
   AgentRunCommandPreflight,
 } from "../../lib/types";
-
-function badgeClassForPriority(priority: Priority): string {
-  if (priority === "critical") return "panel__badge--severity-high";
-  if (priority === "high") return "panel__badge--warning";
-  if (priority === "medium") return "panel__badge--severity-medium";
-  return "panel__badge--severity-low";
-}
-
-function describePriority(priority: Priority): string {
-  if (priority === "critical") return "Critical";
-  if (priority === "high") return "High urgency";
-  if (priority === "medium") return "Medium urgency";
-  return "Low urgency";
-}
-
-function describeRisk(risk: RiskLevel): string {
-  if (risk === "high") return "High risk";
-  if (risk === "medium") return "Medium risk";
-  return "Low risk";
-}
 
 function InterventionsPageContent() {
   const router = useRouter();
@@ -307,18 +288,6 @@ function InterventionsPageContent() {
     [loadInterventions, pendingCompensatingKey, userId],
   );
 
-  function renderMeta(priority: Priority, risk: RiskLevel, run: AgentRun) {
-    return (
-      <div className="list__meta">
-        <span className={`panel__badge ${badgeClassForPriority(priority)}`}>
-          {describePriority(priority)}
-        </span>{" "}
-        <span className="panel__badge panel__badge--secondary">{describeRisk(risk)}</span>{" "}
-        <span>{run.status ?? "unknown"}</span> · <span>{run.state ?? "unknown"}</span>
-      </div>
-    );
-  }
-
   function openRun(runId: string) {
     router.push(buildRunsHref({ runId }));
   }
@@ -397,248 +366,33 @@ function InterventionsPageContent() {
           ) : null}
 
           <section className="agent-workspace inbox-workspace">
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Escalations</h3>
-                <span className="panel__badge panel__badge--severity-high">{visibleEscalations.length}</span>
-              </div>
-              {visibleEscalations.length === 0 ? (
-                <div className="panel__muted">No runs currently require escalation.</div>
-              ) : (
-                <div className="list">
-                  {visibleEscalations.map((item) => (
-                    <div key={`escalation-${item.run.id}`} className="list__row">
-                      <div className="list__title">{item.title}</div>
-                      {renderMeta(item.priority, item.risk, item.run)}
-                      <div className="panel__muted">{item.summary}</div>
-                      {item.latestEvent?.timestamp ? (
-                        <div className="list__meta">
-                          Latest signal: {formatEventTime(item.latestEvent.timestamp)}
-                        </div>
-                      ) : null}
-                      <div className="detail__actions">
-                        <button
-                          type="button"
-                          className="button button--ghost button--sm"
-                          onClick={() => openRun(item.run.id)}
-                        >
-                          Open run
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Command-originated work</h3>
-                <span className="panel__badge panel__badge--warning">{visibleCommands.length}</span>
-              </div>
-              {visibleCommands.length === 0 ? (
-                <div className="panel__muted">No high-risk command receipts or retry proposals need intervention.</div>
-              ) : (
-                <div className="list">
-                  {visibleCommands.map((item) => {
-                      const compensating = item.compensatingActions?.[0] ?? null;
-                      const compensatingKey = compensatingProposalKey(
-                        item.event.id,
-                        compensating,
-                      );
-                      const preflight = compensatingKey
-                        ? compensatingPreflights[compensatingKey]
-                        : null;
-                      const needsConfirm =
-                        compensatingKey && pendingCompensatingKey === compensatingKey;
-                      return (
-                        <div key={`command-${item.event.id}`} className="list__row">
-                          <div className="list__title">{item.title}</div>
-                          {renderMeta(item.priority, item.risk, item.run)}
-                          <div className="panel__muted">{item.summary}</div>
-                          {item.rollbackGuidance ? (
-                            <div className="list__meta">
-                              Rollback: {item.rollbackGuidance}
-                            </div>
-                          ) : null}
-                          <CompensatingProposalControl
-                            recommendation={compensating}
-                            event={item.event}
-                            risk={item.risk}
-                            preflight={preflight}
-                            needsConfirmation={Boolean(needsConfirm)}
-                            busy={Boolean(compensatingKey && busyKey === compensatingKey)}
-                            onCreate={() => {
-                              if (compensating) {
-                                void handleCompensatingAction(item, compensating);
-                              }
-                            }}
-                            onInspectRun={() => openRun(item.run.id)}
-                          />
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Approvals</h3>
-                <span className="panel__badge panel__badge--warning">{visibleApprovals.length}</span>
-              </div>
-              {visibleApprovals.length === 0 ? (
-                <div className="panel__muted">No proposed actions are waiting for approval.</div>
-              ) : (
-                <div className="list">
-                  {visibleApprovals.map((item) => {
-                    const approveKey = `decision:${item.action.id}:approve`;
-                    const rejectKey = `decision:${item.action.id}:reject`;
-                    return (
-                      <div key={`approval-${item.action.id}`} className="list__row">
-                        <div className="list__title">
-                          {formatRunLabel(item.run)}: approve {item.action.capability_name}
-                        </div>
-                        {renderMeta(item.priority, item.risk, item.run)}
-                        <div className="panel__muted">{item.summary}</div>
-                        <div className="agent-ops-summary">
-                          <span className="panel__badge panel__badge--secondary">
-                            Skill: {item.action.skill_id ?? "unmapped"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Tool: {item.action.tool_id ?? "legacy"}
-                          </span>
-                          <span className="panel__badge panel__badge--secondary">
-                            Effect: {item.action.effect_class ?? item.risk}
-                          </span>
-                        </div>
-                        <div className="list__meta">{item.reason}</div>
-                        <div className="detail__actions">
-                          <button
-                            type="button"
-                            className="button button--primary button--sm"
-                            onClick={() => void handleDecision(item.action.id, "approve")}
-                            disabled={busyKey === approveKey || busyKey === rejectKey}
-                          >
-                            {busyKey === approveKey ? "Approving..." : "Approve"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => void handleDecision(item.action.id, "reject")}
-                            disabled={busyKey === approveKey || busyKey === rejectKey}
-                          >
-                            {busyKey === rejectKey ? "Rejecting..." : "Reject"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => openRun(item.run.id)}
-                          >
-                            Inspect run
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Retries and resumes</h3>
-                <span className="panel__badge panel__badge--secondary">{visibleRetries.length}</span>
-              </div>
-              {visibleRetries.length === 0 ? (
-                <div className="panel__muted">No runs are ready for an operator-driven restart or next step.</div>
-              ) : (
-                <div className="list">
-                  {visibleRetries.map((item) => {
-                    const controlKey = `control:${item.run.id}:${item.control}`;
-                    return (
-                      <div key={`retry-${item.run.id}`} className="list__row">
-                        <div className="list__title">{item.title}</div>
-                        {renderMeta(item.priority, item.risk, item.run)}
-                        <div className="panel__muted">{item.summary}</div>
-                        <div className="detail__actions">
-                          <button
-                            type="button"
-                            className="button button--primary button--sm"
-                            onClick={() => void handleRunControl(item.run.id, item.control)}
-                            disabled={busyKey === controlKey}
-                          >
-                            {busyKey === controlKey
-                              ? item.control === "start"
-                                ? "Resuming..."
-                                : "Stepping..."
-                              : item.control === "start"
-                                ? "Resume run"
-                                : "Step run"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => openRun(item.run.id)}
-                          >
-                            Inspect run
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Pauses</h3>
-                <span className="panel__badge panel__badge--secondary">{visiblePauses.length}</span>
-              </div>
-              {visiblePauses.length === 0 ? (
-                <div className="panel__muted">No active runs currently need a pause decision.</div>
-              ) : (
-                <div className="list">
-                  {visiblePauses.map((item) => {
-                    const pauseKey = `control:${item.run.id}:pause`;
-                    const cancelKey = `control:${item.run.id}:cancel`;
-                    return (
-                      <div key={`pause-${item.run.id}`} className="list__row">
-                        <div className="list__title">{formatRunLabel(item.run)} is executing</div>
-                        {renderMeta(item.priority, item.risk, item.run)}
-                        <div className="panel__muted">{item.summary}</div>
-                        <div className="detail__actions">
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => void handleRunControl(item.run.id, "pause")}
-                            disabled={busyKey === pauseKey || busyKey === cancelKey}
-                          >
-                            {busyKey === pauseKey ? "Pausing..." : "Pause run"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => void handleRunControl(item.run.id, "cancel")}
-                            disabled={busyKey === pauseKey || busyKey === cancelKey}
-                          >
-                            {busyKey === cancelKey ? "Canceling..." : "Cancel run"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--sm"
-                            onClick={() => openRun(item.run.id)}
-                          >
-                            Inspect run
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
+            <EscalationsSection items={visibleEscalations} onOpenRun={openRun} />
+            <CommandWorkSection
+              items={visibleCommands}
+              busyKey={busyKey}
+              pendingCompensatingKey={pendingCompensatingKey}
+              compensatingPreflights={compensatingPreflights}
+              onCreateCompensatingAction={handleCompensatingAction}
+              onOpenRun={openRun}
+            />
+            <ApprovalsSection
+              items={visibleApprovals}
+              busyKey={busyKey}
+              onDecision={handleDecision}
+              onOpenRun={openRun}
+            />
+            <RetriesSection
+              items={visibleRetries}
+              busyKey={busyKey}
+              onRunControl={handleRunControl}
+              onOpenRun={openRun}
+            />
+            <PausesSection
+              items={visiblePauses}
+              busyKey={busyKey}
+              onRunControl={handleRunControl}
+              onOpenRun={openRun}
+            />
           </section>
         </div>
       </main>
