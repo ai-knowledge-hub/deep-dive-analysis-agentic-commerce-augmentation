@@ -144,6 +144,7 @@ docs/
 - The run-creation split moved initial plan/action seeding into `application/services/agent_runtime/runs.py`, kept registry materialization in `api/utils/agent_registry_runtime.py` because it touches infrastructure, and left `api/routes/agent_runs.py` as request/principal handling plus read endpoints.
 - The registry approval split moved receipt signing, receipt verification, and ownership preflight into `api/utils/agent_registry_approvals.py`, leaving `api/routes/agent_runs_registry.py` focused on registry endpoints.
 - The capability support split moved shared variant selection, validation readiness, copy-revision lookup, and numeric helpers into `application/services/agent_runtime/capability_support.py`, with shared runtime types in `capability_types.py`.
+- The registry catalog split moved static tool/capability specs, policy profiles, and recovery template definitions into `application/services/agent_runtime/registry_catalog.py`, leaving `registry.py` focused on contract serialization, fingerprinting, version context, and schema validation.
 - Continue moving full recovery/retry mutation orchestration into application services when endpoint contracts are stable.
 - Keep endpoint contracts stable.
 
