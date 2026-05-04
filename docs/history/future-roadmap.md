@@ -1,10 +1,12 @@
 # Future Roadmap (Deferred Features + Enterprise Extensions)
 
+Status: historical
+
 **Purpose:** Track features we intentionally defer during the hackathon/MVP phase so stakeholders know what’s planned, what’s not, and why.
 
 This document complements:
 - `docs/app-architecture.md` (current + planned architecture)
-- `docs/app-workflows.md` (current workflows + planned extensions)
+- `docs/history/app-workflows.md` (historical workflows + planned extensions)
 
 ---
 

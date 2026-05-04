@@ -83,7 +83,7 @@ Use these docs together:
 
 Historical reference:
 
-- `docs/agent-first-migration-slice-rfc.md`: first migration slice; implemented and retained as rationale/history, not the active work plan
+- `docs/history/agent-first-migration-slice-rfc.md`: first migration slice; implemented and retained as rationale/history, not the active work plan
 
 ## Next Development Tracks
 

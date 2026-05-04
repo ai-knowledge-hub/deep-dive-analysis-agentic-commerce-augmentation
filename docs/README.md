@@ -24,13 +24,14 @@ Use this index to avoid treating historical planning notes as active product or 
 - `debug/incidents-fixed.md`: fixed incidents log.
 - `debug/open-risks.md`: active risk log.
 
-## Historical Or Candidate-Historical Docs
+## Historical Docs
 
 These may contain useful context, but should not be treated as the current implementation plan without checking `agentification-checkpoint.md` first.
 
-- `agent-first-migration-slice-rfc.md`: implemented migration-slice rationale.
-- `app-workflows.md`: older workflow map with some still-useful API notes.
-- `experiment-flow-detailed.md`: lab-era experiment flow detail.
-- `future-roadmap.md`: older roadmap notes.
-- `user-guide-complete.md`: older human-led user guide, now likely superseded by the control-plane pivot.
-- `pitch-deck.html`: presentation artifact, not engineering guidance.
+- `history/README.md`: historical documentation index.
+- `history/agent-first-migration-slice-rfc.md`: implemented migration-slice rationale.
+- `history/app-workflows.md`: older workflow map with some still-useful API notes.
+- `history/experiment-flow-detailed.md`: lab-era experiment flow detail.
+- `history/future-roadmap.md`: older roadmap notes.
+- `history/user-guide-complete.md`: older human-led user guide, now likely superseded by the control-plane pivot.
+- `history/pitch-deck.html`: presentation artifact, not engineering guidance.
