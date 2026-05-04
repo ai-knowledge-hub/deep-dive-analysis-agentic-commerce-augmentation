@@ -121,6 +121,7 @@ docs/
 ### PR 4: Frontend Control-Plane Modularisation
 
 - Split `web/app/agent-runs/page.tsx` into run list, run detail, registry, release, and action panels.
+- PR4 started this by extracting the registry/release/backfill surface into `web/components/agent-runs/RegistryPanel.tsx`.
 - Continue extracting `OperatorConsoleChat` into command composer, recovery controls, and preflight panel.
 - Keep behavior unchanged and rely on existing Vitest coverage.
 
