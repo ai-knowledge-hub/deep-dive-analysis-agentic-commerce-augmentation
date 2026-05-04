@@ -34,7 +34,7 @@ Use these labels when auditing files and folders:
 | `scripts/checks/*` | `canonical` | Real implementations for architecture and bloat checks. | Make Makefile call these directly. |
 | `scripts/seed/*` | `canonical` | Real seed implementations. | Make Makefile/docs call these directly. |
 | `scripts/ops/*` | `canonical` | Real runtime worker/scheduler/maintenance implementations. | Make Makefile/docs call these directly. |
-| root `scripts/*.py` wrappers | `compatibility-wrapper` | Thin wrappers around canonical modules. | Keep in PR1; remove in a later PR after references settle. |
+| root `scripts/*.py` wrappers | `delete-now` | Thin wrappers around canonical modules with references migrated. | Removed in PR2 after Makefile/docs/CI were canonicalized; `make script-entrypoint-check` blocks reintroduction. |
 | `docs/agentification-checkpoint.md` | `current` | Active execution checkpoint. | Keep concise; split history out if it grows. |
 | `docs/agent-first-modular-architecture-v1.md` | `current` | Active target architecture. | Keep. |
 | `docs/chat-led-operator-console-spec.md` | `current/reference` | Still relevant to control-plane UX. | Keep, trim only after UI settles. |
@@ -107,9 +107,10 @@ docs/
 
 ### PR 2: Script Consolidation
 
-- Remove or deprecate root script wrappers after references use canonical modules.
+- Remove root script wrappers after references use canonical modules.
 - Update any CI templates or docs still using wrapper paths.
 - Keep `make` targets as the stable operator interface.
+- Add an executable guardrail that fails when root-level script modules reappear.
 
 ### PR 3: Docs Canonicalisation
 
@@ -143,6 +144,7 @@ Run these for cleanup PRs:
 make lint
 make arch-check
 make bloat-check
+make script-entrypoint-check
 venv/bin/python -m pytest tests/test_agent_runs_api.py tests/modules/test_agent_capability_registry.py tests/modules/test_agent_runtime_service.py
 cd web && pnpm exec vitest run app/agent-runs/page.test.tsx components/agent/OperatorConsoleChat.test.tsx app/interventions/page.test.tsx
 cd web && NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm run build

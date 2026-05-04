@@ -71,6 +71,14 @@ bloat-check:
 		$(PYTHON) -m scripts.checks.bloat_check; \
 	fi
 
+.PHONY: script-entrypoint-check
+script-entrypoint-check:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.checks.script_entrypoints_check; \
+	else \
+		$(PYTHON) -m scripts.checks.script_entrypoints_check; \
+	fi
+
 .PHONY: format
 format:
 	@if [ -n "$(RUFF)" ] && [ -x "$(RUFF)" ]; then \

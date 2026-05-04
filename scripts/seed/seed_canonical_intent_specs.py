@@ -1,9 +1,9 @@
 """Populate canonical intent specs for all existing products.
 
 Usage:
-  python -m scripts.seed_canonical_intent_specs
-  python -m scripts.seed_canonical_intent_specs --overwrite
-  python -m scripts.seed_canonical_intent_specs --dry-run
+  python -m scripts.seed.seed_canonical_intent_specs
+  python -m scripts.seed.seed_canonical_intent_specs --overwrite
+  python -m scripts.seed.seed_canonical_intent_specs --dry-run
 """
 
 from __future__ import annotations
