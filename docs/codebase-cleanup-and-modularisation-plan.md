@@ -38,9 +38,9 @@ Use these labels when auditing files and folders:
 | `docs/agentification-checkpoint.md` | `current` | Active execution checkpoint. | Keep concise; split history out if it grows. |
 | `docs/agent-first-modular-architecture-v1.md` | `current` | Active target architecture. | Keep. |
 | `docs/chat-led-operator-console-spec.md` | `current/reference` | Still relevant to control-plane UX. | Keep, trim only after UI settles. |
-| `docs/user-guide-complete.md` | `historical-candidate` | Written for older human-led UX. | Mark historical or replace with control-plane user guide. |
-| `docs/experiment-flow-detailed.md` | `historical-candidate` | Lab-era flow detail. | Move to historical after README no longer points to it as active. |
-| `docs/app-workflows.md` | `reference/historical-candidate` | Contains useful workflow notes but overlaps newer checkpoint docs. | Split current API facts from history. |
+| `docs/history/user-guide-complete.md` | `historical` | Written for older human-led UX. | Retained as history; replace later with a control-plane user guide. |
+| `docs/history/experiment-flow-detailed.md` | `historical` | Lab-era flow detail. | Retained as history after PR3. |
+| `docs/history/app-workflows.md` | `historical/reference` | Contains useful workflow notes but overlaps newer checkpoint docs. | Retained under history after PR3. |
 | largest frontend pages | `active-hotspot` | `experiments`, `agent-runs`, `admin`, `validation` are expensive to load/change. | Modularise by surface after cleanup PRs. |
 | `api/routes/agent_runs.py` | `active-hotspot` | Route file now owns too many registry/command/control concerns. | Split after frontend control-plane cleanup. |
 
