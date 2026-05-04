@@ -1,6 +1,6 @@
 # Agentification Checkpoint
 
-Status date: 2026-04-30
+Status date: 2026-05-04
 
 This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
 
@@ -58,6 +58,9 @@ The codebase now has the minimum spine for the pivot:
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
+- Agent runtime source has been reorganized into responsibility-based subpackages: `capabilities/`, `commands/`, `registry/`, and `runtime/`.
+- Command routes now delegate command orchestration to `application/services/agent_runtime/commands/service.py`; architecture checks prevent command routes from re-importing low-level command internals.
+- Cleanup guardrails now include tighter bloat caps for split backend surfaces and script-entrypoint checks for removed wrapper scripts.
 
 ## Current Architecture Interpretation
 
@@ -91,17 +94,19 @@ Historical reference:
 
 Current state: static in-code registry exposed through `GET /agent-runs/registry`, with each observed registry contract persisted as an immutable snapshot keyed by fingerprint. One registry snapshot is explicitly active; previous active snapshots are retired on fingerprint transitions. Tool ownership metadata is now seeded into a persistent registry ownership source and folded back into the registry payload so owner/steward changes can become auditable registry changes instead of hidden code-only metadata. Operators can update owner/steward metadata from the Runs control plane via `PATCH /agent-runs/registry/ownership/{tool_id}`; the endpoint supports dry-run preflight, requires confirmation before mutation, rejects no-op approvals, emits signed approval receipts, verifies approval receipts through `POST /agent-runs/registry/approval-receipts/verify`, and successful confirmed changes produce a new active registry fingerprint plus transition/approval audit events. Shared-tool skill selection is now deterministic: the registry exposes candidate skills and default skill per tool, while runtime action creation can honor an allowed/preferred skill when commands provide one. Recovery templates are now exposed in the runtime registry, and operator chat previews the selected recovery path before command submission. `GET /agent-runs/registry/releases` exposes active/retired release metadata, and `GET /agent-runs/registry/releases/{fingerprint}` exposes a persisted release payload plus related audit events for drill-down, including concrete release diff rows and operator-triggered receipt verification for signed ownership approvals. Registry fingerprint transitions create audit events with diff summaries so registry drift is explainable after deployment, and `GET /agent-runs/registry/audit` exposes that release trail to operators. `skill_id` lineage is stamped onto new actions and events. Registry specs now include summaries, input/output schema metadata, required receipt fields, owner/steward metadata, side-effect metadata, review checklists, and deterministic registry fingerprints. Runtime validates registry-declared input and output contracts around execution, including stable metric/variant/posterior receipt IDs where capabilities can guarantee them. The Runs UI uses registry metadata for selected-action explanations, new runs pin registry context, new actions pin registry/tool/skill/fingerprint context, and the Runs UI can preview/apply client-scoped backfill for missing pins on older records with audit events for applied backfills.
 
-Next steps:
+Remaining:
 
-- Promote compensating recommendation creation into a reusable control-plane component.
+- No immediate registry-hardening blocker remains before the next platform slice.
+- Future registry work should be incremental: richer schema semantics, registry migration tooling, and production-grade registry authoring workflows.
 
 ### 2. Agent Chat As Primary Control Interface
 
 Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, propose explicit retry actions, and create structured recovery proposals. Recovery proposals now carry capability-specific template context; external validation recovery defaults to `auto_run=false` so provider work is not duplicated before operator review. Runtime registry recovery templates are visible in operator chat as preview guidance before command submission. Compensating proposal controls now have shared command-builder and rendering primitives ready for reuse by other recovery surfaces.
 
-Next steps:
+Remaining:
 
 - Reuse the shared compensating proposal control from additional recovery surfaces where compensating recommendations are shown.
+- Continue reducing control-plane chat complexity only when active files start growing again.
 
 ### 3. External Agent API Contracts
 
@@ -145,11 +150,11 @@ Next steps:
 - Reduce duplicate dashboards.
 - Make all risky actions visible through Interventions.
 
-## Current Build Slice
+## Completed Recent Build Slices
 
-The current implementation slice is Registry Hardening v1.
+### Registry Hardening v1
 
-Completed in this slice:
+Completed:
 
 - Registry metadata:
   - Tool and capability specs now expose summaries, input schemas, output schemas, side effects, and operator review checklists.
@@ -188,12 +193,77 @@ Completed in this slice:
   - Backend tests cover registry metadata exposure and invalid registry input failure handling.
   - Frontend tests cover registry-driven action explanation and review checklist rendering.
 
-## Next Build Slice
+### Cleanup And Backend Modularisation
 
-The next implementation slice should be a cleanup/stabilization pass before adding the external-agent job API surface.
+Completed:
 
-Initial scope:
+- Historical/human-led docs were moved under `docs/history/` and marked as non-current.
+- Root script wrappers were removed after Makefile/docs/CI references moved to canonical script modules.
+- Frontend control-plane surfaces were split into smaller components where it reduced active development friction.
+- Backend agent-run routes were split by responsibility across registry, control, command, and read surfaces.
+- Agent runtime internals were reorganized into package directories:
+  - `application/services/agent_runtime/capabilities/`
+  - `application/services/agent_runtime/commands/`
+  - `application/services/agent_runtime/registry/`
+  - `application/services/agent_runtime/runtime/`
+- Command orchestration now lives in `application/services/agent_runtime/commands/service.py`, leaving command routes as HTTP adapters.
+- Architecture and bloat guardrails now protect the new route/service boundaries.
 
-- Split the largest control-plane UI components only where it reduces active development friction.
-- Keep the registry/recovery docs concise and move older rationale into historical references.
-- Keep backend/frontend broad suites and mock-auth build green.
+## What Is Left To Build
+
+### Priority 1: External Agent Job API Contracts
+
+Goal: make external assistants first-class callers, not UI-shaped API consumers.
+
+Build:
+
+- Idempotent job creation and status APIs for external agents.
+- Stable job ids, dedupe keys, retry-safe responses, and replay-safe error contracts.
+- Scoped machine credentials for tool/skill access.
+- Signed execution receipts for completed or failed work.
+- Contract tests for duplicate submission, retry after timeout, and unauthorized tool access.
+
+### Priority 2: Harness Profiles
+
+Goal: make `harness_id` behavior-defining instead of metadata-only.
+
+Build:
+
+- Harness profile registry for planner mode, retry strategy, fallback order, approval strategy, memory policy, and stopping conditions.
+- Default harness binding for agent profiles.
+- Runtime enforcement of harness posture.
+- Runs/Interventions display of active harness posture and why a run is behaving that way.
+
+### Priority 3: Real Protocol And Fallback Execution Adapters
+
+Goal: let agents act through real commerce/protocol/tool surfaces, not only mocks and internal lab tools.
+
+Build:
+
+- Concrete ACP/UCP retrieval and execution adapters where available.
+- Narrow browser/CLI fallback adapters with explicit permission scopes.
+- Policy review gates for all external side effects.
+- Execution receipts that link provider/job/browser/CLI evidence back to run events.
+
+### Priority 4: Control-Plane UX Simplification
+
+Goal: make the product feel like an agent supervision cockpit, not a dense lab dashboard.
+
+Build:
+
+- Make Inbox/Runs the default operator path.
+- Keep Lab as an advanced workspace.
+- Reduce duplicate dashboards and overlapping navigation.
+- Route all risky work through Interventions.
+- Add a concise control-plane user guide to replace the historical human-led guide.
+
+### Priority 5: Continued Source Hygiene
+
+Goal: keep the codebase cheap for humans and coding agents to reason about.
+
+Build:
+
+- Continue splitting only active hotspots that slow current development.
+- Keep docs index and checkpoint current after each PR.
+- Remove obsolete docs when the active checkpoint fully supersedes them.
+- Tighten bloat and architecture caps after each modularisation slice.

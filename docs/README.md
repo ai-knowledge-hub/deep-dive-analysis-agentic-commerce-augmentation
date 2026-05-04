@@ -32,6 +32,5 @@ These may contain useful context, but should not be treated as the current imple
 - `history/agent-first-migration-slice-rfc.md`: implemented migration-slice rationale.
 - `history/app-workflows.md`: older workflow map with some still-useful API notes.
 - `history/experiment-flow-detailed.md`: lab-era experiment flow detail.
-- `history/future-roadmap.md`: older roadmap notes.
 - `history/user-guide-complete.md`: older human-led user guide, now likely superseded by the control-plane pivot.
 - `history/pitch-deck.html`: presentation artifact, not engineering guidance.

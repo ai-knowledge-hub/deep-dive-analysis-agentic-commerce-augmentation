@@ -1,34 +1,39 @@
-# Agentic Commerce Learning Loop (Bayesian-Style)
+# Agentic Commerce Control Plane
 
-**Optimize product discoverability for LLM shopping flows with a closed learning loop: simulate -> validate -> update beliefs -> distill memory -> optimize again.**
+**A governed agent execution fabric for commerce optimization: agents plan and run work through skills/tools, while humans supervise risk, approvals, recovery, and learning.**
 
 ---
 
 ## What This Repository Is
 
-This project is a multi-tenant agentic commerce system for:
+This project is a multi-tenant agentic commerce control plane for:
+- governed agent runs across commerce optimization workflows,
+- human supervision, intervention, approval, and audit,
+- skills/tools registry management with policy and receipt checks,
 - intent-aware product discoverability optimization,
 - experiment/simulation-based screening,
 - real-world validation capture,
 - Bayesian-style belief updates,
 - memory distillation and reuse.
 
-The core moat is not a single score. It is the **feedback loop** that continuously updates decisions using observed evidence.
+The core moat is not a single score or a standalone lab. It is the **governed feedback loop**: agents execute optimization work through policy-safe tools, every risky action is inspectable, and observed evidence updates future decisions.
 
-Current extension:
-- **Agent operator mode (v0)**: governed backend orchestration with run/action persistence, runtime step controls, centralized capability registry, and policy enforcement.
+Current product direction:
+- **Agent-first execution fabric**: principal-aware runs for humans, internal agents, and external agents; policy profiles; tool/skill lineage; registry-pinned actions; runtime receipt validation.
   See `docs/agentic-layer.md`.
-- **Agent-first pivot checkpoint**: the platform direction is now a governed agent execution fabric with a human control plane, not only a human-led lab.
+- **Human control plane**: Inbox, Runs, Interventions, and Learnings become the primary UX; lab workflows remain available as advanced/drill-down surfaces.
   See `docs/agentification-checkpoint.md`.
-- **Next build track**: Registry Hardening v1 persistence: persistent registry source, output receipts, ownership metadata, and diff/audit events.
+- **Next build track**: external-agent job APIs, harness profiles, protocol/fallback execution adapters, and deeper control-plane UX simplification.
   See the `Next Development Tracks` section in `docs/agentification-checkpoint.md`.
 
 ---
 
 ## Product Positioning
 
-This app is a **screening + validation + learning** platform.
+This app is a **governed agent execution + validation + learning** platform.
 
+- **Execution:** policy-governed agent runs with skill/tool lineage and auditable receipts.
+- **Supervision:** human approval, intervention, recovery, and command observability.
 - **Screening:** synthetic LLM judge signals (fast iteration).
 - **Validation:** observed reality signals plus provider-integrated synthetic checks.
 - **Learning:** belief revision + memory distillation + calibration profiles.
@@ -73,6 +78,11 @@ Operational endpoints:
   - `application/services/query_battery/`
   - `application/services/simulation/`
   - `application/services/validation_service.py`
+  - `application/services/agent_runtime/`
+    - `capabilities/` for capability execution and helpers
+    - `commands/` for command preflight, orchestration, recovery, and decisions
+    - `registry/` for tool/capability catalog and registry contracts
+    - `runtime/` for execution service and runtime audit event construction
 - `infrastructure/` -> DB + LLM adapters + protocol adapters.
 - `api/` -> FastAPI routes (composition root at `api/composition.py`).
 - `web/` -> Next.js app.
@@ -331,7 +341,23 @@ make test
 make web-lint
 ```
 
-Architecture checks are part of CI and enforce layer boundaries.
+Architecture checks are part of CI and enforce layer boundaries, including the command-route boundary that keeps HTTP routes behind command application services.
+
+---
+
+## Current Build Checkpoint
+
+Completed foundation:
+- Agent runtime persistence, policy profiles, skills/tools registry, registry release/audit trail, command preflight, retries, structured recovery proposals, compensating recommendations, and control-plane surfaces.
+- Backend cleanup has split the agent runtime into `capabilities/`, `commands/`, `registry/`, and `runtime/` subpackages.
+- Command routes are thin HTTP adapters; command orchestration lives in `application/services/agent_runtime/commands/service.py`.
+
+Remaining build tracks:
+- External-agent job APIs with idempotency, retry-safe responses, scoped credentials, and signed execution receipts.
+- Harness profiles that define planner mode, retry posture, fallback order, approval strategy, memory policy, and stopping conditions.
+- Real ACP/UCP/browser/CLI fallback execution adapters with narrow permissions and policy review for external side effects.
+- Control-plane UX simplification so Inbox/Runs are primary, Lab is advanced, duplicate dashboards shrink, and risky work flows through Interventions.
+- Continued source hygiene on large frontend pages and remaining hotspots, guarded by bloat and architecture checks.
 
 ---
 
