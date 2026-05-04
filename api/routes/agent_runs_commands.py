@@ -13,9 +13,11 @@ from application.services.agent_runtime.commands import (
     _command_preflight,
     _record_command_event,
     apply_command_action_decision,
+    decide_agent_action,
+)
+from application.services.agent_runtime.recovery import (
     create_change_plan_recovery_action,
     create_retry_action,
-    decide_agent_action,
 )
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,

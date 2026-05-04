@@ -41,6 +41,8 @@ FILE_MAX_LINES = {
     "api/routes/agent_runs.py": 1400,
     "api/routes/agent_runs_commands.py": 320,
     "api/routes/agent_runs_registry.py": 650,
+    "application/services/agent_runtime/commands.py": 450,
+    "application/services/agent_runtime/recovery.py": 650,
     "tests/test_agent_runs_api.py": 1400,
     "web/app/experiments/page.tsx": 5200,
     "web/app/agent-runs/page.tsx": 2600,

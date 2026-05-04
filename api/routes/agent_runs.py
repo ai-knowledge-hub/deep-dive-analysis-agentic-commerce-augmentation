@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
-from application.services.agent_runtime.commands import (
+from application.services.agent_runtime.recovery import (
     _capability_rollback_guidance,
     _capability_side_effects,
     _compensating_actions_for_capability,
@@ -44,7 +44,9 @@ def _deps() -> AppDeps:
     return default_deps()
 
 
-def _require_scoped_run(*, deps: AppDeps, run_id: str, client_id: str) -> Dict[str, Any]:
+def _require_scoped_run(
+    *, deps: AppDeps, run_id: str, client_id: str
+) -> Dict[str, Any]:
     run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
@@ -111,7 +113,6 @@ class AgentRunEventListResponse(BaseModel):
     page: Dict[str, Any]
 
 
-
 @router.post("")
 def create_agent_run(
     payload: AgentRunCreateRequest,
@@ -128,7 +129,9 @@ def create_agent_run(
     )
     client_id = principal.client_id
     run_mode = str(payload.run_mode or "plan_only").strip().lower()
-    policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(run_mode)
+    policy_profile_id = payload.policy_profile_id or policy_profile_for_run_mode(
+        run_mode
+    )
     trace_id = new_trace_id()
     registry_payload, active_registry_fingerprint = _registry_payload_and_fingerprint()
     ensure_agent_registry_version(
@@ -238,7 +241,6 @@ def create_agent_run(
             },
         )
     return {"run": run}
-
 
 
 @router.get("")
