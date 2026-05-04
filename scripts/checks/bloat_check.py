@@ -39,7 +39,7 @@ DEFAULT_MAX_LINES = {
 # Known hotspots with tailored caps. This allows current state while blocking growth.
 FILE_MAX_LINES = {
     "api/routes/agent_runs.py": 240,
-    "api/routes/agent_runs_commands.py": 320,
+    "api/routes/agent_runs_commands.py": 180,
     "api/routes/agent_runs_registry.py": 380,
     "api/utils/agent_registry_approvals.py": 280,
     "api/utils/agent_registry_runtime.py": 90,
@@ -49,6 +49,7 @@ FILE_MAX_LINES = {
     "application/services/agent_runtime/commands/decisions.py": 180,
     "application/services/agent_runtime/commands/preflight.py": 300,
     "application/services/agent_runtime/commands/recovery.py": 650,
+    "application/services/agent_runtime/commands/service.py": 300,
     "application/services/agent_runtime/registry/catalog.py": 560,
     "application/services/agent_runtime/registry/contracts.py": 340,
     "application/services/agent_runtime/runtime/audit.py": 140,

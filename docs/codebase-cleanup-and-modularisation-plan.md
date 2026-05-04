@@ -147,7 +147,8 @@ docs/
 - The registry catalog split moved static tool/capability specs, policy profiles, and recovery template definitions into `application/services/agent_runtime/registry/catalog.py`, leaving `registry/contracts.py` focused on contract serialization, fingerprinting, version context, and schema validation.
 - The runtime audit split moved run/action event construction into `application/services/agent_runtime/runtime/audit.py`, leaving `runtime/service.py` focused on lock, policy, execution, and status transitions.
 - The package reorganisation moved capability, command, registry, and runtime modules into subpackages while preserving package-level re-exports for existing imports.
-- Continue moving full recovery/retry mutation orchestration into application services when endpoint contracts are stable.
+- The command orchestration split moved command context loading, preflight response assembly, command receipt writing, recovery/retry mutation dispatch, decisions, and runtime command dispatch into `application/services/agent_runtime/commands/service.py`, leaving `api/routes/agent_runs_commands.py` as HTTP translation only.
+- Continue extracting only if command-specific flows grow enough to need separate services.
 - Keep endpoint contracts stable.
 
 ### PR 6: Guardrail Tightening
