@@ -52,6 +52,7 @@ The codebase now has the minimum spine for the pivot:
 - Recovery commands can target a specific allowed capability instead of always falling back to the default recommendation action.
 - Proposed recovery actions now persist side-effect metadata and rollback guidance for downstream approval review.
 - Recovery proposals now include compensating-action recommendations for high-risk and external-side-effect paths.
+- Recovery proposals now apply capability-specific templates so proposed actions carry safer default inputs, source-action context, and template IDs.
 - Interventions can now preflight, confirm, and create audited compensating proposals directly from those recommendations.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
@@ -89,15 +90,15 @@ Current state: static in-code registry exposed through `GET /agent-runs/registry
 
 Next steps:
 
-- Start richer capability-specific recovery templates.
+- Expand recovery templates into a reusable registry surface for UI preview and external agents.
 
 ### 2. Agent Chat As Primary Control Interface
 
-Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, propose explicit retry actions, and create structured recovery proposals.
+Current state: operator chat can explain, navigate execution context, preflight risky commands, issue audited steering commands, propose explicit retry actions, and create structured recovery proposals. Recovery proposals now carry capability-specific template context; external validation recovery defaults to `auto_run=false` so provider work is not duplicated before operator review.
 
 Next steps:
 
-- Add richer recovery templates per capability/effect class as the registry becomes persistent/versioned.
+- Expose recovery templates through the runtime registry so the UI can preview recovery paths before command submission.
 - Consider promoting compensating recommendation creation into a reusable control-plane component.
 
 ### 3. External Agent API Contracts
@@ -186,9 +187,9 @@ Completed in this slice:
 
 ## Next Build Slice
 
-The next implementation slice should move into capability-specific recovery templates.
+The next implementation slice should promote recovery templates into a registry-visible surface.
 
 Initial scope:
 
-- Add richer recovery templates per capability/effect class.
+- Expose recovery templates through the registry/API and surface them in operator chat.
 - Keep mock-auth Playwright smoke green.

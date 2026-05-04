@@ -719,6 +719,97 @@ def _compensating_actions_for_capability(
     return recommendations
 
 
+def _recovery_template_for_capability(
+    *,
+    capability_name: str,
+    run: Dict[str, Any],
+    source_action: Optional[Dict[str, Any]],
+    strategy: str,
+) -> Dict[str, Any]:
+    source_capability = str((source_action or {}).get("capability_name") or "").strip()
+    source_error = str((source_action or {}).get("error") or "").strip()
+    variant_id = str((source_action or {}).get("variant_id") or "").strip()
+    validation_job_id = str((source_action or {}).get("validation_job_id") or "").strip()
+    template: Dict[str, Any] = {
+        "id": f"recovery.{capability_name}",
+        "strategy": strategy,
+        "inputs": {
+            "recovery_context": {
+                "source_action_id": (source_action or {}).get("id"),
+                "source_capability_name": source_capability or None,
+                "source_error": source_error or None,
+                "strategy": strategy,
+            }
+        },
+        "rationale": "Use the registry recovery template for this capability.",
+        "rollback_guidance": None,
+    }
+    if run.get("experiment_id"):
+        template["inputs"]["experiment_id"] = run.get("experiment_id")
+    if variant_id and capability_name in {
+        "review_validation_readiness",
+        "request_synthetic_validation",
+        "update_posterior_and_decisions",
+        "promote_variant_lab",
+        "promote_variant_prod",
+        "publish_copy_revision",
+    }:
+        template["inputs"]["variant_id"] = variant_id
+    if validation_job_id:
+        template["inputs"]["validation_job_id"] = validation_job_id
+
+    if capability_name == "request_synthetic_validation":
+        template["inputs"]["auto_run"] = False
+        template["rationale"] = (
+            "Prepare a validation recovery request without auto-running the provider; "
+            "the operator should inspect provider/job state before execution."
+        )
+        template["rollback_guidance"] = (
+            "Because this may create external provider work, keep auto_run disabled until "
+            "provider state and duplicate-job risk are reviewed."
+        )
+    elif capability_name == "review_validation_readiness":
+        template["rationale"] = (
+            "Re-check readiness gates before creating more recovery work or promotion actions."
+        )
+    elif capability_name == "recommend_next_action":
+        template["rationale"] = (
+            "Ask policy for the safest next action using the failed action as recovery context."
+        )
+    elif capability_name in {"promote_variant_lab", "promote_variant_prod"}:
+        template["rationale"] = (
+            "Recreate promotion as a proposed action only after readiness and rollback context are reviewed."
+        )
+    elif capability_name == "publish_copy_revision":
+        template["rationale"] = (
+            "Recreate publish as a proposed action only after copy diff, promotion evidence, and rollback owner are reviewed."
+        )
+    return template
+
+
+def _apply_recovery_template(
+    *,
+    capability_name: str,
+    inputs: Dict[str, Any],
+    run: Dict[str, Any],
+    source_action: Optional[Dict[str, Any]],
+    strategy: str,
+) -> Dict[str, Any]:
+    template = _recovery_template_for_capability(
+        capability_name=capability_name,
+        run=run,
+        source_action=source_action,
+        strategy=strategy,
+    )
+    merged_inputs = dict(template.get("inputs") or {})
+    merged_inputs.update(inputs)
+    recovery_context = dict(merged_inputs.get("recovery_context") or {})
+    recovery_context.setdefault("template_id", template.get("id"))
+    recovery_context.setdefault("strategy", strategy)
+    merged_inputs["recovery_context"] = recovery_context
+    return {**template, "inputs": merged_inputs}
+
+
 def _preflight_summary(
     *, command_type: str, risk_level: str, blockers: List[str], warnings: List[str]
 ) -> str:
@@ -1428,6 +1519,20 @@ def issue_agent_run_command(
             inputs = dict(recovery_inputs) if isinstance(recovery_inputs, dict) else {}
             if run.get("experiment_id") and not inputs.get("experiment_id"):
                 inputs["experiment_id"] = run.get("experiment_id")
+            recovery_template = _apply_recovery_template(
+                capability_name=capability_name,
+                inputs=inputs,
+                run=run,
+                source_action=action,
+                strategy=str(
+                    payload.metadata.get("recovery_strategy") or "propose_next_action"
+                ),
+            )
+            inputs = dict(recovery_template.get("inputs") or {})
+            rollback_guidance = (
+                recovery_template.get("rollback_guidance")
+                or _capability_rollback_guidance(capability_name, effect_class)
+            )
             recovery_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -1439,6 +1544,7 @@ def issue_agent_run_command(
                 inputs_hash=_hash_payload(inputs),
                 outputs_hash=None,
                 rationale=payload.message
+                or str(recovery_template.get("rationale") or "")
                 or "Recovery action proposed from operator change-plan command.",
                 confidence=0.5,
                 snapshot_version=action.get("snapshot_version") if action else None,
@@ -1453,9 +1559,7 @@ def issue_agent_run_command(
                 skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
-                rollback_guidance=_capability_rollback_guidance(
-                    capability_name, effect_class
-                ),
+                rollback_guidance=str(rollback_guidance),
                 compensating_actions=_compensating_actions_for_capability(
                     capability_name=capability_name,
                     effect_class=effect_class,
@@ -1492,6 +1596,7 @@ def issue_agent_run_command(
                     "recovery_strategy": payload.metadata.get(
                         "recovery_strategy", "propose_next_action"
                     ),
+                    "recovery_template_id": recovery_template.get("id"),
                     "side_effects": recovery_action.get("side_effects"),
                     "rollback_guidance": recovery_action.get("rollback_guidance"),
                     "compensating_actions": recovery_action.get(
@@ -1563,6 +1668,20 @@ def issue_agent_run_command(
                 registry_version_override=run.get("registry_version"),
                 registry_fingerprint_override=run.get("registry_fingerprint"),
             )
+            recovery_template = {}
+            if retry_strategy == "create_recovery_action":
+                recovery_template = _apply_recovery_template(
+                    capability_name=capability_name,
+                    inputs=retry_inputs,
+                    run=run,
+                    source_action=action,
+                    strategy=retry_strategy,
+                )
+                retry_inputs = dict(recovery_template.get("inputs") or retry_inputs)
+            rollback_guidance = (
+                recovery_template.get("rollback_guidance")
+                or _capability_rollback_guidance(capability_name, effect_class)
+            )
             retry_action = deps.agent_actions.create_agent_action(
                 agent_run_id=run_id,
                 sequence=next_sequence,
@@ -1579,7 +1698,7 @@ def issue_agent_run_command(
                 outputs_hash=None,
                 rationale=(
                     f"{retry_strategy} proposed from failed action {str(action.get('id') or '')[:8]}. "
-                    f"{action.get('error') or action.get('rationale') or ''}"
+                    f"{recovery_template.get('rationale') or action.get('error') or action.get('rationale') or ''}"
                 ).strip(),
                 confidence=action.get("confidence"),
                 snapshot_version=action.get("snapshot_version"),
@@ -1594,9 +1713,7 @@ def issue_agent_run_command(
                 skill_version=version_context["skill_version"],
                 effect_class=effect_class,
                 side_effects=_capability_side_effects(capability_name),
-                rollback_guidance=_capability_rollback_guidance(
-                    capability_name, effect_class
-                ),
+                rollback_guidance=str(rollback_guidance),
                 compensating_actions=_compensating_actions_for_capability(
                     capability_name=capability_name,
                     effect_class=effect_class,
@@ -1636,6 +1753,7 @@ def issue_agent_run_command(
                     "original_action_id": action.get("id"),
                     "retry_count": retry_count,
                     "retry_strategy": retry_strategy,
+                    "recovery_template_id": recovery_template.get("id"),
                     "side_effects": retry_action.get("side_effects"),
                     "rollback_guidance": retry_action.get("rollback_guidance"),
                     "compensating_actions": retry_action.get("compensating_actions"),

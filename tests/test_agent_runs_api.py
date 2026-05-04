@@ -903,6 +903,10 @@ def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     action = response.json()["action"]
     assert action["capability_name"] == "recommend_next_action"
     assert action["inputs"]["recovery_from_action_id"] == failed["id"]
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.recommend_next_action"
+    )
+    assert action["inputs"]["recovery_context"]["source_action_id"] == failed["id"]
     assert action["dedupe_key"] == f"retry:{failed['id']}:create_recovery_action:1"
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
@@ -975,6 +979,9 @@ def test_retry_recovery_action_can_target_allowed_capability(client: TestClient)
     action = response.json()["action"]
     assert action["capability_name"] == "review_validation_readiness"
     assert action["inputs"]["recovery_from_action_id"] == failed["id"]
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.review_validation_readiness"
+    )
 
 
 def test_recovery_action_includes_compensating_recommendations_for_external_side_effect(
@@ -1041,6 +1048,11 @@ def test_recovery_action_includes_compensating_recommendations_for_external_side
     action = response.json()["action"]
     assert action["capability_name"] == "request_synthetic_validation"
     assert action["effect_class"] == "external_side_effect"
+    assert action["inputs"]["auto_run"] is False
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.request_synthetic_validation"
+    )
+    assert "auto_run disabled" in action["rollback_guidance"]
     assert action["compensating_actions"][0]["capability_name"] == (
         "review_validation_readiness"
     )
@@ -1058,6 +1070,9 @@ def test_recovery_action_includes_compensating_recommendations_for_external_side
     assert recovery_event["anchors"]["compensating_actions"][0][
         "capability_name"
     ] == "review_validation_readiness"
+    assert recovery_event["anchors"]["recovery_template_id"] == (
+        "recovery.request_synthetic_validation"
+    )
 
 
 def test_change_plan_command_creates_recovery_proposal(client: TestClient):
@@ -1098,6 +1113,9 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert action["status"] == "proposed"
     assert action["capability_name"] == "recommend_next_action"
     assert action["inputs"]["experiment_id"] == "exp-1"
+    assert action["inputs"]["recovery_context"]["template_id"] == (
+        "recovery.recommend_next_action"
+    )
     assert action["dedupe_key"].startswith("change_plan:")
     assert action["side_effects"] == ["create_experiment_recommendation"]
     assert "superseded by a later action" in action["rollback_guidance"]
@@ -1119,6 +1137,9 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     assert recovery_event["anchors"]["side_effects"] == [
         "create_experiment_recommendation"
     ]
+    assert recovery_event["anchors"]["recovery_template_id"] == (
+        "recovery.recommend_next_action"
+    )
     assert "superseded by a later action" in recovery_event["anchors"][
         "rollback_guidance"
     ]
