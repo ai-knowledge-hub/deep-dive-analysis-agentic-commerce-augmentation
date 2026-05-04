@@ -12,10 +12,9 @@ from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
     execute_capability,
 )
-from application.services.agent_runtime.agent_first import (
-    capability_to_tool_id,
-    skill_id_for_tool_id,
-    tool_effect_class,
+from application.services.agent_runtime.runtime_audit import (
+    record_action_event,
+    record_run_event,
 )
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
 from application.services.agent_runtime.registry import (
@@ -88,7 +87,8 @@ class AgentRuntimeService:
         updated = self._deps.agent_runs.update_agent_run(
             run_id=run_id, status="running", error=None
         )
-        self._record_run_event(
+        record_run_event(
+            deps=self._deps,
             run_id=run_id,
             sequence=0,
             event_type="run_started",
@@ -100,7 +100,8 @@ class AgentRuntimeService:
     def pause_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
         updated = self._deps.agent_runs.update_agent_run(run_id=run_id, status="paused")
-        self._record_run_event(
+        record_run_event(
+            deps=self._deps,
             run_id=run_id,
             sequence=0,
             event_type="run_paused",
@@ -116,7 +117,8 @@ class AgentRuntimeService:
             status="canceled",
             error=None,
         )
-        self._record_run_event(
+        record_run_event(
+            deps=self._deps,
             run_id=run_id,
             sequence=0,
             event_type="run_canceled",
@@ -154,7 +156,8 @@ class AgentRuntimeService:
             action = self._claim_next_approved_action(run_id=run_id)
             if not action:
                 raise NoApprovedActionError("No approved action to execute")
-            self._record_action_event(
+            record_action_event(
+                deps=self._deps,
                 run_id=run_id,
                 action=action,
                 event_type="action_executing",
@@ -204,7 +207,8 @@ class AgentRuntimeService:
                     status="failed",
                     error=str(exc),
                 )
-                self._record_action_event(
+                record_action_event(
+                    deps=self._deps,
                     run_id=run_id,
                     action=action,
                     event_type="action_failed",
@@ -226,7 +230,8 @@ class AgentRuntimeService:
                     status="failed",
                     error=str(exc),
                 )
-                self._record_action_event(
+                record_action_event(
+                    deps=self._deps,
                     run_id=run_id,
                     action=action,
                     event_type="action_failed",
@@ -248,7 +253,8 @@ class AgentRuntimeService:
                     status="failed",
                     error=str(exc),
                 )
-                self._record_action_event(
+                record_action_event(
+                    deps=self._deps,
                     run_id=run_id,
                     action=action,
                     event_type="action_failed",
@@ -264,7 +270,8 @@ class AgentRuntimeService:
                 outputs=outputs,
                 outputs_hash=_hash_payload(outputs),
             )
-            self._record_action_event(
+            record_action_event(
+                deps=self._deps,
                 run_id=run_id,
                 action=executed or action,
                 event_type="action_executed",
@@ -336,86 +343,6 @@ class AgentRuntimeService:
         if statuses and statuses.issubset({"executed", "rejected"}):
             return "completed"
         return "running"
-
-    def _record_run_event(
-        self,
-        *,
-        run_id: str,
-        sequence: int,
-        event_type: str,
-        status: str,
-        note: Optional[str],
-    ) -> None:
-        run = self._deps.agent_runs.get_agent_run(run_id=run_id) or {}
-        self._deps.agent_events.create_agent_event(
-            agent_run_id=run_id,
-            action_id=None,
-            sequence=sequence,
-            event_type=event_type,
-            status=status,
-            capability_name=None,
-            capability_version=None,
-            principal_type=run.get("principal_type"),
-            principal_id=run.get("principal_id"),
-            trace_id=run.get("trace_id"),
-            note=note,
-            is_policy_event=False,
-            anchors={},
-        )
-
-    def _record_action_event(
-        self,
-        *,
-        run_id: str,
-        action: Dict[str, Any],
-        event_type: str,
-        status: str,
-        note: Optional[str],
-        is_policy_event: bool = False,
-    ) -> None:
-        run = self._deps.agent_runs.get_agent_run(run_id=run_id) or {}
-        outputs = action.get("outputs") or {}
-        metric_id = None
-        if isinstance(outputs, dict):
-            metric_id = (
-                outputs.get("metric_id")
-                or outputs.get("new_metric_id")
-                or outputs.get("source_metric_id")
-            )
-        self._deps.agent_events.create_agent_event(
-            agent_run_id=run_id,
-            action_id=str(action.get("id") or "") or None,
-            sequence=int(action.get("sequence") or 0),
-            event_type=event_type,
-            status=status,
-            capability_name=str(action.get("capability_name") or "") or None,
-            capability_version=str(action.get("capability_version") or "") or None,
-            principal_type=run.get("principal_type"),
-            principal_id=run.get("principal_id"),
-            tool_id=action.get("tool_id")
-            or capability_to_tool_id(str(action.get("capability_name") or "")),
-            skill_id=action.get("skill_id")
-            or skill_id_for_tool_id(
-                action.get("tool_id")
-                or capability_to_tool_id(str(action.get("capability_name") or ""))
-            ),
-            effect_class=action.get("effect_class")
-            or tool_effect_class(
-                action.get("tool_id")
-                or capability_to_tool_id(str(action.get("capability_name") or ""))
-            ),
-            trace_id=run.get("trace_id"),
-            note=str(note) if note is not None else None,
-            is_policy_event=is_policy_event,
-            anchors={
-                "experiment_id": run.get("experiment_id"),
-                "variant_id": action.get("variant_id"),
-                "validation_job_id": action.get("validation_job_id"),
-                "hypothesis_id": action.get("hypothesis_id"),
-                "snapshot_version": action.get("snapshot_version"),
-                "metric_id": metric_id,
-            },
-        )
 
 
 __all__ = [
