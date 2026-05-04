@@ -325,6 +325,8 @@ Deliver:
 - move lab-heavy routes into a secondary nav group
 - simplify `/` to a role-aware landing page
 
+Status: mostly implemented. The current follow-up tightens the sidebar so `Lab` remains visible but subsystem-heavy lab tools sit behind an `Advanced lab` disclosure.
+
 ### Phase 2: Homepage decomposition
 
 Deliver:
@@ -360,6 +362,8 @@ The first UI slice should be intentionally small:
    - `Learnings`
 3. move current workflow-heavy links into a `Lab` or secondary section in the sidebar
 4. simplify `/` so it primarily routes users to the correct workspace instead of rendering the full lab
+
+Status: completed, with the next refinement demoting advanced lab tools further behind a collapsible secondary group.
 
 This gives immediate clarity without forcing a full component rewrite.
 

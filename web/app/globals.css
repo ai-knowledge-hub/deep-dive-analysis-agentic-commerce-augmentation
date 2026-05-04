@@ -566,6 +566,31 @@ ul { list-style: none; }
   margin-bottom: 4px;
 }
 
+.sidebar__advanced-toggle {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.sidebar__advanced-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 2px 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  margin-left: 14px;
+}
+
+.sidebar__item--advanced {
+  padding-block: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sidebar__item--advanced .sidebar__icon {
+  width: 14px;
+  height: 14px;
+}
+
 .sidebar__session {
   width: 100%;
   padding: 8px 10px;

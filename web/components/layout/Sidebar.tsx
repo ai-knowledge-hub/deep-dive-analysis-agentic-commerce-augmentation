@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   SignedIn,
   SignedOut,
@@ -45,6 +45,15 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [showTenantPanel, setShowTenantPanel] = useState(false);
   const pathname = usePathname();
+  const isAdvancedLabRoute = [
+    "/alignment",
+    "/evidence",
+    "/simulation",
+    "/experiments",
+    "/validation",
+    "/overview",
+  ].includes(pathname);
+  const [advancedLabOpen, setAdvancedLabOpen] = useState(isAdvancedLabRoute);
   const mockAuth = isMockAuthEnabled();
   const {
     clients,
@@ -161,20 +170,20 @@ export function Sidebar({
       ),
     },
   ];
-  const workflowItems = [
-    {
-      href: "/lab",
-      label: "Lab",
-      shortLabel: "L",
-      icon: (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M5 4h14a2 2 0 0 1 2 2v2H3V6a2 2 0 0 1 2-2zm-2 6h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm6 2v4h2v-4H9zm4 0v4h2v-4h-2z"
-            fill="currentColor"
-          />
-        </svg>
-      ),
-    },
+  const labItem = {
+    href: "/lab",
+    label: "Lab",
+    shortLabel: "L",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M5 4h14a2 2 0 0 1 2 2v2H3V6a2 2 0 0 1 2-2zm-2 6h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm6 2v4h2v-4H9zm4 0v4h2v-4h-2z"
+          fill="currentColor"
+        />
+      </svg>
+    ),
+  };
+  const advancedLabItems = [
     {
       href: "/alignment",
       label: "Alignment",
@@ -444,24 +453,66 @@ export function Sidebar({
             {!collapsed && (
               <div className="sidebar__section-label">Lab</div>
             )}
-            {workflowItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`sidebar__item ${
-                  pathname === item.href ? "sidebar__item--active" : ""
+            <Link
+              href={labItem.href}
+              className={`sidebar__item ${
+                pathname === labItem.href ? "sidebar__item--active" : ""
+              }`}
+              onClick={() => {
+                if (mobileOpen) onMobileClose();
+              }}
+              title={collapsed ? labItem.label : undefined}
+            >
+              <span className="sidebar__icon" aria-hidden="true">
+                {labItem.icon}
+              </span>
+              {!collapsed && <span className="sidebar__label">{labItem.label}</span>}
+            </Link>
+            {!collapsed ? (
+              <button
+                type="button"
+                className={`sidebar__item sidebar__item--meta sidebar__advanced-toggle ${
+                  isAdvancedLabRoute ? "sidebar__item--active" : ""
                 }`}
-                onClick={() => {
-                  if (mobileOpen) onMobileClose();
-                }}
-                title={collapsed ? item.label : undefined}
+                aria-expanded={advancedLabOpen}
+                onClick={() => setAdvancedLabOpen((open) => !open)}
               >
                 <span className="sidebar__icon" aria-hidden="true">
-                  {item.icon}
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      d={
+                        advancedLabOpen
+                          ? "M7 10l5 5 5-5H7z"
+                          : "M10 7l5 5-5 5V7z"
+                      }
+                      fill="currentColor"
+                    />
+                  </svg>
                 </span>
-                {!collapsed && <span className="sidebar__label">{item.label}</span>}
-              </Link>
-            ))}
+                <span className="sidebar__label">Advanced lab</span>
+              </button>
+            ) : null}
+            {advancedLabOpen && !collapsed ? (
+              <div className="sidebar__advanced-list">
+                {advancedLabItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`sidebar__item sidebar__item--advanced ${
+                      pathname === item.href ? "sidebar__item--active" : ""
+                    }`}
+                    onClick={() => {
+                      if (mobileOpen) onMobileClose();
+                    }}
+                  >
+                    <span className="sidebar__icon" aria-hidden="true">
+                      {item.icon}
+                    </span>
+                    <span className="sidebar__label">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </div>
           {adminItems.length ? (
             <div className="sidebar__nav-section">
