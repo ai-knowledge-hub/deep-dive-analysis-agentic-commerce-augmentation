@@ -134,6 +134,9 @@ docs/
 ### PR 5: Backend Agent Runtime Modularisation
 
 - Split `api/routes/agent_runs.py` by responsibility.
+- PR5 started this by extracting registry/release/ownership/backfill endpoints into `api/routes/agent_runs_registry.py`.
+- The next PR5 slice extracted start/pause/cancel/step/tick control endpoints into `api/routes/agent_runs_control.py`.
+- The command slice extracted preflight, operator command execution, recovery proposal, retry proposal, and action decision endpoints into `api/routes/agent_runs_commands.py`.
 - Move recovery and compensating action construction into an application service module.
 - Keep endpoint contracts stable.
 
