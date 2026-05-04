@@ -39,6 +39,7 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
+import { ActionDiffDrawer } from "../../components/agent-runs/ActionDiffDrawer";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
@@ -2959,207 +2960,15 @@ function AgentRunsPageContent() {
           </div>
         )}
 
-        {diffDrawerOpen && selectedAction && selectedActionDeepDiff && (
-          <div className="drawer">
-            <div className="drawer__overlay" onClick={() => setDiffDrawerOpen(false)} />
-            <div className="drawer__panel">
-              <div className="drawer__header">
-                <h2 className="drawer__title">Artifact diff details</h2>
-                <button className="drawer__close" onClick={() => setDiffDrawerOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <div className="drawer__body">
-                <p className="panel__muted">
-                  Action #{selectedAction.sequence} · {selectedAction.capability_name}
-                </p>
-
-                <p className="panel__subheading">Output changes vs previous action</p>
-                <div className="agent-diff-detail-grid">
-                  <div>
-                    <strong>Added</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(selectedActionDeepDiff.outputsVsPreviousAction.added)}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Changed</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(selectedActionDeepDiff.outputsVsPreviousAction.changed)}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Removed</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(selectedActionDeepDiff.outputsVsPreviousAction.removed)}
-                    </pre>
-                  </div>
-                </div>
-
-                <p className="panel__subheading">Output changes vs previous same capability</p>
-                <div className="agent-diff-detail-grid">
-                  <div>
-                    <strong>Added</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(
-                        selectedActionDeepDiff.outputsVsPreviousCapability.added,
-                      )}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Changed</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(
-                        selectedActionDeepDiff.outputsVsPreviousCapability.changed,
-                      )}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Removed</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(
-                        selectedActionDeepDiff.outputsVsPreviousCapability.removed,
-                      )}
-                    </pre>
-                  </div>
-                </div>
-
-                <p className="panel__subheading">Input changes (traceability)</p>
-                <div className="agent-diff-detail-grid">
-                  <div>
-                    <strong>vs previous action</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(
-                        selectedActionDeepDiff.inputsVsPreviousAction.changed,
-                      )}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>vs previous same capability</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(
-                        selectedActionDeepDiff.inputsVsPreviousCapability.changed,
-                      )}
-                    </pre>
-                  </div>
-                </div>
-
-                <p className="panel__subheading">Snapshot payloads</p>
-                <div className="agent-diff-detail-grid">
-                  <div>
-                    <strong>Current inputs</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(selectedActionDeepDiff.currentInputs)}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Current outputs</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(selectedActionDeepDiff.currentOutputs)}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Previous action outputs</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(selectedActionDeepDiff.previousOutputs)}
-                    </pre>
-                  </div>
-                  <div>
-                    <strong>Previous same-capability outputs</strong>
-                    <pre className="panel__pre">
-                      {formatJsonPreview(
-                        selectedActionDeepDiff.previousCapabilityOutputs,
-                      )}
-                    </pre>
-                  </div>
-                </div>
-
-                <p className="panel__subheading">Copy diff mode (string-heavy fields)</p>
-                <label className="panel__toggle">
-                  <input
-                    type="checkbox"
-                    checked={hideUnchangedDiffLines}
-                    onChange={(event) => setHideUnchangedDiffLines(event.target.checked)}
-                  />
-                  Hide unchanged lines
-                </label>
-                {(selectedActionDeepDiff.copyDiffVsPreviousAction.length === 0 &&
-                  selectedActionDeepDiff.copyDiffVsPreviousCapability.length === 0) ? (
-                  <p className="panel__muted">
-                    No string-heavy output fields changed for this action.
-                  </p>
-                ) : null}
-                {selectedActionDeepDiff.copyDiffVsPreviousAction.length > 0 ? (
-                  <div className="agent-copy-diff-block">
-                    <strong>vs previous action</strong>
-                    {selectedActionDeepDiff.copyDiffVsPreviousAction.map((entry) => (
-                      <details key={`prev-${entry.key}`} className="agent-copy-diff">
-                        <summary>{entry.key}</summary>
-                        <div className="agent-copy-diff__lines">
-                          {entry.lines
-                            .filter((line) =>
-                              hideUnchangedDiffLines ? line.kind !== "same" : true,
-                            )
-                            .map((line, index) => (
-                            <div
-                              key={`${entry.key}-${index}`}
-                              className={`agent-copy-diff__line is-${line.kind}`}
-                            >
-                              <span className="agent-copy-diff__prefix">
-                                {line.kind === "added"
-                                  ? "+"
-                                  : line.kind === "removed"
-                                    ? "-"
-                                    : " "}
-                              </span>
-                              <span className="agent-copy-diff__text">{line.text || " "}</span>
-                            </div>
-                            ))}
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                ) : null}
-                {selectedActionDeepDiff.copyDiffVsPreviousCapability.length > 0 ? (
-                  <div className="agent-copy-diff-block">
-                    <strong>vs previous same capability</strong>
-                    {selectedActionDeepDiff.copyDiffVsPreviousCapability.map((entry) => (
-                      <details key={`cap-${entry.key}`} className="agent-copy-diff">
-                        <summary>{entry.key}</summary>
-                        <div className="agent-copy-diff__lines">
-                          {entry.lines
-                            .filter((line) =>
-                              hideUnchangedDiffLines ? line.kind !== "same" : true,
-                            )
-                            .map((line, index) => (
-                            <div
-                              key={`${entry.key}-cap-${index}`}
-                              className={`agent-copy-diff__line is-${line.kind}`}
-                            >
-                              <span className="agent-copy-diff__prefix">
-                                {line.kind === "added"
-                                  ? "+"
-                                  : line.kind === "removed"
-                                    ? "-"
-                                    : " "}
-                              </span>
-                              <span className="agent-copy-diff__text">{line.text || " "}</span>
-                            </div>
-                            ))}
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <div className="drawer__footer">
-                <button className="button button--ghost" onClick={() => setDiffDrawerOpen(false)}>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ActionDiffDrawer
+          open={diffDrawerOpen}
+          selectedAction={selectedAction}
+          diff={selectedActionDeepDiff}
+          hideUnchangedDiffLines={hideUnchangedDiffLines}
+          onHideUnchangedDiffLinesChange={setHideUnchangedDiffLines}
+          onClose={() => setDiffDrawerOpen(false)}
+          formatJsonPreview={formatJsonPreview}
+        />
 
       </main>
     </div>
