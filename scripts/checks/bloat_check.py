@@ -39,7 +39,7 @@ DEFAULT_MAX_LINES = {
 # Known hotspots with tailored caps. This allows current state while blocking growth.
 FILE_MAX_LINES = {
     "api/routes/agent_runs.py": 1400,
-    "api/routes/agent_runs_commands.py": 650,
+    "api/routes/agent_runs_commands.py": 320,
     "api/routes/agent_runs_registry.py": 650,
     "tests/test_agent_runs_api.py": 1400,
     "web/app/experiments/page.tsx": 5200,

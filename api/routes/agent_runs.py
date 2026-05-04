@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
-from api.routes.agent_runs_commands import (
+from application.services.agent_runtime.commands import (
     _capability_rollback_guidance,
     _capability_side_effects,
     _compensating_actions_for_capability,

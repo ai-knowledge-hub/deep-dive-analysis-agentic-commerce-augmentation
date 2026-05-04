@@ -27,7 +27,6 @@ def _hash_payload(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-
 def _record_command_event(
     *,
     deps: AppDeps,
@@ -45,7 +44,9 @@ def _record_command_event(
         event_type=f"operator_command_{command_type}",
         status=status,
         capability_name=str(action.get("capability_name") or "") if action else None,
-        capability_version=str(action.get("capability_version") or "") if action else None,
+        capability_version=str(action.get("capability_version") or "")
+        if action
+        else None,
         principal_type=run.get("principal_type"),
         principal_id=run.get("principal_id"),
         tool_id=action.get("tool_id") if action else None,
@@ -121,7 +122,9 @@ def _command_preflight(
         ]
         requested_capability = _requested_recovery_capability(metadata)
         if not allowed:
-            blockers.append("Change-plan needs at least one allowed recovery capability.")
+            blockers.append(
+                "Change-plan needs at least one allowed recovery capability."
+            )
         elif requested_capability and requested_capability not in allowed:
             blockers.append(
                 f"Recovery capability '{requested_capability}' is not allowed for this run."
@@ -174,10 +177,12 @@ def _command_preflight(
         }
         if spec.name not in allowed_capabilities:
             blockers.append(f"Capability '{spec.name}' is not allowed for this run")
-        if (
-            str(run.get("policy_profile_id") or "").strip().lower() == "observe"
-            and spec.effect_class not in {"read", "recommend"}
-        ):
+        if str(
+            run.get("policy_profile_id") or ""
+        ).strip().lower() == "observe" and spec.effect_class not in {
+            "read",
+            "recommend",
+        }:
             blockers.append(
                 f"Policy profile 'observe' forbids effect class '{spec.effect_class}' "
                 f"for tool '{tool_id or '<unknown>'}'"
@@ -195,9 +200,13 @@ def _command_preflight(
             f"This command may trigger {effect_class} work through tool '{tool_id or 'unknown'}'."
         )
     if command_type == "cancel":
-        warnings.append("Canceling a run is terminal and should be treated as an operator intervention.")
+        warnings.append(
+            "Canceling a run is terminal and should be treated as an operator intervention."
+        )
     if command_type == "pause":
-        warnings.append("Pausing preserves state but stops autonomous progress until resumed.")
+        warnings.append(
+            "Pausing preserves state but stops autonomous progress until resumed."
+        )
 
     risk_level = "low"
     if command_type == "cancel" or effect_class == "write_high_risk":
@@ -245,7 +254,9 @@ def _rollback_guidance(
     if command_type == "pause":
         return "Resume with start once the operator is ready."
     if command_type == "cancel":
-        return "Cancel is terminal. Create a new run to continue from the same objective."
+        return (
+            "Cancel is terminal. Create a new run to continue from the same objective."
+        )
     if effect_class == "write_high_risk":
         return "High-risk writes may need a compensating action or manual rollback after execution."
     if effect_class == "external_side_effect":
@@ -260,7 +271,9 @@ def _capability_side_effects(capability_name: str) -> List[str]:
     return list(spec.side_effects) if spec else []
 
 
-def _capability_rollback_guidance(capability_name: str, effect_class: str | None) -> str:
+def _capability_rollback_guidance(
+    capability_name: str, effect_class: str | None
+) -> str:
     return _rollback_guidance(
         command_type="execute",
         effect_class=str(effect_class or ""),
@@ -346,7 +359,9 @@ def _recovery_template_for_capability(
     source_capability = str((source_action or {}).get("capability_name") or "").strip()
     source_error = str((source_action or {}).get("error") or "").strip()
     variant_id = str((source_action or {}).get("variant_id") or "").strip()
-    validation_job_id = str((source_action or {}).get("validation_job_id") or "").strip()
+    validation_job_id = str(
+        (source_action or {}).get("validation_job_id") or ""
+    ).strip()
     template: Dict[str, Any] = {
         "id": f"recovery.{capability_name}",
         "strategy": strategy,
@@ -475,7 +490,8 @@ def create_change_plan_recovery_action(
     tool_id = capability_to_tool_id(capability_name)
     skill_id = skill_id_for_tool_id(
         tool_id,
-        preferred_skill_id=metadata.get("skill_id") or metadata.get("preferred_skill_id"),
+        preferred_skill_id=metadata.get("skill_id")
+        or metadata.get("preferred_skill_id"),
     )
     effect_class = tool_effect_class(tool_id)
     version_context = version_context_for_capability(
@@ -514,10 +530,14 @@ def create_change_plan_recovery_action(
         or str(recovery_template.get("rationale") or "")
         or "Recovery action proposed from operator change-plan command.",
         confidence=0.5,
-        snapshot_version=source_action.get("snapshot_version") if source_action else None,
+        snapshot_version=source_action.get("snapshot_version")
+        if source_action
+        else None,
         hypothesis_id=source_action.get("hypothesis_id") if source_action else None,
         variant_id=source_action.get("variant_id") if source_action else None,
-        validation_job_id=source_action.get("validation_job_id") if source_action else None,
+        validation_job_id=source_action.get("validation_job_id")
+        if source_action
+        else None,
         tool_id=tool_id,
         skill_id=skill_id,
         registry_version=version_context["registry_version"],
@@ -610,7 +630,8 @@ def create_retry_action(
     tool_id = capability_to_tool_id(capability_name)
     skill_id = skill_id_for_tool_id(
         tool_id,
-        preferred_skill_id=metadata.get("skill_id") or metadata.get("preferred_skill_id"),
+        preferred_skill_id=metadata.get("skill_id")
+        or metadata.get("preferred_skill_id"),
     )
     effect_class = tool_effect_class(tool_id)
     version_context = version_context_for_capability(
@@ -736,14 +757,17 @@ def apply_command_action_decision(
         capability_version=str(current.get("capability_version") or "") or None,
         principal_type=run.get("principal_type"),
         principal_id=run.get("principal_id"),
-        tool_id=current.get("tool_id") or capability_to_tool_id(current.get("capability_name")),
+        tool_id=current.get("tool_id")
+        or capability_to_tool_id(current.get("capability_name")),
         skill_id=current.get("skill_id")
         or skill_id_for_tool_id(
-            current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
+            current.get("tool_id")
+            or capability_to_tool_id(current.get("capability_name"))
         ),
         effect_class=current.get("effect_class")
         or tool_effect_class(
-            current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
+            current.get("tool_id")
+            or capability_to_tool_id(current.get("capability_name"))
         ),
         trace_id=run.get("trace_id"),
         note=f"Action {command_type} by operator chat",
@@ -794,14 +818,17 @@ def decide_agent_action(
         capability_version=str(current.get("capability_version") or "") or None,
         principal_type=run_row.get("principal_type") if run_row else "human",
         principal_id=run_row.get("principal_id") if run_row else (user_id or None),
-        tool_id=current.get("tool_id") or capability_to_tool_id(current.get("capability_name")),
+        tool_id=current.get("tool_id")
+        or capability_to_tool_id(current.get("capability_name")),
         skill_id=current.get("skill_id")
         or skill_id_for_tool_id(
-            current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
+            current.get("tool_id")
+            or capability_to_tool_id(current.get("capability_name"))
         ),
         effect_class=current.get("effect_class")
         or tool_effect_class(
-            current.get("tool_id") or capability_to_tool_id(current.get("capability_name"))
+            current.get("tool_id")
+            or capability_to_tool_id(current.get("capability_name"))
         ),
         trace_id=run_row.get("trace_id") if run_row else None,
         note=f"Action {normalized_decision} by operator",
@@ -816,4 +843,3 @@ def decide_agent_action(
         },
     )
     return updated or action
-

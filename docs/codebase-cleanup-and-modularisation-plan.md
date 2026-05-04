@@ -138,6 +138,7 @@ docs/
 - The next PR5 slice extracted start/pause/cancel/step/tick control endpoints into `api/routes/agent_runs_control.py`.
 - The command slice extracted preflight, operator command execution, recovery proposal, retry proposal, and action decision endpoints into `api/routes/agent_runs_commands.py`.
 - The command service slice moved reusable command preflight, recovery template, retry metadata, rollback, and compensating-action helpers into `application/services/agent_runtime/commands.py`.
+- The route-thinning slice wired command routes to the command service for change-plan proposals, retry proposals, and action decisions, then lowered the route bloat cap to prevent regression.
 - Continue moving full recovery/retry mutation orchestration into application services when endpoint contracts are stable.
 - Keep endpoint contracts stable.
 
