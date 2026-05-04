@@ -42,6 +42,7 @@ FILE_MAX_LINES = {
     "tests/test_agent_runs_api.py": 1400,
     "web/app/experiments/page.tsx": 5200,
     "web/app/agent-runs/page.tsx": 2600,
+    "web/app/interventions/page.tsx": 720,
     "web/app/admin/page.tsx": 2800,
     "web/components/agent/OperatorConsoleChat.tsx": 520,
     "application/services/experiment/runner.py": 1800,
