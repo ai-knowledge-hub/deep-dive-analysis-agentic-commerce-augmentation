@@ -40,7 +40,9 @@ DEFAULT_MAX_LINES = {
 FILE_MAX_LINES = {
     "api/routes/agent_runs.py": 240,
     "api/routes/agent_runs_commands.py": 320,
-    "api/routes/agent_runs_registry.py": 650,
+    "api/routes/agent_runs_registry.py": 380,
+    "api/utils/agent_registry_approvals.py": 280,
+    "api/utils/agent_registry_runtime.py": 90,
     "application/services/agent_runtime/commands.py": 300,
     "application/services/agent_runtime/decisions.py": 180,
     "application/services/agent_runtime/recovery.py": 650,
