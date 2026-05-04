@@ -12,6 +12,8 @@ from application.services.agent_runtime.capabilities import CapabilityExecutionE
 from application.services.agent_runtime.commands import (
     _command_preflight,
     _record_command_event,
+)
+from application.services.agent_runtime.decisions import (
     apply_command_action_decision,
     decide_agent_action,
 )

@@ -140,6 +140,7 @@ docs/
 - The command service slice moved reusable command preflight, recovery template, retry metadata, rollback, and compensating-action helpers into `application/services/agent_runtime/commands.py`.
 - The route-thinning slice wired command routes to the command service for change-plan proposals, retry proposals, and action decisions, then lowered the route bloat cap to prevent regression.
 - The recovery split moved recovery templates, rollback guidance, compensating actions, change-plan proposal creation, and retry proposal creation into `application/services/agent_runtime/recovery.py`, with dedicated bloat caps for both command and recovery services.
+- The decision split moved action approve/reject mutation and audit-event writing into `application/services/agent_runtime/decisions.py`, leaving `commands.py` focused on preflight and command receipts.
 - Continue moving full recovery/retry mutation orchestration into application services when endpoint contracts are stable.
 - Keep endpoint contracts stable.
 
