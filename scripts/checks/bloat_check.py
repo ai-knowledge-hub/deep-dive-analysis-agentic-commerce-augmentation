@@ -41,7 +41,7 @@ FILE_MAX_LINES = {
     "api/routes/agent_runs.py": 2100,
     "tests/test_agent_runs_api.py": 1400,
     "web/app/experiments/page.tsx": 5200,
-    "web/app/agent-runs/page.tsx": 3100,
+    "web/app/agent-runs/page.tsx": 2600,
     "web/app/admin/page.tsx": 2800,
     "application/services/experiment/runner.py": 1800,
     "web/lib/types.ts": 1700,
