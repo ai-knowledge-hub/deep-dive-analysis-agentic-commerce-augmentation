@@ -1,7 +1,7 @@
 """Run due experiment schedules.
 
 Usage:
-  DATABASE_PATH=./tmp/local.db uv run scripts/run_experiment_schedules.py --limit 10
+  DATABASE_PATH=./tmp/local.db uv run python -m scripts.ops.run_experiment_schedules --limit 10
 """
 
 from __future__ import annotations

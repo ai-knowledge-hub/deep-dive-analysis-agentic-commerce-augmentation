@@ -110,9 +110,9 @@ Worker/ops entry points:
 - API: `POST /agent-runs/{run_id}/commands/preflight`
   - returns whether a command is allowed before execution
   - includes risk level, required confirmation, blockers, warnings, side effects, and rollback guidance
-- CLI: `python -m scripts.run_agent_runtime_worker`
+- CLI: `python -m scripts.ops.run_agent_runtime_worker`
 - Make target: `make agent-runtime-tick`
-- Scheduler CLI: `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`
+- Scheduler CLI: `python -m scripts.ops.run_agent_runtime_scheduler --interval-seconds 30`
 - Scheduler Make target: `make agent-runtime-scheduler`
 
 ### 3.2 Capability Registry (the key abstraction)

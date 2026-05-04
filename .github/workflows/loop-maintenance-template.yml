@@ -45,7 +45,7 @@ jobs:
           if [ -n "${{ github.event.inputs.client_id }}" ]; then
             CLIENT_ARG="--client-id ${{ github.event.inputs.client_id }}"
           fi
-          python -m scripts.run_learning_loop_maintenance \
+          python -m scripts.ops.run_learning_loop_maintenance \
             --lookback-days "${{ github.event.inputs.lookback_days }}" \
             --min-confidence "${{ github.event.inputs.min_confidence }}" \
             ${CLIENT_ARG}

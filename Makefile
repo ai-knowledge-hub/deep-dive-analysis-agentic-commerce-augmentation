@@ -58,17 +58,17 @@ lint:
 .PHONY: arch-check
 arch-check:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.arch_check; \
+		./.venv/bin/python -m scripts.checks.arch_check; \
 	else \
-		$(PYTHON) -m scripts.arch_check; \
+		$(PYTHON) -m scripts.checks.arch_check; \
 	fi
 
 .PHONY: bloat-check
 bloat-check:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.bloat_check; \
+		./.venv/bin/python -m scripts.checks.bloat_check; \
 	else \
-		$(PYTHON) -m scripts.bloat_check; \
+		$(PYTHON) -m scripts.checks.bloat_check; \
 	fi
 
 .PHONY: format
@@ -127,47 +127,47 @@ db-path:
 .PHONY: seed-demo
 seed-demo:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.seed_demo_competitors; \
+		./.venv/bin/python -m scripts.seed.seed_demo_competitors; \
 	else \
-		$(PYTHON) -m scripts.seed_demo_competitors; \
+		$(PYTHON) -m scripts.seed.seed_demo_competitors; \
 	fi
 
 .PHONY: seed-canonical
 seed-canonical:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.seed_canonical_intent_specs; \
+		./.venv/bin/python -m scripts.seed.seed_canonical_intent_specs; \
 	else \
-		$(PYTHON) -m scripts.seed_canonical_intent_specs; \
+		$(PYTHON) -m scripts.seed.seed_canonical_intent_specs; \
 	fi
 
 .PHONY: seed-demo-acme
 seed-demo-acme:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.seed_demo_acme; \
+		./.venv/bin/python -m scripts.seed.seed_demo_acme; \
 	else \
-		$(PYTHON) -m scripts.seed_demo_acme; \
+		$(PYTHON) -m scripts.seed.seed_demo_acme; \
 	fi
 
 .PHONY: loop-maintenance
 loop-maintenance:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.run_learning_loop_maintenance; \
+		./.venv/bin/python -m scripts.ops.run_learning_loop_maintenance; \
 	else \
-		$(PYTHON) -m scripts.run_learning_loop_maintenance; \
+		$(PYTHON) -m scripts.ops.run_learning_loop_maintenance; \
 	fi
 
 .PHONY: agent-runtime-tick
 agent-runtime-tick:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.run_agent_runtime_worker; \
+		./.venv/bin/python -m scripts.ops.run_agent_runtime_worker; \
 	else \
-		$(PYTHON) -m scripts.run_agent_runtime_worker; \
+		$(PYTHON) -m scripts.ops.run_agent_runtime_worker; \
 	fi
 
 .PHONY: agent-runtime-scheduler
 agent-runtime-scheduler:
 	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python -m scripts.run_agent_runtime_scheduler; \
+		./.venv/bin/python -m scripts.ops.run_agent_runtime_scheduler; \
 	else \
-		$(PYTHON) -m scripts.run_agent_runtime_scheduler; \
+		$(PYTHON) -m scripts.ops.run_agent_runtime_scheduler; \
 	fi

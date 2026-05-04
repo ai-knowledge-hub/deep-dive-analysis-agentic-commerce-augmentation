@@ -1,8 +1,8 @@
 """Run agent runtime scheduler loop.
 
 Usage:
-  DATABASE_PATH=./tmp/local.db uv run scripts/run_agent_runtime_scheduler.py --once
-  DATABASE_PATH=./tmp/local.db uv run scripts/run_agent_runtime_scheduler.py --interval-seconds 30
+  DATABASE_PATH=./tmp/local.db uv run python -m scripts.ops.run_agent_runtime_scheduler --once
+  DATABASE_PATH=./tmp/local.db uv run python -m scripts.ops.run_agent_runtime_scheduler --interval-seconds 30
 """
 
 from __future__ import annotations

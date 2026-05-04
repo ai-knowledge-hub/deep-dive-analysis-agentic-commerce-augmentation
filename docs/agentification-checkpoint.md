@@ -74,6 +74,8 @@ The current implementation is still not a full OpenClaw-style autonomous assista
 Use these docs together:
 
 - `docs/agentification-checkpoint.md`: current checkpoint and next implementation tracks
+- `docs/README.md`: documentation index and active/historical status map
+- `docs/codebase-cleanup-and-modularisation-plan.md`: cleanup and modularisation sequence
 - `docs/agent-first-modular-architecture-v1.md`: target architecture
 - `docs/chat-led-operator-console-spec.md`: target human control-plane UX
 - `docs/ui-control-plane-simplification-plan.md`: UI simplification roadmap
