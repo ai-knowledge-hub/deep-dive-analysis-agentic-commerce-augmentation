@@ -11,7 +11,7 @@ from application.services.agent_runtime.agent_first import (
     tool_effect_class,
 )
 from application.services.agent_runtime.planner import build_initial_plan
-from application.services.agent_runtime.recovery import (
+from application.services.agent_runtime.commands.recovery import (
     _capability_rollback_guidance,
     _capability_side_effects,
     _compensating_actions_for_capability,

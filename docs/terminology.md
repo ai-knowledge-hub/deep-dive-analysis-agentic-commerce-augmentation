@@ -70,7 +70,7 @@ Example:
 
 **In Code**
 ```
-application/services/agent_runtime/registry.py
+application/services/agent_runtime/registry/contracts.py
 application/services/agent_runtime/agent_first.py
 ```
 

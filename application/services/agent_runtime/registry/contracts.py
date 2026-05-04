@@ -11,7 +11,7 @@ from application.services.agent_runtime.agent_first import (
     select_skill_for_tool_id,
     skill_specs_for_tool_id,
 )
-from application.services.agent_runtime.registry_catalog import (
+from application.services.agent_runtime.registry.catalog import (
     REGISTRY_VERSION,
     CapabilitySpec,
     ToolSpec,

@@ -47,7 +47,9 @@ class AgentRunTickRequest(BaseModel):
     max_steps_per_run: int = 5
 
 
-def _require_scoped_run(*, deps: AppDeps, run_id: str, client_id: str) -> Dict[str, Any]:
+def _require_scoped_run(
+    *, deps: AppDeps, run_id: str, client_id: str
+) -> Dict[str, Any]:
     run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")

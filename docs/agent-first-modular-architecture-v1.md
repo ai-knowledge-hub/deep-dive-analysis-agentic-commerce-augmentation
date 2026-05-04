@@ -395,7 +395,7 @@ This migration can be incremental.
 
 ### Keep and evolve
 
-- `application/services/agent_runtime/runtime.py`
+- `application/services/agent_runtime/runtime/service.py`
   - keep as the execution kernel
   - extend it to operate on tools and skills, not just current capability names
 
@@ -403,7 +403,7 @@ This migration can be incremental.
   - keep as policy enforcement core
   - extend to policy profiles, effect classes, principal scopes, and approval thresholds
 
-- `application/services/agent_runtime/registry.py`
+- `application/services/agent_runtime/registry/contracts.py`
   - evolve from capability registry into tool registry plus compatibility shims
 
 - `application/agents/harness/`
