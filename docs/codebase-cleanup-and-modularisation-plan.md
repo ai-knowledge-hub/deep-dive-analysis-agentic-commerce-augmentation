@@ -137,7 +137,8 @@ docs/
 - PR5 started this by extracting registry/release/ownership/backfill endpoints into `api/routes/agent_runs_registry.py`.
 - The next PR5 slice extracted start/pause/cancel/step/tick control endpoints into `api/routes/agent_runs_control.py`.
 - The command slice extracted preflight, operator command execution, recovery proposal, retry proposal, and action decision endpoints into `api/routes/agent_runs_commands.py`.
-- Move recovery and compensating action construction into an application service module.
+- The command service slice moved reusable command preflight, recovery template, retry metadata, rollback, and compensating-action helpers into `application/services/agent_runtime/commands.py`.
+- Continue moving full recovery/retry mutation orchestration into application services when endpoint contracts are stable.
 - Keep endpoint contracts stable.
 
 ### PR 6: Guardrail Tightening
