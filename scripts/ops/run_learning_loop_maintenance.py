@@ -1,7 +1,7 @@
 """Run learning-loop maintenance jobs.
 
 Usage:
-  DATABASE_PATH=./tmp/local.db uv run scripts/run_learning_loop_maintenance.py --lookback-days 30
+  DATABASE_PATH=./tmp/local.db uv run python -m scripts.ops.run_learning_loop_maintenance --lookback-days 30
 """
 
 from __future__ import annotations

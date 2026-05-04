@@ -171,7 +171,7 @@ Agent Runs operator UX (current):
 
 Agent runtime worker/scheduler:
 - one-off tick: `make agent-runtime-tick`
-- interval scheduler: `make agent-runtime-scheduler` (or `python -m scripts.run_agent_runtime_scheduler --interval-seconds 30`)
+- interval scheduler: `make agent-runtime-scheduler` (or `python -m scripts.ops.run_agent_runtime_scheduler --interval-seconds 30`)
 
 ---
 
@@ -337,21 +337,19 @@ Architecture checks are part of CI and enforce layer boundaries.
 
 ## Documentation
 
+Start with `docs/README.md` for the canonical documentation index and status map.
+
+Current planning references:
+
 - `docs/agentification-checkpoint.md`
 - `docs/agent-first-modular-architecture-v1.md`
-- `docs/agent-first-migration-slice-rfc.md`
+- `docs/codebase-cleanup-and-modularisation-plan.md`
 - `docs/agentic-layer.md`
 - `docs/chat-led-operator-console-spec.md`
 - `docs/ui-control-plane-simplification-plan.md`
-- `docs/app-architecture.md`
-- `docs/app-workflows.md`
-- `docs/experiment-flow-detailed.md`
-- `docs/architecture-learning-loop.md`
-- `docs/user-guide-complete.md`
-- `docs/external-integrations.md`
-- `docs/deployment.md`
-- `docs/debug/incidents-fixed.md`
-- `docs/debug/open-risks.md`
+
+Historical or candidate-historical docs are still retained, but should not be treated
+as the current implementation plan without checking the checkpoint first.
 
 ---
 

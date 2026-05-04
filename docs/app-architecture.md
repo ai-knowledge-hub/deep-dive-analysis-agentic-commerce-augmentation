@@ -210,9 +210,9 @@ The agentic module is implemented as an orchestration layer over the same experi
   - atomic action claim (`approved -> executing -> executed|failed`)
 - Bounded autonomous execution:
   - worker tick endpoint `POST /agent-runs/tick`
-  - CLI runner `scripts/run_agent_runtime_worker.py`
+  - CLI runner `scripts/ops/run_agent_runtime_worker.py`
   - Make target `make agent-runtime-tick`
-  - scheduler loop `scripts/run_agent_runtime_scheduler.py` / `make agent-runtime-scheduler`
+  - scheduler loop `scripts/ops/run_agent_runtime_scheduler.py` / `make agent-runtime-scheduler`
 
 ### Capability and policy model
 - Capabilities are explicit names with a shared contract:

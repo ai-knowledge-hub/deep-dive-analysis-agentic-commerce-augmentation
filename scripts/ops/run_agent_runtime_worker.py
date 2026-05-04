@@ -1,7 +1,7 @@
 """Run one autonomous tick for agent runtime runs.
 
 Usage:
-  DATABASE_PATH=./tmp/local.db uv run scripts/run_agent_runtime_worker.py --client-id <client>
+  DATABASE_PATH=./tmp/local.db uv run python -m scripts.ops.run_agent_runtime_worker --client-id <client>
 """
 
 from __future__ import annotations

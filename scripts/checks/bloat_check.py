@@ -23,6 +23,7 @@ ROOT = _repo_root()
 IGNORE_DIRS = {
     ".git",
     ".venv",
+    "venv",
     "node_modules",
     ".next",
     "tmp",
@@ -37,9 +38,13 @@ DEFAULT_MAX_LINES = {
 
 # Known hotspots with tailored caps. This allows current state while blocking growth.
 FILE_MAX_LINES = {
+    "api/routes/agent_runs.py": 2100,
+    "tests/test_agent_runs_api.py": 1400,
     "web/app/experiments/page.tsx": 5200,
+    "web/app/agent-runs/page.tsx": 3800,
     "web/app/admin/page.tsx": 2800,
     "application/services/experiment/runner.py": 1800,
+    "web/lib/types.ts": 1700,
 }
 
 

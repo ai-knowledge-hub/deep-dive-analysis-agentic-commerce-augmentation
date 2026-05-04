@@ -15,7 +15,15 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / ".git").exists() or (parent / "Makefile").exists():
+            return parent
+    return Path.cwd()
+
+
+ROOT = _repo_root()
 
 DOMAIN_FORBIDDEN = {"api", "application", "infrastructure", "shared", "llm", "web"}
 INFRA_FORBIDDEN = {"api", "application"}
