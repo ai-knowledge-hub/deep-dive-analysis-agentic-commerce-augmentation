@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from application.ports.deps import AppDeps
-from application.services.agent_runtime.capabilities import CapabilityExecutionError
 from application.services.agent_runtime.commands.decisions import (
     apply_command_action_decision,
 )
@@ -16,12 +15,7 @@ from application.services.agent_runtime.commands.recovery import (
     create_retry_action,
 )
 from application.services.agent_runtime.runtime import (
-    AgentRuntimeError,
     AgentRuntimeService,
-    NoApprovedActionError,
-    PlanOnlyModeError,
-    RunBusyError,
-    RunNotFoundError,
 )
 
 
@@ -122,24 +116,19 @@ def issue_agent_run_command(
     if normalized_command in {"explain", "focus"}:
         return result
 
-    try:
-        _apply_agent_run_command(
-            deps=deps,
-            runtime=runtime,
-            result=result,
-            run_id=run_id,
-            run=run,
-            action=action,
-            command_type=normalized_command,
-            command_receipt=receipt,
-            user_id=user_id,
-            message=message,
-            metadata=metadata,
-        )
-    except (RunNotFoundError, PlanOnlyModeError, NoApprovedActionError, RunBusyError):
-        raise
-    except (CapabilityExecutionError, AgentRuntimeError):
-        raise
+    _apply_agent_run_command(
+        deps=deps,
+        runtime=runtime,
+        result=result,
+        run_id=run_id,
+        run=run,
+        action=action,
+        command_type=normalized_command,
+        command_receipt=receipt,
+        user_id=user_id,
+        message=message,
+        metadata=metadata,
+    )
 
     _record_command_event(
         deps=deps,

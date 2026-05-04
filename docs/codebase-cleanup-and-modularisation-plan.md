@@ -155,6 +155,7 @@ docs/
 
 - Lower bloat thresholds after hotspots are split.
 - Add a duplicate-script check once wrappers are removed.
+- Add an architecture guardrail that keeps command routes behind `commands/service.py` instead of re-importing low-level command internals.
 - Add doc status enforcement if docs continue growing.
 
 ## Verification Baseline

@@ -28,6 +28,23 @@ ROOT = _repo_root()
 DOMAIN_FORBIDDEN = {"api", "application", "infrastructure", "shared", "llm", "web"}
 INFRA_FORBIDDEN = {"api", "application"}
 APP_FORBIDDEN = {"api", "infrastructure", "web"}
+COMMAND_ROUTE_PATH = Path("api/routes/agent_runs_commands.py")
+COMMAND_ROUTE_FORBIDDEN_MODULES = {
+    "application.services.agent_runtime.commands.preflight",
+    "application.services.agent_runtime.commands.recovery",
+}
+COMMAND_ROUTE_FORBIDDEN_NAMES = {
+    "application.services.agent_runtime.commands": {
+        "_command_preflight",
+        "_record_command_event",
+        "apply_command_action_decision",
+        "create_change_plan_recovery_action",
+        "create_retry_action",
+    },
+    "application.services.agent_runtime.commands.decisions": {
+        "apply_command_action_decision",
+    },
+}
 
 
 def _iter_py_files(root: Path) -> list[Path]:
@@ -102,12 +119,40 @@ def _check_application(file: Path) -> list[str]:
     return [f"{rel}: application imports forbidden module(s): {', '.join(bad)}"]
 
 
+def _check_command_route_boundary(file: Path) -> list[str]:
+    rel = file.relative_to(ROOT)
+    if rel != COMMAND_ROUTE_PATH:
+        return []
+    tree = ast.parse(file.read_text(encoding="utf-8"))
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level:
+            continue
+        module = node.module or ""
+        if module in COMMAND_ROUTE_FORBIDDEN_MODULES:
+            errors.append(
+                f"{rel}: command routes must use commands.service, not {module}"
+            )
+            continue
+        forbidden_names = COMMAND_ROUTE_FORBIDDEN_NAMES.get(module, set())
+        bad_names = sorted(
+            alias.name for alias in node.names if alias.name in forbidden_names
+        )
+        if bad_names:
+            errors.append(
+                f"{rel}: command routes must not import service internals from "
+                f"{module}: {', '.join(bad_names)}"
+            )
+    return errors
+
+
 def main() -> int:
     errors: list[str] = []
     for file in _iter_py_files(ROOT):
         errors.extend(_check_domain(file))
         errors.extend(_check_infrastructure(file))
         errors.extend(_check_application(file))
+        errors.extend(_check_command_route_boundary(file))
 
     if errors:
         print("Architecture check failed:\n", file=sys.stderr)
