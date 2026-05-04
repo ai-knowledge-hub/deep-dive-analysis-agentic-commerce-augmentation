@@ -1166,6 +1166,17 @@ export type AgentRuntimePolicyProfile = {
   auto_effect_classes: string[];
 };
 
+export type AgentRuntimeRecoveryTemplate = {
+  id: string;
+  capability_name: string;
+  tool_id?: string;
+  effect_class?: string;
+  summary?: string;
+  default_inputs?: Record<string, unknown>;
+  operator_notes?: string[];
+  side_effects?: string[];
+};
+
 export type AgentRuntimeRegistryResponse = {
   registry_version?: string;
   registry_fingerprint?: string;
@@ -1186,6 +1197,7 @@ export type AgentRuntimeRegistryResponse = {
       candidate_skill_ids?: string[];
     }
   >;
+  recovery_templates?: AgentRuntimeRecoveryTemplate[];
   policy_profiles: AgentRuntimePolicyProfile[];
 };
 

@@ -324,6 +324,12 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     )
     assert "new_metric_id" in posterior["output_schema"]["required"]
     assert "variant_id" in posterior["output_schema"]["required"]
+    validation_template = next(
+        item
+        for item in payload["recovery_templates"]
+        if item["capability_name"] == "request_synthetic_validation"
+    )
+    assert validation_template["default_inputs"]["auto_run"] is False
     assert run_variant["review_checklist"]
     assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
     assert run_variant["steward_team"] == "commerce-optimization"

@@ -430,6 +430,52 @@ def list_policy_profiles() -> list[Dict[str, Any]]:
     ]
 
 
+def recovery_template_for_capability(capability_name: str) -> Dict[str, Any] | None:
+    spec = get_capability_spec(capability_name)
+    if not spec:
+        return None
+    default_inputs: Dict[str, Any] = {}
+    summary = "Create a proposed recovery action using source-action context."
+    operator_notes = [
+        "Recovery proposals are created for operator review; they do not execute immediately.",
+        "The source action id and failure context are attached in recovery_context.",
+    ]
+    if capability_name == "request_synthetic_validation":
+        default_inputs["auto_run"] = False
+        summary = "Prepare validation recovery without auto-running external provider work."
+        operator_notes.append(
+            "Keep auto_run disabled until duplicate provider/job risk has been reviewed."
+        )
+    elif capability_name == "review_validation_readiness":
+        summary = "Re-check readiness gates before creating more promotion or provider work."
+    elif capability_name == "recommend_next_action":
+        summary = "Ask policy for the safest next recovery action."
+    elif capability_name in {"promote_variant_lab", "promote_variant_prod"}:
+        summary = "Recreate promotion as a proposed action after readiness review."
+        operator_notes.append("Confirm promotion evidence and rollback owner before approval.")
+    elif capability_name == "publish_copy_revision":
+        summary = "Recreate publish as a proposed action after copy and rollback review."
+        operator_notes.append("Confirm copy diff, prod promotion evidence, and rollback owner.")
+    return {
+        "id": f"recovery.{capability_name}",
+        "capability_name": capability_name,
+        "tool_id": spec.tool_id,
+        "effect_class": spec.effect_class,
+        "summary": summary,
+        "default_inputs": default_inputs,
+        "operator_notes": operator_notes,
+        "side_effects": list(spec.side_effects),
+    }
+
+
+def list_recovery_templates() -> list[Dict[str, Any]]:
+    return [
+        template
+        for capability in list_capability_specs()
+        if (template := recovery_template_for_capability(capability.name)) is not None
+    ]
+
+
 def registry_contract_payload(
     ownership_by_tool: Mapping[str, Mapping[str, Any]]
     | Sequence[Mapping[str, Any]]
@@ -461,6 +507,7 @@ def registry_contract_payload(
         "capabilities": capabilities,
         "skill_ids_by_tool": skill_ids_by_tool,
         "skill_selection_by_tool": skill_selection_by_tool,
+        "recovery_templates": list_recovery_templates(),
         "policy_profiles": list_policy_profiles(),
     }
 
@@ -661,10 +708,12 @@ __all__ = [
     "capability_supported",
     "list_capability_specs",
     "list_policy_profiles",
+    "list_recovery_templates",
     "next_state_for_capability",
     "registry_contract_payload",
     "registry_fingerprint",
     "validate_inputs",
     "validate_outputs",
     "version_context_for_capability",
+    "recovery_template_for_capability",
 ]

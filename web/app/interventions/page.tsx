@@ -7,6 +7,11 @@ import { useAppUser } from "../../lib/auth";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { Sidebar } from "../../components/layout/Sidebar";
+import { CompensatingProposalControl } from "../../components/agent/CompensatingProposalControl";
+import {
+  buildCompensatingProposalCommand,
+  compensatingProposalKey,
+} from "../../components/agent/compensatingProposal";
 import {
   controlAgentRun,
   decideAgentAction,
@@ -88,13 +93,6 @@ type CommandItem = {
   compensatingActions?: AgentCompensatingAction[];
 };
 
-type CompensatingCommand = {
-  command_type: "change_plan";
-  action_id?: string | null;
-  message: string;
-  metadata: Record<string, unknown>;
-};
-
 const HIGH_RISK_CAPABILITIES = new Set([
   "promote_variant_prod",
   "publish_copy_revision",
@@ -154,34 +152,6 @@ function eventRollbackGuidance(event: AgentRunEvent): string | null {
 function eventCompensatingActions(event: AgentRunEvent): AgentCompensatingAction[] {
   const value = event.anchors?.compensating_actions;
   return Array.isArray(value) ? (value as AgentCompensatingAction[]) : [];
-}
-
-function sourceActionId(event: AgentRunEvent): string | null {
-  const source = event.anchors?.source_action_id;
-  if (typeof source === "string" && source.trim()) return source;
-  return event.action_id ?? null;
-}
-
-function compensatingCommand(
-  item: CommandItem,
-  recommendation: AgentCompensatingAction,
-): CompensatingCommand | null {
-  if (!recommendation.capability_name) return null;
-  return {
-    command_type: "change_plan",
-    action_id: sourceActionId(item.event),
-    message:
-      recommendation.label ||
-      `Create compensating proposal for ${recommendation.capability_name}`,
-    metadata: {
-      recovery_strategy: "compensating_action",
-      capability_name: recommendation.capability_name,
-      source_event_id: item.event.id,
-      compensating_priority: recommendation.priority,
-      compensating_rationale: recommendation.rationale,
-      inputs: item.run.experiment_id ? { experiment_id: item.run.experiment_id } : {},
-    },
-  };
 }
 
 function badgeClassForPriority(priority: Priority): string {
@@ -610,9 +580,13 @@ function InterventionsPageContent() {
   const handleCompensatingAction = useCallback(
     async (item: CommandItem, recommendation: AgentCompensatingAction) => {
       if (!userId || !recommendation.capability_name) return;
-      const busy = `compensate:${item.event.id}:${recommendation.capability_name}`;
+      const busy = compensatingProposalKey(item.event.id, recommendation);
+      if (!busy) return;
       const pendingKey = busy;
-      const command = compensatingCommand(item, recommendation);
+      const command = buildCompensatingProposalCommand(
+        { event: item.event, experimentId: item.run.experiment_id },
+        recommendation,
+      );
       if (!command) return;
       setBusyKey(busy);
       setError(null);
@@ -788,9 +762,10 @@ function InterventionsPageContent() {
                 <div className="list">
                   {visibleCommands.map((item) => {
                       const compensating = item.compensatingActions?.[0] ?? null;
-                      const compensatingKey = compensating?.capability_name
-                        ? `compensate:${item.event.id}:${compensating.capability_name}`
-                        : null;
+                      const compensatingKey = compensatingProposalKey(
+                        item.event.id,
+                        compensating,
+                      );
                       const preflight = compensatingKey
                         ? compensatingPreflights[compensatingKey]
                         : null;
@@ -806,76 +781,23 @@ function InterventionsPageContent() {
                               Rollback: {item.rollbackGuidance}
                             </div>
                           ) : null}
-                          {compensating ? (
-                            <div className="list__meta">
-                              Compensating action:{" "}
-                              {compensating.label ??
-                                compensating.capability_name ??
-                                "Review next safe action"}
-                            </div>
-                          ) : null}
-                          {preflight ? (
-                            <div className="panel__notice panel__notice--info">
-                              <strong>Preflight:</strong> {preflight.summary}{" "}
-                              <span className="panel__badge panel__badge--secondary">
-                                Risk: {preflight.risk_level}
-                              </span>
-                              {preflight.blockers[0] ? (
-                                <div>Blocker: {preflight.blockers[0]}</div>
-                              ) : null}
-                              {preflight.warnings[0] ? (
-                                <div>Warning: {preflight.warnings[0]}</div>
-                              ) : null}
-                              <div>Rollback: {preflight.rollback_guidance}</div>
-                              {needsConfirm ? (
-                                <div>Click again to confirm proposal creation.</div>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          <div className="agent-ops-summary">
-                            <span className="panel__badge panel__badge--secondary">
-                              Event: {item.event.event_type}
-                            </span>
-                            <span className="panel__badge panel__badge--secondary">
-                              Status: {item.event.status}
-                            </span>
-                            <span className="panel__badge panel__badge--secondary">
-                              Effect: {item.event.effect_class ?? item.risk}
-                            </span>
-                          </div>
-                          {item.event.timestamp ? (
-                            <div className="list__meta">
-                              Command signal: {formatEventTime(item.event.timestamp)}
-                            </div>
-                          ) : null}
-                          <div className="detail__actions">
-                            {compensating?.capability_name && compensatingKey ? (
-                              <button
-                                type="button"
-                                className="button button--primary button--sm"
-                                onClick={() =>
-                                  void handleCompensatingAction(item, compensating)
-                                }
-                                disabled={busyKey === compensatingKey}
-                              >
-                                {busyKey === compensatingKey
-                                  ? "Checking..."
-                                  : needsConfirm
-                                    ? "Confirm compensating proposal"
-                                    : "Create compensating proposal"}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="button button--ghost button--sm"
-                              onClick={() => openRun(item.run.id)}
-                            >
-                              Inspect run
-                            </button>
-                          </div>
+                          <CompensatingProposalControl
+                            recommendation={compensating}
+                            event={item.event}
+                            risk={item.risk}
+                            preflight={preflight}
+                            needsConfirmation={Boolean(needsConfirm)}
+                            busy={Boolean(compensatingKey && busyKey === compensatingKey)}
+                            onCreate={() => {
+                              if (compensating) {
+                                void handleCompensatingAction(item, compensating);
+                              }
+                            }}
+                            onInspectRun={() => openRun(item.run.id)}
+                          />
                         </div>
                       );
-                  })}
+                    })}
                 </div>
               )}
             </section>
