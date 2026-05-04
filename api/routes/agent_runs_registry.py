@@ -12,7 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
-from api.routes import agent_runs as agent_runs_core
+from api.utils.agent_registry_runtime import (
+    registry_ownership,
+    registry_payload_and_fingerprint,
+)
 from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.agent_first import (
@@ -64,11 +67,11 @@ class AgentRegistryApprovalReceiptVerifyRequest(BaseModel):
 
 
 def _registry_ownership() -> List[Dict[str, Any]]:
-    return agent_runs_core._registry_ownership()
+    return registry_ownership()
 
 
 def _registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
-    return agent_runs_core._registry_payload_and_fingerprint()
+    return registry_payload_and_fingerprint()
 
 
 def _urlsafe_b64encode(raw: bytes) -> str:
@@ -325,7 +328,9 @@ def get_agent_runtime_registry_releases(
 ) -> Dict[str, Any]:
     normalized_status = str(status).strip().lower() if status else None
     if normalized_status and normalized_status not in {"active", "retired"}:
-        raise HTTPException(status_code=400, detail="Unsupported registry release status")
+        raise HTTPException(
+            status_code=400, detail="Unsupported registry release status"
+        )
     bounded_limit = max(1, min(int(limit), 100))
     return {
         "releases": list_agent_registry_versions(
@@ -355,9 +360,7 @@ def update_agent_runtime_registry_tool_ownership(
     tool_id: str,
     payload: AgentRegistryOwnershipUpdateRequest,
 ) -> Dict[str, Any]:
-    existing_tool_ids = {
-        item["tool_id"] for item in default_tool_ownership_records()
-    }
+    existing_tool_ids = {item["tool_id"] for item in default_tool_ownership_records()}
     if tool_id not in existing_tool_ids:
         raise HTTPException(status_code=404, detail="Registry tool not found")
     current_ownership = _registry_ownership()
@@ -396,7 +399,9 @@ def update_agent_runtime_registry_tool_ownership(
         source="operator_override",
     )
     if not ownership:
-        raise HTTPException(status_code=400, detail="Invalid registry ownership payload")
+        raise HTTPException(
+            status_code=400, detail="Invalid registry ownership payload"
+        )
     registry_payload, fingerprint = _registry_payload_and_fingerprint()
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
