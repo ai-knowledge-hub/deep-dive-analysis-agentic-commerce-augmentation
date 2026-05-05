@@ -437,6 +437,30 @@ function resolveSinceForWindow(windowId: "all" | "24h" | "7d"): string | null {
   return new Date(now - deltaMs).toISOString();
 }
 
+function runAttentionRank(run: AgentRun): number {
+  const status = String(run.status ?? "").toLowerCase();
+  if (status === "failed") return 0;
+  if (run.requires_approval) return 1;
+  if (["running", "active", "executing", "paused"].includes(status)) return 2;
+  return 3;
+}
+
+function runAttentionLabel(run: AgentRun): string | null {
+  const status = String(run.status ?? "").toLowerCase();
+  if (status === "failed") return "Critical";
+  if (run.requires_approval) return "Approval";
+  if (["running", "active", "executing", "paused"].includes(status)) return "Watching";
+  return null;
+}
+
+function sortRunsForOperatorAttention(runs: AgentRun[]): AgentRun[] {
+  return [...runs].sort((a, b) => {
+    const rankDelta = runAttentionRank(a) - runAttentionRank(b);
+    if (rankDelta !== 0) return rankDelta;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
 function AgentRunsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -598,7 +622,7 @@ function AgentRunsPageContent() {
           }
         }
         if (!selectedRunId) {
-          setSelectedRunId(nextRuns[0].id);
+          setSelectedRunId(sortRunsForOperatorAttention(nextRuns)[0].id);
         }
       }
     } catch (err) {
@@ -962,7 +986,14 @@ function AgentRunsPageContent() {
   }, [selectedRun]);
 
   const runCounters = useMemo(() => {
-    const counters = { total: 0, running: 0, planned: 0, failed: 0, completed: 0 };
+    const counters = {
+      total: 0,
+      running: 0,
+      planned: 0,
+      failed: 0,
+      completed: 0,
+      approvals: 0,
+    };
     (runs ?? []).forEach((run) => {
       counters.total += 1;
       const status = String(run.status ?? "").toLowerCase();
@@ -970,9 +1001,12 @@ function AgentRunsPageContent() {
       if (status === "planned") counters.planned += 1;
       if (status === "failed") counters.failed += 1;
       if (status === "completed") counters.completed += 1;
+      if (run.requires_approval) counters.approvals += 1;
     });
     return counters;
   }, [runs]);
+
+  const displayRuns = useMemo(() => sortRunsForOperatorAttention(runs ?? []), [runs]);
 
   const flowSteps = useMemo(() => {
     const currentIndex = AGENT_FLOW_STEPS.findIndex(
@@ -1598,8 +1632,12 @@ function AgentRunsPageContent() {
             }
             metrics={[
               { label: "Total", value: runCounters.total },
+              {
+                label: "Approvals",
+                value: runCounters.approvals,
+                tone: runCounters.approvals > 0 ? "warning" : "default",
+              },
               { label: "Running", value: runCounters.running },
-              { label: "Planned", value: runCounters.planned },
               {
                 label: "Failed",
                 value: runCounters.failed,
@@ -1614,13 +1652,17 @@ function AgentRunsPageContent() {
               <div className="panel__card">
                 <div className="panel__header">
                   <h3>Run selection</h3>
+                  <span className="panel__badge panel__badge--secondary">
+                    Attention first
+                  </span>
                 </div>
                 <div className="list">
-                  {(runs ?? []).map((run) => {
+                  {displayRuns.map((run) => {
                     const active = run.id === selectedRunId;
                     const label = run.experiment_id
                       ? `Experiment ${String(run.experiment_id).slice(0, 8)}`
                       : `Run ${String(run.id).slice(0, 8)}`;
+                    const attentionLabel = runAttentionLabel(run);
                     return (
                       <button
                         key={run.id}
@@ -1635,6 +1677,17 @@ function AgentRunsPageContent() {
                         <div className="list__meta">
                           {run.status ?? "unknown"} · {run.state ?? "unknown"}
                         </div>
+                        {attentionLabel ? (
+                          <span
+                            className={`panel__badge ${
+                              attentionLabel === "Critical"
+                                ? "panel__badge--warning"
+                                : "panel__badge--secondary"
+                            }`}
+                          >
+                            {attentionLabel}
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -1653,6 +1706,9 @@ function AgentRunsPageContent() {
                   </span>
                   <span className="panel__badge panel__badge--secondary">
                     Running: {runCounters.running}
+                  </span>
+                  <span className="panel__badge panel__badge--secondary">
+                    Approvals: {runCounters.approvals}
                   </span>
                   <span className="panel__badge panel__badge--secondary">
                     Planned: {runCounters.planned}

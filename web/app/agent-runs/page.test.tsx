@@ -523,6 +523,57 @@ describe("AgentRunsPage timeline presets", () => {
     expect(typeof payload.since).toBe("string");
   });
 
+  it("sorts run selection by operator attention", async () => {
+    listAgentRunsMock.mockResolvedValue({
+      runs: [
+        {
+          id: "run-calm",
+          experiment_id: "exp-calm",
+          status: "completed",
+          state: "finished",
+          budgets: {},
+          requires_approval: false,
+        },
+        {
+          id: "run-approval",
+          experiment_id: "exp-appr",
+          status: "planned",
+          state: "variants_ready",
+          budgets: {},
+          requires_approval: true,
+        },
+        {
+          id: "run-failed",
+          experiment_id: "exp-fail",
+          status: "failed",
+          state: "validation_failed",
+          budgets: {},
+          requires_approval: false,
+        },
+        {
+          id: "run-running",
+          experiment_id: "exp-run",
+          status: "running",
+          state: "executing",
+          budgets: {},
+          requires_approval: false,
+        },
+      ],
+    });
+
+    render(<AgentRunsPage />);
+
+    await waitFor(() => expect(getAgentRunMock).toHaveBeenCalledWith("run-failed", expect.anything(), "user-a"));
+    const rows = await screen.findAllByRole("button", { name: /Experiment exp-/i });
+
+    expect(rows[0]).toHaveTextContent(/exp-fail/i);
+    expect(rows[0]).toHaveTextContent(/Critical/i);
+    expect(rows[1]).toHaveTextContent(/exp-appr/i);
+    expect(rows[1]).toHaveTextContent(/Approval/i);
+    expect(rows[2]).toHaveTextContent(/exp-run/i);
+    expect(rows[2]).toHaveTextContent(/Watching/i);
+  });
+
   it("applies Commands preset to event query payload", async () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());

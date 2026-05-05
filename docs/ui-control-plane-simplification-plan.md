@@ -354,8 +354,10 @@ Deliver:
 - clearer state badges and failure surfaces
 
 Status: in progress. `Inbox` now groups recent work by `Critical`, `Review`,
-and `Watching` urgency, while `Learnings` starts with recommended operator
-follow-ups and separates decision signals from general execution signals.
+and `Watching` urgency, `Learnings` starts with recommended operator follow-ups
+and separates decision signals from general execution signals, and `Runs`
+orders the run selector by operator attention so failed and approval-needed
+execution contexts surface first.
 
 ## Concrete First Implementation Slice
 
