@@ -353,6 +353,10 @@ Deliver:
 - compact run summaries
 - clearer state badges and failure surfaces
 
+Status: in progress. `Inbox` now groups recent work by `Critical`, `Review`,
+and `Watching` urgency, while `Learnings` starts with recommended operator
+follow-ups and separates decision signals from general execution signals.
+
 ## Concrete First Implementation Slice
 
 The first UI slice should be intentionally small:
