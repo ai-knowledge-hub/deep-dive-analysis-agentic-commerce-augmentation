@@ -85,6 +85,12 @@ describe("LearningsPage", () => {
           status: "failed",
           state: "validation_completed",
         },
+        {
+          id: "run-2",
+          experiment_id: "exp-2",
+          status: "planned",
+          state: "variants_ready",
+        },
       ],
     });
 
@@ -112,7 +118,15 @@ describe("LearningsPage", () => {
     expect(screen.getByText(/Validation accuracy/i)).toBeInTheDocument();
     expect(screen.getByText(/82%/i)).toBeInTheDocument();
     expect(screen.getAllByText(/shipping clarity/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Decision signals/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Execution signals/i)).toBeInTheDocument();
     expect(screen.getByText(/Review recent execution drift/i)).toBeInTheDocument();
+    expect(getAgentRunEventsMock).toHaveBeenCalledTimes(1);
+    expect(getAgentRunEventsMock).toHaveBeenCalledWith(
+      "run-1",
+      { limit: 12, event_type: "all" },
+      "user-a",
+    );
   });
 
   it("navigates from a follow-up action", async () => {

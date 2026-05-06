@@ -40,9 +40,12 @@ import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefi
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
 import { ActionDiffDrawer } from "../../components/agent-runs/ActionDiffDrawer";
+import { ExecutionControlsSummary } from "../../components/agent-runs/ExecutionControlsSummary";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
+import { RunSelectionRail } from "../../components/agent-runs/RunSelectionRail";
 import { SelectedActionDetailPanel } from "../../components/agent-runs/SelectedActionDetailPanel";
+import { sortRunsForOperatorAttention } from "../../components/agent-runs/runAttention";
 import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
 const RUNS_ROUTE = "/runs";
@@ -598,7 +601,7 @@ function AgentRunsPageContent() {
           }
         }
         if (!selectedRunId) {
-          setSelectedRunId(nextRuns[0].id);
+          setSelectedRunId(sortRunsForOperatorAttention(nextRuns)[0].id);
         }
       }
     } catch (err) {
@@ -962,7 +965,14 @@ function AgentRunsPageContent() {
   }, [selectedRun]);
 
   const runCounters = useMemo(() => {
-    const counters = { total: 0, running: 0, planned: 0, failed: 0, completed: 0 };
+    const counters = {
+      total: 0,
+      running: 0,
+      planned: 0,
+      failed: 0,
+      completed: 0,
+      approvals: 0,
+    };
     (runs ?? []).forEach((run) => {
       counters.total += 1;
       const status = String(run.status ?? "").toLowerCase();
@@ -970,9 +980,12 @@ function AgentRunsPageContent() {
       if (status === "planned") counters.planned += 1;
       if (status === "failed") counters.failed += 1;
       if (status === "completed") counters.completed += 1;
+      if (run.requires_approval) counters.approvals += 1;
     });
     return counters;
   }, [runs]);
+
+  const displayRuns = useMemo(() => sortRunsForOperatorAttention(runs ?? []), [runs]);
 
   const flowSteps = useMemo(() => {
     const currentIndex = AGENT_FLOW_STEPS.findIndex(
@@ -1598,8 +1611,12 @@ function AgentRunsPageContent() {
             }
             metrics={[
               { label: "Total", value: runCounters.total },
+              {
+                label: "Approvals",
+                value: runCounters.approvals,
+                tone: runCounters.approvals > 0 ? "warning" : "default",
+              },
               { label: "Running", value: runCounters.running },
-              { label: "Planned", value: runCounters.planned },
               {
                 label: "Failed",
                 value: runCounters.failed,
@@ -1610,61 +1627,16 @@ function AgentRunsPageContent() {
           />
 
           <div className="agent-workspace">
-            <section className="panel__card panel__card--secondary agent-workspace__rail">
-              <div className="panel__card">
-                <div className="panel__header">
-                  <h3>Run selection</h3>
-                </div>
-                <div className="list">
-                  {(runs ?? []).map((run) => {
-                    const active = run.id === selectedRunId;
-                    const label = run.experiment_id
-                      ? `Experiment ${String(run.experiment_id).slice(0, 8)}`
-                      : `Run ${String(run.id).slice(0, 8)}`;
-                    return (
-                      <button
-                        key={run.id}
-                        type="button"
-                        className={`list__row ${active ? "is-active" : ""}`}
-                        onClick={() => {
-                          setSelectedRunId(run.id);
-                          setSelectedEventId(null);
-                        }}
-                      >
-                        <div className="list__title">{label}</div>
-                        <div className="list__meta">
-                          {run.status ?? "unknown"} · {run.state ?? "unknown"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {runs.length === 0 && (
-                    <div className="panel__muted">No agent runs yet.</div>
-                  )}
-                </div>
-              </div>
-              <div className="panel__card">
-                <div className="panel__header">
-                  <h4>Run stats</h4>
-                </div>
-                <div className="agent-ops-summary">
-                  <span className="panel__badge panel__badge--secondary">
-                    Total: {runCounters.total}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Running: {runCounters.running}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Planned: {runCounters.planned}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Completed: {runCounters.completed}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Failed: {runCounters.failed}
-                  </span>
-                </div>
-              </div>
+            <section className="control-surface agent-workspace__rail">
+              <RunSelectionRail
+                runs={displayRuns}
+                selectedRunId={selectedRunId}
+                runCounters={runCounters}
+                onSelectRun={(runId) => {
+                  setSelectedRunId(runId);
+                  setSelectedEventId(null);
+                }}
+              />
               <OperatorConsoleChat
                 run={selectedRun}
                 actions={actions}
@@ -1741,46 +1713,16 @@ function AgentRunsPageContent() {
               />
             </section>
 
-            <section className="panel__card panel__card--secondary agent-workspace__main">
+            <section className="control-surface agent-workspace__main">
               {selectedRun ? (
-                <div className="agent-run-summary">
-                  <div className="panel__header">
-                    <h4>Execution controls</h4>
-                    <span className="panel__badge panel__badge--secondary">
-                      Current: {selectedRun.state ?? "unknown"}
-                    </span>
-                  </div>
-                  <div className="agent-run-summary__chips">
-                    <span className="panel__badge panel__badge--secondary">
-                      Status: {selectedRun.status ?? "unknown"}
-                    </span>
-                    <span className="panel__badge panel__badge--secondary">
-                      Approval:{" "}
-                      {selectedRun.requires_approval ? "required" : "auto-execute safe"}
-                    </span>
-                    <span className="panel__badge panel__badge--secondary">
-                      Mode: {selectedRun.run_mode || "plan_only"}
-                    </span>
-                  </div>
-                  <details className="agent-flow-details">
-                    <summary>View full execution flow</summary>
-                    <div className="flow-rail">
-                      <div className="flow-rail__steps">
-                        {flowSteps.map((step, index) => (
-                          <div key={step.id} className={`flow-rail__step ${step.className}`}>
-                            <span className="flow-rail__index">{index + 1}</span>
-                            <span className="flow-rail__label">{step.label}</span>
-                            <span className="flow-rail__status">{step.status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                </div>
+                <ExecutionControlsSummary selectedRun={selectedRun} flowSteps={flowSteps} />
               ) : null}
-              <div className="panel__card">
-                <div className="panel__header">
-                  <h3>Action queue</h3>
+              <section className="control-section">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Queue</span>
+                    <h3 className="control-section__title">Action queue</h3>
+                  </div>
                   <div className="panel__meta agent-queue-controls">
                     {selectedRun?.experiment_id && (
                       <button
@@ -1843,10 +1785,13 @@ function AgentRunsPageContent() {
                 {selectedRun && (
                   <>
                     <section className="agent-next-action">
-                      <div className="panel__header">
-                        <h4>Next recommended action</h4>
+                      <div className="control-section__header">
+                        <div>
+                          <span className="control-section__eyebrow">Recommendation</span>
+                          <h4 className="control-section__title">Next recommended action</h4>
+                        </div>
                         {nextRecommendedAction.action ? (
-                          <span className="panel__badge panel__badge--secondary">
+                          <span className="control-chip">
                             #{nextRecommendedAction.action.sequence} ·{" "}
                             {nextRecommendedAction.action.capability_name}
                           </span>
@@ -1867,7 +1812,7 @@ function AgentRunsPageContent() {
                       ) : null}
                     </section>
 
-                    <div className="panel__meta-strip">
+                    <div className="panel__meta-strip panel__meta-strip--flat">
                       <div>
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}
                       </div>
@@ -1928,14 +1873,17 @@ function AgentRunsPageContent() {
                       onDecision={handleDecision}
                       formatJsonPreview={formatJsonPreview}
                     />
-                    <section className="agent-timeline">
-                      <div className="panel__header">
-                        <h4>Execution timeline</h4>
+                    <section className="agent-timeline control-section">
+                      <div className="control-section__header">
+                        <div>
+                          <span className="control-section__eyebrow">Timeline</span>
+                          <h4 className="control-section__title">Execution timeline</h4>
+                        </div>
                         <div className="panel__row panel__row--compact">
-                          <span className="panel__badge panel__badge--secondary">
+                          <span className="control-chip">
                             {timelineEvents.length}/{actions.length} events
                           </span>
-                          <span className="panel__badge panel__badge--secondary">
+                          <span className="control-chip">
                             Live: {livePollingActive ? "on" : "paused"}
                           </span>
                           {eventsPage?.has_more_before ? (
@@ -2243,7 +2191,7 @@ function AgentRunsPageContent() {
                     />
                   </>
                 )}
-              </div>
+              </section>
             </section>
           </div>
         </div>

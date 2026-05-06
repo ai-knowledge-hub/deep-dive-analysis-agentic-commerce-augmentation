@@ -20,9 +20,19 @@ type InboxItem = {
   title: string;
   summary: string;
   statusLabel: string;
-  kind: "failed" | "policy" | "approval";
+  kind: "failed" | "policy" | "approval" | "watching";
+  urgency: "critical" | "review" | "watching";
   latestEvent?: AgentRunEvent | null;
   proposedCount?: number;
+};
+
+type InboxGroup = {
+  id: string;
+  title: string;
+  summary: string;
+  badgeTone: "warning" | "secondary";
+  emptyLabel: string;
+  items: InboxItem[];
 };
 
 function formatRunLabel(run: AgentRun): string {
@@ -48,6 +58,7 @@ function buildApprovalSummary(run: AgentRun, actions: AgentAction[]): InboxItem 
   return {
     run,
     kind: "approval",
+    urgency: "review",
     title: `${formatRunLabel(run)} needs approval`,
     summary: first?.rationale
       ? `Next proposed action is ${first.capability_name}. ${first.rationale}`
@@ -64,6 +75,7 @@ function buildPolicySummary(run: AgentRun, events: AgentRunEvent[]): InboxItem |
   return {
     run,
     kind: "policy",
+    urgency: "review",
     title: `${formatRunLabel(run)} triggered a policy alert`,
     summary:
       latest.note ||
@@ -82,6 +94,7 @@ function buildFailureSummary(run: AgentRun, events: AgentRunEvent[]): InboxItem 
   return {
     run,
     kind: "failed",
+    urgency: "critical",
     title: `${formatRunLabel(run)} failed`,
     summary:
       failureEvent?.note ||
@@ -92,15 +105,31 @@ function buildFailureSummary(run: AgentRun, events: AgentRunEvent[]): InboxItem 
   };
 }
 
+function buildWatchingSummary(run: AgentRun): InboxItem | null {
+  const status = String(run.status || "").toLowerCase();
+  if (!["running", "active", "executing", "paused"].includes(status)) return null;
+  return {
+    run,
+    kind: "watching",
+    urgency: "watching",
+    title: `${formatRunLabel(run)} is ${status}`,
+    summary:
+      status === "paused"
+        ? "Run is paused and may need a start/resume decision if work should continue."
+        : `Run is currently ${status}; inspect the run if progress looks stale or opaque.`,
+    statusLabel: run.state || status,
+  };
+}
+
 export default function InboxPage() {
   const router = useRouter();
   const { user } = useAppUser();
   const userId = user?.id ?? null;
 
   const [runs, setRuns] = useState<AgentRun[]>([]);
-  const [failedItems, setFailedItems] = useState<InboxItem[]>([]);
-  const [policyItems, setPolicyItems] = useState<InboxItem[]>([]);
-  const [approvalItems, setApprovalItems] = useState<InboxItem[]>([]);
+  const [criticalItems, setCriticalItems] = useState<InboxItem[]>([]);
+  const [reviewItems, setReviewItems] = useState<InboxItem[]>([]);
+  const [watchingItems, setWatchingItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -114,47 +143,71 @@ export default function InboxPage() {
       const nextRuns = response.runs ?? [];
       setRuns(nextRuns);
 
-      const detailRows = await Promise.all(
-        nextRuns.map(async (run) => {
-          try {
-            const [detail, eventData] = await Promise.all([
-              getAgentRun(run.id, { limit: 50 }, userId),
-              getAgentRunEvents(
+      const failedRunItems = nextRuns
+        .map((run) => buildFailureSummary(run, []))
+        .filter((item): item is InboxItem => Boolean(item));
+      const watchingRunItems = nextRuns
+        .map(buildWatchingSummary)
+        .filter((item): item is InboxItem => Boolean(item));
+      const approvalCandidates = nextRuns
+        .filter((run) => Boolean(run.requires_approval))
+        .slice(0, 8);
+      const eventCandidates = nextRuns
+        .filter((run) => {
+          const status = String(run.status || "").toLowerCase();
+          return (
+            Boolean(run.requires_approval) ||
+            ["failed", "running", "active", "executing", "paused"].includes(status)
+          );
+        })
+        .slice(0, 8);
+
+      const [detailRows, eventRows] = await Promise.all([
+        Promise.all(
+          approvalCandidates.map(async (run) => {
+            try {
+              const detail = await getAgentRun(run.id, { limit: 30 }, userId);
+              return { run, actions: detail.actions ?? [] };
+            } catch {
+              return { run, actions: [] };
+            }
+          }),
+        ),
+        Promise.all(
+          eventCandidates.map(async (run) => {
+            try {
+              const eventData = await getAgentRunEvents(
                 run.id,
-                { limit: 50, event_type: "all" },
+                { limit: 30, event_type: "all" },
                 userId,
-              ),
-            ]);
-            return {
-              run,
-              actions: detail.actions ?? [],
-              events: eventData.events ?? [],
-            };
-          } catch {
-            return {
-              run,
-              actions: [],
-              events: [],
-            };
-          }
-        }),
+              );
+              return { run, events: eventData.events ?? [] };
+            } catch {
+              return { run, events: [] };
+            }
+          }),
+        ),
+      ]);
+
+      const failedEventItems = eventRows
+        .map(({ run, events }) => buildFailureSummary(run, events))
+        .filter((item): item is InboxItem => Boolean(item));
+      const failedByRunId = new Map(
+        [...failedRunItems, ...failedEventItems].map((item) => [item.run.id, item]),
       );
 
-      setFailedItems(
-        detailRows
-          .map(({ run, events }) => buildFailureSummary(run, events))
-          .filter((item): item is InboxItem => Boolean(item)),
+      setCriticalItems([...failedByRunId.values()]);
+      setReviewItems(
+        [
+          ...eventRows
+            .map(({ run, events }) => buildPolicySummary(run, events))
+            .filter((item): item is InboxItem => Boolean(item)),
+          ...detailRows
+            .map(({ run, actions }) => buildApprovalSummary(run, actions))
+            .filter((item): item is InboxItem => Boolean(item)),
+        ].sort((a, b) => (a.kind === "policy" && b.kind !== "policy" ? -1 : 0)),
       );
-      setPolicyItems(
-        detailRows
-          .map(({ run, events }) => buildPolicySummary(run, events))
-          .filter((item): item is InboxItem => Boolean(item)),
-      );
-      setApprovalItems(
-        detailRows
-          .map(({ run, actions }) => buildApprovalSummary(run, actions))
-          .filter((item): item is InboxItem => Boolean(item)),
-      );
+      setWatchingItems(watchingRunItems.slice(0, 6));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load inbox.");
     } finally {
@@ -170,40 +223,86 @@ export default function InboxPage() {
     if (!userId) {
       return "Sign in to review failed runs, policy alerts, and approval-needed actions.";
     }
-    const totalAttention =
-      failedItems.length + policyItems.length + approvalItems.length;
+    const totalAttention = criticalItems.length + reviewItems.length;
     if (totalAttention === 0) {
       return "No urgent execution items are currently waiting for operator attention.";
     }
-    return `${totalAttention} attention item${totalAttention === 1 ? "" : "s"} across ${runs.length} recent run${runs.length === 1 ? "" : "s"}: ${failedItems.length} failed, ${policyItems.length} policy, ${approvalItems.length} approval-needed.`;
-  }, [
-    approvalItems.length,
-    failedItems.length,
-    policyItems.length,
-    runs.length,
-    userId,
-  ]);
+    return `${totalAttention} attention item${totalAttention === 1 ? "" : "s"} across ${runs.length} recent run${runs.length === 1 ? "" : "s"}: ${criticalItems.length} critical, ${reviewItems.length} review-needed.`;
+  }, [criticalItems.length, reviewItems.length, runs.length, userId]);
+
+  const groups: InboxGroup[] = [
+    {
+      id: "critical",
+      title: "Critical",
+      summary: "Failed execution or blocked work that should be inspected first.",
+      badgeTone: "warning",
+      emptyLabel: "No critical execution items in the recent window.",
+      items: criticalItems,
+    },
+    {
+      id: "review",
+      title: "Review",
+      summary: "Policy alerts and proposed actions waiting for operator judgement.",
+      badgeTone: "secondary",
+      emptyLabel: "No policy or approval items currently need review.",
+      items: reviewItems,
+    },
+    {
+      id: "watching",
+      title: "Watching",
+      summary: "Active or paused runs that are not urgent but may need supervision.",
+      badgeTone: "secondary",
+      emptyLabel: "No active or paused runs in the recent window.",
+      items: watchingItems,
+    },
+  ];
 
   function renderItem(item: InboxItem) {
     return (
       <button
         key={`${item.kind}-${item.run.id}`}
         type="button"
-        className="list__row inbox-list__item"
+        className="control-list__row inbox-list__item"
         onClick={() => router.push(buildRunsHref({ runId: item.run.id }))}
       >
-        <div className="list__title">{item.title}</div>
-        <div className="list__meta">
+        <div className="control-list__title">{item.title}</div>
+        <div className="control-list__meta">
           {item.run.status ?? "unknown"} · {item.run.state ?? "unknown"} ·{" "}
           {item.statusLabel}
         </div>
         <div className="panel__muted">{item.summary}</div>
         {item.latestEvent?.timestamp ? (
-          <div className="list__meta">
+          <div className="control-list__meta">
             Latest event: {formatEventTime(item.latestEvent.timestamp)}
           </div>
         ) : null}
       </button>
+    );
+  }
+
+  function renderGroup(group: InboxGroup) {
+    return (
+      <section key={group.id} className="control-surface">
+        <div className="control-section__header">
+          <div>
+            <span className="control-section__eyebrow">Triage</span>
+            <h3 className="control-section__title">{group.title}</h3>
+            <div className="control-section__summary">{group.summary}</div>
+          </div>
+          <span
+            className={`control-chip ${
+              group.badgeTone === "warning" ? "control-chip--attention" : ""
+            }`}
+          >
+            {group.items.length}
+          </span>
+        </div>
+        {group.items.length === 0 ? (
+          <div className="panel__muted">{group.emptyLabel}</div>
+        ) : (
+          <div className="control-list">{group.items.map(renderItem)}</div>
+        )}
+      </section>
     );
   }
 
@@ -247,57 +346,15 @@ export default function InboxPage() {
             subtitle="The inbox is the control-plane triage layer. It should answer what needs attention now, not just what happened."
             summary={briefing}
             metrics={[
-              { label: "Failed", value: failedItems.length, tone: failedItems.length > 0 ? "warning" : "default" },
-              { label: "Policy", value: policyItems.length },
-              { label: "Approval", value: approvalItems.length },
+              { label: "Critical", value: criticalItems.length, tone: criticalItems.length > 0 ? "warning" : "default" },
+              { label: "Review", value: reviewItems.length },
+              { label: "Watching", value: watchingItems.length },
             ]}
             error={error}
           />
 
-          <section className="agent-workspace inbox-workspace">
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Failed runs</h3>
-                <span className="panel__badge panel__badge--warning">
-                  {failedItems.length}
-                </span>
-              </div>
-              {failedItems.length === 0 ? (
-                <div className="panel__muted">No failed runs in the recent window.</div>
-              ) : (
-                <div className="list">{failedItems.map(renderItem)}</div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Policy alerts</h3>
-                <span className="panel__badge panel__badge--secondary">
-                  {policyItems.length}
-                </span>
-              </div>
-              {policyItems.length === 0 ? (
-                <div className="panel__muted">No policy alerts in the recent window.</div>
-              ) : (
-                <div className="list">{policyItems.map(renderItem)}</div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Needs approval</h3>
-                <span className="panel__badge panel__badge--secondary">
-                  {approvalItems.length}
-                </span>
-              </div>
-              {approvalItems.length === 0 ? (
-                <div className="panel__muted">
-                  No proposed actions currently waiting for operator review.
-                </div>
-              ) : (
-                <div className="list">{approvalItems.map(renderItem)}</div>
-              )}
-            </section>
+          <section className="control-grid control-grid--compact control-grid--full">
+            {groups.map(renderGroup)}
           </section>
         </div>
       </main>

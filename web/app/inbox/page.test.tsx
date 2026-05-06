@@ -62,6 +62,13 @@ describe("InboxPage", () => {
           experiment_id: "exp-2",
           status: "planned",
           state: "variants_ready",
+          requires_approval: true,
+        },
+        {
+          id: "run-3",
+          experiment_id: "exp-3",
+          status: "running",
+          state: "executing",
         },
       ],
     });
@@ -97,6 +104,9 @@ describe("InboxPage", () => {
           ],
         };
       }
+      if (runId === "run-3") {
+        return { events: [] };
+      }
       return {
         events: [
           {
@@ -111,16 +121,21 @@ describe("InboxPage", () => {
     });
   });
 
-  it("renders failed, policy, and approval sections from run data", async () => {
+  it("renders urgency groups from bounded run detail and event data", async () => {
     render(<InboxPage />);
 
     await waitFor(() => expect(listAgentRunsMock).toHaveBeenCalled());
+    await waitFor(() => expect(getAgentRunMock).toHaveBeenCalledTimes(1));
 
+    expect(screen.getByText("Critical")).toBeInTheDocument();
+    expect(screen.getByText("Review")).toBeInTheDocument();
+    expect(screen.getByText("Watching")).toBeInTheDocument();
     expect(await screen.findByText(/Experiment exp-1 failed/i)).toBeInTheDocument();
     expect(screen.getByText(/Validation provider failed/i)).toBeInTheDocument();
     expect(screen.getByText(/Policy blocked promotion/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-2 needs approval/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Experiment exp-3 is running/i)).toBeInTheDocument();
   });
 });

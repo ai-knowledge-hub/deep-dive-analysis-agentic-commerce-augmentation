@@ -89,10 +89,13 @@ export function RegistryPanel({
   onRunRegistryBackfill,
 }: Props) {
   return (
-    <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
-        <h4>Skills and tools</h4>
-        <span className="panel__badge panel__badge--secondary">
+    <section className="control-section registry-panel">
+      <div className="control-section__header">
+        <div>
+          <span className="control-section__eyebrow">Contract</span>
+          <h4 className="control-section__title">Skills and tools</h4>
+        </div>
+        <span className="control-chip">
           {runtimeRegistry?.registry_version ?? "Loading registry"}
         </span>
       </div>
@@ -101,20 +104,20 @@ export function RegistryPanel({
         reusable workflows, tools are the policy-governed capabilities the runtime can
         execute.
       </p>
-      <div className="agent-ops-summary">
-        <span className="panel__badge panel__badge--secondary">
+      <div className="control-chip-row">
+        <span className="control-chip">
           Principal: {selectedRun.principal_type ?? "human"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Run registry: {selectedRun.registry_version ?? runtimeRegistry?.registry_version ?? "unpinned"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Fingerprint:{" "}
           {selectedRun.registry_fingerprint
             ? selectedRun.registry_fingerprint.slice(0, 12)
@@ -122,30 +125,30 @@ export function RegistryPanel({
               ? runtimeRegistry.registry_fingerprint.slice(0, 12)
               : "pending"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Registry source: {runtimeRegistry?.registry_source ?? "pending"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Release status: {runtimeRegistry?.registry_status ?? "pending"}
         </span>
       </div>
-      <div className="agent-ops-summary">
+      <div className="control-chip-row registry-panel__skills">
         {activeRuntimeSkills.slice(0, 4).map((skill) => (
-          <span key={skill.id} className="panel__badge panel__badge--secondary">
+          <span key={skill.id} className="control-chip">
             {skill.name} · {skill.risk_class}
           </span>
         ))}
         {runtimeRegistry && activeRuntimeSkills.length === 0 ? (
-          <span className="panel__badge panel__badge--warning">
+          <span className="control-chip control-chip--attention">
             No matching skills for allowed tools
           </span>
         ) : null}
       </div>
 
-      <div className="panel__card panel__card--secondary">
-        <div className="panel__header">
-          <h4>Registry releases</h4>
-          <span className="panel__badge panel__badge--secondary">
+      <section className="control-section">
+        <div className="control-section__header">
+          <h4 className="control-section__title">Registry releases</h4>
+          <span className="control-chip">
             {registryReleases.length} tracked
           </span>
         </div>
@@ -206,7 +209,7 @@ export function RegistryPanel({
               {selectedRegistryRelease.audit_events.length} audit events are tied to this release.
             </p>
             {selectedRegistryRelease.audit_events.length > 0 ? (
-              <div className="panel__card panel__card--secondary">
+              <div className="registry-panel__subsection">
                 <div className="panel__eyebrow">Release diff</div>
                 <div className="run-event-list">
                   {selectedRegistryRelease.audit_events.slice(0, 4).map((event) => (
@@ -299,12 +302,12 @@ export function RegistryPanel({
         {registryBackfillNotice ? (
           <div className="panel__notice panel__notice--info">{registryBackfillNotice}</div>
         ) : null}
-      </div>
+      </section>
 
-      <div className="panel__card panel__card--secondary">
-        <div className="panel__header">
-          <h4>Registry release trail</h4>
-          <span className="panel__badge panel__badge--secondary">
+      <section className="control-section">
+        <div className="control-section__header">
+          <h4 className="control-section__title">Registry release trail</h4>
+          <span className="control-chip">
             {registryAuditEvents.length} recent changes
           </span>
         </div>
@@ -344,7 +347,7 @@ export function RegistryPanel({
         {!selectedRegistryRelease ? (
           <ReceiptVerificationNotice verification={registryReceiptVerification} />
         ) : null}
-      </div>
+      </section>
 
       <div className="table">
         <div className="table__header">

@@ -41,8 +41,8 @@ Use these labels when auditing files and folders:
 | `docs/history/user-guide-complete.md` | `historical` | Written for older human-led UX. | Retained as history; replace later with a control-plane user guide. |
 | `docs/history/experiment-flow-detailed.md` | `historical` | Lab-era flow detail. | Retained as history after PR3. |
 | `docs/history/app-workflows.md` | `historical/reference` | Contains useful workflow notes but overlaps newer checkpoint docs. | Retained under history after PR3. |
-| largest frontend pages | `active-hotspot` | `experiments`, `agent-runs`, `admin`, `validation` are expensive to load/change. | Modularise by surface after cleanup PRs. |
-| `api/routes/agent_runs.py` | `active-hotspot` | Route file now owns too many registry/command/control concerns. | Split after frontend control-plane cleanup. |
+| largest frontend pages | `active-hotspot` | `experiments`, `agent-runs`, `admin`, `validation` are still the largest files. | Modularise only where active development friction is real. |
+| `api/routes/agent_runs.py` | `active` | Split by registry/control/command responsibility; remaining route should stay thin. | Keep endpoint contracts stable and guard against orchestration creep. |
 
 ## Target Source Shape
 
@@ -55,9 +55,21 @@ api/routes/
   agent_runs_registry.py         # registry, releases, audit, ownership endpoints
   agent_runs_control.py          # start/pause/cancel/step endpoints
 application/services/agent_runtime/
-  command_service.py             # command orchestration and receipts
-  recovery.py                    # retry/recovery/compensating proposal construction
-  registry.py                    # registry contract, metadata, fingerprinting
+  capabilities/
+    executor.py                  # capability execution
+    support.py                   # capability helper logic
+    types.py                     # shared capability runtime types
+  commands/
+    service.py                   # command orchestration and receipts
+    preflight.py                 # command preflight and command event receipts
+    recovery.py                  # retry/recovery/compensating proposal construction
+    decisions.py                 # approve/reject mutation and audit events
+  registry/
+    catalog.py                   # static specs, profiles, recovery templates
+    contracts.py                 # registry serialization, fingerprinting, schema validation
+  runtime/
+    service.py                   # lock, policy, execution, status transitions
+    audit.py                     # run/action event construction
   policy.py                      # policy and capability authorization
 ```
 
@@ -87,12 +99,13 @@ docs/
   README.md                      # canonical doc index and statuses
   agentification-checkpoint.md    # active checkpoint only
   agent-first-modular-architecture-v1.md
-  agentic-layer.md
-  chat-led-operator-console-spec.md
-  history/
-    agent-first-migration-slice-rfc.md
-    user-guide-complete.md
-    experiment-flow-detailed.md
+    agentic-layer.md
+    ui-control-plane-simplification-plan.md
+    chat-led-operator-console-spec.md
+    history/
+      agent-first-migration-slice-rfc.md
+      user-guide-complete.md
+      experiment-flow-detailed.md
 ```
 
 ## PR Sequence

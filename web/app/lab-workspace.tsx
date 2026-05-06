@@ -1051,6 +1051,19 @@ function HomePageContent() {
       />
       <main className="main">
         <div className="main__content">
+          <section className="lab-bench-header">
+            <div>
+              <span className="control-section__eyebrow">Advanced workspace</span>
+              <h1 className="lab-bench-header__title">Lab bench</h1>
+              <p className="control-section__summary">
+                Exploratory chat-led diagnostics for simulation, evidence, alignment, and
+                experiment setup. The control plane remains the default supervision surface.
+              </p>
+            </div>
+            <Link href="/" className="button button--ghost button--sm">
+              Back to control plane
+            </Link>
+          </section>
           <div className="main__toolbar">
             <button
               type="button"
@@ -1191,10 +1204,13 @@ function HomePageContent() {
               onQuickCreateBattery={handleQuickCreateBattery}
               statusMessage={batteryStatus ?? backgroundStatus ?? researchStatus}
             />
-            <div className="insights__summary">
-              <div className="summary-card summary-card--header">
-                <div className="summary-card__header">
-                  <h4>Overview</h4>
+            <div className="insights__summary lab-bench-summary">
+              <section className="control-surface">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Dashboard</span>
+                    <h4 className="control-section__title">Overview</h4>
+                  </div>
                   <Link href="/overview" className="summary-card__link">
                     Open
                   </Link>
@@ -1202,10 +1218,14 @@ function HomePageContent() {
                 <p className="summary-card__text">
                   Jump to the full dashboard of simulation, evidence, and alignment signals.
                 </p>
-              </div>
-              <div className="summary-card">
-                <div className="summary-card__header">
-                  <h4>Simulation Sandbox</h4>
+              </section>
+
+              <section className="control-surface">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Sandbox</span>
+                    <h4 className="control-section__title">Simulation Sandbox</h4>
+                  </div>
                   <button
                     type="button"
                     className="summary-card__link"
@@ -1218,53 +1238,57 @@ function HomePageContent() {
                   {simulationScenario.trim() || lastQuery
                     ? `Scenario: ${simulationScenario.trim() || lastQuery}`
                     : "No scenario yet."}
-              </p>
-              <div className="summary-card__meta">
-                <span>Runs: {simulationRuns.length}</span>
-                <span>Lessons: {simulationLessons.length}</span>
-                {typeof simulationRuns?.[0]?.protocol_readiness_score === "number" && (
-                  <span>
+                </p>
+                <div className="control-chip-row">
+                  <span className="control-chip">Runs: {simulationRuns.length}</span>
+                  <span className="control-chip">Lessons: {simulationLessons.length}</span>
+                  {typeof simulationRuns?.[0]?.protocol_readiness_score === "number" && (
                     <span
+                      className="control-chip"
                       title="UCP readiness score based on business profile validation and platform capability intersection."
                     >
                       Protocol readiness: {simulationRuns[0].protocol_readiness_score}/100
                     </span>
-                  </span>
-                )}
-              </div>
-            </div>
+                  )}
+                </div>
+              </section>
 
-              <div className="summary-card">
-              <div className="summary-card__header">
-                <h4>Evidence + Research</h4>
-                <Link href="/evidence" className="summary-card__link">
-                  Open
-                </Link>
-              </div>
-              <div className="summary-card__badges">
-                <Link href="/alignment#alignment-research" className="summary-card__badge">
-                  Research
-                </Link>
-              </div>
-              <p className="summary-card__text">
-                {evidenceAnalysis?.evidence_products?.length
-                  ? `${evidenceAnalysis.evidence_products.length} evidence items analyzed.`
-                  : "No evidence analysis yet."}
+              <section className="control-surface">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Signals</span>
+                    <h4 className="control-section__title">Evidence + Research</h4>
+                  </div>
+                  <Link href="/evidence" className="summary-card__link">
+                    Open
+                  </Link>
+                </div>
+                <div className="control-chip-row">
+                  <Link href="/alignment#alignment-research" className="control-chip">
+                    Research
+                  </Link>
+                </div>
+                <p className="summary-card__text">
+                  {evidenceAnalysis?.evidence_products?.length
+                    ? `${evidenceAnalysis.evidence_products.length} evidence items analyzed.`
+                    : "No evidence analysis yet."}
                 </p>
-                <div className="summary-card__meta">
-                  <span>
-                    Lift:{" "}
-                    {evidenceVerification?.lift !== undefined
+                <div className="control-chip-row">
+                  <span className="control-chip">
+                    Lift: {evidenceVerification?.lift !== undefined
                       ? `${Math.round(evidenceVerification.lift * 100)}%`
                       : "—"}
                   </span>
-                  <span>Research: {researchResults?.length ?? 0}</span>
+                  <span className="control-chip">Research: {researchResults?.length ?? 0}</span>
                 </div>
-              </div>
+              </section>
 
-              <div className="summary-card">
-                <div className="summary-card__header">
-                  <h4>Alignment</h4>
+              <section className="control-surface">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Fit</span>
+                    <h4 className="control-section__title">Alignment</h4>
+                  </div>
                   <Link href="/alignment" className="summary-card__link">
                     Open
                   </Link>
@@ -1274,16 +1298,15 @@ function HomePageContent() {
                     ? `${plan.products.length} products scored.`
                     : "No alignment results yet."}
                 </p>
-                <div className="summary-card__meta">
-                  <span>
-                    Score:{" "}
-                    {plan?.alignment?.goal_alignment?.score !== undefined
+                <div className="control-chip-row">
+                  <span className="control-chip">
+                    Score: {plan?.alignment?.goal_alignment?.score !== undefined
                       ? `${Math.round(plan.alignment.goal_alignment.score * 100)}%`
                       : "—"}
                   </span>
-                  <span>Clarifications: {clarifications.length}</span>
+                  <span className="control-chip">Clarifications: {clarifications.length}</span>
                 </div>
-              </div>
+              </section>
             </div>
           </aside>
         )}

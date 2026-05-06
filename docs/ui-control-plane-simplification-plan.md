@@ -325,6 +325,8 @@ Deliver:
 - move lab-heavy routes into a secondary nav group
 - simplify `/` to a role-aware landing page
 
+Status: mostly implemented. The current follow-up tightens the sidebar so `Lab` remains visible but subsystem-heavy lab tools sit behind an `Advanced lab` disclosure.
+
 ### Phase 2: Homepage decomposition
 
 Deliver:
@@ -332,6 +334,16 @@ Deliver:
 - move current chat-lab experience into `/lab`
 - reduce root page to decision-oriented entry content
 - remove overlapping summary modules from `/`
+
+Status: in progress. The current root page is now a control-plane entry that loads a lightweight run snapshot, shows attention/active/recent counts, and recommends Inbox, Runs, Interventions, or Learnings based on current run state.
+
+Visual status: implemented for the primary agentic loop. `/`, `Runs`, `Inbox`,
+`Interventions`, and `Learnings` now use the flatter control-surface/list
+language defined in `docs/ui-style-direction.md`.
+
+Lab status: retained as an advanced bench. `/lab` now uses the same visual
+primitives for its entry header and built-in insight summaries, while deeper
+lab-era routes remain secondary drilldowns.
 
 ### Phase 3: Shared run-centric data layer
 
@@ -349,6 +361,12 @@ Deliver:
 - compact run summaries
 - clearer state badges and failure surfaces
 
+Status: in progress. `Inbox` now groups recent work by `Critical`, `Review`,
+and `Watching` urgency, `Learnings` starts with recommended operator follow-ups
+and separates decision signals from general execution signals, and `Runs`
+orders the run selector by operator attention so failed and approval-needed
+execution contexts surface first.
+
 ## Concrete First Implementation Slice
 
 The first UI slice should be intentionally small:
@@ -360,6 +378,8 @@ The first UI slice should be intentionally small:
    - `Learnings`
 3. move current workflow-heavy links into a `Lab` or secondary section in the sidebar
 4. simplify `/` so it primarily routes users to the correct workspace instead of rendering the full lab
+
+Status: completed, with the next refinement demoting advanced lab tools further behind a collapsible secondary group.
 
 This gives immediate clarity without forcing a full component rewrite.
 

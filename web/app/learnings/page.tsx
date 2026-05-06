@@ -36,6 +36,14 @@ type Recommendation = {
   cta: string;
 };
 
+type LearningGroup = {
+  id: string;
+  title: string;
+  summary: string;
+  emptyLabel: string;
+  signals: LearningSignal[];
+};
+
 function formatPercent(value?: number | null): string {
   if (value == null || Number.isNaN(value)) return "Unavailable";
   return `${Math.round(value * 100)}%`;
@@ -77,6 +85,30 @@ function buildSignal(run: AgentRun, event: AgentRunEvent): LearningSignal {
     event.note ||
     `Recent ${category} signal on ${event.capability_name ?? "the active workflow"}.`;
   return { run, event, title, summary, category };
+}
+
+function isLearningCandidateRun(run: AgentRun): boolean {
+  const status = String(run.status || "").toLowerCase();
+  return (
+    Boolean(run.requires_approval) ||
+    ["failed", "completed", "executed", "running", "paused"].includes(status)
+  );
+}
+
+function pickInterestingEvent(events: AgentRunEvent[]): AgentRunEvent | null {
+  return (
+    [...events]
+      .reverse()
+      .find((event) => {
+        const status = String(event.status || "").toLowerCase();
+        return (
+          Boolean(event.is_policy_event) ||
+          status === "failed" ||
+          status === "executed" ||
+          status === "completed"
+        );
+      }) ?? null
+  );
 }
 
 function buildRecommendations(
@@ -164,22 +196,16 @@ export default function LearningsPage() {
       setChanges(changesData);
 
       const runs = runsResponse.runs ?? [];
+      const eventCandidates = runs.filter(isLearningCandidateRun).slice(0, 6);
       const eventRows = await Promise.all(
-        runs.map(async (run) => {
+        eventCandidates.map(async (run) => {
           try {
             const response = await getAgentRunEvents(
               run.id,
               { limit: 12, event_type: "all" },
               userId,
             );
-            const interesting = [...(response.events ?? [])]
-              .reverse()
-              .find(
-                (event) =>
-                  Boolean(event.is_policy_event) ||
-                  String(event.status || "").toLowerCase() === "failed" ||
-                  String(event.status || "").toLowerCase() === "executed",
-              );
+            const interesting = pickInterestingEvent(response.events ?? []);
             return interesting ? buildSignal(run, interesting) : null;
           } catch {
             return null;
@@ -201,6 +227,27 @@ export default function LearningsPage() {
   const recommendations = useMemo(
     () => buildRecommendations(summary, changes, signals),
     [changes, signals, summary],
+  );
+  const signalGroups = useMemo<LearningGroup[]>(
+    () => [
+      {
+        id: "decisions",
+        title: "Decision signals",
+        summary: "Policy and failure signals that should shape operator judgement.",
+        emptyLabel: "No policy or failure learning signals were found in recent runs.",
+        signals: signals.filter(
+          (signal) => signal.category === "policy" || signal.category === "failure",
+        ),
+      },
+      {
+        id: "execution",
+        title: "Execution signals",
+        summary: "Completed execution steps that help explain what changed.",
+        emptyLabel: "No completed execution learning signals were found in recent runs.",
+        signals: signals.filter((signal) => signal.category === "execution"),
+      },
+    ],
+    [signals],
   );
 
   const briefing = useMemo(() => {
@@ -252,126 +299,35 @@ export default function LearningsPage() {
             subtitle="Learnings compress recent platform behavior into operator-readable takeaways."
             summary={briefing}
             metrics={[
+              {
+                label: "Decision signals",
+                value: signalGroups[0]?.signals.length ?? 0,
+                tone: (signalGroups[0]?.signals.length ?? 0) > 0 ? "warning" : "default",
+              },
               { label: "Signals", value: signals.length },
               { label: "Follow-ups", value: recommendations.length },
             ]}
             error={error}
           />
 
-          <section className="agent-workspace inbox-workspace">
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>What changed</h3>
-                <span className="panel__badge panel__badge--secondary">30d</span>
+          <section className="control-grid control-grid--compact control-grid--full">
+            <section className="control-surface">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Operator path</span>
+                  <h3 className="control-section__title">Recommended follow-ups</h3>
+                  <div className="control-section__summary">
+                    Operator actions ordered before raw learning context.
+                  </div>
+                </div>
+                <span className="control-chip control-chip--attention">
+                  {recommendations.length}
+                </span>
               </div>
-              <div className="list">
-                <div className="list__row">
-                  <div className="list__title">Latest experiment</div>
-                  <div className="list__meta">
-                    {changes?.latest_experiment?.winner_label || "No winner recorded"}
-                  </div>
-                  <div className="panel__muted">
-                    {changes?.latest_experiment?.name || "No recent experiment has been recorded in the selected window."}
-                  </div>
-                </div>
-                <div className="list__row">
-                  <div className="list__title">Latest simulation lesson</div>
-                  <div className="list__meta">
-                    Confidence {formatDecimal(changes?.latest_simulation_lesson?.confidence ?? null)}
-                  </div>
-                  <div className="panel__muted">
-                    {changes?.latest_simulation_lesson?.summary || "No recent simulation lesson is available yet."}
-                  </div>
-                </div>
-                <div className="list__row">
-                  <div className="list__title">Top gap signal</div>
-                  <div className="list__meta">
-                    {(changes?.top_gap_signals?.[0]?.count ?? 0) > 0
-                      ? `${changes?.top_gap_signals?.[0]?.count} sightings`
-                      : "No gap signals recorded"}
-                  </div>
-                  <div className="panel__muted">
-                    {changes?.top_gap_signals?.[0]?.signal || "No dominant gap signal surfaced in this window."}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Readiness snapshot</h3>
-                <span className="panel__badge panel__badge--secondary">KPIs</span>
-              </div>
-              <div className="list">
-                <div className="list__row">
-                  <div className="list__title">Validation accuracy</div>
-                  <div className="list__meta">{formatPercent(summary?.kpis.validation.accuracy ?? null)}</div>
-                  <div className="panel__muted">
-                    Unlock ready: {summary?.kpis.validation.unlock_ready ? "Yes" : "Not yet"}
-                  </div>
-                </div>
-                <div className="list__row">
-                  <div className="list__title">Protocol readiness</div>
-                  <div className="list__meta">{formatPercent(summary?.kpis.protocol_readiness.score ?? null)}</div>
-                  <div className="panel__muted">
-                    Improve this before relying on external agent-to-agent execution contracts.
-                  </div>
-                </div>
-                <div className="list__row">
-                  <div className="list__title">Battery coverage</div>
-                  <div className="list__meta">{formatPercent(summary?.kpis.battery_health.coverage_score ?? null)}</div>
-                  <div className="panel__muted">
-                    Redundancy: {formatPercent(summary?.kpis.battery_health.redundancy_rate ?? null)}
-                  </div>
-                </div>
-                <div className="list__row">
-                  <div className="list__title">Observed lift</div>
-                  <div className="list__meta">
-                    Simulation {formatDecimal(summary?.kpis.simulation.avg_lift ?? null)} · Evidence {formatDecimal(summary?.kpis.evidence.avg_lift ?? null)}
-                  </div>
-                  <div className="panel__muted">
-                    Compare modeled improvement against evidence-backed lift before expanding autonomy.
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Recent execution learnings</h3>
-                <span className="panel__badge panel__badge--secondary">{signals.length}</span>
-              </div>
-              {signals.length === 0 ? (
-                <div className="panel__muted">No recent execution signals were available in the selected window.</div>
-              ) : (
-                <div className="list">
-                  {signals.map((signal) => (
-                    <button
-                      key={`${signal.run.id}-${signal.event.id}`}
-                      type="button"
-                      className="list__row"
-                      onClick={() => router.push(buildRunsHref({ runId: signal.run.id }))}
-                    >
-                      <div className="list__title">{signal.title}</div>
-                      <div className="list__meta">
-                        {signal.category} · {signal.run.status ?? "unknown"} · {formatDateTime(signal.event.timestamp)}
-                      </div>
-                      <div className="panel__muted">{signal.summary}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Recommended follow-ups</h3>
-                <span className="panel__badge panel__badge--warning">{recommendations.length}</span>
-              </div>
-              <div className="list">
+              <div className="control-list">
                 {recommendations.map((item) => (
-                  <div key={item.title} className="list__row">
-                    <div className="list__title">{item.title}</div>
+                  <div key={item.title} className="control-list__row">
+                    <div className="control-list__title">{item.title}</div>
                     <div className="panel__muted">{item.summary}</div>
                     <div className="detail__actions">
                       <button
@@ -386,6 +342,129 @@ export default function LearningsPage() {
                 ))}
               </div>
             </section>
+
+            <section className="control-surface">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Change log</span>
+                  <h3 className="control-section__title">What changed</h3>
+                </div>
+                <span className="control-chip">30d</span>
+              </div>
+              <div className="control-list">
+                <div className="control-list__row">
+                  <div className="control-list__title">Latest experiment</div>
+                  <div className="control-list__meta">
+                    {changes?.latest_experiment?.winner_label || "No winner recorded"}
+                  </div>
+                  <div className="panel__muted">
+                    {changes?.latest_experiment?.name || "No recent experiment has been recorded in the selected window."}
+                  </div>
+                </div>
+                <div className="control-list__row">
+                  <div className="control-list__title">Latest simulation lesson</div>
+                  <div className="control-list__meta">
+                    Confidence {formatDecimal(changes?.latest_simulation_lesson?.confidence ?? null)}
+                  </div>
+                  <div className="panel__muted">
+                    {changes?.latest_simulation_lesson?.summary || "No recent simulation lesson is available yet."}
+                  </div>
+                </div>
+                <div className="control-list__row">
+                  <div className="control-list__title">Top gap signal</div>
+                  <div className="control-list__meta">
+                    {(changes?.top_gap_signals?.[0]?.count ?? 0) > 0
+                      ? `${changes?.top_gap_signals?.[0]?.count} sightings`
+                      : "No gap signals recorded"}
+                  </div>
+                  <div className="panel__muted">
+                    {changes?.top_gap_signals?.[0]?.signal || "No dominant gap signal surfaced in this window."}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="control-surface">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Readiness</span>
+                  <h3 className="control-section__title">Readiness snapshot</h3>
+                </div>
+                <span className="control-chip">KPIs</span>
+              </div>
+              <div className="control-list">
+                <div className="control-list__row">
+                  <div className="control-list__title">Validation accuracy</div>
+                  <div className="control-list__meta">{formatPercent(summary?.kpis.validation.accuracy ?? null)}</div>
+                  <div className="panel__muted">
+                    Unlock ready: {summary?.kpis.validation.unlock_ready ? "Yes" : "Not yet"}
+                  </div>
+                </div>
+                <div className="control-list__row">
+                  <div className="control-list__title">Protocol readiness</div>
+                  <div className="control-list__meta">{formatPercent(summary?.kpis.protocol_readiness.score ?? null)}</div>
+                  <div className="panel__muted">
+                    Improve this before relying on external agent-to-agent execution contracts.
+                  </div>
+                </div>
+                <div className="control-list__row">
+                  <div className="control-list__title">Battery coverage</div>
+                  <div className="control-list__meta">{formatPercent(summary?.kpis.battery_health.coverage_score ?? null)}</div>
+                  <div className="panel__muted">
+                    Redundancy: {formatPercent(summary?.kpis.battery_health.redundancy_rate ?? null)}
+                  </div>
+                </div>
+                <div className="control-list__row">
+                  <div className="control-list__title">Observed lift</div>
+                  <div className="control-list__meta">
+                    Simulation {formatDecimal(summary?.kpis.simulation.avg_lift ?? null)} · Evidence {formatDecimal(summary?.kpis.evidence.avg_lift ?? null)}
+                  </div>
+                  <div className="panel__muted">
+                    Compare modeled improvement against evidence-backed lift before expanding autonomy.
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {signalGroups.map((group) => (
+              <section key={group.id} className="control-surface">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Signals</span>
+                    <h3 className="control-section__title">{group.title}</h3>
+                    <div className="control-section__summary">{group.summary}</div>
+                  </div>
+                  <span
+                    className={`control-chip ${
+                      group.id === "decisions" ? "control-chip--attention" : ""
+                    }`}
+                  >
+                    {group.signals.length}
+                  </span>
+                </div>
+                {group.signals.length === 0 ? (
+                  <div className="panel__muted">{group.emptyLabel}</div>
+                ) : (
+                  <div className="control-list">
+                    {group.signals.map((signal) => (
+                      <button
+                        key={`${signal.run.id}-${signal.event.id}`}
+                        type="button"
+                        className="control-list__row"
+                        onClick={() => router.push(buildRunsHref({ runId: signal.run.id }))}
+                      >
+                        <div className="control-list__title">{signal.title}</div>
+                        <div className="control-list__meta">
+                          {signal.category} · {signal.run.status ?? "unknown"} ·{" "}
+                          {formatDateTime(signal.event.timestamp)}
+                        </div>
+                        <div className="panel__muted">{signal.summary}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
           </section>
         </div>
       </main>

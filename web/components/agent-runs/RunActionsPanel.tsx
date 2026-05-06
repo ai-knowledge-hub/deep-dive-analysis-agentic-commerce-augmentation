@@ -130,20 +130,20 @@ export function RunActionsPanel({
         </div>
       ) : null}
 
-      <div className="agent-ops-summary">
-        <span className="panel__badge panel__badge--secondary">
+      <div className="control-chip-row">
+        <span className="control-chip">
           Proposed: {actionCounters.proposed}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Approved: {actionCounters.approved}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Executing: {actionCounters.executing}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Executed: {actionCounters.executed}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Failed: {actionCounters.failed}
         </span>
       </div>
