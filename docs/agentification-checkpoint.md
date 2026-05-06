@@ -26,6 +26,7 @@ The codebase now has the minimum spine for the pivot:
 
 - Principal-aware agent run creation with `principal_type`, `principal_id`, `agent_profile_id`, `harness_id`, `policy_profile_id`, `idempotency_key`, and `trace_id`.
 - Machine-principal token resolution for scoped external-agent run creation.
+- External-agent job facade with idempotent create/status contracts through `POST /external-agent/jobs` and `GET /external-agent/jobs/{job_id}`.
 - Agent run/action/event persistence with tool/effect metadata stamped onto proposed and executed work.
 - Runtime policy profiles mapped from run modes: `human_approval_required`, `safe_auto`, and `observe`.
 - Compatibility from legacy `capability_name` to machine-facing `tool_id`.
@@ -83,6 +84,7 @@ Use these docs together:
 - `docs/codebase-cleanup-and-modularisation-plan.md`: cleanup and modularisation sequence
 - `docs/agent-first-modular-architecture-v1.md`: target architecture
 - `docs/agent-capability-map.md`: narrative-to-agent/tool capability map
+- `docs/external-agent-job-contracts.md`: machine-facing external-agent job API contract
 - `docs/chat-led-operator-console-spec.md`: target human control-plane UX
 - `docs/operator-experience.md`: current operator/user guide
 - `docs/ui-control-plane-simplification-plan.md`: UI simplification roadmap
@@ -114,14 +116,14 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs.
 
 Next steps:
 
-- Define idempotent job APIs for external agents.
-- Add dedupe keys and retry-safe responses across more endpoints.
+- Add signed completion/failure receipts at the job facade level.
+- Add job event-stream/read APIs for external agents.
 - Add scoped credentials for tool/skill access.
-- Add signed execution receipts for completed work.
+- Add retry-safe responses across more external-agent endpoints.
 
 ### 4. Harness Profiles
 

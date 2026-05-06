@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import uuid
+from typing import Any, Dict, Optional
+
+from infrastructure.db.core.connection import get_connection
+from infrastructure.db.core.json import from_json, to_json
+from infrastructure.db.core.tenancy import ensure_client
+
+
+def create_external_agent_job(
+    *,
+    client_id: str,
+    principal_id: str,
+    agent_profile_id: Optional[str],
+    idempotency_key: str,
+    request_hash: str,
+    run_id: str,
+    requested_skill_id: Optional[str],
+    requested_tool_id: Optional[str],
+    status: str,
+    trace_id: Optional[str],
+    request: Dict[str, Any],
+    response: Dict[str, Any],
+) -> Dict[str, Any]:
+    ensure_client(client_id)
+    job_id = str(uuid.uuid4())
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO external_agent_jobs (
+            id,
+            client_id,
+            principal_id,
+            agent_profile_id,
+            idempotency_key,
+            request_hash,
+            run_id,
+            requested_skill_id,
+            requested_tool_id,
+            status,
+            trace_id,
+            request_json,
+            response_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), json(?))
+        """,
+        (
+            job_id,
+            client_id,
+            principal_id,
+            agent_profile_id,
+            idempotency_key,
+            request_hash,
+            run_id,
+            requested_skill_id,
+            requested_tool_id,
+            status,
+            trace_id,
+            to_json(request) or to_json({}),
+            to_json(response) or to_json({}),
+        ),
+    )
+    conn.commit()
+    return get_external_agent_job(job_id=job_id, client_id=client_id) or {}
+
+
+def get_external_agent_job(
+    *, job_id: str, client_id: Optional[str] = None, principal_id: Optional[str] = None
+) -> Dict[str, Any] | None:
+    filters = ["id = ?"]
+    params: list[Any] = [job_id]
+    if client_id:
+        filters.append("client_id = ?")
+        params.append(client_id)
+    if principal_id:
+        filters.append("principal_id = ?")
+        params.append(principal_id)
+    row = get_connection().execute(
+        f"SELECT * FROM external_agent_jobs WHERE {' AND '.join(filters)}", params
+    ).fetchone()
+    return _row(row) if row else None
+
+
+def get_external_agent_job_by_idempotency_key(
+    *, client_id: str, principal_id: str, idempotency_key: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_jobs
+        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+        """,
+        (client_id, principal_id, idempotency_key),
+    ).fetchone()
+    return _row(row) if row else None
+
+
+def update_external_agent_job_status(
+    *, job_id: str, status: str, response: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any] | None:
+    conn = get_connection()
+    if response is None:
+        conn.execute(
+            """
+            UPDATE external_agent_jobs
+            SET status = ?, updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (status, job_id),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE external_agent_jobs
+            SET status = ?, response_json = json(?), updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (status, to_json(response) or to_json({}), job_id),
+        )
+    conn.commit()
+    return get_external_agent_job(job_id=job_id)
+
+
+def _row(row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "client_id": row["client_id"],
+        "principal_id": row["principal_id"],
+        "agent_profile_id": row["agent_profile_id"],
+        "idempotency_key": row["idempotency_key"],
+        "request_hash": row["request_hash"],
+        "run_id": row["run_id"],
+        "requested_skill_id": row["requested_skill_id"],
+        "requested_tool_id": row["requested_tool_id"],
+        "status": row["status"],
+        "trace_id": row["trace_id"],
+        "request": from_json(row["request_json"], default={}),
+        "response": from_json(row["response_json"], default={}),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+__all__ = [
+    "create_external_agent_job",
+    "get_external_agent_job",
+    "get_external_agent_job_by_idempotency_key",
+    "update_external_agent_job_status",
+]

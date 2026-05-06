@@ -10,6 +10,7 @@ Use this index to avoid treating historical planning notes as active product or 
 - `agentification-checkpoint.md`: current execution checkpoint and next build tracks.
 - `agent-first-modular-architecture-v1.md`: target agent-first architecture.
 - `agent-capability-map.md`: narrative-to-agent/tool capability map for functionality and UX planning.
+- `external-agent-job-contracts.md`: machine-facing external-agent job API contract.
 - `codebase-cleanup-and-modularisation-plan.md`: cleanup and source modularisation plan.
 - `agentic-layer.md`: current runtime implementation notes.
 - `operator-experience.md`: current operator/user guide for the agentic control plane.

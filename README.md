@@ -372,6 +372,7 @@ Current planning references:
 - `docs/agentification-checkpoint.md`
 - `docs/agent-first-modular-architecture-v1.md`
 - `docs/agent-capability-map.md`
+- `docs/external-agent-job-contracts.md`
 - `docs/codebase-cleanup-and-modularisation-plan.md`
 - `docs/agentic-layer.md`
 - `docs/operator-experience.md`
