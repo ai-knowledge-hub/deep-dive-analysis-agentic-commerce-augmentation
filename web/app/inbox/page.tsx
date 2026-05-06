@@ -262,17 +262,17 @@ export default function InboxPage() {
       <button
         key={`${item.kind}-${item.run.id}`}
         type="button"
-        className="list__row inbox-list__item"
+        className="control-list__row inbox-list__item"
         onClick={() => router.push(buildRunsHref({ runId: item.run.id }))}
       >
-        <div className="list__title">{item.title}</div>
-        <div className="list__meta">
+        <div className="control-list__title">{item.title}</div>
+        <div className="control-list__meta">
           {item.run.status ?? "unknown"} · {item.run.state ?? "unknown"} ·{" "}
           {item.statusLabel}
         </div>
         <div className="panel__muted">{item.summary}</div>
         {item.latestEvent?.timestamp ? (
-          <div className="list__meta">
+          <div className="control-list__meta">
             Latest event: {formatEventTime(item.latestEvent.timestamp)}
           </div>
         ) : null}
@@ -282,17 +282,16 @@ export default function InboxPage() {
 
   function renderGroup(group: InboxGroup) {
     return (
-      <section key={group.id} className="panel__card panel__card--secondary">
-        <div className="panel__header">
-          <div className="panel__meta panel__meta--stack">
-            <h3>{group.title}</h3>
-            <div className="panel__subtitle">{group.summary}</div>
+      <section key={group.id} className="control-surface">
+        <div className="control-section__header">
+          <div>
+            <span className="control-section__eyebrow">Triage</span>
+            <h3 className="control-section__title">{group.title}</h3>
+            <div className="control-section__summary">{group.summary}</div>
           </div>
           <span
-            className={`panel__badge ${
-              group.badgeTone === "warning"
-                ? "panel__badge--warning"
-                : "panel__badge--secondary"
+            className={`control-chip ${
+              group.badgeTone === "warning" ? "control-chip--attention" : ""
             }`}
           >
             {group.items.length}
@@ -301,7 +300,7 @@ export default function InboxPage() {
         {group.items.length === 0 ? (
           <div className="panel__muted">{group.emptyLabel}</div>
         ) : (
-          <div className="list">{group.items.map(renderItem)}</div>
+          <div className="control-list">{group.items.map(renderItem)}</div>
         )}
       </section>
     );
