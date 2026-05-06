@@ -39,3 +39,10 @@ The primary operator control plane now uses the flatter primitives across:
 
 Remaining visual cleanup should focus on older lab and admin surfaces, not the
 primary agentic supervision loop.
+
+## Lab Role
+
+`/lab` is retained as an advanced bench: a notebook-like, chat-led diagnostic
+workspace for exploratory simulation, evidence, alignment, and experiment setup.
+It should share the control-plane primitives for consistency, but it remains
+secondary to the operator cockpit.

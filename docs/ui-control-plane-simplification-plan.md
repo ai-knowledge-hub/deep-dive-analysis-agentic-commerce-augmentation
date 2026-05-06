@@ -341,6 +341,10 @@ Visual status: implemented for the primary agentic loop. `/`, `Runs`, `Inbox`,
 `Interventions`, and `Learnings` now use the flatter control-surface/list
 language defined in `docs/ui-style-direction.md`.
 
+Lab status: retained as an advanced bench. `/lab` now uses the same visual
+primitives for its entry header and built-in insight summaries, while deeper
+lab-era routes remain secondary drilldowns.
+
 ### Phase 3: Shared run-centric data layer
 
 Deliver:
