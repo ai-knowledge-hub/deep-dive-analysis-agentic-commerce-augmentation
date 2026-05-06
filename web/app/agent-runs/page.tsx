@@ -40,9 +40,12 @@ import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefi
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
 import { ActionDiffDrawer } from "../../components/agent-runs/ActionDiffDrawer";
+import { ExecutionControlsSummary } from "../../components/agent-runs/ExecutionControlsSummary";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
+import { RunSelectionRail } from "../../components/agent-runs/RunSelectionRail";
 import { SelectedActionDetailPanel } from "../../components/agent-runs/SelectedActionDetailPanel";
+import { sortRunsForOperatorAttention } from "../../components/agent-runs/runAttention";
 import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
 const RUNS_ROUTE = "/runs";
@@ -435,30 +438,6 @@ function resolveSinceForWindow(windowId: "all" | "24h" | "7d"): string | null {
   const now = Date.now();
   const deltaMs = windowId === "24h" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
   return new Date(now - deltaMs).toISOString();
-}
-
-function runAttentionRank(run: AgentRun): number {
-  const status = String(run.status ?? "").toLowerCase();
-  if (status === "failed") return 0;
-  if (run.requires_approval) return 1;
-  if (["running", "active", "executing", "paused"].includes(status)) return 2;
-  return 3;
-}
-
-function runAttentionLabel(run: AgentRun): string | null {
-  const status = String(run.status ?? "").toLowerCase();
-  if (status === "failed") return "Critical";
-  if (run.requires_approval) return "Approval";
-  if (["running", "active", "executing", "paused"].includes(status)) return "Watching";
-  return null;
-}
-
-function sortRunsForOperatorAttention(runs: AgentRun[]): AgentRun[] {
-  return [...runs].sort((a, b) => {
-    const rankDelta = runAttentionRank(a) - runAttentionRank(b);
-    if (rankDelta !== 0) return rankDelta;
-    return String(a.id).localeCompare(String(b.id));
-  });
 }
 
 function AgentRunsPageContent() {
@@ -1648,79 +1627,16 @@ function AgentRunsPageContent() {
           />
 
           <div className="agent-workspace">
-            <section className="panel__card panel__card--secondary agent-workspace__rail">
-              <div className="panel__card">
-                <div className="panel__header">
-                  <h3>Run selection</h3>
-                  <span className="panel__badge panel__badge--secondary">
-                    Attention first
-                  </span>
-                </div>
-                <div className="list">
-                  {displayRuns.map((run) => {
-                    const active = run.id === selectedRunId;
-                    const label = run.experiment_id
-                      ? `Experiment ${String(run.experiment_id).slice(0, 8)}`
-                      : `Run ${String(run.id).slice(0, 8)}`;
-                    const attentionLabel = runAttentionLabel(run);
-                    return (
-                      <button
-                        key={run.id}
-                        type="button"
-                        className={`list__row ${active ? "is-active" : ""}`}
-                        onClick={() => {
-                          setSelectedRunId(run.id);
-                          setSelectedEventId(null);
-                        }}
-                      >
-                        <div className="list__title">{label}</div>
-                        <div className="list__meta">
-                          {run.status ?? "unknown"} · {run.state ?? "unknown"}
-                        </div>
-                        {attentionLabel ? (
-                          <span
-                            className={`panel__badge ${
-                              attentionLabel === "Critical"
-                                ? "panel__badge--warning"
-                                : "panel__badge--secondary"
-                            }`}
-                          >
-                            {attentionLabel}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                  {runs.length === 0 && (
-                    <div className="panel__muted">No agent runs yet.</div>
-                  )}
-                </div>
-              </div>
-              <div className="panel__card">
-                <div className="panel__header">
-                  <h4>Run stats</h4>
-                </div>
-                <div className="agent-ops-summary">
-                  <span className="panel__badge panel__badge--secondary">
-                    Total: {runCounters.total}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Running: {runCounters.running}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Approvals: {runCounters.approvals}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Planned: {runCounters.planned}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Completed: {runCounters.completed}
-                  </span>
-                  <span className="panel__badge panel__badge--secondary">
-                    Failed: {runCounters.failed}
-                  </span>
-                </div>
-              </div>
+            <section className="control-surface agent-workspace__rail">
+              <RunSelectionRail
+                runs={displayRuns}
+                selectedRunId={selectedRunId}
+                runCounters={runCounters}
+                onSelectRun={(runId) => {
+                  setSelectedRunId(runId);
+                  setSelectedEventId(null);
+                }}
+              />
               <OperatorConsoleChat
                 run={selectedRun}
                 actions={actions}
@@ -1797,46 +1713,16 @@ function AgentRunsPageContent() {
               />
             </section>
 
-            <section className="panel__card panel__card--secondary agent-workspace__main">
+            <section className="control-surface agent-workspace__main">
               {selectedRun ? (
-                <div className="agent-run-summary">
-                  <div className="panel__header">
-                    <h4>Execution controls</h4>
-                    <span className="panel__badge panel__badge--secondary">
-                      Current: {selectedRun.state ?? "unknown"}
-                    </span>
-                  </div>
-                  <div className="agent-run-summary__chips">
-                    <span className="panel__badge panel__badge--secondary">
-                      Status: {selectedRun.status ?? "unknown"}
-                    </span>
-                    <span className="panel__badge panel__badge--secondary">
-                      Approval:{" "}
-                      {selectedRun.requires_approval ? "required" : "auto-execute safe"}
-                    </span>
-                    <span className="panel__badge panel__badge--secondary">
-                      Mode: {selectedRun.run_mode || "plan_only"}
-                    </span>
-                  </div>
-                  <details className="agent-flow-details">
-                    <summary>View full execution flow</summary>
-                    <div className="flow-rail">
-                      <div className="flow-rail__steps">
-                        {flowSteps.map((step, index) => (
-                          <div key={step.id} className={`flow-rail__step ${step.className}`}>
-                            <span className="flow-rail__index">{index + 1}</span>
-                            <span className="flow-rail__label">{step.label}</span>
-                            <span className="flow-rail__status">{step.status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                </div>
+                <ExecutionControlsSummary selectedRun={selectedRun} flowSteps={flowSteps} />
               ) : null}
-              <div className="panel__card">
-                <div className="panel__header">
-                  <h3>Action queue</h3>
+              <section className="control-section">
+                <div className="control-section__header">
+                  <div>
+                    <span className="control-section__eyebrow">Queue</span>
+                    <h3 className="control-section__title">Action queue</h3>
+                  </div>
                   <div className="panel__meta agent-queue-controls">
                     {selectedRun?.experiment_id && (
                       <button
@@ -1900,9 +1786,9 @@ function AgentRunsPageContent() {
                   <>
                     <section className="agent-next-action">
                       <div className="panel__header">
-                        <h4>Next recommended action</h4>
+                        <h4 className="control-section__title">Next recommended action</h4>
                         {nextRecommendedAction.action ? (
-                          <span className="panel__badge panel__badge--secondary">
+                          <span className="control-chip">
                             #{nextRecommendedAction.action.sequence} ·{" "}
                             {nextRecommendedAction.action.capability_name}
                           </span>
@@ -1923,7 +1809,7 @@ function AgentRunsPageContent() {
                       ) : null}
                     </section>
 
-                    <div className="panel__meta-strip">
+                    <div className="panel__meta-strip panel__meta-strip--flat">
                       <div>
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}
                       </div>
@@ -2299,7 +2185,7 @@ function AgentRunsPageContent() {
                     />
                   </>
                 )}
-              </div>
+              </section>
             </section>
           </div>
         </div>
