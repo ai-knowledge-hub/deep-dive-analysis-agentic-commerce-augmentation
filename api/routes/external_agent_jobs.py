@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import hmac
 import json
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,6 +15,7 @@ from api.composition import default_deps
 from api.utils.agent_registry_runtime import registry_payload_and_fingerprint
 from api.utils.principals import PrincipalContext, resolve_principal_context
 from application.ports.deps import AppDeps
+from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
     list_skill_specs,
@@ -23,8 +28,10 @@ from infrastructure.db.agent.external_agent_jobs import (
     create_external_agent_job,
     get_external_agent_job,
     get_external_agent_job_by_idempotency_key,
+    update_external_agent_job_receipt,
     update_external_agent_job_status,
 )
+from shared.config.env import get_settings
 
 router = APIRouter(prefix="/external-agent/jobs", tags=["external-agent-jobs"])
 
@@ -57,6 +64,15 @@ class ExternalAgentJobResponse(BaseModel):
     job: Dict[str, Any]
     run: Dict[str, Any]
     idempotent_replay: bool = False
+
+
+class ExternalAgentJobReceiptResponse(BaseModel):
+    receipt: Dict[str, Any]
+
+
+class ExternalAgentJobEventListResponse(BaseModel):
+    events: List[Dict[str, Any]]
+    page: Dict[str, Any]
 
 
 @router.post("")
@@ -190,6 +206,79 @@ def get_external_agent_job_route(
     return ExternalAgentJobResponse(job=_job_status_payload(job=job, run=run), run=run)
 
 
+@router.get("/{job_id}/receipt")
+def get_external_agent_job_receipt_route(
+    job_id: str,
+    request: Request,
+    deps: AppDeps = Depends(_deps),
+) -> ExternalAgentJobReceiptResponse:
+    principal = _require_external_agent_principal(request=request)
+    _require_any_scope(
+        principal,
+        "external_agent_jobs:read",
+        "external_agent_jobs:write",
+        "agent_runs:read",
+        "agent_runs:write",
+    )
+    job, run = _require_scoped_job_and_run(
+        deps=deps, job_id=job_id, principal=principal
+    )
+    receipt = _ensure_external_agent_job_receipt(job=job, run=run)
+    return ExternalAgentJobReceiptResponse(receipt=receipt)
+
+
+@router.get("/{job_id}/events")
+def get_external_agent_job_events_route(
+    job_id: str,
+    request: Request,
+    limit: int = 500,
+    event_type: Optional[str] = None,
+    status: Optional[str] = None,
+    capability_name: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    before: Optional[str] = None,
+    after: Optional[str] = None,
+    event_id: Optional[str] = None,
+    around: int = 120,
+    deps: AppDeps = Depends(_deps),
+) -> ExternalAgentJobEventListResponse:
+    principal = _require_external_agent_principal(request=request)
+    _require_any_scope(
+        principal,
+        "external_agent_jobs:read",
+        "external_agent_jobs:write",
+        "agent_runs:read",
+        "agent_runs:write",
+    )
+    job, run = _require_scoped_job_and_run(
+        deps=deps, job_id=job_id, principal=principal
+    )
+    try:
+        page = list_agent_run_events_page(
+            deps=deps,
+            run_id=job["run_id"],
+            client_id=principal.client_id,
+            limit=max(1, min(int(limit), 2000)),
+            event_type=event_type,
+            status=status,
+            capability_name=capability_name,
+            since=since,
+            until=until,
+            before=before,
+            after=after,
+            event_id=event_id,
+            around=max(1, min(int(around), 2000)),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    payload = page.to_dict()
+    _sync_job_status_from_run(job=job, run=run)
+    return ExternalAgentJobEventListResponse(
+        events=payload["events"], page=payload["page"]
+    )
+
+
 def _require_external_agent_principal(*, request: Request) -> PrincipalContext:
     auth_header = request.headers.get("authorization") or request.headers.get(
         "Authorization"
@@ -214,6 +303,23 @@ def _require_external_agent_principal(*, request: Request) -> PrincipalContext:
             detail="External agent jobs require an external_agent bearer token",
         )
     return principal
+
+
+def _require_scoped_job_and_run(
+    *, deps: AppDeps, job_id: str, principal: PrincipalContext
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    job = get_external_agent_job(
+        job_id=job_id,
+        client_id=principal.client_id,
+        principal_id=principal.principal_id,
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="External agent job not found")
+    run = deps.agent_runs.get_agent_run(run_id=job["run_id"], client_id=principal.client_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="External agent job run not found")
+    job = _sync_job_status_from_run(job=job, run=run)
+    return job, run
 
 
 def _resolve_requested_runtime_contract(
@@ -303,9 +409,102 @@ def _job_status_payload(*, job: Dict[str, Any], run: Dict[str, Any]) -> Dict[str
         "trace_id": job.get("trace_id") or run.get("trace_id"),
         "requested_skill_id": job.get("requested_skill_id"),
         "requested_tool_id": job.get("requested_tool_id"),
+        "receipt_id": job.get("receipt_id"),
+        "receipt_type": job.get("receipt_type"),
+        "receipt_signature_algorithm": job.get("receipt_signature_algorithm"),
         "created_at": job.get("created_at"),
         "updated_at": job.get("updated_at"),
     }
+
+
+def _sync_job_status_from_run(*, job: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
+    status = _job_status_from_run(run)
+    if status == job.get("status"):
+        return job
+    return update_external_agent_job_status(
+        job_id=job["id"],
+        status=status,
+        response={**(job.get("response") or {}), "status": status},
+    ) or job
+
+
+def _ensure_external_agent_job_receipt(
+    *, job: Dict[str, Any], run: Dict[str, Any]
+) -> Dict[str, Any]:
+    current_status = _job_status_from_run(run)
+    if (
+        job.get("receipt_id")
+        and job.get("receipt_signature")
+        and (job.get("receipt_payload") or {}).get("status") == current_status
+    ):
+        return {
+            **(job.get("receipt_payload") or {}),
+            "signature": job.get("receipt_signature"),
+            "signature_algorithm": job.get("receipt_signature_algorithm"),
+        }
+    receipt_payload = {
+        "receipt_id": str(uuid.uuid4()),
+        "receipt_type": f"external_agent_job_{current_status}",
+        "job_id": job["id"],
+        "run_id": job["run_id"],
+        "client_id": job["client_id"],
+        "principal_id": job["principal_id"],
+        "agent_profile_id": job.get("agent_profile_id"),
+        "idempotency_key": job["idempotency_key"],
+        "status": current_status,
+        "trace_id": job.get("trace_id") or run.get("trace_id"),
+        "requested_skill_id": job.get("requested_skill_id"),
+        "requested_tool_id": job.get("requested_tool_id"),
+        "run_status": run.get("status"),
+        "run_state": run.get("state"),
+        "registry_version": run.get("registry_version"),
+        "registry_fingerprint": run.get("registry_fingerprint"),
+        "issued_at": datetime.now(timezone.utc).isoformat(),
+    }
+    signature = _sign_external_agent_job_receipt(receipt_payload)
+    stored = update_external_agent_job_receipt(
+        job_id=job["id"],
+        receipt_id=receipt_payload["receipt_id"],
+        receipt_type=receipt_payload["receipt_type"],
+        receipt_signature=signature,
+        receipt_signature_algorithm="hmac-sha256",
+        receipt_payload=receipt_payload,
+    )
+    job.update(stored or {})
+    return {
+        **receipt_payload,
+        "signature": signature,
+        "signature_algorithm": "hmac-sha256",
+    }
+
+
+def _sign_external_agent_job_receipt(payload: Dict[str, Any]) -> str:
+    payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("utf-8").rstrip("=")
+    signature = hmac.new(
+        _external_agent_job_receipt_secret().encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+
+def _external_agent_job_receipt_secret() -> str:
+    settings = get_settings()
+    secret = (
+        settings.registry_approval_signing_secret
+        or settings.agent_principal_signing_secret
+    )
+    if secret:
+        return secret
+    if settings.app_env != "prod":
+        return "local-development-external-agent-job-secret"
+    raise HTTPException(
+        status_code=500,
+        detail="AGENT_PRINCIPAL_SIGNING_SECRET is not configured",
+    )
 
 
 __all__ = ["router"]

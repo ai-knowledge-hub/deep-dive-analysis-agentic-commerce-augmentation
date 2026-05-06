@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import sys
 import types
+import base64
+import hashlib
+import hmac
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,3 +173,93 @@ def test_external_agent_job_validates_requested_skill_tool_pair(client: TestClie
     )
     assert response.status_code == 400
     assert "cannot use tool" in response.json()["detail"]
+
+
+def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-receipt", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job_id = payload["job"]["id"]
+    run_id = payload["run"]["id"]
+
+    receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert receipt_response.status_code == 200
+    receipt = receipt_response.json()["receipt"]
+    assert receipt["receipt_type"] == "external_agent_job_accepted"
+    assert receipt["job_id"] == job_id
+    assert receipt["run_id"] == run_id
+    assert receipt["status"] == "accepted"
+    assert receipt["signature_algorithm"] == "hmac-sha256"
+    assert _valid_signature(receipt, "test-agent-secret")
+
+    deps = default_deps()
+    deps.agent_runs.update_agent_run(run_id=run_id, status="completed")
+    completed_receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert completed_receipt_response.status_code == 200
+    completed_receipt = completed_receipt_response.json()["receipt"]
+    assert completed_receipt["receipt_type"] == "external_agent_job_completed"
+    assert completed_receipt["status"] == "completed"
+    assert completed_receipt["receipt_id"] != receipt["receipt_id"]
+    assert _valid_signature(completed_receipt, "test-agent-secret")
+
+
+def test_external_agent_job_events_are_scoped_to_creating_principal(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-events", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    job_id = created.json()["job"]["id"]
+
+    events = client.get(
+        f"/external-agent/jobs/{job_id}/events",
+        headers=_headers(token),
+        params={"event_type": "all"},
+    )
+    assert events.status_code == 200
+    event_payload = events.json()
+    assert event_payload["events"]
+    assert event_payload["events"][0]["event_type"] == "action_proposed"
+    assert event_payload["events"][0]["tool_id"] == "experiment.run_variant"
+
+    other_principal_token = _token(principal_id="agent-ext-events-other")
+    wrong_principal = client.get(
+        f"/external-agent/jobs/{job_id}/events",
+        headers=_headers(other_principal_token),
+    )
+    assert wrong_principal.status_code == 404
+
+
+def _valid_signature(receipt: dict, secret: str) -> bool:
+    signature = receipt["signature"]
+    payload_b64, provided_signature = signature.rsplit(".", 1)
+    expected_signature = hmac.new(
+        secret.encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(provided_signature, expected_signature):
+        return False
+    padding = "=" * (-len(payload_b64) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64 + padding))
+    unsigned_receipt = {
+        key: value
+        for key, value in receipt.items()
+        if key not in {"signature", "signature_algorithm"}
+    }
+    return payload == unsigned_receipt

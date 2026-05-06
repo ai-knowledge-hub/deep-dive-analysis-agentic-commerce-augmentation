@@ -26,7 +26,7 @@ The codebase now has the minimum spine for the pivot:
 
 - Principal-aware agent run creation with `principal_type`, `principal_id`, `agent_profile_id`, `harness_id`, `policy_profile_id`, `idempotency_key`, and `trace_id`.
 - Machine-principal token resolution for scoped external-agent run creation.
-- External-agent job facade with idempotent create/status contracts through `POST /external-agent/jobs` and `GET /external-agent/jobs/{job_id}`.
+- External-agent job facade with idempotent create/status contracts through `POST /external-agent/jobs` and `GET /external-agent/jobs/{job_id}`, plus signed latest-status receipts and scoped linked-run event reads.
 - Agent run/action/event persistence with tool/effect metadata stamped onto proposed and executed work.
 - Runtime policy profiles mapped from run modes: `human_approval_required`, `safe_auto`, and `observe`.
 - Compatibility from legacy `capability_name` to machine-facing `tool_id`.
@@ -116,12 +116,12 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, and linked run events.
 
 Next steps:
 
-- Add signed completion/failure receipts at the job facade level.
-- Add job event-stream/read APIs for external agents.
+- Add a historical receipt ledger instead of latest receipt only.
+- Add richer job-specific event projections for external agents.
 - Add scoped credentials for tool/skill access.
 - Add retry-safe responses across more external-agent endpoints.
 

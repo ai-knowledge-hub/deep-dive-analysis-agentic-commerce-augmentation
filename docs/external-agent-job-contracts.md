@@ -33,6 +33,7 @@ Required scopes:
 
 - `external_agent_jobs:write` or `agent_runs:write` for job creation.
 - `external_agent_jobs:read`, `external_agent_jobs:write`, `agent_runs:read`, or `agent_runs:write` for status reads.
+- The same read/write scopes allow receipt and event reads.
 
 Skill/tool scopes:
 
@@ -150,23 +151,82 @@ Status mapping:
 | `failed` | `failed` |
 | `cancelled` | `cancelled` |
 
+## Get Job Receipt
+
+Endpoint:
+
+```http
+GET /external-agent/jobs/{job_id}/receipt
+Authorization: Bearer <agent-principal-token>
+```
+
+Behavior:
+
+- Only the creating principal can read the receipt.
+- The receipt is signed with HMAC-SHA256.
+- The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, and registry pins.
+- If the linked run status changes, the endpoint issues and stores a new latest-status receipt.
+
+Example response:
+
+```json
+{
+  "receipt": {
+    "receipt_id": "<receipt-id>",
+    "receipt_type": "external_agent_job_accepted",
+    "job_id": "<job-id>",
+    "run_id": "<agent-run-id>",
+    "client_id": "client-a",
+    "principal_id": "external-agent-1",
+    "status": "accepted",
+    "trace_id": "trace_...",
+    "requested_skill_id": "optimize-product-representation",
+    "requested_tool_id": "experiment.run_variant",
+    "registry_version": "agent-runtime-static-v1",
+    "registry_fingerprint": "...",
+    "issued_at": "...",
+    "signature": "<payload>.<hmac>",
+    "signature_algorithm": "hmac-sha256"
+  }
+}
+```
+
+## Get Job Events
+
+Endpoint:
+
+```http
+GET /external-agent/jobs/{job_id}/events
+Authorization: Bearer <agent-principal-token>
+```
+
+Behavior:
+
+- Only the creating principal can read the job event feed.
+- The endpoint returns the linked run's `agent_events` feed.
+- Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
+
 ## Current Implementation Boundary
 
 Implemented now:
 
 - `POST /external-agent/jobs`
 - `GET /external-agent/jobs/{job_id}`
+- `GET /external-agent/jobs/{job_id}/receipt`
+- `GET /external-agent/jobs/{job_id}/events`
 - machine-principal auth requirement
 - idempotent create/replay behavior
 - payload mismatch conflict
 - skill/tool scope checks
 - linked `agent_run` creation with registry pins, principal, trace id, and initial action plan
 - scoped status reads
+- signed latest-status receipts
+- scoped linked-run event reads
 
 Still to build:
 
-- signed completion/failure receipts at the job facade level
-- richer external-agent job event stream
+- historical receipt ledger instead of latest receipt only
+- richer external-agent job event projections beyond linked run events
 - full harness-profile enforcement
 - scoped credential management UI/API
 - production-grade tool permission registry instead of token-scope strings only

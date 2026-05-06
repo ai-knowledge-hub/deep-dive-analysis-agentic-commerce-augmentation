@@ -122,6 +122,41 @@ def update_external_agent_job_status(
     return get_external_agent_job(job_id=job_id)
 
 
+def update_external_agent_job_receipt(
+    *,
+    job_id: str,
+    receipt_id: str,
+    receipt_type: str,
+    receipt_signature: str,
+    receipt_signature_algorithm: str,
+    receipt_payload: Dict[str, Any],
+) -> Dict[str, Any] | None:
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE external_agent_jobs
+        SET
+            receipt_id = ?,
+            receipt_type = ?,
+            receipt_signature = ?,
+            receipt_signature_algorithm = ?,
+            receipt_payload_json = json(?),
+            updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (
+            receipt_id,
+            receipt_type,
+            receipt_signature,
+            receipt_signature_algorithm,
+            to_json(receipt_payload) or to_json({}),
+            job_id,
+        ),
+    )
+    conn.commit()
+    return get_external_agent_job(job_id=job_id)
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -135,6 +170,20 @@ def _row(row) -> Dict[str, Any]:
         "requested_tool_id": row["requested_tool_id"],
         "status": row["status"],
         "trace_id": row["trace_id"],
+        "receipt_id": row["receipt_id"] if "receipt_id" in row.keys() else None,
+        "receipt_type": row["receipt_type"] if "receipt_type" in row.keys() else None,
+        "receipt_signature": row["receipt_signature"]
+        if "receipt_signature" in row.keys()
+        else None,
+        "receipt_signature_algorithm": row["receipt_signature_algorithm"]
+        if "receipt_signature_algorithm" in row.keys()
+        else None,
+        "receipt_payload": from_json(
+            row["receipt_payload_json"]
+            if "receipt_payload_json" in row.keys()
+            else None,
+            default={},
+        ),
         "request": from_json(row["request_json"], default={}),
         "response": from_json(row["response_json"], default={}),
         "created_at": row["created_at"],
@@ -146,5 +195,6 @@ __all__ = [
     "create_external_agent_job",
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
+    "update_external_agent_job_receipt",
     "update_external_agent_job_status",
 ]
