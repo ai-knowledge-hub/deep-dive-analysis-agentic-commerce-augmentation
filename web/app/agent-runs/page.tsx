@@ -1785,8 +1785,11 @@ function AgentRunsPageContent() {
                 {selectedRun && (
                   <>
                     <section className="agent-next-action">
-                      <div className="panel__header">
-                        <h4 className="control-section__title">Next recommended action</h4>
+                      <div className="control-section__header">
+                        <div>
+                          <span className="control-section__eyebrow">Recommendation</span>
+                          <h4 className="control-section__title">Next recommended action</h4>
+                        </div>
                         {nextRecommendedAction.action ? (
                           <span className="control-chip">
                             #{nextRecommendedAction.action.sequence} ·{" "}
