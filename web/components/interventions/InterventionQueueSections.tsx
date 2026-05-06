@@ -52,10 +52,10 @@ type PausesProps = {
 };
 
 function badgeClassForPriority(priority: Priority): string {
-  if (priority === "critical") return "panel__badge--severity-high";
-  if (priority === "high") return "panel__badge--warning";
-  if (priority === "medium") return "panel__badge--severity-medium";
-  return "panel__badge--severity-low";
+  if (priority === "critical" || priority === "high") {
+    return "control-chip control-chip--attention";
+  }
+  return "control-chip";
 }
 
 function describePriority(priority: Priority): string {
@@ -81,11 +81,11 @@ function InterventionMeta({
   run: AgentRun;
 }) {
   return (
-    <div className="list__meta">
-      <span className={`panel__badge ${badgeClassForPriority(priority)}`}>
+    <div className="intervention-meta">
+      <span className={badgeClassForPriority(priority)}>
         {describePriority(priority)}
-      </span>{" "}
-      <span className="panel__badge panel__badge--secondary">{describeRisk(risk)}</span>{" "}
+      </span>
+      <span className="control-chip">{describeRisk(risk)}</span>
       <span>{run.status ?? "unknown"}</span> · <span>{run.state ?? "unknown"}</span>
     </div>
   );
@@ -93,17 +93,17 @@ function InterventionMeta({
 
 export function EscalationsSection({ items, onOpenRun }: EscalationsProps) {
   return (
-    <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
+    <section className="control-surface intervention-section">
+      <div className="control-section__header">
         <h3>Escalations</h3>
-        <span className="panel__badge panel__badge--severity-high">{items.length}</span>
+        <span className="control-chip control-chip--attention">{items.length}</span>
       </div>
       {items.length === 0 ? (
         <div className="panel__muted">No runs currently require escalation.</div>
       ) : (
-        <div className="list">
+        <div className="intervention-list">
           {items.map((item) => (
-            <div key={`escalation-${item.run.id}`} className="list__row">
+            <div key={`escalation-${item.run.id}`} className="intervention-item">
               <div className="list__title">{item.title}</div>
               <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
               <div className="panel__muted">{item.summary}</div>
@@ -138,17 +138,17 @@ export function CommandWorkSection({
   onOpenRun,
 }: CommandsProps) {
   return (
-    <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
+    <section className="control-surface intervention-section">
+      <div className="control-section__header">
         <h3>Command-originated work</h3>
-        <span className="panel__badge panel__badge--warning">{items.length}</span>
+        <span className="control-chip control-chip--attention">{items.length}</span>
       </div>
       {items.length === 0 ? (
         <div className="panel__muted">
           No high-risk command receipts or retry proposals need intervention.
         </div>
       ) : (
-        <div className="list">
+        <div className="intervention-list">
           {items.map((item) => {
             const compensating = item.compensatingActions?.[0] ?? null;
             const compensatingKey = compensatingProposalKey(item.event.id, compensating);
@@ -156,7 +156,7 @@ export function CommandWorkSection({
             const needsConfirm =
               compensatingKey && pendingCompensatingKey === compensatingKey;
             return (
-              <div key={`command-${item.event.id}`} className="list__row">
+              <div key={`command-${item.event.id}`} className="intervention-item">
                 <div className="list__title">{item.title}</div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{item.summary}</div>
@@ -188,33 +188,33 @@ export function CommandWorkSection({
 
 export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: ApprovalsProps) {
   return (
-    <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
+    <section className="control-surface intervention-section">
+      <div className="control-section__header">
         <h3>Approvals</h3>
-        <span className="panel__badge panel__badge--warning">{items.length}</span>
+        <span className="control-chip control-chip--attention">{items.length}</span>
       </div>
       {items.length === 0 ? (
         <div className="panel__muted">No proposed actions are waiting for approval.</div>
       ) : (
-        <div className="list">
+        <div className="intervention-list">
           {items.map((item) => {
             const approveKey = `decision:${item.action.id}:approve`;
             const rejectKey = `decision:${item.action.id}:reject`;
             return (
-              <div key={`approval-${item.action.id}`} className="list__row">
+              <div key={`approval-${item.action.id}`} className="intervention-item">
                 <div className="list__title">
                   {formatRunLabel(item.run)}: approve {item.action.capability_name}
                 </div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{item.summary}</div>
-                <div className="agent-ops-summary">
-                  <span className="panel__badge panel__badge--secondary">
+                <div className="control-chip-row">
+                  <span className="control-chip">
                     Skill: {item.action.skill_id ?? "unmapped"}
                   </span>
-                  <span className="panel__badge panel__badge--secondary">
+                  <span className="control-chip">
                     Tool: {item.action.tool_id ?? "legacy"}
                   </span>
-                  <span className="panel__badge panel__badge--secondary">
+                  <span className="control-chip">
                     Effect: {item.action.effect_class ?? item.risk}
                   </span>
                 </div>
@@ -255,21 +255,21 @@ export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: Appr
 
 export function RetriesSection({ items, busyKey, onRunControl, onOpenRun }: RetriesProps) {
   return (
-    <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
+    <section className="control-surface intervention-section">
+      <div className="control-section__header">
         <h3>Retries and resumes</h3>
-        <span className="panel__badge panel__badge--secondary">{items.length}</span>
+        <span className="control-chip">{items.length}</span>
       </div>
       {items.length === 0 ? (
         <div className="panel__muted">
           No runs are ready for an operator-driven restart or next step.
         </div>
       ) : (
-        <div className="list">
+        <div className="intervention-list">
           {items.map((item) => {
             const controlKey = `control:${item.run.id}:${item.control}`;
             return (
-              <div key={`retry-${item.run.id}`} className="list__row">
+              <div key={`retry-${item.run.id}`} className="intervention-item">
                 <div className="list__title">{item.title}</div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{item.summary}</div>
@@ -307,20 +307,20 @@ export function RetriesSection({ items, busyKey, onRunControl, onOpenRun }: Retr
 
 export function PausesSection({ items, busyKey, onRunControl, onOpenRun }: PausesProps) {
   return (
-    <section className="panel__card panel__card--secondary">
-      <div className="panel__header">
+    <section className="control-surface intervention-section">
+      <div className="control-section__header">
         <h3>Pauses</h3>
-        <span className="panel__badge panel__badge--secondary">{items.length}</span>
+        <span className="control-chip">{items.length}</span>
       </div>
       {items.length === 0 ? (
         <div className="panel__muted">No active runs currently need a pause decision.</div>
       ) : (
-        <div className="list">
+        <div className="intervention-list">
           {items.map((item) => {
             const pauseKey = `control:${item.run.id}:pause`;
             const cancelKey = `control:${item.run.id}:cancel`;
             return (
-              <div key={`pause-${item.run.id}`} className="list__row">
+              <div key={`pause-${item.run.id}`} className="intervention-item">
                 <div className="list__title">{formatRunLabel(item.run)} is executing</div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{item.summary}</div>

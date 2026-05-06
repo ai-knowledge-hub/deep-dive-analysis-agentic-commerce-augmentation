@@ -1556,6 +1556,42 @@ ul { list-style: none; }
   color: #b7f7d8;
 }
 
+.intervention-section {
+  min-height: 0;
+}
+
+.intervention-section .control-section__header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.intervention-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.intervention-item {
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.intervention-item:first-child {
+  border-top: 0;
+}
+
+.intervention-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .detail {
   width: 100%;
   display: flex;
