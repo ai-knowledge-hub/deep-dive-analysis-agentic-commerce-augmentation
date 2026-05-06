@@ -127,10 +127,13 @@ export function SelectedActionDetailPanel({
   const metricId = metricIdForAction(selectedAction);
 
   return (
-    <section className="agent-action-detail">
-      <div className="panel__header">
-        <h4>Selected action details</h4>
-        <span className="panel__badge panel__badge--secondary">
+    <section className="agent-action-detail control-section">
+      <div className="control-section__header">
+        <div>
+          <span className="control-section__eyebrow">Action detail</span>
+          <h4 className="control-section__title">Selected action details</h4>
+        </div>
+        <span className="control-chip">
           {selectedAction.capability_name}
         </span>
       </div>
@@ -139,29 +142,29 @@ export function SelectedActionDetailPanel({
           CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
           "Capability summary not yet documented."}
       </p>
-      <div className="agent-ops-summary">
-        <span className="panel__badge panel__badge--secondary">
+      <div className="control-chip-row">
+        <span className="control-chip">
           Skill: {selectedAction.skill_id ?? "unmapped"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Tool: {selectedAction.tool_id ?? "legacy"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Effect: {selectedAction.effect_class ?? "unknown"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Registry: {selectedAction.registry_version ?? "unpinned"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Receipt fingerprint:{" "}
           {selectedAction.registry_fingerprint
             ? selectedAction.registry_fingerprint.slice(0, 12)
             : "unpinned"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Tool version: {selectedAction.tool_version ?? "unpinned"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Skill version: {selectedAction.skill_version ?? "unpinned"}
         </span>
       </div>
@@ -185,14 +188,14 @@ export function SelectedActionDetailPanel({
       )}
 
       <p className="panel__subheading">Registry ownership</p>
-      <div className="agent-ops-summary">
-        <span className="panel__badge panel__badge--secondary">
+      <div className="control-chip-row">
+        <span className="control-chip">
           Owner: {selectedCapabilitySpec?.owner_principal_id ?? "unassigned"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Steward: {selectedCapabilitySpec?.steward_team ?? "unassigned"}
         </span>
-        <span className="panel__badge panel__badge--secondary">
+        <span className="control-chip">
           Source: {selectedCapabilitySpec?.ownership_source ?? "static_code"}
         </span>
       </div>

@@ -1870,14 +1870,17 @@ function AgentRunsPageContent() {
                       onDecision={handleDecision}
                       formatJsonPreview={formatJsonPreview}
                     />
-                    <section className="agent-timeline">
-                      <div className="panel__header">
-                        <h4>Execution timeline</h4>
+                    <section className="agent-timeline control-section">
+                      <div className="control-section__header">
+                        <div>
+                          <span className="control-section__eyebrow">Timeline</span>
+                          <h4 className="control-section__title">Execution timeline</h4>
+                        </div>
                         <div className="panel__row panel__row--compact">
-                          <span className="panel__badge panel__badge--secondary">
+                          <span className="control-chip">
                             {timelineEvents.length}/{actions.length} events
                           </span>
-                          <span className="panel__badge panel__badge--secondary">
+                          <span className="control-chip">
                             Live: {livePollingActive ? "on" : "paused"}
                           </span>
                           {eventsPage?.has_more_before ? (
