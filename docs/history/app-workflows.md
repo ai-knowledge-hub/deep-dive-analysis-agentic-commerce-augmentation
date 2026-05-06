@@ -1,4 +1,12 @@
-# App Workflows (Current + Planned)
+# Historical App Workflows (Lab-First Product)
+
+Status: historical/reference
+Current UX guide: `../operator-experience.md`
+Current build checkpoint: `../agentification-checkpoint.md`
+
+This document maps older lab-first workflows. Keep it as reference context, but do not treat it as the active product navigation model.
+
+---
 
 This document maps implemented workflows and highlights planned gaps.
 

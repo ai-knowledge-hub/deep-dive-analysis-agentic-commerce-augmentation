@@ -21,8 +21,8 @@ The core moat is not a single score or a standalone lab. It is the **governed fe
 Current product direction:
 - **Agent-first execution fabric**: principal-aware runs for humans, internal agents, and external agents; policy profiles; tool/skill lineage; registry-pinned actions; runtime receipt validation.
   See `docs/agentic-layer.md`.
-- **Human control plane**: Inbox, Runs, Interventions, and Learnings become the primary UX; lab workflows remain available as advanced/drill-down surfaces.
-  See `docs/agentification-checkpoint.md`.
+- **Human control plane**: Inbox, Runs, Interventions, and Learnings are the primary UX; Lab remains available as an advanced bench.
+  See `docs/operator-experience.md`.
 - **Next build track**: external-agent job APIs, harness profiles, protocol/fallback execution adapters, and deeper control-plane UX simplification.
   See the `Next Development Tracks` section in `docs/agentification-checkpoint.md`.
 
@@ -238,8 +238,9 @@ pnpm test
 If `pnpm test` fails with `vitest: command not found`, run `pnpm install` again in `web/` to pull the new test dependencies.
 
 Open:
-- App: `http://localhost:3000`
-- Validation: `http://localhost:3000/validation`
+- Control plane: `http://localhost:3000`
+- Runs: `http://localhost:3000/runs`
+- Lab bench: `http://localhost:3000/lab`
 
 ---
 
@@ -351,6 +352,7 @@ Completed foundation:
 - Agent runtime persistence, policy profiles, skills/tools registry, registry release/audit trail, command preflight, retries, structured recovery proposals, compensating recommendations, and control-plane surfaces.
 - Backend cleanup has split the agent runtime into `capabilities/`, `commands/`, `registry/`, and `runtime/` subpackages.
 - Command routes are thin HTTP adapters; command orchestration lives in `application/services/agent_runtime/commands/service.py`.
+- Primary operator surfaces now use the flattened control-plane visual language; the current user guide lives in `docs/operator-experience.md`.
 
 Remaining build tracks:
 - External-agent job APIs with idempotency, retry-safe responses, scoped credentials, and signed execution receipts.
@@ -369,10 +371,13 @@ Current planning references:
 
 - `docs/agentification-checkpoint.md`
 - `docs/agent-first-modular-architecture-v1.md`
+- `docs/agent-capability-map.md`
 - `docs/codebase-cleanup-and-modularisation-plan.md`
 - `docs/agentic-layer.md`
+- `docs/operator-experience.md`
 - `docs/chat-led-operator-console-spec.md`
 - `docs/ui-control-plane-simplification-plan.md`
+- `docs/ui-style-direction.md`
 
 Historical or candidate-historical docs are still retained, but should not be treated
 as the current implementation plan without checking the checkpoint first.

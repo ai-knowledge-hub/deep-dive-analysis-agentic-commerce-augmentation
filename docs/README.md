@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: current
-Last updated: 2026-05-04
+Last updated: 2026-05-06
 
 Use this index to avoid treating historical planning notes as active product or architecture guidance.
 
@@ -9,10 +9,13 @@ Use this index to avoid treating historical planning notes as active product or 
 
 - `agentification-checkpoint.md`: current execution checkpoint and next build tracks.
 - `agent-first-modular-architecture-v1.md`: target agent-first architecture.
+- `agent-capability-map.md`: narrative-to-agent/tool capability map for functionality and UX planning.
 - `codebase-cleanup-and-modularisation-plan.md`: cleanup and source modularisation plan.
 - `agentic-layer.md`: current runtime implementation notes.
-- `chat-led-operator-console-spec.md`: control-plane chat UX target.
+- `operator-experience.md`: current operator/user guide for the agentic control plane.
+- `chat-led-operator-console-spec.md`: reference spec for chat-led control-plane interaction.
 - `ui-control-plane-simplification-plan.md`: current UI simplification roadmap.
+- `ui-style-direction.md`: visual style rules for the flattened control-plane UI.
 
 ## Reference Docs
 
@@ -32,5 +35,5 @@ These may contain useful context, but should not be treated as the current imple
 - `history/agent-first-migration-slice-rfc.md`: implemented migration-slice rationale.
 - `history/app-workflows.md`: older workflow map with some still-useful API notes.
 - `history/experiment-flow-detailed.md`: lab-era experiment flow detail.
-- `history/user-guide-complete.md`: older human-led user guide, now likely superseded by the control-plane pivot.
+- `history/user-guide-complete.md`: older human-led user guide, superseded by `operator-experience.md`.
 - `history/pitch-deck.html`: presentation artifact, not engineering guidance.
