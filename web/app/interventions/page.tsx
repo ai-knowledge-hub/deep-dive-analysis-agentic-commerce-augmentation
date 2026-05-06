@@ -365,7 +365,7 @@ function InterventionsPageContent() {
             </section>
           ) : null}
 
-          <section className="agent-workspace inbox-workspace">
+          <section className="control-grid control-grid--compact control-grid--full">
             <EscalationsSection items={visibleEscalations} onOpenRun={openRun} />
             <CommandWorkSection
               items={visibleCommands}

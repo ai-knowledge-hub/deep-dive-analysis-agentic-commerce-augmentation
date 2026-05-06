@@ -217,8 +217,8 @@ export default function HomePage() {
             </div>
           ) : null}
 
-          <section className="agent-workspace inbox-workspace">
-            <section className="control-surface panel__card--full-row">
+          <section className="control-grid control-grid--full">
+            <section className="control-surface control-grid__full">
               <div className="control-section__header">
                 <div>
                   <span className="control-section__eyebrow">Next move</span>

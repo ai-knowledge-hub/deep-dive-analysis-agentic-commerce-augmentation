@@ -353,7 +353,7 @@ export default function InboxPage() {
             error={error}
           />
 
-          <section className="agent-workspace inbox-workspace">
+          <section className="control-grid control-grid--compact control-grid--full">
             {groups.map(renderGroup)}
           </section>
         </div>

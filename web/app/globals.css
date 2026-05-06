@@ -1430,6 +1430,25 @@ ul { list-style: none; }
   background: transparent;
 }
 
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.control-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+
+.control-grid--full > .control-surface {
+  min-height: 100%;
+}
+
+.control-grid__full {
+  grid-column: 1 / -1;
+}
+
 .control-section {
   padding: 14px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.07);

@@ -310,7 +310,7 @@ export default function LearningsPage() {
             error={error}
           />
 
-          <section className="agent-workspace inbox-workspace">
+          <section className="control-grid control-grid--compact control-grid--full">
             <section className="control-surface">
               <div className="control-section__header">
                 <div>
