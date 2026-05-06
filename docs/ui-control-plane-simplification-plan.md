@@ -337,6 +337,10 @@ Deliver:
 
 Status: in progress. The current root page is now a control-plane entry that loads a lightweight run snapshot, shows attention/active/recent counts, and recommends Inbox, Runs, Interventions, or Learnings based on current run state.
 
+Visual status: implemented for the primary agentic loop. `/`, `Runs`, `Inbox`,
+`Interventions`, and `Learnings` now use the flatter control-surface/list
+language defined in `docs/ui-style-direction.md`.
+
 ### Phase 3: Shared run-centric data layer
 
 Deliver:

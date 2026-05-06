@@ -218,15 +218,16 @@ export default function HomePage() {
           ) : null}
 
           <section className="agent-workspace inbox-workspace">
-            <section className="panel__card panel__card--secondary panel__card--full-row">
-              <div className="panel__header">
-                <div className="panel__meta panel__meta--stack">
-                  <h3>Recommended next move</h3>
-                  <div className="panel__subtitle">
+            <section className="control-surface panel__card--full-row">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Next move</span>
+                  <h3 className="control-section__title">Recommended next move</h3>
+                  <div className="control-section__summary">
                     Based on the latest run statuses available to the control plane.
                   </div>
                 </div>
-                <span className="panel__badge panel__badge--warning">
+                <span className="control-chip control-chip--attention">
                   {loadingSnapshot ? "Loading" : "Live"}
                 </span>
               </div>
@@ -252,18 +253,21 @@ export default function HomePage() {
               </div>
             </section>
 
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Primary control plane</h3>
-                <span className="panel__badge panel__badge--warning">Default</span>
+            <section className="control-surface">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Primary</span>
+                  <h3 className="control-section__title">Primary control plane</h3>
+                </div>
+                <span className="control-chip control-chip--attention">Default</span>
               </div>
-              <div className="list">
+              <div className="control-list">
                 {PRIMARY_ENTRY_CARDS.map((item) => (
-                  <div key={item.title} className="list__row">
-                    <div className="list__title">{item.title}</div>
+                  <div key={item.title} className="control-list__row">
+                    <div className="control-list__title">{item.title}</div>
                     {item.badge ? (
-                      <div className="list__meta">
-                        <span className="panel__badge panel__badge--secondary">{item.badge}</span>
+                      <div className="control-list__meta">
+                        <span className="control-chip">{item.badge}</span>
                       </div>
                     ) : null}
                     <div className="panel__muted">{item.summary}</div>
@@ -281,26 +285,29 @@ export default function HomePage() {
               </div>
             </section>
 
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Suggested operator paths</h3>
-                <span className="panel__badge panel__badge--secondary">Guided</span>
+            <section className="control-surface">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Guidance</span>
+                  <h3 className="control-section__title">Suggested operator paths</h3>
+                </div>
+                <span className="control-chip">Guided</span>
               </div>
-              <div className="list">
-                <div className="list__row">
-                  <div className="list__title">If execution feels unstable</div>
+              <div className="control-list">
+                <div className="control-list__row">
+                  <div className="control-list__title">If execution feels unstable</div>
                   <div className="panel__muted">
                     Start in `Inbox`, move into `Interventions`, then inspect the affected run in `Runs`.
                   </div>
                 </div>
-                <div className="list__row">
-                  <div className="list__title">If execution is healthy but opaque</div>
+                <div className="control-list__row">
+                  <div className="control-list__title">If execution is healthy but opaque</div>
                   <div className="panel__muted">
                     Start in `Runs`, use the operator chat for explanation, then finish in `Learnings` to understand what changed.
                   </div>
                 </div>
-                <div className="list__row">
-                  <div className="list__title">If you want to drive the system directly</div>
+                <div className="control-list__row">
+                  <div className="control-list__title">If you want to drive the system directly</div>
                   <div className="panel__muted">
                     Open the `Lab` and use the chat-led workspace for exploratory, human-guided operation.
                   </div>
@@ -308,15 +315,18 @@ export default function HomePage() {
               </div>
             </section>
 
-            <section className="panel__card panel__card--secondary">
-              <div className="panel__header">
-                <h3>Secondary surfaces</h3>
-                <span className="panel__badge panel__badge--secondary">Bridge</span>
+            <section className="control-surface">
+              <div className="control-section__header">
+                <div>
+                  <span className="control-section__eyebrow">Bridge</span>
+                  <h3 className="control-section__title">Secondary surfaces</h3>
+                </div>
+                <span className="control-chip">Bridge</span>
               </div>
-              <div className="list">
+              <div className="control-list">
                 {SECONDARY_ENTRY_CARDS.map((item) => (
-                  <div key={item.title} className="list__row">
-                    <div className="list__title">{item.title}</div>
+                  <div key={item.title} className="control-list__row">
+                    <div className="control-list__title">{item.title}</div>
                     <div className="panel__muted">{item.summary}</div>
                     <div className="detail__actions">
                       <button

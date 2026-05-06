@@ -26,3 +26,16 @@ Start with `Runs`, because it currently carries the most nested operational UI.
 The first implementation uses flatter primitives for the run rail and selected
 run execution summary before applying the same language to `Inbox`,
 `Interventions`, and `Learnings`.
+
+## Current Adoption Checkpoint
+
+The primary operator control plane now uses the flatter primitives across:
+
+- `/`
+- `/runs`
+- `/inbox`
+- `/interventions`
+- `/learnings`
+
+Remaining visual cleanup should focus on older lab and admin surfaces, not the
+primary agentic supervision loop.
