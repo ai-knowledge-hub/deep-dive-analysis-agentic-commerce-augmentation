@@ -248,6 +248,33 @@ def test_external_agent_job_rejects_idempotency_payload_mismatch(client: TestCli
     assert second.status_code == 409
 
 
+def test_external_agent_job_idempotent_replay_survives_runtime_contract_drift(
+    client: TestClient, monkeypatch
+):
+    token = _token()
+    payload = {
+        "idempotency_key": "job-replay-contract-drift",
+        "tool_id": "experiment.run_variant",
+    }
+    first = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json=payload,
+    )
+    assert first.status_code == 200
+
+    monkeypatch.setattr("api.routes.external_agent_jobs.get_tool_spec", lambda _: None)
+
+    replay = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json=payload,
+    )
+    assert replay.status_code == 200
+    assert replay.json()["idempotent_replay"] is True
+    assert replay.json()["job"]["id"] == first.json()["job"]["id"]
+
+
 def test_external_agent_job_duplicate_insert_reloads_existing_job(client: TestClient):
     deps = default_deps()
     run = deps.agent_runs.create_agent_run(
@@ -535,6 +562,48 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
         headers=_headers(other_principal_token),
     )
     assert wrong_principal.status_code == 404
+
+
+def test_external_agent_job_status_hides_stale_receipt_metadata(client: TestClient):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-stale-receipt", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job_id = payload["job"]["id"]
+    run_id = payload["run"]["id"]
+
+    receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert receipt_response.status_code == 200
+    assert receipt_response.json()["receipt"]["status"] == "accepted"
+
+    deps = default_deps()
+    deps.agent_runs.update_agent_run(run_id=run_id, status="completed")
+
+    status = client.get(f"/external-agent/jobs/{job_id}", headers=_headers(token))
+    assert status.status_code == 200
+    job = status.json()["job"]
+    assert job["status"] == "completed"
+    assert job["receipt_id"] is None
+    assert job["receipt_type"] is None
+    assert job["receipt_signature_algorithm"] is None
+
+    completed_receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert completed_receipt_response.status_code == 200
+    assert completed_receipt_response.json()["receipt"]["status"] == "completed"
+
+    refreshed_status = client.get(f"/external-agent/jobs/{job_id}", headers=_headers(token))
+    assert refreshed_status.status_code == 200
+    refreshed_job = refreshed_status.json()["job"]
+    assert refreshed_job["status"] == "completed"
+    assert refreshed_job["receipt_type"] == "external_agent_job_completed"
 
 
 def test_external_agent_job_receipt_insert_dedupes_status(client: TestClient):

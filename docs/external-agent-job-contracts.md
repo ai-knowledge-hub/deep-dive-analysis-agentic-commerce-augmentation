@@ -1,7 +1,7 @@
 # External Agent Job Contracts
 
 Status: current
-Last updated: 2026-05-06
+Last updated: 2026-05-09
 
 This document defines the machine-facing job contract for external assistants calling the agentic commerce control plane.
 
@@ -71,6 +71,7 @@ Supported body fields:
 | `skill_id` | No | Optional preferred skill. Must be compatible with `tool_id`. |
 | `capability_name` | Conditional | Legacy/runtime capability name. Used when `tool_id` is not supplied. |
 | `allowed_capabilities` | Conditional | Explicit action queue capabilities. Required if neither `tool_id` nor `capability_name` is supplied. |
+| `plan_mode` | No | `single_tool` or `workflow`. Defaults to `single_tool` when `tool_id`/`capability_name` is supplied, otherwise `workflow` for capability-list jobs. |
 | `objective` | No | Caller intent/context copied into the linked run objective. |
 | `brand_id` | No | Optional tenant-scoped brand anchor. |
 | `product_id` | No | Optional tenant-scoped product anchor. |
@@ -123,6 +124,7 @@ client_id + principal_id + idempotency_key
 Behavior:
 
 - Same key and same payload returns the existing job/run with `idempotent_replay=true`.
+- Exact-payload replays are resolved before current registry/tool/skill validation, so safe retries keep working if runtime metadata or token scopes drift after the first successful create.
 - Same key and different payload returns `409 Conflict`.
 - Different principal with the same key creates a different job.
 
@@ -149,7 +151,10 @@ Status mapping:
 | `running` / `executing` | `running` |
 | `completed` | `completed` |
 | `failed` | `failed` |
-| `cancelled` | `cancelled` |
+| `paused` | `paused` |
+| `canceled` / `cancelled` | `canceled` |
+
+Receipt metadata on the job status payload is only populated when the stored latest receipt matches the current derived job status. If the run status changed after the last receipt was issued, callers should fetch `/receipt` to mint the latest-status receipt.
 
 ## Get Job Receipt
 
@@ -224,6 +229,8 @@ Behavior:
 - Only the creating principal can read the activity projection.
 - The response combines job creation, signed receipts, and linked run events into one chronological `items` list.
 - Items are normalized as `job`, `receipt`, or `run_event` so external assistants do not have to stitch multiple endpoints together.
+- Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
+- The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
 
 Use this endpoint for machine-friendly progress narration and polling.
 

@@ -101,12 +101,6 @@ def create_external_agent_job_route(
 ) -> ExternalAgentJobResponse:
     principal = _require_external_agent_principal(request=request)
     _require_any_scope(principal, "external_agent_jobs:write", "agent_runs:write")
-    resolved = _resolve_requested_runtime_contract(payload)
-    _require_requested_skill_tool_scopes(
-        principal,
-        skill_ids=resolved["scope_skill_ids"],
-        tool_ids=resolved["scope_tool_ids"],
-    )
     request_hash = _request_hash(payload.model_dump(mode="json"))
     existing = get_external_agent_job_by_idempotency_key(
         client_id=principal.client_id,
@@ -126,6 +120,13 @@ def create_external_agent_job_route(
             raise HTTPException(status_code=409, detail="idempotent job run is missing")
         job = _job_status_payload(job=existing, run=run)
         return ExternalAgentJobResponse(job=job, run=run, idempotent_replay=True)
+
+    resolved = _resolve_requested_runtime_contract(payload)
+    _require_requested_skill_tool_scopes(
+        principal,
+        skill_ids=resolved["scope_skill_ids"],
+        tool_ids=resolved["scope_tool_ids"],
+    )
 
     registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
     ensure_agent_registry_version(
@@ -637,6 +638,9 @@ def _job_status_from_run(run: Dict[str, Any]) -> str:
 
 
 def _job_status_payload(*, job: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
+    status = _job_status_from_run(run)
+    receipt_payload = job.get("receipt_payload") or {}
+    receipt_matches_status = receipt_payload.get("status") == status
     return {
         "id": job["id"],
         "client_id": job["client_id"],
@@ -644,15 +648,17 @@ def _job_status_payload(*, job: Dict[str, Any], run: Dict[str, Any]) -> Dict[str
         "agent_profile_id": job.get("agent_profile_id"),
         "idempotency_key": job["idempotency_key"],
         "run_id": job["run_id"],
-        "status": _job_status_from_run(run),
+        "status": status,
         "run_status": run.get("status"),
         "run_state": run.get("state"),
         "trace_id": job.get("trace_id") or run.get("trace_id"),
         "requested_skill_id": job.get("requested_skill_id"),
         "requested_tool_id": job.get("requested_tool_id"),
-        "receipt_id": job.get("receipt_id"),
-        "receipt_type": job.get("receipt_type"),
-        "receipt_signature_algorithm": job.get("receipt_signature_algorithm"),
+        "receipt_id": job.get("receipt_id") if receipt_matches_status else None,
+        "receipt_type": job.get("receipt_type") if receipt_matches_status else None,
+        "receipt_signature_algorithm": job.get("receipt_signature_algorithm")
+        if receipt_matches_status
+        else None,
         "created_at": job.get("created_at"),
         "updated_at": job.get("updated_at"),
     }
