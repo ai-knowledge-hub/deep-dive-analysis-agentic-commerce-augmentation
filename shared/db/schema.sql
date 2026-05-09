@@ -594,6 +594,16 @@ ON external_agent_jobs(client_id, principal_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_external_agent_jobs_trace
 ON external_agent_jobs(trace_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS external_agent_job_idempotency_reservations (
+    client_id TEXT NOT NULL,
+    principal_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (client_id, principal_id, idempotency_key),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS external_agent_job_receipts (
     id TEXT PRIMARY KEY,
     job_id TEXT NOT NULL,

@@ -11,7 +11,7 @@ The goal is to give external agents a stable, retry-safe API that does not requi
 
 - External agents authenticate as `principal_type=external_agent` using signed bearer tokens.
 - Every submitted job requires an `idempotency_key`.
-- Duplicate submissions with the same principal, tenant, and idempotency key return the same job/run.
+- Duplicate submissions with the same principal, tenant, and idempotency key return the same job/run once created; simultaneous duplicate submissions can receive retryable `409` while the first request is still planning.
 - Duplicate submissions with a different payload are rejected with `409`.
 - Requested skills/tools must be allowed by token scopes.
 - Submitted jobs create a linked `agent_run` so the human control plane can inspect, intervene, and audit execution.
@@ -175,24 +175,28 @@ Status mapping:
 | `paused` | `paused` |
 | `canceled` / `cancelled` | `canceled` |
 
-Receipt metadata on the job status payload is only populated when the stored latest receipt matches the current derived job status and signed receipt context. If the run status, run state, registry pins, action digest, or event digest changed after the last receipt was issued, callers should fetch `/receipt` to mint the latest matching receipt.
+Receipt metadata on the job status payload is only populated when the stored latest receipt matches the current derived job status. Polling endpoints do not mint new receipts implicitly; callers should use `/receipt?refresh=true` when they need a fresh non-terminal attestation.
 
 ## Get Job Receipt
 
 Endpoint:
 
 ```http
-GET /external-agent/jobs/{job_id}/receipt
+GET /external-agent/jobs/{job_id}/receipt?refresh=false
 Authorization: Bearer <agent-principal-token>
 ```
 
 Behavior:
 
 - Only the creating principal can read the receipt.
+- By default the endpoint returns the stored latest receipt without recomputing evidence or writing a new receipt.
+- Use `refresh=true` to mint a fresh non-terminal receipt. Terminal statuses (`completed`, `failed`, `canceled`) may mint a latest-status receipt automatically.
+- If no stored receipt exists for a non-terminal job and `refresh=false`, the endpoint returns `404` with guidance to call `refresh=true`.
 - The receipt is signed with HMAC-SHA256 and includes a `key_id` for the server-side verifier key family.
 - The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, registry pins, and execution evidence digests.
-- If the linked run status or signed context changes, the endpoint issues and stores a new receipt.
+- If the linked run status or signed context changes, a refresh issues and stores a new receipt.
 - The latest receipt is also appended to the immutable receipt history.
+- Stored receipts returned without refresh can include `stale_context=true` and `refresh_required_for_latest_context=true` when cheap run-level context no longer matches the signed payload.
 
 Example response:
 
@@ -216,6 +220,12 @@ Example response:
     "evidence": {
       "action_count": 1,
       "event_count": 1,
+      "complete": true,
+      "actions_complete": true,
+      "events_complete": true,
+      "action_limit": 500,
+      "event_limit": 2000,
+      "digest_scope": "complete",
       "latest_event_id": "<event-id>",
       "latest_event_timestamp": "...",
       "action_digest": "<sha256>",
@@ -270,9 +280,9 @@ Behavior:
 
 - Only the creating principal can read the receipt history.
 - The response returns signed receipts ordered newest first.
-- The endpoint ensures a latest-status receipt exists before listing history.
+- The endpoint is read-only and does not mint receipts while listing history.
 - Each receipt item is the signed payload plus `signature` and `signature_algorithm`.
-- Exact same-status/context receipts are deduped by `receipt_context_hash`; same-status state or evidence changes create new history entries.
+- Exact same-status/context receipts are deduped by `receipt_context_hash`; same-status state or evidence changes create new history entries only when a caller explicitly refreshes or a terminal status receipt is minted.
 
 Use this endpoint when an external assistant needs to prove the job moved from `accepted` to a later terminal state.
 
@@ -289,12 +299,15 @@ Behavior:
 
 - Only the creating principal can read the activity projection.
 - The response combines job creation, signed receipts, and linked run events into one chronological `items` list.
+- The endpoint is polling-safe and read-only; it does not mint receipts.
 - Items are normalized as `job`, `receipt`, or `run_event` so external assistants do not have to stitch multiple endpoints together.
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
 - Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
 
 Use this endpoint for machine-friendly progress narration and polling.
+
+Polling responses include `Retry-After`, `X-Agent-Poll-Interval-Seconds`, and `X-Agent-Receipt-Refresh` headers. External agents should treat these as the minimum polling cadence unless a future deployment-specific rate-limit contract is stricter.
 
 ## Get Job Events
 
@@ -323,6 +336,7 @@ Implemented now:
 - `GET /external-agent/jobs/{job_id}/events`
 - machine-principal auth requirement
 - idempotent create/replay behavior
+- idempotency reservation before planning to avoid duplicate planned runs during retry storms
 - payload mismatch conflict
 - skill/tool scope checks
 - linked `agent_run` creation with registry pins, principal, trace id, and initial action plan

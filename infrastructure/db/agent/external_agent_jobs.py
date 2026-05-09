@@ -77,6 +77,67 @@ def create_external_agent_job(
         raise
 
 
+def reserve_external_agent_job_idempotency(
+    *, client_id: str, principal_id: str, idempotency_key: str, request_hash: str
+) -> bool:
+    ensure_client(client_id)
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO external_agent_job_idempotency_reservations (
+                client_id,
+                principal_id,
+                idempotency_key,
+                request_hash
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (client_id, principal_id, idempotency_key, request_hash),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return False
+
+
+def get_external_agent_job_idempotency_reservation(
+    *, client_id: str, principal_id: str, idempotency_key: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_idempotency_reservations
+        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+        """,
+        (client_id, principal_id, idempotency_key),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "client_id": row["client_id"],
+        "principal_id": row["principal_id"],
+        "idempotency_key": row["idempotency_key"],
+        "request_hash": row["request_hash"],
+        "created_at": row["created_at"],
+    }
+
+
+def delete_external_agent_job_idempotency_reservation(
+    *, client_id: str, principal_id: str, idempotency_key: str
+) -> None:
+    conn = get_connection()
+    conn.execute(
+        """
+        DELETE FROM external_agent_job_idempotency_reservations
+        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+        """,
+        (client_id, principal_id, idempotency_key),
+    )
+    conn.commit()
+
+
 def get_external_agent_job(
     *, job_id: str, client_id: Optional[str] = None, principal_id: Optional[str] = None
 ) -> Dict[str, Any] | None:
@@ -376,12 +437,15 @@ def _receipt_row(row) -> Dict[str, Any]:
 __all__ = [
     "create_external_agent_job_receipt",
     "create_external_agent_job",
+    "delete_external_agent_job_idempotency_reservation",
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
+    "get_external_agent_job_idempotency_reservation",
     "get_external_agent_job_receipt",
     "get_external_agent_job_receipt_for_context_hash",
     "get_external_agent_job_receipt_for_status",
     "list_external_agent_job_receipts",
+    "reserve_external_agent_job_idempotency",
     "update_external_agent_job_receipt",
     "update_external_agent_job_status",
 ]

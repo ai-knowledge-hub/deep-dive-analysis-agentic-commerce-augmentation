@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
@@ -30,16 +30,25 @@ from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
 from infrastructure.db.agent.external_agent_jobs import (
     create_external_agent_job_receipt,
     create_external_agent_job,
+    delete_external_agent_job_idempotency_reservation,
     get_external_agent_job,
     get_external_agent_job_by_idempotency_key,
+    get_external_agent_job_idempotency_reservation,
     get_external_agent_job_receipt_for_context_hash,
     list_external_agent_job_receipts,
+    reserve_external_agent_job_idempotency,
     update_external_agent_job_receipt,
     update_external_agent_job_status,
 )
 from shared.config.env import get_settings
 
 router = APIRouter(prefix="/external-agent/jobs", tags=["external-agent-jobs"])
+
+_POLL_RETRY_AFTER_SECONDS = 3
+_POLL_INTERVAL_SECONDS = 3
+_TERMINAL_JOB_STATUSES = {"completed", "failed", "canceled"}
+_ACTION_EVIDENCE_LIMIT = 500
+_EVENT_EVIDENCE_LIMIT = 2000
 
 
 def _deps() -> AppDeps:
@@ -132,6 +141,44 @@ def create_external_agent_job_route(
         skill_ids=resolved["scope_skill_ids"],
         tool_ids=resolved["scope_tool_ids"],
     )
+    if not reserve_external_agent_job_idempotency(
+        client_id=principal.client_id,
+        principal_id=principal.principal_id,
+        idempotency_key=payload.idempotency_key,
+        request_hash=request_hash,
+    ):
+        existing = get_external_agent_job_by_idempotency_key(
+            client_id=principal.client_id,
+            principal_id=principal.principal_id,
+            idempotency_key=payload.idempotency_key,
+        )
+        if existing:
+            if existing["request_hash"] != request_hash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="idempotency_key already used with a different request payload",
+                )
+            run = deps.agent_runs.get_agent_run(
+                run_id=existing["run_id"], client_id=principal.client_id
+            )
+            if not run:
+                raise HTTPException(status_code=409, detail="idempotent job run is missing")
+            job = _job_status_payload(job=existing, run=run)
+            return ExternalAgentJobResponse(job=job, run=run, idempotent_replay=True)
+        reservation = get_external_agent_job_idempotency_reservation(
+            client_id=principal.client_id,
+            principal_id=principal.principal_id,
+            idempotency_key=payload.idempotency_key,
+        )
+        if reservation and reservation.get("request_hash") != request_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="idempotency_key already reserved with a different request payload",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="idempotent job creation is already in progress; retry with the same idempotency_key",
+        )
 
     registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
     ensure_agent_registry_version(
@@ -173,6 +220,11 @@ def create_external_agent_job_route(
             preferred_skill_id=resolved["skill_id"],
         )
     except AgentRunPlanError as exc:
+        delete_external_agent_job_idempotency_reservation(
+            client_id=principal.client_id,
+            principal_id=principal.principal_id,
+            idempotency_key=payload.idempotency_key,
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     response = {
         "job_id": None,
@@ -182,20 +234,29 @@ def create_external_agent_job_route(
         "requested_skill_id": resolved["skill_id"],
         "requested_tool_id": resolved["tool_id"],
     }
-    created = create_external_agent_job(
-        client_id=principal.client_id,
-        principal_id=principal.principal_id,
-        agent_profile_id=principal.agent_profile_id,
-        idempotency_key=payload.idempotency_key,
-        request_hash=request_hash,
-        run_id=run["id"],
-        requested_skill_id=resolved["skill_id"],
-        requested_tool_id=resolved["tool_id"],
-        status=response["status"],
-        trace_id=run.get("trace_id"),
-        request=payload.model_dump(mode="json"),
-        response=response,
-    )
+    try:
+        created = create_external_agent_job(
+            client_id=principal.client_id,
+            principal_id=principal.principal_id,
+            agent_profile_id=principal.agent_profile_id,
+            idempotency_key=payload.idempotency_key,
+            request_hash=request_hash,
+            run_id=run["id"],
+            requested_skill_id=resolved["skill_id"],
+            requested_tool_id=resolved["tool_id"],
+            status=response["status"],
+            trace_id=run.get("trace_id"),
+            request=payload.model_dump(mode="json"),
+            response=response,
+        )
+    except Exception:
+        deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
+        delete_external_agent_job_idempotency_reservation(
+            client_id=principal.client_id,
+            principal_id=principal.principal_id,
+            idempotency_key=payload.idempotency_key,
+        )
+        raise
     if created["request_hash"] != request_hash:
         deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
         raise HTTPException(
@@ -222,6 +283,7 @@ def create_external_agent_job_route(
 def get_external_agent_job_route(
     job_id: str,
     request: Request,
+    response: Response,
     deps: AppDeps = Depends(_deps),
 ) -> ExternalAgentJobResponse:
     principal = _require_external_agent_principal(request=request)
@@ -247,6 +309,7 @@ def get_external_agent_job_route(
             status=status,
             response={**(job.get("response") or {}), "status": status},
         ) or job
+    _set_external_agent_poll_headers(response)
     return ExternalAgentJobResponse(job=_job_status_payload(job=job, run=run), run=run)
 
 
@@ -254,6 +317,8 @@ def get_external_agent_job_route(
 def get_external_agent_job_receipt_route(
     job_id: str,
     request: Request,
+    response: Response,
+    refresh: bool = False,
     deps: AppDeps = Depends(_deps),
 ) -> ExternalAgentJobReceiptResponse:
     principal = _require_external_agent_principal(request=request)
@@ -267,7 +332,17 @@ def get_external_agent_job_receipt_route(
     job, run = _require_scoped_job_and_run(
         deps=deps, job_id=job_id, principal=principal
     )
-    receipt = _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
+    current_status = _job_status_from_run(run)
+    if refresh or current_status in _TERMINAL_JOB_STATUSES:
+        receipt = _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
+    else:
+        receipt = _stored_external_agent_job_receipt(job=job, run=run)
+        if not receipt:
+            raise HTTPException(
+                status_code=404,
+                detail="No stored receipt exists for this job status; call with refresh=true to mint one.",
+            )
+    _set_external_agent_poll_headers(response)
     return ExternalAgentJobReceiptResponse(receipt=receipt)
 
 
@@ -276,6 +351,7 @@ def verify_external_agent_job_receipt_route(
     job_id: str,
     payload: ExternalAgentJobReceiptVerifyRequest,
     request: Request,
+    response: Response,
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     principal = _require_external_agent_principal(request=request)
@@ -312,6 +388,7 @@ def verify_external_agent_job_receipt_route(
         blockers.append("Receipt payload does not match the signed payload.")
     if valid_signature and not valid_scope:
         blockers.append("Receipt does not belong to the scoped external-agent job.")
+    _set_external_agent_poll_headers(response)
     return {
         "valid": not blockers,
         "valid_signature": valid_signature,
@@ -328,6 +405,7 @@ def verify_external_agent_job_receipt_route(
 def list_external_agent_job_receipts_route(
     job_id: str,
     request: Request,
+    response: Response,
     limit: int = 50,
     deps: AppDeps = Depends(_deps),
 ) -> ExternalAgentJobReceiptListResponse:
@@ -339,10 +417,9 @@ def list_external_agent_job_receipts_route(
         "agent_runs:read",
         "agent_runs:write",
     )
-    job, run = _require_scoped_job_and_run(
+    _job, _run = _require_scoped_job_and_run(
         deps=deps, job_id=job_id, principal=principal
     )
-    _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
     rows = list_external_agent_job_receipts(
         job_id=job_id,
         client_id=principal.client_id,
@@ -361,6 +438,7 @@ def list_external_agent_job_receipts_route(
         key=lambda item: str(item.get("issued_at") or item.get("created_at") or ""),
         reverse=True,
     )
+    _set_external_agent_poll_headers(response)
     return ExternalAgentJobReceiptListResponse(receipts=receipts)
 
 
@@ -368,6 +446,7 @@ def list_external_agent_job_receipts_route(
 def get_external_agent_job_activity_route(
     job_id: str,
     request: Request,
+    response: Response,
     limit: int = 100,
     event_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -391,7 +470,6 @@ def get_external_agent_job_activity_route(
     job, run = _require_scoped_job_and_run(
         deps=deps, job_id=job_id, principal=principal
     )
-    _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
     receipt_rows = list_external_agent_job_receipts(
         job_id=job_id,
         client_id=principal.client_id,
@@ -422,6 +500,7 @@ def get_external_agent_job_activity_route(
         receipts=receipt_rows,
         events=page["events"],
     )
+    _set_external_agent_poll_headers(response)
     return ExternalAgentJobActivityResponse(
         job=_job_status_payload(job=job, run=run),
         summary={
@@ -444,6 +523,7 @@ def get_external_agent_job_activity_route(
 def get_external_agent_job_events_route(
     job_id: str,
     request: Request,
+    response: Response,
     limit: int = 500,
     event_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -487,6 +567,7 @@ def get_external_agent_job_events_route(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     payload = page.to_dict()
     _sync_job_status_from_run(job=job, run=run)
+    _set_external_agent_poll_headers(response)
     return ExternalAgentJobEventListResponse(
         events=payload["events"], page=payload["page"]
     )
@@ -835,6 +916,38 @@ def _ensure_external_agent_job_receipt(
     }
 
 
+def _stored_external_agent_job_receipt(
+    *, job: Dict[str, Any], run: Dict[str, Any]
+) -> Dict[str, Any] | None:
+    payload = job.get("receipt_payload") or {}
+    signature = job.get("receipt_signature")
+    if not payload or not signature:
+        return None
+    current_status = _job_status_from_run(run)
+    stale_context = not _stored_receipt_context_matches_run(
+        payload=payload, run=run, current_status=current_status
+    )
+    return {
+        **payload,
+        "signature": signature,
+        "signature_algorithm": job.get("receipt_signature_algorithm"),
+        "stale_context": stale_context,
+        "refresh_required_for_latest_context": stale_context,
+    }
+
+
+def _stored_receipt_context_matches_run(
+    *, payload: Dict[str, Any], run: Dict[str, Any], current_status: str
+) -> bool:
+    return bool(
+        payload.get("status") == current_status
+        and payload.get("run_status") == run.get("status")
+        and payload.get("run_state") == run.get("state")
+        and payload.get("registry_version") == run.get("registry_version")
+        and payload.get("registry_fingerprint") == run.get("registry_fingerprint")
+    )
+
+
 def _external_agent_activity_items(
     *,
     job: Dict[str, Any],
@@ -935,8 +1048,16 @@ def _decode_external_agent_job_receipt_signature(
 
 def _job_evidence_summary(*, deps: AppDeps, run: Dict[str, Any]) -> Dict[str, Any]:
     run_id = str(run.get("id") or "")
-    actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
-    events = deps.agent_events.list_agent_events(agent_run_id=run_id, limit=2000)
+    actions = deps.agent_actions.list_agent_actions(
+        agent_run_id=run_id, limit=_ACTION_EVIDENCE_LIMIT + 1
+    )
+    events = deps.agent_events.list_agent_events(
+        agent_run_id=run_id, limit=_EVENT_EVIDENCE_LIMIT + 1
+    )
+    actions_truncated = len(actions) > _ACTION_EVIDENCE_LIMIT
+    events_truncated = len(events) > _EVENT_EVIDENCE_LIMIT
+    actions = actions[:_ACTION_EVIDENCE_LIMIT]
+    events = events[-_EVENT_EVIDENCE_LIMIT:]
     action_items = [
         {
             "id": action.get("id"),
@@ -980,6 +1101,12 @@ def _job_evidence_summary(*, deps: AppDeps, run: Dict[str, Any]) -> Dict[str, An
     return {
         "action_count": len(action_items),
         "event_count": len(event_items),
+        "complete": not actions_truncated and not events_truncated,
+        "actions_complete": not actions_truncated,
+        "events_complete": not events_truncated,
+        "action_limit": _ACTION_EVIDENCE_LIMIT,
+        "event_limit": _EVENT_EVIDENCE_LIMIT,
+        "digest_scope": "complete" if not actions_truncated and not events_truncated else "bounded_window",
         "latest_event_id": latest_event.get("id"),
         "latest_event_timestamp": latest_event.get("timestamp"),
         "action_digest": _stable_digest(action_items),
@@ -1028,6 +1155,12 @@ def _receipt_context_hash(
 def _stable_digest(payload: Any) -> str:
     normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _set_external_agent_poll_headers(response: Response) -> None:
+    response.headers["Retry-After"] = str(_POLL_RETRY_AFTER_SECONDS)
+    response.headers["X-Agent-Poll-Interval-Seconds"] = str(_POLL_INTERVAL_SECONDS)
+    response.headers["X-Agent-Receipt-Refresh"] = "explicit"
 
 
 def _external_agent_job_receipt_key_id() -> str:

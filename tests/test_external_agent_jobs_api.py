@@ -359,7 +359,7 @@ def test_external_agent_job_duplicate_insert_reloads_existing_job(client: TestCl
     assert second["id"] == first["id"]
 
 
-def test_external_agent_job_route_conflict_returns_existing_run(
+def test_external_agent_job_route_conflict_blocks_duplicate_planning(
     client: TestClient, monkeypatch
 ):
     token = _token()
@@ -369,7 +369,6 @@ def test_external_agent_job_route_conflict_returns_existing_run(
         json={"idempotency_key": "job-route-race", "tool_id": "experiment.run_variant"},
     )
     assert created.status_code == 200
-    first = created.json()
     existing = get_external_agent_job_by_idempotency_key(
         client_id=CLIENT_ID,
         principal_id="agent-ext-1",
@@ -392,11 +391,8 @@ def test_external_agent_job_route_conflict_returns_existing_run(
         headers=_headers(token),
         json={"idempotency_key": "job-route-race", "tool_id": "experiment.run_variant"},
     )
-    assert replay.status_code == 200
-    payload = replay.json()
-    assert payload["idempotent_replay"] is True
-    assert payload["job"]["run_id"] == first["run"]["id"]
-    assert payload["run"]["id"] == first["run"]["id"]
+    assert replay.status_code == 409
+    assert "already in progress" in replay.json()["detail"]
     assert len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20)) == run_count
 
 
@@ -556,7 +552,9 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     run_id = payload["run"]["id"]
 
     receipt_response = client.get(
-        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
     )
     assert receipt_response.status_code == 200
     receipt = receipt_response.json()["receipt"]
@@ -571,6 +569,8 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     assert receipt["evidence"]["event_count"] >= 1
     assert receipt["evidence"]["action_digest"]
     assert receipt["evidence"]["event_digest"]
+    assert receipt["evidence"]["complete"] is True
+    assert receipt_response.headers["x-agent-receipt-refresh"] == "explicit"
     assert _valid_signature(receipt, "test-agent-secret")
 
     verification = client.post(
@@ -623,7 +623,9 @@ def test_external_agent_job_status_hides_stale_receipt_metadata(client: TestClie
     run_id = payload["run"]["id"]
 
     receipt_response = client.get(
-        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
     )
     assert receipt_response.status_code == 200
     assert receipt_response.json()["receipt"]["status"] == "accepted"
@@ -664,7 +666,9 @@ def test_external_agent_job_receipt_insert_dedupes_status(client: TestClient):
     job = payload["job"]
     run = payload["run"]
     receipt_response = client.get(
-        f"/external-agent/jobs/{job['id']}/receipt", headers=_headers(token)
+        f"/external-agent/jobs/{job['id']}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
     )
     assert receipt_response.status_code == 200
     first_receipt = receipt_response.json()["receipt"]
@@ -698,6 +702,51 @@ def test_external_agent_job_receipt_insert_dedupes_status(client: TestClient):
     assert len(accepted) == 1
 
 
+def test_external_agent_job_polling_endpoints_do_not_mint_receipts(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-read-only-polling", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    job_id = created.json()["job"]["id"]
+
+    missing_receipt = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert missing_receipt.status_code == 404
+
+    receipt_list = client.get(
+        f"/external-agent/jobs/{job_id}/receipts", headers=_headers(token)
+    )
+    assert receipt_list.status_code == 200
+    assert receipt_list.json()["receipts"] == []
+    assert receipt_list.headers["x-agent-poll-interval-seconds"] == "3"
+
+    activity = client.get(
+        f"/external-agent/jobs/{job_id}/activity", headers=_headers(token)
+    )
+    assert activity.status_code == 200
+    assert activity.json()["summary"]["receipt_count"] == 0
+    assert all(item["type"] != "receipt" for item in activity.json()["items"])
+
+    refreshed = client.get(
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
+    )
+    assert refreshed.status_code == 200
+
+    refreshed_list = client.get(
+        f"/external-agent/jobs/{job_id}/receipts", headers=_headers(token)
+    )
+    assert refreshed_list.status_code == 200
+    assert len(refreshed_list.json()["receipts"]) == 1
+
+
 def test_external_agent_job_status_and_receipt_normalize_canceled_run(
     client: TestClient,
 ):
@@ -720,7 +769,9 @@ def test_external_agent_job_status_and_receipt_normalize_canceled_run(
     assert status.json()["job"]["status"] == "canceled"
 
     receipt_response = client.get(
-        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
     )
     assert receipt_response.status_code == 200
     receipt = receipt_response.json()["receipt"]
@@ -751,7 +802,9 @@ def test_external_agent_job_status_preserves_paused_run(client: TestClient):
     assert job["run_status"] == "paused"
 
     receipt_response = client.get(
-        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
     )
     assert receipt_response.status_code == 200
     receipt = receipt_response.json()["receipt"]
@@ -804,7 +857,9 @@ def test_external_agent_job_activity_projects_job_receipts_and_run_events(
     job_id = created.json()["job"]["id"]
 
     receipt_response = client.get(
-        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
     )
     assert receipt_response.status_code == 200
 
@@ -908,7 +963,11 @@ def test_external_agent_job_receipt_refreshes_when_same_status_context_changes(
     job_id = payload["job"]["id"]
     run_id = payload["run"]["id"]
 
-    first = client.get(f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token))
+    first = client.get(
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
+    )
     assert first.status_code == 200
     first_receipt = first.json()["receipt"]
     assert first_receipt["status"] == "accepted"
@@ -920,10 +979,21 @@ def test_external_agent_job_receipt_refreshes_when_same_status_context_changes(
     assert second.status_code == 200
     second_receipt = second.json()["receipt"]
     assert second_receipt["status"] == "accepted"
-    assert second_receipt["run_state"] == "experiment_ready"
-    assert second_receipt["receipt_id"] != first_receipt["receipt_id"]
-    assert second_receipt["receipt_context_hash"] != first_receipt["receipt_context_hash"]
-    assert _valid_signature(second_receipt, "test-agent-secret")
+    assert second_receipt["run_state"] == "battery_ready"
+    assert second_receipt["receipt_id"] == first_receipt["receipt_id"]
+    assert second_receipt["stale_context"] is True
+
+    refreshed = client.get(
+        f"/external-agent/jobs/{job_id}/receipt",
+        headers=_headers(token),
+        params={"refresh": "true"},
+    )
+    assert refreshed.status_code == 200
+    refreshed_receipt = refreshed.json()["receipt"]
+    assert refreshed_receipt["run_state"] == "experiment_ready"
+    assert refreshed_receipt["receipt_id"] != first_receipt["receipt_id"]
+    assert refreshed_receipt["receipt_context_hash"] != first_receipt["receipt_context_hash"]
+    assert _valid_signature(refreshed_receipt, "test-agent-secret")
 
 
 def _valid_signature(receipt: dict, secret: str) -> bool:
