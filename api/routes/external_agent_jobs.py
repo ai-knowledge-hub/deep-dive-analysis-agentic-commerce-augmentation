@@ -8,11 +8,22 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Security
+from fastapi.security import HTTPBearer
 
 from api.composition import default_deps
+from api.routes.external_agent_job_models import (
+    ExternalAgentJobActivityResponse,
+    ExternalAgentJobCreateRequest,
+    ExternalAgentJobEventListResponse,
+    ExternalAgentJobReceiptListResponse,
+    ExternalAgentJobReceiptResponse,
+    ExternalAgentJobReceiptVerificationResponse,
+    ExternalAgentJobReceiptVerifyRequest,
+    ExternalAgentJobResponse,
+)
 from api.utils.agent_registry_runtime import registry_payload_and_fingerprint
+from api.utils.external_agent_errors import external_agent_error
 from api.utils.principals import PrincipalContext, resolve_principal_context
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.events import list_agent_run_events_page
@@ -42,7 +53,13 @@ from infrastructure.db.agent.external_agent_jobs import (
 )
 from shared.config.env import get_settings
 
-router = APIRouter(prefix="/external-agent/jobs", tags=["external-agent-jobs"])
+_AGENT_BEARER = HTTPBearer(auto_error=False)
+
+router = APIRouter(
+    prefix="/external-agent/jobs",
+    tags=["external-agent-jobs"],
+    dependencies=[Security(_AGENT_BEARER)],
+)
 
 _POLL_RETRY_AFTER_SECONDS = 3
 _POLL_INTERVAL_SECONDS = 3
@@ -53,58 +70,6 @@ _EVENT_EVIDENCE_LIMIT = 2000
 
 def _deps() -> AppDeps:
     return default_deps()
-
-
-class ExternalAgentJobCreateRequest(BaseModel):
-    idempotency_key: str = Field(..., min_length=1)
-    brand_id: Optional[str] = None
-    product_id: Optional[str] = None
-    experiment_id: Optional[str] = None
-    objective: Dict[str, Any] = Field(default_factory=dict)
-    skill_id: Optional[str] = None
-    tool_id: Optional[str] = None
-    capability_name: Optional[str] = None
-    allowed_capabilities: List[str] = Field(default_factory=list)
-    capability_versions: Dict[str, Any] = Field(default_factory=dict)
-    budgets: Dict[str, Any] = Field(default_factory=dict)
-    approval_policy: Dict[str, Any] = Field(default_factory=dict)
-    harness_id: Optional[str] = None
-    policy_profile_id: Optional[str] = None
-    requires_approval: bool = True
-    run_mode: str = "plan_only"
-    plan_mode: Optional[str] = None
-    state: str = "battery_ready"
-
-
-class ExternalAgentJobResponse(BaseModel):
-    job: Dict[str, Any]
-    run: Dict[str, Any]
-    idempotent_replay: bool = False
-
-
-class ExternalAgentJobReceiptResponse(BaseModel):
-    receipt: Dict[str, Any]
-
-
-class ExternalAgentJobReceiptVerifyRequest(BaseModel):
-    receipt: Dict[str, Any]
-
-
-class ExternalAgentJobEventListResponse(BaseModel):
-    events: List[Dict[str, Any]]
-    page: Dict[str, Any]
-
-
-class ExternalAgentJobReceiptListResponse(BaseModel):
-    receipts: List[Dict[str, Any]]
-
-
-class ExternalAgentJobActivityResponse(BaseModel):
-    job: Dict[str, Any]
-    summary: Dict[str, Any]
-    items: List[Dict[str, Any]]
-    event_page: Dict[str, Any]
-    page: Dict[str, Any]
 
 
 @router.post("")
@@ -123,9 +88,10 @@ def create_external_agent_job_route(
     )
     if existing:
         if existing["request_hash"] != request_hash:
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=409,
-                detail="idempotency_key already used with a different request payload",
+                code="idempotency_payload_mismatch",
+                message="idempotency_key already used with a different request payload",
             )
         run = deps.agent_runs.get_agent_run(
             run_id=existing["run_id"], client_id=principal.client_id
@@ -154,9 +120,10 @@ def create_external_agent_job_route(
         )
         if existing:
             if existing["request_hash"] != request_hash:
-                raise HTTPException(
+                raise external_agent_error(
                     status_code=409,
-                    detail="idempotency_key already used with a different request payload",
+                    code="idempotency_payload_mismatch",
+                    message="idempotency_key already used with a different request payload",
                 )
             run = deps.agent_runs.get_agent_run(
                 run_id=existing["run_id"], client_id=principal.client_id
@@ -171,13 +138,17 @@ def create_external_agent_job_route(
             idempotency_key=payload.idempotency_key,
         )
         if reservation and reservation.get("request_hash") != request_hash:
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=409,
-                detail="idempotency_key already reserved with a different request payload",
+                code="idempotency_payload_mismatch",
+                message="idempotency_key already reserved with a different request payload",
             )
-        raise HTTPException(
+        raise external_agent_error(
             status_code=409,
-            detail="idempotent job creation is already in progress; retry with the same idempotency_key",
+            code="idempotency_in_progress",
+            message="idempotent job creation is already in progress; retry with the same idempotency_key",
+            retryable=True,
+            retry_after_seconds=_POLL_RETRY_AFTER_SECONDS,
         )
 
     registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
@@ -225,7 +196,12 @@ def create_external_agent_job_route(
             principal_id=principal.principal_id,
             idempotency_key=payload.idempotency_key,
         )
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise external_agent_error(
+            status_code=400,
+            code="invalid_job_plan",
+            message=str(exc),
+            retryable=False,
+        ) from exc
     response = {
         "job_id": None,
         "run_id": run["id"],
@@ -259,9 +235,10 @@ def create_external_agent_job_route(
         raise
     if created["request_hash"] != request_hash:
         deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
-        raise HTTPException(
+        raise external_agent_error(
             status_code=409,
-            detail="idempotency_key already used with a different request payload",
+            code="idempotency_payload_mismatch",
+            message="idempotency_key already used with a different request payload",
         )
     if created["run_id"] != run["id"]:
         deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
@@ -313,7 +290,7 @@ def get_external_agent_job_route(
     return ExternalAgentJobResponse(job=_job_status_payload(job=job, run=run), run=run)
 
 
-@router.get("/{job_id}/receipt")
+@router.get("/{job_id}/receipt", response_model_exclude_none=True)
 def get_external_agent_job_receipt_route(
     job_id: str,
     request: Request,
@@ -353,7 +330,7 @@ def verify_external_agent_job_receipt_route(
     request: Request,
     response: Response,
     deps: AppDeps = Depends(_deps),
-) -> Dict[str, Any]:
+) -> ExternalAgentJobReceiptVerificationResponse:
     principal = _require_external_agent_principal(request=request)
     _require_any_scope(
         principal,
@@ -401,7 +378,7 @@ def verify_external_agent_job_receipt_route(
     }
 
 
-@router.get("/{job_id}/receipts")
+@router.get("/{job_id}/receipts", response_model_exclude_none=True)
 def list_external_agent_job_receipts_route(
     job_id: str,
     request: Request,
@@ -442,7 +419,7 @@ def list_external_agent_job_receipts_route(
     return ExternalAgentJobReceiptListResponse(receipts=receipts)
 
 
-@router.get("/{job_id}/activity")
+@router.get("/{job_id}/activity", response_model_exclude_none=True)
 def get_external_agent_job_activity_route(
     job_id: str,
     request: Request,
@@ -579,9 +556,10 @@ def _require_external_agent_principal(*, request: Request) -> PrincipalContext:
     )
     scheme, _, token = str(auth_header or "").partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
-        raise HTTPException(
+        raise external_agent_error(
             status_code=401,
-            detail="External agent jobs require an external_agent bearer token",
+            code="external_agent_auth_required",
+            message="External agent jobs require an external_agent bearer token",
         )
     principal = resolve_principal_context(
         request=request,
@@ -592,9 +570,10 @@ def _require_external_agent_principal(*, request: Request) -> PrincipalContext:
         agent_profile_id=None,
     )
     if principal.auth_method != "bearer_token" or principal.principal_type != "external_agent":
-        raise HTTPException(
+        raise external_agent_error(
             status_code=401,
-            detail="External agent jobs require an external_agent bearer token",
+            code="external_agent_auth_required",
+            message="External agent jobs require an external_agent bearer token",
         )
     return principal
 
@@ -625,19 +604,28 @@ def _resolve_requested_runtime_contract(
         tool_id = capability_to_tool_id(capability_name)
     tool = get_tool_spec(tool_id) if tool_id else None
     if tool_id and not tool:
-        raise HTTPException(status_code=400, detail=f"Unsupported tool_id: {tool_id}")
+        raise external_agent_error(
+            status_code=400,
+            code="unsupported_tool",
+            message=f"Unsupported tool_id: {tool_id}",
+        )
     if tool and not capability_name:
         capability_name = tool.capability_name
 
     skill_id = str(payload.skill_id or "").strip() or None
     if skill_id and skill_id not in {skill.id for skill in list_skill_specs()}:
-        raise HTTPException(status_code=400, detail=f"Unsupported skill_id: {skill_id}")
+        raise external_agent_error(
+            status_code=400,
+            code="unsupported_skill",
+            message=f"Unsupported skill_id: {skill_id}",
+        )
     if tool_id:
         selected = select_skill_for_tool_id(tool_id, preferred_skill_id=skill_id)
         if skill_id and (not selected or selected.id != skill_id):
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=400,
-                detail=f"Skill '{skill_id}' cannot use tool '{tool_id}'",
+                code="incompatible_skill_tool",
+                message=f"Skill '{skill_id}' cannot use tool '{tool_id}'",
             )
         skill_id = selected.id if selected else skill_id
 
@@ -647,23 +635,26 @@ def _resolve_requested_runtime_contract(
     if capability_name and capability_name not in allowed_capabilities:
         allowed_capabilities = [capability_name, *allowed_capabilities]
     if not allowed_capabilities:
-        raise HTTPException(
+        raise external_agent_error(
             status_code=400,
-            detail="External agent job requires a tool_id, capability_name, or allowed_capabilities",
+            code="missing_runtime_target",
+            message="External agent job requires a tool_id, capability_name, or allowed_capabilities",
         )
     plan_mode = str(
         payload.plan_mode or ("single_tool" if capability_name else "workflow")
     ).strip().lower()
     if plan_mode not in {"single_tool", "workflow"}:
-        raise HTTPException(
+        raise external_agent_error(
             status_code=400,
-            detail="plan_mode must be 'single_tool' or 'workflow'",
+            code="invalid_plan_mode",
+            message="plan_mode must be 'single_tool' or 'workflow'",
         )
     if plan_mode == "single_tool":
         if not capability_name:
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=400,
-                detail="single_tool plan_mode requires a tool_id or capability_name",
+                code="single_tool_target_required",
+                message="single_tool plan_mode requires a tool_id or capability_name",
             )
         allowed_capabilities = [capability_name]
     return {
@@ -685,13 +676,19 @@ def _require_requested_skill_tool_scopes(
 ) -> None:
     for tool_id in tool_ids:
         if not _has_any_scope(principal, f"tool:{tool_id}", "tools:*"):
-            raise HTTPException(
-                status_code=403, detail=f"Missing scope for tool '{tool_id}'"
+            raise external_agent_error(
+                status_code=403,
+                code="missing_tool_scope",
+                message=f"Missing scope for tool '{tool_id}'",
+                context={"required": [f"tool:{tool_id}", "tools:*"]},
             )
     for skill_id in skill_ids:
         if not _has_any_scope(principal, f"skill:{skill_id}", "skills:*"):
-            raise HTTPException(
-                status_code=403, detail=f"Missing scope for skill '{skill_id}'"
+            raise external_agent_error(
+                status_code=403,
+                code="missing_skill_scope",
+                message=f"Missing scope for skill '{skill_id}'",
+                context={"required": [f"skill:{skill_id}", "skills:*"]},
             )
 
 
@@ -700,9 +697,10 @@ def _tool_ids_for_capabilities(capability_names: List[str]) -> List[str]:
     for capability_name in capability_names:
         tool_id = capability_to_tool_id(capability_name)
         if not tool_id or not get_tool_spec(tool_id):
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=400,
-                detail=f"Unsupported capability_name: {capability_name}",
+                code="unsupported_capability",
+                message=f"Unsupported capability_name: {capability_name}",
             )
         if tool_id not in tool_ids:
             tool_ids.append(tool_id)
@@ -752,7 +750,12 @@ def _dedupe_ids(items: List[str]) -> List[str]:
 
 def _require_any_scope(principal: PrincipalContext, *required: str) -> None:
     if not _has_any_scope(principal, *required):
-        raise HTTPException(status_code=403, detail="Missing required external agent scope")
+        raise external_agent_error(
+            status_code=403,
+            code="missing_external_agent_scope",
+            message="Missing required external agent scope",
+            context={"required": list(required)},
+        )
 
 
 def _has_any_scope(principal: PrincipalContext, *required: str) -> bool:

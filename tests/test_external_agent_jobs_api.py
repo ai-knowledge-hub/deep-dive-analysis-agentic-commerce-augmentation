@@ -235,7 +235,7 @@ def test_external_agent_job_rejects_unknown_profiles(client: TestClient):
         json={**base, "run_mode": "manual"},
     )
     assert bad_run_mode.status_code == 400
-    assert "Unsupported run_mode: manual" in bad_run_mode.json()["detail"]
+    assert "Unsupported run_mode: manual" in bad_run_mode.json()["detail"]["message"]
 
     bad_policy = client.post(
         "/external-agent/jobs",
@@ -243,7 +243,7 @@ def test_external_agent_job_rejects_unknown_profiles(client: TestClient):
         json={**base, "idempotency_key": "job-bad-policy", "policy_profile_id": "unknown"},
     )
     assert bad_policy.status_code == 400
-    assert "Unsupported policy_profile_id: unknown" in bad_policy.json()["detail"]
+    assert "Unsupported policy_profile_id: unknown" in bad_policy.json()["detail"]["message"]
 
     bad_harness = client.post(
         "/external-agent/jobs",
@@ -251,7 +251,7 @@ def test_external_agent_job_rejects_unknown_profiles(client: TestClient):
         json={**base, "idempotency_key": "job-bad-harness", "harness_id": "pretend"},
     )
     assert bad_harness.status_code == 400
-    assert "Unsupported harness_id: pretend" in bad_harness.json()["detail"]
+    assert "Unsupported harness_id: pretend" in bad_harness.json()["detail"]["message"]
 
 
 def test_external_agent_job_rejects_idempotency_payload_mismatch(client: TestClient):
@@ -392,7 +392,11 @@ def test_external_agent_job_route_conflict_blocks_duplicate_planning(
         json={"idempotency_key": "job-route-race", "tool_id": "experiment.run_variant"},
     )
     assert replay.status_code == 409
-    assert "already in progress" in replay.json()["detail"]
+    detail = replay.json()["detail"]
+    assert detail["code"] == "idempotency_in_progress"
+    assert detail["retryable"] is True
+    assert detail["retry_after_seconds"] == 3
+    assert replay.headers["retry-after"] == "3"
     assert len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20)) == run_count
 
 
@@ -464,6 +468,32 @@ def test_external_agent_job_requires_machine_auth_and_scopes(client: TestClient)
     assert no_tool_scope.status_code == 403
 
 
+def test_external_agent_metadata_and_openapi_expose_integrator_contract(
+    client: TestClient,
+):
+    metadata = client.get("/external-agent/credentials/metadata")
+    assert metadata.status_code == 200
+    payload = metadata.json()
+    assert payload["token_type"] == "bearer"
+    assert payload["signing_algorithm"] == "hmac-sha256"
+    assert payload["current_key_id"] == "agent-principal-signing-secret:v1"
+    assert payload["audience"] == "agent-runtime"
+    assert payload["max_ttl_seconds"] == 3600
+    assert payload["rotation_supported"] is False
+
+    openapi = client.get("/openapi.json")
+    assert openapi.status_code == 200
+    spec = openapi.json()
+    operation = spec["paths"]["/external-agent/jobs"]["post"]
+    assert operation["security"]
+    assert "ExternalAgentJobResponse" in operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]["$ref"]
+    components = spec["components"]["schemas"]
+    assert "ExternalAgentJobPayload" in components
+    assert "ExternalAgentJobReceiptPayload" in components
+
+
 def test_external_agent_job_checks_scopes_for_allowed_capabilities(
     client: TestClient,
 ):
@@ -483,7 +513,7 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
         },
     )
     assert no_tool_scope.status_code == 403
-    assert "copy.publish_revision" in no_tool_scope.json()["detail"]
+    assert "copy.publish_revision" in no_tool_scope.json()["detail"]["message"]
 
     missing_capability_skill_scope = _token(
         scopes=[
@@ -501,7 +531,7 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
         },
     )
     assert no_skill_scope.status_code == 403
-    assert "promote-and-publish-approved-copy" in no_skill_scope.json()["detail"]
+    assert "promote-and-publish-approved-copy" in no_skill_scope.json()["detail"]["message"]
 
     authorized = _token(
         scopes=[
@@ -534,7 +564,8 @@ def test_external_agent_job_validates_requested_skill_tool_pair(client: TestClie
         },
     )
     assert response.status_code == 400
-    assert "cannot use tool" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "incompatible_skill_tool"
+    assert "cannot use tool" in response.json()["detail"]["message"]
 
 
 def test_external_agent_job_receipt_is_signed_and_tracks_run_status(

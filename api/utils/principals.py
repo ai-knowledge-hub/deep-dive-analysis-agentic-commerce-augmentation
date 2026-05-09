@@ -78,6 +78,21 @@ def build_agent_principal_token(
     return f"{payload_b64}.{signature}"
 
 
+def agent_principal_token_metadata() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "token_type": "bearer",
+        "signing_algorithm": "hmac-sha256",
+        "current_key_id": _agent_principal_token_key_id(),
+        "audience": settings.agent_principal_token_audience,
+        "issuer": settings.agent_principal_token_issuer,
+        "default_ttl_seconds": int(settings.agent_principal_token_ttl_seconds),
+        "max_ttl_seconds": int(settings.agent_principal_token_max_ttl_seconds),
+        "rotation_supported": False,
+        "issuer_managed": True,
+    }
+
+
 def resolve_principal_context(
     *,
     request: Request,
@@ -335,6 +350,7 @@ def _urlsafe_b64decode(value: str) -> bytes:
 
 __all__ = [
     "PrincipalContext",
+    "agent_principal_token_metadata",
     "build_agent_principal_token",
     "ensure_principal",
     "resolve_principal_context",

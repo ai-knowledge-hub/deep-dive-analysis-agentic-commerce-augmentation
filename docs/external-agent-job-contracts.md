@@ -50,6 +50,14 @@ Skill/tool scopes:
 - Skill request requires `skill:<skill_id>` or `skills:*`.
 - Registry discovery via `GET /agent-runs/registry` requires a tenant/user context or a bearer token with `external_agent_jobs:read`, `external_agent_jobs:write`, `agent_runs:read`, or `agent_runs:write`.
 
+Credential metadata:
+
+```http
+GET /external-agent/credentials/metadata
+```
+
+The metadata endpoint exposes the current token contract for integrators: token type, signing algorithm, current `kid`, expected audience, issuer, default TTL, maximum TTL, and whether server-side key rotation/JWKS-style discovery is available. The current implementation is issuer-managed HMAC with a single configured key id; token issuance and rotation APIs are still future work.
+
 ## Discover Runtime Tools
 
 Endpoint:
@@ -147,7 +155,23 @@ Behavior:
 - Same key and same payload returns the existing job/run with `idempotent_replay=true`.
 - Exact-payload replays are resolved before current registry/tool/skill validation, so safe retries keep working if runtime metadata or token scopes drift after the first successful create.
 - Same key and different payload returns `409 Conflict`.
+- Simultaneous same-payload creates can return retryable `409` with `Retry-After`, `X-Agent-Poll-Interval-Seconds`, and a structured `detail.code=idempotency_in_progress`.
 - Different principal with the same key creates a different job.
+
+Structured error shape:
+
+```json
+{
+  "detail": {
+    "code": "idempotency_in_progress",
+    "message": "idempotent job creation is already in progress; retry with the same idempotency_key",
+    "retryable": true,
+    "retry_after_seconds": 3
+  }
+}
+```
+
+External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
 
 ## Get Job Status
 
@@ -346,6 +370,7 @@ Behavior:
 Implemented now:
 
 - `POST /external-agent/jobs`
+- `GET /external-agent/credentials/metadata`
 - `GET /external-agent/jobs/{job_id}`
 - `GET /external-agent/jobs/{job_id}/receipt`
 - `GET /external-agent/jobs/{job_id}/receipts`
