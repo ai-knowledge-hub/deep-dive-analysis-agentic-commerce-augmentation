@@ -10,6 +10,7 @@ import {
   AgentRunCommandResponse,
   AgentRunCommandPreflightResponse,
   AgentRunCommandType,
+  ExternalAgentJobOperatorDetail,
   AgentRegistryApprovalReceiptVerifyResponse,
   AgentRegistryAuditListResponse,
   AgentRegistryOwnershipUpdateResponse,
@@ -594,6 +595,37 @@ export async function getAgentRunEvents(
   if (payload.around) params.set("around", String(payload.around));
   return request<AgentRunEventListResponse>(
     `/agent-runs/${runId}/events${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function getExternalAgentJobForRun(
+  runId: string,
+  userId?: string | null,
+): Promise<ExternalAgentJobOperatorDetail> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<ExternalAgentJobOperatorDetail>(
+    `/external-agent/jobs/operator/by-run/${runId}${
+      params.toString() ? `?${params.toString()}` : ""
+    }`,
+  );
+}
+
+export async function verifyExternalAgentJobReceiptForRun(
+  runId: string,
+  userId?: string | null,
+): Promise<ExternalAgentJobOperatorDetail["verification"]> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<ExternalAgentJobOperatorDetail["verification"]>(
+    `/external-agent/jobs/operator/by-run/${runId}/receipt/verify${
+      params.toString() ? `?${params.toString()}` : ""
+    }`,
+    { method: "POST" },
   );
 }
 

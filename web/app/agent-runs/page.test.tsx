@@ -12,6 +12,8 @@ const listAgentRunsMock = vi.fn();
 const listExperimentsMock = vi.fn();
 const getAgentRunMock = vi.fn();
 const getAgentRunEventsMock = vi.fn();
+const getExternalAgentJobForRunMock = vi.fn();
+const verifyExternalAgentJobReceiptForRunMock = vi.fn();
 const createAgentRunMock = vi.fn();
 const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
@@ -66,6 +68,10 @@ vi.mock("../../lib/api", () => ({
   listExperiments: (...args: unknown[]) => listExperimentsMock(...args),
   getAgentRun: (...args: unknown[]) => getAgentRunMock(...args),
   getAgentRunEvents: (...args: unknown[]) => getAgentRunEventsMock(...args),
+  getExternalAgentJobForRun: (...args: unknown[]) =>
+    getExternalAgentJobForRunMock(...args),
+  verifyExternalAgentJobReceiptForRun: (...args: unknown[]) =>
+    verifyExternalAgentJobReceiptForRunMock(...args),
   createAgentRun: (...args: unknown[]) => createAgentRunMock(...args),
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
@@ -103,6 +109,8 @@ describe("AgentRunsPage timeline presets", () => {
     listExperimentsMock.mockReset();
     getAgentRunMock.mockReset();
     getAgentRunEventsMock.mockReset();
+    getExternalAgentJobForRunMock.mockReset();
+    verifyExternalAgentJobReceiptForRunMock.mockReset();
     createAgentRunMock.mockReset();
     decideAgentActionMock.mockReset();
     controlAgentRunMock.mockReset();
@@ -177,6 +185,28 @@ describe("AgentRunsPage timeline presets", () => {
         has_more_before: false,
         has_more_after: false,
       },
+    });
+    getExternalAgentJobForRunMock.mockResolvedValue({
+      job: {
+        id: "job-ext-1",
+        principal_id: "agent-ext-1",
+        agent_profile_id: "buyer-assistant-v1",
+        idempotency_key: "job-key-1",
+        status: "accepted",
+        requested_tool_id: "experiment.run_variant",
+        requested_skill_id: "optimize-product-representation",
+      },
+      run: {},
+      receipts: [],
+      latest_receipt: null,
+      verification: null,
+    });
+    verifyExternalAgentJobReceiptForRunMock.mockResolvedValue({
+      valid: true,
+      valid_signature: true,
+      valid_payload: true,
+      valid_scope: true,
+      blockers: [],
     });
     createAgentRunMock.mockResolvedValue({ run: { id: "run-2" } });
     decideAgentActionMock.mockResolvedValue({});
@@ -1076,6 +1106,67 @@ describe("AgentRunsPage timeline presets", () => {
         action_id: "action-1",
         message: "Approve run_variant",
       },
+      "user-a",
+    );
+  });
+
+  it("surfaces external-agent job context and verifies the latest receipt", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-ext-1",
+        experiment_id: "exp-1",
+        status: "planned",
+        state: "battery_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "auto_execute_safe",
+        allowed_capabilities: ["run_variant"],
+        principal_type: "external_agent",
+        principal_id: "agent-ext-1",
+        agent_profile_id: "buyer-assistant-v1",
+      },
+      actions: [],
+    });
+    getExternalAgentJobForRunMock.mockResolvedValue({
+      job: {
+        id: "job-ext-123456",
+        principal_id: "agent-ext-1",
+        agent_profile_id: "buyer-assistant-v1",
+        idempotency_key: "retry-safe-key",
+        status: "accepted",
+        requested_tool_id: "experiment.run_variant",
+        requested_skill_id: "optimize-product-representation",
+      },
+      run: {},
+      receipts: [
+        {
+          receipt_type: "external_agent_job_accepted",
+          status: "accepted",
+          receipt_context_hash: "hash-123456789",
+        },
+      ],
+      latest_receipt: {
+        receipt_type: "external_agent_job_accepted",
+        status: "accepted",
+        receipt_context_hash: "hash-123456789",
+      },
+      verification: {
+        valid: false,
+        valid_signature: false,
+        valid_payload: false,
+        valid_scope: false,
+        blockers: ["Receipt signature is invalid."],
+      },
+    });
+
+    render(<AgentRunsPage />);
+
+    expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
+    expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
+      "run-ext-1",
       "user-a",
     );
   });

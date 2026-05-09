@@ -177,6 +177,23 @@ Status mapping:
 
 Receipt metadata on the job status payload is only populated when the stored latest receipt matches the current derived job status. Polling endpoints do not mint new receipts implicitly; callers should use `/receipt?refresh=true` when they need a fresh non-terminal attestation.
 
+## Operator Job Supervision
+
+Endpoint:
+
+```http
+GET /external-agent/jobs/operator/by-run/{run_id}?client_id=<client>&user_id=<operator>
+POST /external-agent/jobs/operator/by-run/{run_id}/receipt/verify?client_id=<client>&user_id=<operator>
+```
+
+Behavior:
+
+- These are human-control-plane endpoints, not machine-facing job endpoints.
+- They require operator `user_id` context plus tenant scoping.
+- They let tenant operators inspect the external-agent job linked to a selected `agent_run`, including job id, external principal, idempotency key, requested skill/tool, receipt history, latest receipt, and latest receipt verification.
+- They do not mint new receipts. External agents still use `/receipt?refresh=true` when they need to issue a fresh non-terminal attestation.
+- They do not relax the principal-scoped machine API. `/external-agent/jobs/{job_id}` and sibling machine endpoints remain readable only by the creating external principal.
+
 ## Get Job Receipt
 
 Endpoint:

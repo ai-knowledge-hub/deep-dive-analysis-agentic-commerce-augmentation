@@ -55,7 +55,11 @@ def require_agent_run_control_access(
     user_id: str | None,
     required_scope: str,
 ) -> PrincipalContext | None:
-    """Protect external-agent-owned runs from tenant-only control calls."""
+    """Protect external-agent-owned runs from external-principal hijacking.
+
+    Human user context is allowed to supervise runs scoped to its tenant. Bearer-token
+    calls remain constrained to the external principal that owns the run.
+    """
 
     principal_type = str(run.get("principal_type") or "human").strip()
     if principal_type != "external_agent":
@@ -69,10 +73,12 @@ def require_agent_run_control_access(
         principal_id=None,
         agent_profile_id=None,
     )
+    if principal.auth_method == "user_context" and principal.principal_type == "human":
+        return principal
     if principal.auth_method != "bearer_token":
         raise HTTPException(
             status_code=401,
-            detail="External-agent run control requires a bearer token",
+            detail="External-agent run supervision requires user context or owner bearer token",
         )
     if principal.principal_type != "external_agent":
         raise HTTPException(

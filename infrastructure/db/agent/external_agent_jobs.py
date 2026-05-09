@@ -169,6 +169,22 @@ def get_external_agent_job_by_idempotency_key(
     return _row(row) if row else None
 
 
+def get_external_agent_job_by_run_id(
+    *, client_id: str, run_id: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_jobs
+        WHERE client_id = ? AND run_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (client_id, run_id),
+    ).fetchone()
+    return _row(row) if row else None
+
+
 def update_external_agent_job_status(
     *, job_id: str, status: str, response: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any] | None:
@@ -440,6 +456,7 @@ __all__ = [
     "delete_external_agent_job_idempotency_reservation",
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
+    "get_external_agent_job_by_run_id",
     "get_external_agent_job_idempotency_reservation",
     "get_external_agent_job_receipt",
     "get_external_agent_job_receipt_for_context_hash",

@@ -44,7 +44,7 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def test_external_agent_owned_run_control_requires_owner_bearer_scope(
+def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_scope(
     client: TestClient,
 ):
     deps = default_deps()
@@ -84,12 +84,6 @@ def test_external_agent_owned_run_control_requires_owner_bearer_scope(
         variant_id=None,
         validation_job_id=None,
     )
-
-    human_shaped_decision = client.post(
-        f"/agent-runs/actions/{action['id']}/decision",
-        json={"client_id": CLIENT_ID, "user_id": USER_ID, "decision": "approve"},
-    )
-    assert human_shaped_decision.status_code == 401
 
     wrong_principal_token = build_agent_principal_token(
         principal_id="agent-other",
@@ -131,11 +125,42 @@ def test_external_agent_owned_run_control_requires_owner_bearer_scope(
     assert approved.status_code == 200
     assert approved.json()["action"]["status"] == "approved"
 
-    human_shaped_step = client.post(
-        f"/agent-runs/{run['id']}/step",
+    operator_action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=2,
+        status="proposed",
+        capability_name="seed_hypotheses",
+        capability_version="v1",
+        inputs={},
+        outputs={},
+        inputs_hash="seed-in-2",
+        outputs_hash=None,
+        rationale="operator supervised action",
+        confidence=0.7,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+    human_shaped_decision = client.post(
+        f"/agent-runs/actions/{operator_action['id']}/decision",
+        json={"client_id": CLIENT_ID, "user_id": USER_ID, "decision": "approve"},
+    )
+    assert human_shaped_decision.status_code == 200
+    assert human_shaped_decision.json()["action"]["status"] == "approved"
+
+    human_shaped_pause = client.post(
+        f"/agent-runs/{run['id']}/pause",
         json={"client_id": CLIENT_ID, "user_id": USER_ID},
     )
-    assert human_shaped_step.status_code == 401
+    assert human_shaped_pause.status_code == 200
+    assert human_shaped_pause.json()["run"]["status"] == "paused"
+
+    tenant_only_pause = client.post(
+        f"/agent-runs/{run['id']}/pause",
+        json={"client_id": CLIENT_ID},
+    )
+    assert tenant_only_pause.status_code == 401
 
 
 def test_create_external_agent_run_requires_bearer_principal(client: TestClient):

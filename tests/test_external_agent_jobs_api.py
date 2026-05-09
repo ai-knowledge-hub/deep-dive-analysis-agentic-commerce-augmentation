@@ -609,6 +609,32 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     )
     assert wrong_principal.status_code == 404
 
+    operator_detail = client.get(
+        f"/external-agent/jobs/operator/by-run/{run_id}",
+        params={"client_id": CLIENT_ID, "user_id": "operator-a"},
+    )
+    assert operator_detail.status_code == 200
+    detail = operator_detail.json()
+    assert detail["job"]["id"] == job_id
+    assert detail["job"]["principal_id"] == "agent-ext-1"
+    assert detail["job"]["idempotency_key"] == "job-receipt"
+    assert [item["status"] for item in detail["receipts"]] == ["completed", "accepted"]
+    assert detail["latest_receipt"]["status"] == "completed"
+    assert detail["verification"]["valid"] is True
+
+    operator_verification = client.post(
+        f"/external-agent/jobs/operator/by-run/{run_id}/receipt/verify",
+        params={"client_id": CLIENT_ID, "user_id": "operator-a"},
+    )
+    assert operator_verification.status_code == 200
+    assert operator_verification.json()["valid"] is True
+
+    tenant_context_only = client.get(
+        f"/external-agent/jobs/operator/by-run/{run_id}",
+        params={"client_id": CLIENT_ID},
+    )
+    assert tenant_context_only.status_code == 401
+
 
 def test_external_agent_job_status_hides_stale_receipt_metadata(client: TestClient):
     token = _token()
