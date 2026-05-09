@@ -23,6 +23,10 @@ POLL_RETRY_AFTER_SECONDS = 3
 POLL_INTERVAL_SECONDS = 3
 ACTION_EVIDENCE_LIMIT = 500
 EVENT_EVIDENCE_LIMIT = 2000
+RECEIPT_RESPONSE_METADATA_FIELDS = {
+    "stale_context",
+    "refresh_required_for_latest_context",
+}
 
 
 def job_status_from_run(run: Dict[str, Any]) -> str:
@@ -277,7 +281,12 @@ def verify_external_agent_job_receipt(
     unsigned_receipt = {
         key: value
         for key, value in receipt.items()
-        if key not in {"signature", "signature_algorithm"}
+        if key
+        not in {
+            "signature",
+            "signature_algorithm",
+            *RECEIPT_RESPONSE_METADATA_FIELDS,
+        }
     }
     valid_payload = bool(valid_signature and decoded_payload == unsigned_receipt)
     valid_scope = bool(

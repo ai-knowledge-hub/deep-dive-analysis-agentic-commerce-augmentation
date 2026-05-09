@@ -46,6 +46,10 @@ def client(tmp_path, monkeypatch):
     deps = default_deps()
     deps.clients.create_client(client_id=CLIENT_ID, name="Client A")
     deps.clients.create_client(client_id="client-b", name="Client B")
+    deps.users.ensure_user("operator-a")
+    deps.clients.add_client_user(
+        client_id=CLIENT_ID, user_id="operator-a", role="operator"
+    )
     return TestClient(app)
 
 
@@ -666,6 +670,12 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     )
     assert tenant_context_only.status_code == 401
 
+    unscoped_operator = client.get(
+        f"/external-agent/jobs/operator/by-run/{run_id}",
+        params={"client_id": CLIENT_ID, "user_id": "not-a-tenant-user"},
+    )
+    assert unscoped_operator.status_code == 403
+
 
 def test_external_agent_job_status_hides_stale_receipt_metadata(client: TestClient):
     token = _token()
@@ -1039,6 +1049,14 @@ def test_external_agent_job_receipt_refreshes_when_same_status_context_changes(
     assert second_receipt["run_state"] == "battery_ready"
     assert second_receipt["receipt_id"] == first_receipt["receipt_id"]
     assert second_receipt["stale_context"] is True
+
+    verification = client.post(
+        f"/external-agent/jobs/{job_id}/receipt/verify",
+        headers=_headers(token),
+        json={"receipt": second_receipt},
+    )
+    assert verification.status_code == 200
+    assert verification.json()["valid"] is True
 
     refreshed = client.get(
         f"/external-agent/jobs/{job_id}/receipt",

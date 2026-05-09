@@ -213,7 +213,7 @@ POST /external-agent/jobs/operator/by-run/{run_id}/receipt/verify?client_id=<cli
 Behavior:
 
 - These are human-control-plane endpoints, not machine-facing job endpoints.
-- They require operator `user_id` context plus tenant scoping.
+- They require operator `user_id` context, tenant scoping, and a tenant role of `operator`, `owner`, or `admin`. Platform admins configured through `ADMIN_USER_IDS` are also accepted by the tenant-role helper.
 - They let tenant operators inspect the external-agent job linked to a selected `agent_run`, including job id, external principal, idempotency key, requested skill/tool, receipt history, latest receipt, and latest receipt verification.
 - They do not mint new receipts. External agents still use `/receipt?refresh=true` when they need to issue a fresh non-terminal attestation.
 - They do not relax the principal-scoped machine API. `/external-agent/jobs/{job_id}` and sibling machine endpoints remain readable only by the creating external principal.
@@ -296,6 +296,35 @@ Request:
 {
   "receipt": {
     "receipt_id": "<receipt-id>",
+    "receipt_type": "external_agent_job_accepted",
+    "job_id": "<job-id>",
+    "run_id": "<agent-run-id>",
+    "client_id": "client-a",
+    "principal_id": "external-agent-1",
+    "status": "accepted",
+    "trace_id": "trace_...",
+    "requested_skill_id": "optimize-product-representation",
+    "requested_tool_id": "experiment.run_variant",
+    "registry_version": "agent-runtime-static-v1",
+    "registry_fingerprint": "...",
+    "key_id": "agent-principal-signing-secret:v1",
+    "receipt_context_hash": "<sha256>",
+    "evidence": {
+      "action_count": 1,
+      "event_count": 1,
+      "complete": true,
+      "actions_complete": true,
+      "events_complete": true,
+      "action_limit": 500,
+      "event_limit": 2000,
+      "digest_scope": "complete",
+      "latest_event_id": "<event-id>",
+      "latest_event_timestamp": "...",
+      "action_digest": "<sha256>",
+      "event_digest": "<sha256>",
+      "terminal_action_statuses": []
+    },
+    "issued_at": "...",
     "signature": "<payload>.<hmac>",
     "signature_algorithm": "hmac-sha256"
   }
@@ -305,7 +334,9 @@ Request:
 Behavior:
 
 - Only the creating principal can verify a receipt against the scoped job.
-- The verifier checks the HMAC signature, that the submitted payload matches the signed payload, and that the signed receipt belongs to the scoped job/run/client/principal.
+- Submit the full receipt object returned by `/receipt` or `/receipts`; the signature alone is not enough for `valid_payload=true`.
+- The verifier checks the HMAC signature, that the submitted receipt payload matches the signed payload, and that the signed receipt belongs to the scoped job/run/client/principal.
+- Response-only metadata fields such as `stale_context` and `refresh_required_for_latest_context` are ignored during payload comparison because they are not part of the signed receipt payload.
 - The response includes `valid`, `valid_signature`, `valid_payload`, `valid_scope`, `key_id`, `receipt_payload`, and `blockers`.
 
 ## List Job Receipts

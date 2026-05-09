@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.composition import default_deps
-from api.utils.tenancy import require_client_id
+from api.utils.tenancy import require_client_id, require_client_role
 from application.ports.deps import AppDeps
 from api.utils.external_agent_jobs import (
     job_status_payload,
@@ -88,7 +88,13 @@ def verify_external_agent_job_receipt_for_operator_route(
 def _require_operator_client_id(*, client_id: str | None, user_id: str | None) -> str:
     if not user_id:
         raise HTTPException(status_code=401, detail="Operator user context is required")
-    return require_client_id(client_id, user_id)
+    scoped_client_id = require_client_id(client_id, user_id)
+    require_client_role(
+        client_id=scoped_client_id,
+        user_id=user_id,
+        allowed_roles={"admin", "owner", "operator"},
+    )
+    return scoped_client_id
 
 
 def _require_operator_scoped_job_and_run(
