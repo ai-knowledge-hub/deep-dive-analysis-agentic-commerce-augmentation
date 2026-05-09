@@ -99,8 +99,8 @@ def create_external_agent_job_route(
     resolved = _resolve_requested_runtime_contract(payload)
     _require_requested_skill_tool_scopes(
         principal,
-        skill_id=resolved["skill_id"],
-        tool_id=resolved["tool_id"],
+        skill_ids=resolved["scope_skill_ids"],
+        tool_ids=resolved["scope_tool_ids"],
     )
     request_hash = _request_hash(payload.model_dump(mode="json"))
     existing = get_external_agent_job_by_idempotency_key(
@@ -466,16 +466,60 @@ def _resolve_requested_runtime_contract(
         "skill_id": skill_id,
         "tool_id": tool_id,
         "allowed_capabilities": allowed_capabilities,
+        "scope_tool_ids": _tool_ids_for_capabilities(allowed_capabilities),
+        "scope_skill_ids": _dedupe_ids(
+            [
+                *_skill_ids_for_capabilities(allowed_capabilities),
+                *([skill_id] if skill_id else []),
+            ]
+        ),
     }
 
 
 def _require_requested_skill_tool_scopes(
-    principal: PrincipalContext, *, skill_id: Optional[str], tool_id: Optional[str]
+    principal: PrincipalContext, *, skill_ids: List[str], tool_ids: List[str]
 ) -> None:
-    if tool_id and not _has_any_scope(principal, f"tool:{tool_id}", "tools:*"):
-        raise HTTPException(status_code=403, detail=f"Missing scope for tool '{tool_id}'")
-    if skill_id and not _has_any_scope(principal, f"skill:{skill_id}", "skills:*"):
-        raise HTTPException(status_code=403, detail=f"Missing scope for skill '{skill_id}'")
+    for tool_id in tool_ids:
+        if not _has_any_scope(principal, f"tool:{tool_id}", "tools:*"):
+            raise HTTPException(
+                status_code=403, detail=f"Missing scope for tool '{tool_id}'"
+            )
+    for skill_id in skill_ids:
+        if not _has_any_scope(principal, f"skill:{skill_id}", "skills:*"):
+            raise HTTPException(
+                status_code=403, detail=f"Missing scope for skill '{skill_id}'"
+            )
+
+
+def _tool_ids_for_capabilities(capability_names: List[str]) -> List[str]:
+    tool_ids: List[str] = []
+    for capability_name in capability_names:
+        tool_id = capability_to_tool_id(capability_name)
+        if not tool_id or not get_tool_spec(tool_id):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported capability_name: {capability_name}",
+            )
+        if tool_id not in tool_ids:
+            tool_ids.append(tool_id)
+    return tool_ids
+
+
+def _skill_ids_for_capabilities(capability_names: List[str]) -> List[str]:
+    skill_ids: List[str] = []
+    for tool_id in _tool_ids_for_capabilities(capability_names):
+        selected = select_skill_for_tool_id(tool_id)
+        if selected and selected.id not in skill_ids:
+            skill_ids.append(selected.id)
+    return skill_ids
+
+
+def _dedupe_ids(items: List[str]) -> List[str]:
+    result: List[str] = []
+    for item in items:
+        if item and item not in result:
+            result.append(item)
+    return result
 
 
 def _require_any_scope(principal: PrincipalContext, *required: str) -> None:

@@ -214,6 +214,64 @@ def test_external_agent_job_requires_machine_auth_and_scopes(client: TestClient)
     assert no_tool_scope.status_code == 403
 
 
+def test_external_agent_job_checks_scopes_for_allowed_capabilities(
+    client: TestClient,
+):
+    missing_capability_tool_scope = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "tool:experiment.run_variant",
+            "skill:optimize-product-representation",
+        ]
+    )
+    no_tool_scope = client.post(
+        "/external-agent/jobs",
+        headers=_headers(missing_capability_tool_scope),
+        json={
+            "idempotency_key": "job-capability-tool-scope",
+            "allowed_capabilities": ["publish_copy_revision"],
+        },
+    )
+    assert no_tool_scope.status_code == 403
+    assert "copy.publish_revision" in no_tool_scope.json()["detail"]
+
+    missing_capability_skill_scope = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "tool:copy.publish_revision",
+            "skill:optimize-product-representation",
+        ]
+    )
+    no_skill_scope = client.post(
+        "/external-agent/jobs",
+        headers=_headers(missing_capability_skill_scope),
+        json={
+            "idempotency_key": "job-capability-skill-scope",
+            "allowed_capabilities": ["publish_copy_revision"],
+        },
+    )
+    assert no_skill_scope.status_code == 403
+    assert "promote-and-publish-approved-copy" in no_skill_scope.json()["detail"]
+
+    authorized = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "tool:copy.publish_revision",
+            "skill:promote-and-publish-approved-copy",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(authorized),
+        json={
+            "idempotency_key": "job-capability-authorized",
+            "allowed_capabilities": ["publish_copy_revision"],
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["run"]["allowed_capabilities"] == ["publish_copy_revision"]
+
+
 def test_external_agent_job_validates_requested_skill_tool_pair(client: TestClient):
     token = _token(scopes=["external_agent_jobs:write", "tools:*", "skills:*"])
     response = client.post(

@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.agent_registry_runtime import registry_payload_and_fingerprint
+from api.utils.agent_run_authorization import (
+    require_agent_run_control_access,
+    require_agent_run_create_principal_access,
+)
 from api.utils.principals import resolve_principal_context
 from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
@@ -93,6 +97,12 @@ def create_agent_run(
         principal_id=payload.principal_id,
         agent_profile_id=payload.agent_profile_id,
     )
+    require_agent_run_create_principal_access(
+        principal=principal,
+        requested_principal_type=payload.principal_type,
+        requested_principal_id=payload.principal_id,
+        requested_agent_profile_id=payload.agent_profile_id,
+    )
     registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
     ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
@@ -151,6 +161,7 @@ def list_agent_runs(
 @router.get("/{run_id}")
 def get_agent_run(
     run_id: str,
+    request: Request,
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
     limit: int = 200,
@@ -158,6 +169,13 @@ def get_agent_run(
 ) -> AgentRunDetailResponse:
     scoped_client_id = require_client_id(client_id, user_id)
     run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    require_agent_run_control_access(
+        request=request,
+        run=run,
+        client_id=scoped_client_id,
+        user_id=user_id,
+        required_scope="agent_runs:read",
+    )
     actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=limit)
     return AgentRunDetailResponse(run=run, actions=actions)
 
@@ -165,6 +183,7 @@ def get_agent_run(
 @router.get("/{run_id}/events")
 def get_agent_run_events(
     run_id: str,
+    request: Request,
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
     limit: int = 500,
@@ -180,7 +199,14 @@ def get_agent_run_events(
     deps: AppDeps = Depends(_deps),
 ) -> AgentRunEventListResponse:
     scoped_client_id = require_client_id(client_id, user_id)
-    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    require_agent_run_control_access(
+        request=request,
+        run=run,
+        client_id=scoped_client_id,
+        user_id=user_id,
+        required_scope="agent_runs:read",
+    )
     try:
         page = list_agent_run_events_page(
             deps=deps,

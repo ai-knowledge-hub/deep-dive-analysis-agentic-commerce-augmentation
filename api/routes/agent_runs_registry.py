@@ -15,7 +15,7 @@ from api.utils.agent_registry_runtime import (
     registry_ownership,
     registry_payload_and_fingerprint,
 )
-from api.utils.tenancy import require_client_id
+from api.utils.tenancy import require_admin, require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
@@ -169,6 +169,7 @@ def update_agent_runtime_registry_tool_ownership(
             status_code=409,
             detail="Registry ownership preflight confirmation required",
         )
+    require_admin(payload.user_id)
     if not preflight.get("allowed"):
         raise HTTPException(
             status_code=400,

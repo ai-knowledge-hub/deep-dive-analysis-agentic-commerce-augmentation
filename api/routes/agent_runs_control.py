@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.composition import default_deps
-from api.utils.tenancy import require_client_id
+from api.utils.agent_run_authorization import require_agent_run_control_access
+from api.utils.tenancy import require_admin, require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities import CapabilityExecutionError
 from application.services.agent_runtime.runtime import (
@@ -60,11 +61,19 @@ def _require_scoped_run(
 def start_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    request: Request,
     runtime: AgentRuntimeService = Depends(_runtime),
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    require_agent_run_control_access(
+        request=request,
+        run=run,
+        client_id=scoped_client_id,
+        user_id=payload.user_id,
+        required_scope="agent_runs:write",
+    )
     try:
         result = runtime.start_run(run_id=run_id)
     except RunNotFoundError as exc:
@@ -76,11 +85,19 @@ def start_agent_run(
 def pause_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    request: Request,
     runtime: AgentRuntimeService = Depends(_runtime),
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    require_agent_run_control_access(
+        request=request,
+        run=run,
+        client_id=scoped_client_id,
+        user_id=payload.user_id,
+        required_scope="agent_runs:write",
+    )
     try:
         result = runtime.pause_run(run_id=run_id)
     except RunNotFoundError as exc:
@@ -92,11 +109,19 @@ def pause_agent_run(
 def cancel_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    request: Request,
     runtime: AgentRuntimeService = Depends(_runtime),
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    require_agent_run_control_access(
+        request=request,
+        run=run,
+        client_id=scoped_client_id,
+        user_id=payload.user_id,
+        required_scope="agent_runs:write",
+    )
     try:
         result = runtime.cancel_run(run_id=run_id)
     except RunNotFoundError as exc:
@@ -108,11 +133,19 @@ def cancel_agent_run(
 def step_agent_run(
     run_id: str,
     payload: AgentRunControlRequest,
+    request: Request,
     runtime: AgentRuntimeService = Depends(_runtime),
     deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    run = _require_scoped_run(deps=deps, run_id=run_id, client_id=scoped_client_id)
+    require_agent_run_control_access(
+        request=request,
+        run=run,
+        client_id=scoped_client_id,
+        user_id=payload.user_id,
+        required_scope="agent_runs:write",
+    )
     try:
         result = runtime.step_once(
             run_id=run_id,
@@ -131,9 +164,17 @@ def step_agent_run(
 
 @router.post("/tick")
 def tick_agent_runs(
-    payload: AgentRunTickRequest, worker: AgentRuntimeWorkerService = Depends(_worker)
+    payload: AgentRunTickRequest,
+    worker: AgentRuntimeWorkerService = Depends(_worker),
+    deps: AppDeps = Depends(_deps),
 ) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
+    runnable = deps.agent_runs.list_runnable_agent_runs(
+        client_id=client_id,
+        limit=max(1, min(100, int(payload.max_runs))),
+    )
+    if any(str(run.get("principal_type") or "") == "external_agent" for run in runnable):
+        require_admin(payload.user_id)
     summary = worker.tick_client(
         client_id=client_id,
         user_id=payload.user_id,

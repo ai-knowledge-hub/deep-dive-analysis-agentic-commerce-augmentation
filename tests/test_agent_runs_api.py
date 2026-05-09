@@ -36,7 +36,12 @@ USER_ID = "user-a"
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_PRINCIPAL_SIGNING_SECRET", "test-agent-secret")
+    monkeypatch.setenv("ADMIN_USER_IDS", USER_ID)
     get_settings.cache_clear()
+    monkeypatch.setattr(
+        "api.utils.tenancy.settings.admin_user_ids",
+        USER_ID,
+    )
     db_path = tmp_path / "agent-runs-api.db"
     set_database_path(db_path)
     init_db()
@@ -210,11 +215,18 @@ def test_agent_run_routes_enforce_client_scope(client: TestClient):
 
 
 def test_create_agent_run_persists_principal_policy_and_trace_fields(client: TestClient):
+    token = build_agent_principal_token(
+        principal_id="principal-ext-1",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="external-buyer-assistant",
+        scopes=["agent_runs:write", "agent_runs:read"],
+    )
     response = client.post(
         "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
         json={
             "client_id": CLIENT_ID,
-            "user_id": USER_ID,
             "principal_type": "external_agent",
             "principal_id": "principal-ext-1",
             "agent_profile_id": "external-buyer-assistant",
@@ -239,6 +251,7 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
 
     detail = client.get(
         f"/agent-runs/{run['id']}",
+        headers={"Authorization": f"Bearer {token}"},
         params={"client_id": CLIENT_ID, "user_id": USER_ID},
     )
     assert detail.status_code == 200
@@ -255,6 +268,7 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
+        headers={"Authorization": f"Bearer {token}"},
         params={"client_id": CLIENT_ID, "user_id": USER_ID},
     )
     assert events.status_code == 200
@@ -500,6 +514,22 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
         },
     )
     assert missing.status_code == 404
+
+
+def test_agent_runtime_registry_ownership_update_requires_admin(
+    client: TestClient,
+):
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": "not-admin",
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 403
 
 
 def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
