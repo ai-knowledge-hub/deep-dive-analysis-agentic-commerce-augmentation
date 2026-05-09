@@ -8,6 +8,8 @@ from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
 from infrastructure.db.core.tenancy import ensure_client
 
+IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS = 300
+
 
 def create_external_agent_job(
     *,
@@ -99,7 +101,39 @@ def reserve_external_agent_job_idempotency(
         return True
     except sqlite3.IntegrityError:
         conn.rollback()
-        return False
+        stale_age = f"-{IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS} seconds"
+        deleted = conn.execute(
+            """
+            DELETE FROM external_agent_job_idempotency_reservations
+            WHERE client_id = ?
+              AND principal_id = ?
+              AND idempotency_key = ?
+              AND request_hash = ?
+              AND datetime(created_at) <= datetime('now', ?)
+            """,
+            (client_id, principal_id, idempotency_key, request_hash, stale_age),
+        )
+        if deleted.rowcount <= 0:
+            conn.rollback()
+            return False
+        try:
+            conn.execute(
+                """
+                INSERT INTO external_agent_job_idempotency_reservations (
+                    client_id,
+                    principal_id,
+                    idempotency_key,
+                    request_hash
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (client_id, principal_id, idempotency_key, request_hash),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return False
 
 
 def get_external_agent_job_idempotency_reservation(
@@ -461,6 +495,7 @@ __all__ = [
     "get_external_agent_job_receipt",
     "get_external_agent_job_receipt_for_context_hash",
     "get_external_agent_job_receipt_for_status",
+    "IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS",
     "list_external_agent_job_receipts",
     "reserve_external_agent_job_idempotency",
     "update_external_agent_job_receipt",

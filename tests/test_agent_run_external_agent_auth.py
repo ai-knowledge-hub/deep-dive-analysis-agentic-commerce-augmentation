@@ -163,6 +163,58 @@ def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_s
     assert tenant_only_pause.status_code == 401
 
 
+def test_bearer_principal_cannot_use_parameter_tenancy_for_human_run(
+    client: TestClient,
+):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={"goal": "human run"},
+        allowed_capabilities=["seed_hypotheses"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="plan_only",
+        state="battery_ready",
+        status="planned",
+        principal_type="human",
+        principal_id="human:user-a",
+        trace_id="trace_human_run",
+    )
+    token = build_agent_principal_token(
+        principal_id="agent-reader",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["agent_runs:read"],
+    )
+
+    detail = client.get(
+        f"/agent-runs/{run['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"client_id": CLIENT_ID},
+    )
+    assert detail.status_code == 403
+
+    listing = client.get(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"client_id": CLIENT_ID},
+    )
+    assert listing.status_code == 200
+    assert all(item["id"] != run["id"] for item in listing.json()["runs"])
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"client_id": CLIENT_ID},
+    )
+    assert events.status_code == 403
+
+
 def test_create_external_agent_run_requires_bearer_principal(client: TestClient):
     response = client.post(
         "/agent-runs",

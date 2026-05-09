@@ -618,10 +618,15 @@ def _resolve_requested_runtime_contract(
         "allowed_capabilities": allowed_capabilities,
         "plan_mode": plan_mode,
         "scope_tool_ids": _tool_ids_for_capabilities(allowed_capabilities),
-        "scope_skill_ids": _scope_skill_ids_for_capabilities(
-            allowed_capabilities=allowed_capabilities,
-            requested_capability_name=capability_name,
-            requested_skill_id=skill_id,
+        "scope_skill_ids": _dedupe_ids(
+            [
+                *_scope_skill_ids_for_capabilities(
+                    allowed_capabilities=allowed_capabilities,
+                    requested_capability_name=capability_name,
+                    requested_skill_id=skill_id,
+                ),
+                *([skill_id] if skill_id else []),
+            ]
         ),
     }
 

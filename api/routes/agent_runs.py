@@ -1,15 +1,22 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
 
 from api.composition import default_deps
+from api.routes.agent_run_models import (
+    AgentRunCreateRequest,
+    AgentRunDetailResponse,
+    AgentRunEventListResponse,
+    AgentRunListResponse,
+)
 from api.utils.agent_registry_runtime import registry_payload_and_fingerprint
 from api.utils.agent_run_authorization import (
+    filter_agent_runs_for_principal,
     require_agent_run_control_access,
     require_agent_run_create_principal_access,
+    require_agent_run_list_access,
 )
 from api.utils.principals import resolve_principal_context
 from api.utils.tenancy import require_client_id
@@ -45,45 +52,6 @@ def _require_scoped_run(
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
-
-
-class AgentRunCreateRequest(BaseModel):
-    user_id: Optional[str] = None
-    client_id: Optional[str] = None
-    brand_id: Optional[str] = None
-    product_id: Optional[str] = None
-    experiment_id: Optional[str] = None
-    principal_type: Optional[str] = None
-    principal_id: Optional[str] = None
-    agent_profile_id: Optional[str] = None
-    harness_id: Optional[str] = None
-    policy_profile_id: Optional[str] = None
-    idempotency_key: Optional[str] = None
-
-    objective: Dict[str, Any] = Field(default_factory=dict)
-    allowed_capabilities: List[str] = Field(default_factory=list)
-    capability_versions: Dict[str, Any] = Field(default_factory=dict)
-    budgets: Dict[str, Any] = Field(default_factory=dict)
-    approval_policy: Dict[str, Any] = Field(default_factory=dict)
-    requires_approval: bool = True
-    run_mode: str = "plan_only"  # plan_only|auto_execute_safe
-
-    state: str = "battery_ready"
-    status: str = "planned"
-
-
-class AgentRunListResponse(BaseModel):
-    runs: List[Dict[str, Any]]
-
-
-class AgentRunDetailResponse(BaseModel):
-    run: Dict[str, Any]
-    actions: List[Dict[str, Any]]
-
-
-class AgentRunEventListResponse(BaseModel):
-    events: List[Dict[str, Any]]
-    page: Dict[str, Any]
 
 
 @router.post("")
@@ -145,6 +113,7 @@ def create_agent_run(
 
 @router.get("")
 def list_agent_runs(
+    request: Request,
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
     experiment_id: Optional[str] = None,
@@ -154,6 +123,12 @@ def list_agent_runs(
     deps: AppDeps = Depends(_deps),
 ) -> AgentRunListResponse:
     resolved = require_client_id(client_id, user_id)
+    principal = require_agent_run_list_access(
+        request=request,
+        client_id=resolved,
+        user_id=user_id,
+        required_scope="agent_runs:read",
+    )
     runs = deps.agent_runs.list_agent_runs(
         client_id=resolved,
         experiment_id=experiment_id,
@@ -161,7 +136,9 @@ def list_agent_runs(
         status=status,
         limit=limit,
     )
-    return AgentRunListResponse(runs=runs)
+    return AgentRunListResponse(
+        runs=filter_agent_runs_for_principal(runs=runs, principal=principal)
+    )
 
 
 @router.get("/{run_id}")

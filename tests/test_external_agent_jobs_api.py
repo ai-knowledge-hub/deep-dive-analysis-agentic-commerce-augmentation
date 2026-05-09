@@ -24,12 +24,15 @@ if "google" not in sys.modules:
 
 from api.composition import default_deps
 from api.main import app
+from api.routes.external_agent_job_models import ExternalAgentJobCreateRequest
 from api.utils.principals import build_agent_principal_token
 from infrastructure.db.agent.external_agent_jobs import (
     create_external_agent_job,
     create_external_agent_job_receipt,
     get_external_agent_job_by_idempotency_key,
+    reserve_external_agent_job_idempotency,
 )
+from infrastructure.db.core.connection import get_connection
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
 
@@ -70,6 +73,15 @@ def _token(*, principal_id: str = "agent-ext-1", client_id: str = CLIENT_ID, sco
 
 def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _request_hash(payload: dict) -> str:
+    normalized = json.dumps(
+        ExternalAgentJobCreateRequest(**payload).model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def test_external_agent_job_create_is_idempotent_and_status_is_scoped(
@@ -448,6 +460,39 @@ def test_external_agent_job_route_conflict_rechecks_request_hash(
     assert len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20)) == run_count
 
 
+def test_external_agent_job_stale_idempotency_reservation_can_be_reclaimed(
+    client: TestClient,
+):
+    token = _token()
+    payload = {
+        "idempotency_key": "job-stale-reservation",
+        "tool_id": "experiment.run_variant",
+    }
+    reserved = reserve_external_agent_job_idempotency(
+        client_id=CLIENT_ID,
+        principal_id="agent-ext-1",
+        idempotency_key=payload["idempotency_key"],
+        request_hash=_request_hash(payload),
+    )
+    assert reserved is True
+    get_connection().execute(
+        """
+        UPDATE external_agent_job_idempotency_reservations
+        SET created_at = datetime('now', '-10 minutes')
+        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+        """,
+        (CLIENT_ID, "agent-ext-1", payload["idempotency_key"]),
+    )
+    get_connection().commit()
+
+    created = client.post("/external-agent/jobs", headers=_headers(token), json=payload)
+
+    assert created.status_code == 200
+    body = created.json()
+    assert body["idempotent_replay"] is False
+    assert body["job"]["idempotency_key"] == payload["idempotency_key"]
+
+
 def test_external_agent_job_requires_machine_auth_and_scopes(client: TestClient):
     unauthenticated = client.post(
         "/external-agent/jobs",
@@ -554,6 +599,32 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
     )
     assert created.status_code == 200
     assert created.json()["run"]["allowed_capabilities"] == ["publish_copy_revision"]
+
+
+def test_external_agent_job_requires_scope_for_requested_workflow_skill(
+    client: TestClient,
+):
+    missing_requested_skill_scope = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "tool:validation.review_readiness",
+            "skill:request-validation-and-ingest-result",
+        ]
+    )
+    response = client.post(
+        "/external-agent/jobs",
+        headers=_headers(missing_requested_skill_scope),
+        json={
+            "idempotency_key": "job-workflow-requested-skill-scope",
+            "allowed_capabilities": ["review_validation_readiness"],
+            "skill_id": "promote-and-publish-approved-copy",
+            "plan_mode": "workflow",
+        },
+    )
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["code"] == "missing_skill_scope"
+    assert "promote-and-publish-approved-copy" in detail["message"]
 
 
 def test_external_agent_job_validates_requested_skill_tool_pair(client: TestClient):
