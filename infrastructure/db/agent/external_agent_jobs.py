@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from typing import Any, Dict, Optional
 
@@ -26,43 +27,53 @@ def create_external_agent_job(
     ensure_client(client_id)
     job_id = str(uuid.uuid4())
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO external_agent_jobs (
-            id,
-            client_id,
-            principal_id,
-            agent_profile_id,
-            idempotency_key,
-            request_hash,
-            run_id,
-            requested_skill_id,
-            requested_tool_id,
-            status,
-            trace_id,
-            request_json,
-            response_json
+    try:
+        conn.execute(
+            """
+            INSERT INTO external_agent_jobs (
+                id,
+                client_id,
+                principal_id,
+                agent_profile_id,
+                idempotency_key,
+                request_hash,
+                run_id,
+                requested_skill_id,
+                requested_tool_id,
+                status,
+                trace_id,
+                request_json,
+                response_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), json(?))
+            """,
+            (
+                job_id,
+                client_id,
+                principal_id,
+                agent_profile_id,
+                idempotency_key,
+                request_hash,
+                run_id,
+                requested_skill_id,
+                requested_tool_id,
+                status,
+                trace_id,
+                to_json(request) or to_json({}),
+                to_json(response) or to_json({}),
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), json(?))
-        """,
-        (
-            job_id,
-            client_id,
-            principal_id,
-            agent_profile_id,
-            idempotency_key,
-            request_hash,
-            run_id,
-            requested_skill_id,
-            requested_tool_id,
-            status,
-            trace_id,
-            to_json(request) or to_json({}),
-            to_json(response) or to_json({}),
-        ),
-    )
-    conn.commit()
-    return get_external_agent_job(job_id=job_id, client_id=client_id) or {}
+        conn.commit()
+        return get_external_agent_job(job_id=job_id, client_id=client_id) or {}
+    except sqlite3.IntegrityError:
+        existing = get_external_agent_job_by_idempotency_key(
+            client_id=client_id,
+            principal_id=principal_id,
+            idempotency_key=idempotency_key,
+        )
+        if existing:
+            return existing
+        raise
 
 
 def get_external_agent_job(

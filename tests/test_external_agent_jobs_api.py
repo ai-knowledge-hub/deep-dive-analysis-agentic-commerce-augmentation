@@ -24,6 +24,7 @@ if "google" not in sys.modules:
 from api.composition import default_deps
 from api.main import app
 from api.utils.principals import build_agent_principal_token
+from infrastructure.db.agent.external_agent_jobs import create_external_agent_job
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
 
@@ -136,6 +137,59 @@ def test_external_agent_job_rejects_idempotency_payload_mismatch(client: TestCli
     assert second.status_code == 409
 
 
+def test_external_agent_job_duplicate_insert_reloads_existing_job(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="plan_only",
+        state="battery_ready",
+        status="planned",
+        principal_type="external_agent",
+        principal_id="agent-ext-race",
+        agent_profile_id="buyer-assistant-v1",
+        idempotency_key="race-key",
+        trace_id="trace_race_1",
+    )
+    first = create_external_agent_job(
+        client_id=CLIENT_ID,
+        principal_id="agent-ext-race",
+        agent_profile_id="buyer-assistant-v1",
+        idempotency_key="race-key",
+        request_hash="same-request",
+        run_id=run["id"],
+        requested_skill_id="optimize-product-representation",
+        requested_tool_id="experiment.run_variant",
+        status="accepted",
+        trace_id=run["trace_id"],
+        request={"idempotency_key": "race-key"},
+        response={"run_id": run["id"]},
+    )
+    second = create_external_agent_job(
+        client_id=CLIENT_ID,
+        principal_id="agent-ext-race",
+        agent_profile_id="buyer-assistant-v1",
+        idempotency_key="race-key",
+        request_hash="same-request",
+        run_id=run["id"],
+        requested_skill_id="optimize-product-representation",
+        requested_tool_id="experiment.run_variant",
+        status="accepted",
+        trace_id=run["trace_id"],
+        request={"idempotency_key": "race-key"},
+        response={"run_id": run["id"]},
+    )
+    assert second["id"] == first["id"]
+
+
 def test_external_agent_job_requires_machine_auth_and_scopes(client: TestClient):
     unauthenticated = client.post(
         "/external-agent/jobs",
@@ -227,6 +281,37 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
         headers=_headers(other_principal_token),
     )
     assert wrong_principal.status_code == 404
+
+
+def test_external_agent_job_status_and_receipt_normalize_canceled_run(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-canceled", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job_id = payload["job"]["id"]
+    run_id = payload["run"]["id"]
+
+    deps = default_deps()
+    deps.agent_runs.update_agent_run(run_id=run_id, status="canceled")
+
+    status = client.get(f"/external-agent/jobs/{job_id}", headers=_headers(token))
+    assert status.status_code == 200
+    assert status.json()["job"]["status"] == "canceled"
+
+    receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert receipt_response.status_code == 200
+    receipt = receipt_response.json()["receipt"]
+    assert receipt["receipt_type"] == "external_agent_job_canceled"
+    assert receipt["status"] == "canceled"
+    assert _valid_signature(receipt, "test-agent-secret")
 
 
 def test_external_agent_job_events_are_scoped_to_creating_principal(

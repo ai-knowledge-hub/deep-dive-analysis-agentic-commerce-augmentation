@@ -494,9 +494,11 @@ def _request_hash(payload: Dict[str, Any]) -> str:
 
 
 def _job_status_from_run(run: Dict[str, Any]) -> str:
-    status = str(run.get("status") or "planned")
-    if status in {"completed", "failed", "cancelled"}:
+    status = str(run.get("status") or "planned").strip().lower()
+    if status in {"completed", "failed"}:
         return status
+    if status in {"canceled", "cancelled"}:
+        return "canceled"
     if status in {"running", "executing"}:
         return "running"
     return "accepted"
