@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -502,6 +503,37 @@ def test_external_agent_job_status_and_receipt_normalize_canceled_run(
     assert _valid_signature(receipt, "test-agent-secret")
 
 
+def test_external_agent_job_status_preserves_paused_run(client: TestClient):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-paused", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job_id = payload["job"]["id"]
+    run_id = payload["run"]["id"]
+
+    deps = default_deps()
+    deps.agent_runs.update_agent_run(run_id=run_id, status="paused")
+
+    status = client.get(f"/external-agent/jobs/{job_id}", headers=_headers(token))
+    assert status.status_code == 200
+    job = status.json()["job"]
+    assert job["status"] == "paused"
+    assert job["run_status"] == "paused"
+
+    receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert receipt_response.status_code == 200
+    receipt = receipt_response.json()["receipt"]
+    assert receipt["receipt_type"] == "external_agent_job_paused"
+    assert receipt["status"] == "paused"
+    assert _valid_signature(receipt, "test-agent-secret")
+
+
 def test_external_agent_job_events_are_scoped_to_creating_principal(
     client: TestClient,
 ):
@@ -563,6 +595,8 @@ def test_external_agent_job_activity_projects_job_receipts_and_run_events(
     run_event = next(item for item in payload["items"] if item["type"] == "run_event")
     assert run_event["subtype"] == "action_proposed"
     assert run_event["tool_id"] == "experiment.run_variant"
+    assert payload["summary"]["page_scope"] == "run_events"
+    assert payload["event_page"] == payload["page"]
 
     other_principal_token = _token(principal_id="agent-ext-activity-other")
     wrong_principal = client.get(
@@ -570,6 +604,64 @@ def test_external_agent_job_activity_projects_job_receipts_and_run_events(
         headers=_headers(other_principal_token),
     )
     assert wrong_principal.status_code == 404
+
+
+def test_external_agent_job_activity_accepts_event_cursor_filters(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-activity-cursors", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job_id = payload["job"]["id"]
+    run_id = payload["run"]["id"]
+
+    deps = default_deps()
+    time.sleep(1.05)
+    deps.agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=99,
+        event_type="operator_command_completed",
+        status="completed",
+        capability_name=None,
+        capability_version=None,
+        note="Cursor filter marker",
+        anchors={},
+    )
+
+    first = client.get(
+        f"/external-agent/jobs/{job_id}/activity",
+        headers=_headers(token),
+        params={"limit": 1, "event_type": "command"},
+    )
+    assert first.status_code == 200
+    first_payload = first.json()
+    command_events = [
+        item for item in first_payload["items"] if item["type"] == "run_event"
+    ]
+    assert len(command_events) == 1
+    assert command_events[0]["subtype"] == "operator_command_completed"
+    assert first_payload["event_page"]["after_cursor"]
+
+    next_page = client.get(
+        f"/external-agent/jobs/{job_id}/activity",
+        headers=_headers(token),
+        params={
+            "limit": 1,
+            "event_type": "all",
+            "before": first_payload["event_page"]["before_cursor"],
+        },
+    )
+    assert next_page.status_code == 200
+    next_payload = next_page.json()
+    next_events = [item for item in next_payload["items"] if item["type"] == "run_event"]
+    assert len(next_events) == 1
+    assert next_events[0]["subtype"] == "action_proposed"
 
 
 def _valid_signature(receipt: dict, secret: str) -> bool:

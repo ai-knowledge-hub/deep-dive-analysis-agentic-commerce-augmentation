@@ -85,6 +85,7 @@ class ExternalAgentJobActivityResponse(BaseModel):
     job: Dict[str, Any]
     summary: Dict[str, Any]
     items: List[Dict[str, Any]]
+    event_page: Dict[str, Any]
     page: Dict[str, Any]
 
 
@@ -300,6 +301,15 @@ def get_external_agent_job_activity_route(
     job_id: str,
     request: Request,
     limit: int = 100,
+    event_type: Optional[str] = None,
+    status: Optional[str] = None,
+    capability_name: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    before: Optional[str] = None,
+    after: Optional[str] = None,
+    event_id: Optional[str] = None,
+    around: int = 120,
     deps: AppDeps = Depends(_deps),
 ) -> ExternalAgentJobActivityResponse:
     principal = _require_external_agent_principal(request=request)
@@ -320,13 +330,24 @@ def get_external_agent_job_activity_route(
         principal_id=principal.principal_id,
         limit=limit,
     )
-    page = list_agent_run_events_page(
-        deps=deps,
-        run_id=job["run_id"],
-        client_id=principal.client_id,
-        limit=max(1, min(int(limit), 2000)),
-        event_type="all",
-    ).to_dict()
+    try:
+        page = list_agent_run_events_page(
+            deps=deps,
+            run_id=job["run_id"],
+            client_id=principal.client_id,
+            limit=max(1, min(int(limit), 2000)),
+            event_type=event_type or "all",
+            status=status,
+            capability_name=capability_name,
+            since=since,
+            until=until,
+            before=before,
+            after=after,
+            event_id=event_id,
+            around=max(1, min(int(around), 2000)),
+        ).to_dict()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     items = _external_agent_activity_items(
         job=job,
         run=run,
@@ -337,12 +358,16 @@ def get_external_agent_job_activity_route(
         job=_job_status_payload(job=job, run=run),
         summary={
             "status": _job_status_from_run(run),
+            "run_status": run.get("status"),
+            "run_state": run.get("state"),
             "run_id": run.get("id"),
             "trace_id": job.get("trace_id") or run.get("trace_id"),
             "receipt_count": len(receipt_rows),
             "event_count": len(page["events"]),
+            "page_scope": "run_events",
         },
         items=items,
+        event_page=page["page"],
         page=page["page"],
     )
 
@@ -554,7 +579,7 @@ def _request_hash(payload: Dict[str, Any]) -> str:
 
 def _job_status_from_run(run: Dict[str, Any]) -> str:
     status = str(run.get("status") or "planned").strip().lower()
-    if status in {"completed", "failed"}:
+    if status in {"completed", "failed", "paused"}:
         return status
     if status in {"canceled", "cancelled"}:
         return "canceled"
@@ -572,6 +597,8 @@ def _job_status_payload(*, job: Dict[str, Any], run: Dict[str, Any]) -> Dict[str
         "idempotency_key": job["idempotency_key"],
         "run_id": job["run_id"],
         "status": _job_status_from_run(run),
+        "run_status": run.get("status"),
+        "run_state": run.get("state"),
         "trace_id": job.get("trace_id") or run.get("trace_id"),
         "requested_skill_id": job.get("requested_skill_id"),
         "requested_tool_id": job.get("requested_tool_id"),
