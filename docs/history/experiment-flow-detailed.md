@@ -1,5 +1,12 @@
 # Experiment Flow (Detailed)
 
+Status: historical/reference
+Current UX guide: `../operator-experience.md`
+
+This document remains useful for the lab experiment protocol, but the platform's primary product surface is now the agentic control plane.
+
+---
+
 This document defines the implemented experiment protocol for copy optimization in the lab.
 
 ## 1) Objective and Unit

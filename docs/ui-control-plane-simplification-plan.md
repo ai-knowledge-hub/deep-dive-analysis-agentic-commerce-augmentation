@@ -345,6 +345,10 @@ Lab status: retained as an advanced bench. `/lab` now uses the same visual
 primitives for its entry header and built-in insight summaries, while deeper
 lab-era routes remain secondary drilldowns.
 
+Operator-guide status: current UX guidance now lives in
+`docs/operator-experience.md`. The historical complete user guide remains under
+`docs/history/` for context only.
+
 ### Phase 3: Shared run-centric data layer
 
 Deliver:

@@ -1,6 +1,6 @@
 # Agentification Checkpoint
 
-Status date: 2026-05-04
+Status date: 2026-05-06
 
 This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
 
@@ -26,6 +26,7 @@ The codebase now has the minimum spine for the pivot:
 
 - Principal-aware agent run creation with `principal_type`, `principal_id`, `agent_profile_id`, `harness_id`, `policy_profile_id`, `idempotency_key`, and `trace_id`.
 - Machine-principal token resolution for scoped external-agent run creation.
+- External-agent job facade with idempotent create/status contracts through `POST /external-agent/jobs` and `GET /external-agent/jobs/{job_id}`, plus signed latest-status receipts and scoped linked-run event reads.
 - Agent run/action/event persistence with tool/effect metadata stamped onto proposed and executed work.
 - Runtime policy profiles mapped from run modes: `human_approval_required`, `safe_auto`, and `observe`.
 - Compatibility from legacy `capability_name` to machine-facing `tool_id`.
@@ -56,6 +57,8 @@ The codebase now has the minimum spine for the pivot:
 - Interventions can now preflight, confirm, and create audited compensating proposals directly from those recommendations.
 - Compensating proposal command construction and UI rendering are now reusable control-plane primitives instead of Interventions-only inline logic.
 - Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
+- Primary control-plane pages now use the flattened visual language from `docs/ui-style-direction.md`; `/lab` is retained as an advanced bench with matching surface primitives.
+- `docs/operator-experience.md` is now the canonical operator/user guide, superseding the older lab-first guide in `docs/history/`.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.
 - Playwright smoke coverage verifies authenticated control-plane surfaces under mock auth.
 - Agent runtime source has been reorganized into responsibility-based subpackages: `capabilities/`, `commands/`, `registry/`, and `runtime/`.
@@ -80,7 +83,10 @@ Use these docs together:
 - `docs/README.md`: documentation index and active/historical status map
 - `docs/codebase-cleanup-and-modularisation-plan.md`: cleanup and modularisation sequence
 - `docs/agent-first-modular-architecture-v1.md`: target architecture
+- `docs/agent-capability-map.md`: narrative-to-agent/tool capability map
+- `docs/external-agent-job-contracts.md`: machine-facing external-agent job API contract
 - `docs/chat-led-operator-console-spec.md`: target human control-plane UX
+- `docs/operator-experience.md`: current operator/user guide
 - `docs/ui-control-plane-simplification-plan.md`: UI simplification roadmap
 - `docs/agentic-layer.md`: runtime implementation notes
 
@@ -110,14 +116,13 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection.
 
 Next steps:
 
-- Define idempotent job APIs for external agents.
-- Add dedupe keys and retry-safe responses across more endpoints.
+- Add richer domain-specific activity summaries for external agents.
 - Add scoped credentials for tool/skill access.
-- Add signed execution receipts for completed work.
+- Add retry-safe responses across more external-agent endpoints.
 
 ### 4. Harness Profiles
 
@@ -141,13 +146,13 @@ Next steps:
 
 ### 6. Control-Plane UX Cleanup
 
-Current state: control-plane pages exist but the lab is still visually and conceptually heavy.
+Current state: control-plane pages exist and the primary loop now uses a flatter supervision style. Lab remains available as an advanced bench.
 
 Next steps:
 
-- Make Inbox/Runs the default path.
-- Keep Lab as an advanced workspace.
-- Reduce duplicate dashboards.
+- Continue reducing older lab/admin route density where it creates real user confusion.
+- Keep Inbox/Runs as the default path and Lab as an advanced workspace.
+- Reduce duplicate dashboards and avoid reintroducing card-heavy layouts.
 - Make all risky actions visible through Interventions.
 
 ## Completed Recent Build Slices
@@ -255,7 +260,7 @@ Build:
 - Keep Lab as an advanced workspace.
 - Reduce duplicate dashboards and overlapping navigation.
 - Route all risky work through Interventions.
-- Add a concise control-plane user guide to replace the historical human-led guide.
+- Keep `docs/operator-experience.md` current as the concise control-plane user guide.
 
 ### Priority 5: Continued Source Hygiene
 

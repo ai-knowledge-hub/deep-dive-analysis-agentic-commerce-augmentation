@@ -1,4 +1,11 @@
-# User Guide (Current Features Only)
+# Historical User Guide (Lab-First Product)
+
+Status: historical
+Superseded by: `../operator-experience.md`
+
+This guide describes the older lab-first product shape. It is retained for workflow context only and should not be used as the current operator guide.
+
+---
 
 This guide documents what is implemented now. Any future item is marked **Planned (not built)**.
 

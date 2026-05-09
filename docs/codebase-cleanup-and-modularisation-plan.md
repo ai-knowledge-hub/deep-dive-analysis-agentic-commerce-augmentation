@@ -1,7 +1,7 @@
 # Codebase Cleanup And Modularisation Plan
 
 Status: current
-Last updated: 2026-05-04
+Last updated: 2026-05-06
 
 This is the working plan for reducing source entanglement and making the agent-first platform easier for humans and coding agents to change safely. The goal is not a decorative refactor. The goal is less context drag, clearer ownership, smaller active files, and fewer stale paths for future work to trip over.
 
@@ -37,8 +37,9 @@ Use these labels when auditing files and folders:
 | root `scripts/*.py` wrappers | `delete-now` | Thin wrappers around canonical modules with references migrated. | Removed in PR2 after Makefile/docs/CI were canonicalized; `make script-entrypoint-check` blocks reintroduction. |
 | `docs/agentification-checkpoint.md` | `current` | Active execution checkpoint. | Keep concise; split history out if it grows. |
 | `docs/agent-first-modular-architecture-v1.md` | `current` | Active target architecture. | Keep. |
-| `docs/chat-led-operator-console-spec.md` | `current/reference` | Still relevant to control-plane UX. | Keep, trim only after UI settles. |
-| `docs/history/user-guide-complete.md` | `historical` | Written for older human-led UX. | Retained as history; replace later with a control-plane user guide. |
+| `docs/operator-experience.md` | `current` | Current operator/user guide for the agentic control plane. | Keep as the canonical UX guide and update after each major UI slice. |
+| `docs/chat-led-operator-console-spec.md` | `current/reference` | Still relevant to control-plane UX. | Keep as design reference; trim only after UI settles. |
+| `docs/history/user-guide-complete.md` | `historical` | Written for older human-led UX. | Retained as history; superseded by `docs/operator-experience.md`. |
 | `docs/history/experiment-flow-detailed.md` | `historical` | Lab-era flow detail. | Retained as history after PR3. |
 | `docs/history/app-workflows.md` | `historical/reference` | Contains useful workflow notes but overlaps newer checkpoint docs. | Retained under history after PR3. |
 | largest frontend pages | `active-hotspot` | `experiments`, `agent-runs`, `admin`, `validation` are still the largest files. | Modularise only where active development friction is real. |
@@ -99,13 +100,15 @@ docs/
   README.md                      # canonical doc index and statuses
   agentification-checkpoint.md    # active checkpoint only
   agent-first-modular-architecture-v1.md
-    agentic-layer.md
-    ui-control-plane-simplification-plan.md
-    chat-led-operator-console-spec.md
-    history/
-      agent-first-migration-slice-rfc.md
-      user-guide-complete.md
-      experiment-flow-detailed.md
+  operator-experience.md          # current operator/user guide
+  agentic-layer.md
+  ui-control-plane-simplification-plan.md
+  ui-style-direction.md
+  chat-led-operator-console-spec.md
+  history/
+    agent-first-migration-slice-rfc.md
+    user-guide-complete.md
+    experiment-flow-detailed.md
 ```
 
 ## PR Sequence
