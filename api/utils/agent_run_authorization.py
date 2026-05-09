@@ -33,7 +33,6 @@ def require_agent_run_create_principal_access(
         )
     if (
         requested_agent_profile_id
-        and principal.agent_profile_id
         and requested_agent_profile_id != principal.agent_profile_id
     ):
         raise HTTPException(

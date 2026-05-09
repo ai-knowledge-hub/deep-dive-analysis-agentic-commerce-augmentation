@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import sys
 import types
 
@@ -20,6 +24,7 @@ if "google" not in sys.modules:
 from api.composition import default_deps
 from api.main import app
 from api.utils.principals import build_agent_principal_token
+from infrastructure.db.core.connection import get_connection
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
 
@@ -165,3 +170,87 @@ def test_create_external_agent_run_requires_bearer_principal(client: TestClient)
         },
     )
     assert mismatch.status_code == 403
+
+
+def test_agent_principal_token_requires_exp_claim(client: TestClient):
+    token = _legacy_agent_principal_token(
+        {
+            "principal_id": "legacy-principal",
+            "client_id": CLIENT_ID,
+            "principal_type": "external_agent",
+            "scopes": ["agent_runs:write"],
+        },
+        secret="test-agent-secret",
+    )
+
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"allowed_capabilities": ["run_variant"], "run_mode": "plan_only"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Agent principal token missing exp"
+
+
+def test_inactive_external_principal_token_is_rejected(client: TestClient):
+    token = build_agent_principal_token(
+        principal_id="revoked-agent",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["agent_runs:write"],
+    )
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO principals (id, principal_type, tenant_id, status)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("revoked-agent", "external_agent", CLIENT_ID, "inactive"),
+    )
+    conn.commit()
+
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"allowed_capabilities": ["run_variant"], "run_mode": "plan_only"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Agent principal is not active"
+
+
+def test_bearer_token_cannot_self_assert_agent_profile(client: TestClient):
+    token = build_agent_principal_token(
+        principal_id="profileless-agent",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["agent_runs:write"],
+    )
+
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "principal_type": "external_agent",
+            "agent_profile_id": "self-asserted-profile",
+            "allowed_capabilities": ["run_variant"],
+            "run_mode": "plan_only",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "agent_profile_id does not match authenticated principal"
+
+
+def _legacy_agent_principal_token(payload: dict, *, secret: str) -> str:
+    payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("utf-8").rstrip("=")
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload_b64}.{signature}"

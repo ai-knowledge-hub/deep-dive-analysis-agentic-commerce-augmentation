@@ -26,8 +26,17 @@ Token claims are resolved by `api/utils/principals.py` and must include:
 - `principal_type=external_agent`
 - `principal_id`
 - `client_id`
-- optional `agent_profile_id`
+- `exp` within the configured maximum TTL
+- `iat`
+- `jti`
+- `kid`
+- `aud`
+- `iss`
 - `scopes`
+
+`agent_profile_id` is optional, but when a bearer-authenticated caller wants to create a run under a profile, the profile must be present in the signed token. Request bodies cannot self-assert a profile that is absent from the bearer token.
+
+The persisted principal row must also be active. Setting a principal status to anything other than `active` revokes future bearer-token use for that principal, even when an existing token is otherwise correctly signed.
 
 Required scopes:
 

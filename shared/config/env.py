@@ -147,6 +147,22 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("AGENT_PRINCIPAL_SIGNING_SECRET"),
     )
+    agent_principal_token_ttl_seconds: int = Field(
+        default=3600,
+        validation_alias=AliasChoices("AGENT_PRINCIPAL_TOKEN_TTL_SECONDS"),
+    )
+    agent_principal_token_max_ttl_seconds: int = Field(
+        default=3600,
+        validation_alias=AliasChoices("AGENT_PRINCIPAL_TOKEN_MAX_TTL_SECONDS"),
+    )
+    agent_principal_token_audience: str = Field(
+        default="agent-runtime",
+        validation_alias=AliasChoices("AGENT_PRINCIPAL_TOKEN_AUDIENCE"),
+    )
+    agent_principal_token_issuer: str = Field(
+        default="deep-dive-analysis-agentic-commerce-augmentation",
+        validation_alias=AliasChoices("AGENT_PRINCIPAL_TOKEN_ISSUER"),
+    )
     registry_approval_signing_secret: str | None = Field(
         default=None,
         validation_alias=AliasChoices("REGISTRY_APPROVAL_SIGNING_SECRET"),
