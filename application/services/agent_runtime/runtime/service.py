@@ -21,6 +21,7 @@ from application.services.agent_runtime.policy import PolicyEnforcer, PolicyErro
 from application.services.agent_runtime.registry import (
     get_capability_spec,
     next_state_for_capability,
+    run_mode_supported,
     validate_outputs,
 )
 
@@ -43,6 +44,10 @@ class RunBusyError(AgentRuntimeError):
 
 class NoApprovedActionError(AgentRuntimeError):
     pass
+
+
+_TERMINAL_STATUSES = {"canceled", "cancelled", "completed", "failed"}
+_NON_EXECUTABLE_STATUSES = {*_TERMINAL_STATUSES, "paused"}
 
 
 @dataclass(frozen=True)
@@ -70,7 +75,10 @@ class AgentRuntimeService:
 
     def start_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
-        run_mode = str(run.get("run_mode") or "plan_only")
+        self._assert_not_terminal(run, action="started")
+        run_mode = str(run.get("run_mode") or "plan_only").strip().lower()
+        if not run_mode_supported(run_mode):
+            raise AgentRuntimeError(f"Unsupported run_mode: {run_mode}")
         if run_mode == "plan_only":
             updated = self._deps.agent_runs.update_agent_run(
                 run_id=run_id,
@@ -100,6 +108,7 @@ class AgentRuntimeService:
 
     def pause_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
+        self._assert_not_terminal(run, action="paused")
         updated = self._deps.agent_runs.update_agent_run(run_id=run_id, status="paused")
         record_run_event(
             deps=self._deps,
@@ -113,6 +122,8 @@ class AgentRuntimeService:
 
     def cancel_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
+        if self._normalized_status(run) in _TERMINAL_STATUSES:
+            raise AgentRuntimeError("Run is already terminal")
         updated = self._deps.agent_runs.update_agent_run(
             run_id=run_id,
             status="canceled",
@@ -130,10 +141,12 @@ class AgentRuntimeService:
 
     def step_once(self, *, run_id: str, user_id: Optional[str]) -> RuntimeResult:
         run = self._require_run(run_id)
-        run_mode = str(run.get("run_mode") or "plan_only")
+        run_mode = str(run.get("run_mode") or "plan_only").strip().lower()
+        if not run_mode_supported(run_mode):
+            raise AgentRuntimeError(f"Unsupported run_mode: {run_mode}")
         if run_mode == "plan_only":
             raise PlanOnlyModeError("Run is plan-only. Switch mode to execute steps.")
-        if str(run.get("status") or "").lower() in {"canceled", "completed"}:
+        if self._normalized_status(run) in _NON_EXECUTABLE_STATUSES:
             raise AgentRuntimeError("Run is not executable in its current status")
 
         lock_token = str(uuid.uuid4())
@@ -146,9 +159,6 @@ class AgentRuntimeService:
             raise RunBusyError("Run is currently busy; try again shortly.")
 
         try:
-            self._deps.agent_runs.update_agent_run(
-                run_id=run_id, status="running", error=None
-            )
             self._deps.agent_runs.heartbeat_run_lock(
                 run_id=run_id,
                 lock_token=lock_token,
@@ -156,7 +166,16 @@ class AgentRuntimeService:
             )
             action = self._claim_next_approved_action(run_id=run_id)
             if not action:
+                status = self._compute_next_run_status(run_id=run_id)
+                self._deps.agent_runs.update_agent_run(
+                    run_id=run_id,
+                    status=status,
+                    error=None,
+                )
                 raise NoApprovedActionError("No approved action to execute")
+            self._deps.agent_runs.update_agent_run(
+                run_id=run_id, status="running", error=None
+            )
             record_action_event(
                 deps=self._deps,
                 run_id=run_id,
@@ -168,13 +187,13 @@ class AgentRuntimeService:
 
             capability_name = str(action.get("capability_name") or "")
             spec = get_capability_spec(capability_name)
-            if not spec:
-                raise AgentRuntimeError(f"Unsupported capability: {capability_name}")
-            inputs = spec.normalize_inputs(action.get("inputs") or {})
             all_actions = self._deps.agent_actions.list_agent_actions(
                 agent_run_id=run_id, limit=500
             )
             try:
+                if not spec:
+                    raise AgentRuntimeError(f"Unsupported capability: {capability_name}")
+                inputs = spec.normalize_inputs(action.get("inputs") or {})
                 self._policy.validate_action_execution(
                     run=run,
                     action=action,
@@ -195,7 +214,7 @@ class AgentRuntimeService:
                 output_errors = validate_outputs(spec, outputs)
                 if output_errors:
                     raise CapabilityExecutionError("; ".join(output_errors))
-            except PolicyError as exc:
+            except (PolicyError, AgentRuntimeError) as exc:
                 self._deps.agent_actions.update_agent_action_status(
                     action_id=str(action.get("id") or ""),
                     status="failed",
@@ -315,6 +334,14 @@ class AgentRuntimeService:
             raise RunNotFoundError("Agent run not found")
         return run
 
+    def _normalized_status(self, run: Dict[str, Any]) -> str:
+        status = str(run.get("status") or "").strip().lower()
+        return "canceled" if status == "cancelled" else status
+
+    def _assert_not_terminal(self, run: Dict[str, Any], *, action: str) -> None:
+        if self._normalized_status(run) in _TERMINAL_STATUSES:
+            raise AgentRuntimeError(f"Terminal runs cannot be {action}")
+
     def _claim_next_approved_action(self, *, run_id: str) -> Dict[str, Any] | None:
         actions = self._deps.agent_actions.list_agent_actions(
             agent_run_id=run_id, limit=500
@@ -343,7 +370,7 @@ class AgentRuntimeService:
             return "planned"
         if statuses and statuses.issubset({"executed", "rejected"}):
             return "completed"
-        return "running"
+        return "planned"
 
 
 def _execute_capability(**kwargs: Any) -> Dict[str, Any]:

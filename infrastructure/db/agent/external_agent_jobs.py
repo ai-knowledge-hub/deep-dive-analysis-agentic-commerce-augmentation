@@ -8,6 +8,8 @@ from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
 from infrastructure.db.core.tenancy import ensure_client
 
+IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS = 300
+
 
 def create_external_agent_job(
     *,
@@ -66,6 +68,7 @@ def create_external_agent_job(
         conn.commit()
         return get_external_agent_job(job_id=job_id, client_id=client_id) or {}
     except sqlite3.IntegrityError:
+        conn.rollback()
         existing = get_external_agent_job_by_idempotency_key(
             client_id=client_id,
             principal_id=principal_id,
@@ -74,6 +77,99 @@ def create_external_agent_job(
         if existing:
             return existing
         raise
+
+
+def reserve_external_agent_job_idempotency(
+    *, client_id: str, principal_id: str, idempotency_key: str, request_hash: str
+) -> bool:
+    ensure_client(client_id)
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO external_agent_job_idempotency_reservations (
+                client_id,
+                principal_id,
+                idempotency_key,
+                request_hash
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (client_id, principal_id, idempotency_key, request_hash),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        stale_age = f"-{IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS} seconds"
+        deleted = conn.execute(
+            """
+            DELETE FROM external_agent_job_idempotency_reservations
+            WHERE client_id = ?
+              AND principal_id = ?
+              AND idempotency_key = ?
+              AND request_hash = ?
+              AND datetime(created_at) <= datetime('now', ?)
+            """,
+            (client_id, principal_id, idempotency_key, request_hash, stale_age),
+        )
+        if deleted.rowcount <= 0:
+            conn.rollback()
+            return False
+        try:
+            conn.execute(
+                """
+                INSERT INTO external_agent_job_idempotency_reservations (
+                    client_id,
+                    principal_id,
+                    idempotency_key,
+                    request_hash
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (client_id, principal_id, idempotency_key, request_hash),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return False
+
+
+def get_external_agent_job_idempotency_reservation(
+    *, client_id: str, principal_id: str, idempotency_key: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_idempotency_reservations
+        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+        """,
+        (client_id, principal_id, idempotency_key),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "client_id": row["client_id"],
+        "principal_id": row["principal_id"],
+        "idempotency_key": row["idempotency_key"],
+        "request_hash": row["request_hash"],
+        "created_at": row["created_at"],
+    }
+
+
+def delete_external_agent_job_idempotency_reservation(
+    *, client_id: str, principal_id: str, idempotency_key: str
+) -> None:
+    conn = get_connection()
+    conn.execute(
+        """
+        DELETE FROM external_agent_job_idempotency_reservations
+        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+        """,
+        (client_id, principal_id, idempotency_key),
+    )
+    conn.commit()
 
 
 def get_external_agent_job(
@@ -103,6 +199,22 @@ def get_external_agent_job_by_idempotency_key(
         WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
         """,
         (client_id, principal_id, idempotency_key),
+    ).fetchone()
+    return _row(row) if row else None
+
+
+def get_external_agent_job_by_run_id(
+    *, client_id: str, run_id: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_jobs
+        WHERE client_id = ? AND run_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (client_id, run_id),
     ).fetchone()
     return _row(row) if row else None
 
@@ -177,44 +289,60 @@ def create_external_agent_job_receipt(
     run_id: str,
     receipt_type: str,
     status: str,
+    receipt_context_hash: str,
     signature: str,
     signature_algorithm: str,
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO external_agent_job_receipts (
-            id,
-            job_id,
-            client_id,
-            principal_id,
-            run_id,
-            receipt_type,
-            status,
-            signature,
-            signature_algorithm,
-            payload_json
+    try:
+        conn.execute(
+            """
+            INSERT INTO external_agent_job_receipts (
+                id,
+                job_id,
+                client_id,
+                principal_id,
+                run_id,
+                receipt_type,
+                status,
+                receipt_context_hash,
+                signature,
+                signature_algorithm,
+                payload_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
+            """,
+            (
+                receipt_id,
+                job_id,
+                client_id,
+                principal_id,
+                run_id,
+                receipt_type,
+                status,
+                receipt_context_hash,
+                signature,
+                signature_algorithm,
+                to_json(payload) or to_json({}),
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
-        """,
-        (
-            receipt_id,
-            job_id,
-            client_id,
-            principal_id,
-            run_id,
-            receipt_type,
-            status,
-            signature,
-            signature_algorithm,
-            to_json(payload) or to_json({}),
-        ),
-    )
-    conn.commit()
-    return get_external_agent_job_receipt(
-        receipt_id=receipt_id, client_id=client_id, principal_id=principal_id
-    ) or {}
+        conn.commit()
+        return get_external_agent_job_receipt(
+            receipt_id=receipt_id, client_id=client_id, principal_id=principal_id
+        ) or {}
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        existing = get_external_agent_job_receipt_for_context_hash(
+            job_id=job_id,
+            client_id=client_id,
+            principal_id=principal_id,
+            status=status,
+            receipt_context_hash=receipt_context_hash,
+        )
+        if existing:
+            return existing
+        raise
 
 
 def list_external_agent_job_receipts(
@@ -262,6 +390,47 @@ def get_external_agent_job_receipt(
     return _receipt_row(row) if row else None
 
 
+def get_external_agent_job_receipt_for_status(
+    *, job_id: str, client_id: str, principal_id: str, status: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_receipts
+        WHERE job_id = ? AND client_id = ? AND principal_id = ? AND status = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (job_id, client_id, principal_id, status),
+    ).fetchone()
+    return _receipt_row(row) if row else None
+
+
+def get_external_agent_job_receipt_for_context_hash(
+    *,
+    job_id: str,
+    client_id: str,
+    principal_id: str,
+    status: str,
+    receipt_context_hash: str,
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_receipts
+        WHERE job_id = ?
+          AND client_id = ?
+          AND principal_id = ?
+          AND status = ?
+          AND receipt_context_hash = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (job_id, client_id, principal_id, status, receipt_context_hash),
+    ).fetchone()
+    return _receipt_row(row) if row else None
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -305,6 +474,9 @@ def _receipt_row(row) -> Dict[str, Any]:
         "run_id": row["run_id"],
         "receipt_type": row["receipt_type"],
         "status": row["status"],
+        "receipt_context_hash": row["receipt_context_hash"]
+        if "receipt_context_hash" in row.keys()
+        else None,
         "signature": row["signature"],
         "signature_algorithm": row["signature_algorithm"],
         "payload": from_json(row["payload_json"], default={}),
@@ -315,10 +487,17 @@ def _receipt_row(row) -> Dict[str, Any]:
 __all__ = [
     "create_external_agent_job_receipt",
     "create_external_agent_job",
+    "delete_external_agent_job_idempotency_reservation",
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
+    "get_external_agent_job_by_run_id",
+    "get_external_agent_job_idempotency_reservation",
     "get_external_agent_job_receipt",
+    "get_external_agent_job_receipt_for_context_hash",
+    "get_external_agent_job_receipt_for_status",
+    "IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS",
     "list_external_agent_job_receipts",
+    "reserve_external_agent_job_idempotency",
     "update_external_agent_job_receipt",
     "update_external_agent_job_status",
 ]

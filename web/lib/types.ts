@@ -1044,6 +1044,43 @@ export type AgentRunDetailResponse = {
   actions: AgentAction[];
 };
 
+export type ExternalAgentJobReceiptVerification = {
+  valid: boolean;
+  valid_signature: boolean;
+  valid_payload: boolean;
+  valid_scope: boolean;
+  key_id?: string | null;
+  signature_algorithm?: string | null;
+  receipt_payload?: Record<string, unknown>;
+  blockers: string[];
+};
+
+export type ExternalAgentJobOperatorDetail = {
+  job: {
+    id: string;
+    client_id?: string | null;
+    principal_id?: string | null;
+    agent_profile_id?: string | null;
+    idempotency_key?: string | null;
+    run_id?: string | null;
+    status?: string | null;
+    run_status?: string | null;
+    run_state?: string | null;
+    trace_id?: string | null;
+    requested_skill_id?: string | null;
+    requested_tool_id?: string | null;
+    receipt_id?: string | null;
+    receipt_type?: string | null;
+    receipt_signature_algorithm?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  };
+  run: AgentRun;
+  receipts: Record<string, unknown>[];
+  latest_receipt?: Record<string, unknown> | null;
+  verification?: ExternalAgentJobReceiptVerification | null;
+};
+
 export type AgentRunControlResponse = {
   run: AgentRun;
   action?: AgentAction;

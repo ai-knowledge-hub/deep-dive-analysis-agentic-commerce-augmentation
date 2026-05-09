@@ -88,5 +88,12 @@ def record_action_event(
             "hypothesis_id": action.get("hypothesis_id"),
             "snapshot_version": action.get("snapshot_version"),
             "metric_id": metric_id,
+            "inputs_hash": action.get("inputs_hash"),
+            "outputs_hash": action.get("outputs_hash"),
+            "registry_version": action.get("registry_version"),
+            "registry_fingerprint": action.get("registry_fingerprint"),
+            "tool_version": action.get("tool_version"),
+            "skill_version": action.get("skill_version"),
+            "receipt_id": action.get("receipt_id"),
         },
     )

@@ -36,7 +36,12 @@ USER_ID = "user-a"
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_PRINCIPAL_SIGNING_SECRET", "test-agent-secret")
+    monkeypatch.setenv("ADMIN_USER_IDS", USER_ID)
     get_settings.cache_clear()
+    monkeypatch.setattr(
+        "api.utils.tenancy.settings.admin_user_ids",
+        USER_ID,
+    )
     db_path = tmp_path / "agent-runs-api.db"
     set_database_path(db_path)
     init_db()
@@ -102,6 +107,10 @@ def _seed_run_with_events() -> tuple[dict, list[dict]]:
         )
         seeded_events.append(event)
     return run, seeded_events
+
+
+def _registry_params(**params):
+    return {"client_id": CLIENT_ID, "user_id": USER_ID, **params}
 
 
 def test_agent_run_events_endpoint_supports_filter_and_cursor(client: TestClient):
@@ -210,11 +219,18 @@ def test_agent_run_routes_enforce_client_scope(client: TestClient):
 
 
 def test_create_agent_run_persists_principal_policy_and_trace_fields(client: TestClient):
+    token = build_agent_principal_token(
+        principal_id="principal-ext-1",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="external-buyer-assistant",
+        scopes=["agent_runs:write", "agent_runs:read"],
+    )
     response = client.post(
         "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
         json={
             "client_id": CLIENT_ID,
-            "user_id": USER_ID,
             "principal_type": "external_agent",
             "principal_id": "principal-ext-1",
             "agent_profile_id": "external-buyer-assistant",
@@ -239,6 +255,7 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
 
     detail = client.get(
         f"/agent-runs/{run['id']}",
+        headers={"Authorization": f"Bearer {token}"},
         params={"client_id": CLIENT_ID, "user_id": USER_ID},
     )
     assert detail.status_code == 200
@@ -255,6 +272,7 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
 
     events = client.get(
         f"/agent-runs/{run['id']}/events",
+        headers={"Authorization": f"Bearer {token}"},
         params={"client_id": CLIENT_ID, "user_id": USER_ID},
     )
     assert events.status_code == 200
@@ -262,6 +280,43 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert event_payload["events"][0]["tool_id"] == "experiment.run_variant"
     assert event_payload["events"][0]["skill_id"] == "optimize-product-representation"
     assert event_payload["events"][0]["effect_class"] == "write_low_risk"
+
+
+def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["not_real"],
+        },
+    )
+    assert response.status_code == 400
+    assert "Unsupported allowed_capabilities: not_real" in response.json()["detail"]
+
+
+def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
+    base = {"client_id": CLIENT_ID, "user_id": USER_ID, "allowed_capabilities": ["run_variant"]}
+    bad_run_mode = client.post(
+        "/agent-runs",
+        json={**base, "run_mode": "manual"},
+    )
+    assert bad_run_mode.status_code == 400
+    assert "Unsupported run_mode: manual" in bad_run_mode.json()["detail"]
+
+    bad_policy = client.post(
+        "/agent-runs",
+        json={**base, "policy_profile_id": "unknown_profile"},
+    )
+    assert bad_policy.status_code == 400
+    assert "Unsupported policy_profile_id: unknown_profile" in bad_policy.json()["detail"]
+
+    bad_harness = client.post(
+        "/agent-runs",
+        json={**base, "harness_id": "pretend_harness"},
+    )
+    assert bad_harness.status_code == 400
+    assert "Unsupported harness_id: pretend_harness" in bad_harness.json()["detail"]
 
 
 def test_seed_skill_specs_are_available():
@@ -274,7 +329,10 @@ def test_seed_skill_specs_are_available():
 def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     client: TestClient,
 ):
-    response = client.get("/agent-runs/registry")
+    unauthorized = client.get("/agent-runs/registry")
+    assert unauthorized.status_code == 400
+
+    response = client.get("/agent-runs/registry", params=_registry_params())
     assert response.status_code == 200
     payload = response.json()
     assert payload["registry_version"] == "agent-runtime-static-v1"
@@ -284,9 +342,9 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert payload["registry_source"] == "static_code"
     assert payload["registry_status"] == "active"
     assert payload["registry_ownership_source"] == "persistent"
-    assert client.get("/agent-runs/registry").json()["registry_fingerprint"] == payload[
-        "registry_fingerprint"
-    ]
+    assert client.get(
+        "/agent-runs/registry", params=_registry_params()
+    ).json()["registry_fingerprint"] == payload["registry_fingerprint"]
     row = get_connection().execute(
         """
         SELECT registry_version, registry_fingerprint, source, status, payload_json
@@ -349,7 +407,30 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
     ]
+    assert payload["skill_ids_by_executable_tool"]["experiment.run_variant"] == [
+        "optimize-product-representation"
+    ]
     assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+    assert "run.read" in payload["declared_non_executable_skill_tools"]
+    run_read_mapping = next(
+        item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
+    )
+    assert run_read_mapping["executable"] is False
+    run_variant_tool = next(
+        tool for tool in payload["tools"] if tool["id"] == "experiment.run_variant"
+    )
+    assert run_variant_tool["executable"] is True
+    assert run_variant_tool["external_agent_contract"]["required_scopes"]["tool"] == [
+        "tool:experiment.run_variant",
+        "tools:*",
+    ]
+    assert "skill:optimize-product-representation" in run_variant_tool[
+        "external_agent_contract"
+    ]["required_scopes"]["skill"]
+    assert run_variant["external_agent_contract"]["minimal_request"] == {
+        "capability_name": "run_variant",
+        "plan_mode": "single_tool",
+    }
     assert payload["skill_ids_by_tool"]["validation.review_readiness"] == [
         "request-validation-and-ingest-result",
         "promote-and-publish-approved-copy",
@@ -362,11 +443,35 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
         ],
     }
 
+    token = build_agent_principal_token(
+        principal_id="registry-reader",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["external_agent_jobs:read"],
+    )
+    bearer_response = client.get(
+        "/agent-runs/registry",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert bearer_response.status_code == 200
+
+    missing_scope_token = build_agent_principal_token(
+        principal_id="registry-reader",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["tool:experiment.run_variant"],
+    )
+    missing_scope = client.get(
+        "/agent-runs/registry",
+        headers={"Authorization": f"Bearer {missing_scope_token}"},
+    )
+    assert missing_scope.status_code == 403
+
 
 def test_agent_runtime_registry_ownership_update_creates_new_release(
     client: TestClient,
 ):
-    first = client.get("/agent-runs/registry").json()
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
     preflight_response = client.patch(
         "/agent-runs/registry/ownership/experiment.run_variant",
         json={
@@ -429,7 +534,7 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
     assert payload["ownership"]["source"] == "operator_override"
     assert payload["registry_fingerprint"] != first["registry_fingerprint"]
 
-    refreshed = client.get("/agent-runs/registry").json()
+    refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
     run_variant = next(
         capability
         for capability in refreshed["capabilities"]
@@ -442,7 +547,7 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
 
     audit = client.get(
         "/agent-runs/registry/audit",
-        params={"registry_fingerprint": payload["registry_fingerprint"]},
+        params=_registry_params(registry_fingerprint=payload["registry_fingerprint"]),
     ).json()["events"]
     assert audit
     approval_events = [
@@ -502,10 +607,26 @@ def test_agent_runtime_registry_ownership_update_creates_new_release(
     assert missing.status_code == 404
 
 
+def test_agent_runtime_registry_ownership_update_requires_admin(
+    client: TestClient,
+):
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": "not-admin",
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 403
+
+
 def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     client: TestClient, monkeypatch
 ):
-    first = client.get("/agent-runs/registry").json()
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
     changed_contract = agent_runs_route.registry_contract_payload()
     changed_contract = {
         **changed_contract,
@@ -532,7 +653,7 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     )
     monkeypatch.setattr(agent_runs_route, "registry_fingerprint", lambda: changed_fingerprint)
 
-    changed = client.get("/agent-runs/registry").json()
+    changed = client.get("/agent-runs/registry", params=_registry_params()).json()
 
     assert changed["registry_fingerprint"] == changed_fingerprint
     assert changed["registry_status"] == "active"
@@ -560,7 +681,9 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     assert statuses[first["registry_fingerprint"]] == "retired"
     assert statuses[changed_fingerprint] == "active"
 
-    audit_response = client.get("/agent-runs/registry/audit", params={"limit": 5})
+    audit_response = client.get(
+        "/agent-runs/registry/audit", params=_registry_params(limit=5)
+    )
     assert audit_response.status_code == 200
     audit_payload = audit_response.json()
     assert audit_payload["events"][0]["registry_fingerprint"] == changed_fingerprint
@@ -570,12 +693,14 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
 
     filtered_response = client.get(
         "/agent-runs/registry/audit",
-        params={"registry_fingerprint": changed_fingerprint},
+        params=_registry_params(registry_fingerprint=changed_fingerprint),
     )
     assert filtered_response.status_code == 200
     assert len(filtered_response.json()["events"]) == 1
 
-    releases_response = client.get("/agent-runs/registry/releases")
+    releases_response = client.get(
+        "/agent-runs/registry/releases", params=_registry_params()
+    )
     assert releases_response.status_code == 200
     releases = releases_response.json()["releases"]
     assert releases[0]["registry_fingerprint"] == changed_fingerprint
@@ -589,20 +714,20 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
 
     active_response = client.get(
         "/agent-runs/registry/releases",
-        params={"status": "active"},
+        params=_registry_params(status="active"),
     )
     assert active_response.status_code == 200
     assert [item["status"] for item in active_response.json()["releases"]] == ["active"]
 
     invalid_status = client.get(
         "/agent-runs/registry/releases",
-        params={"status": "draft"},
+        params=_registry_params(status="draft"),
     )
     assert invalid_status.status_code == 400
 
     detail_response = client.get(
         f"/agent-runs/registry/releases/{changed_fingerprint}",
-        params={"audit_limit": 5},
+        params=_registry_params(audit_limit=5),
     )
     assert detail_response.status_code == 200
     release_detail = detail_response.json()["release"]
@@ -613,7 +738,10 @@ def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
     )
     assert release_detail["audit_events"][0]["registry_fingerprint"] == changed_fingerprint
 
-    missing_detail = client.get("/agent-runs/registry/releases/not-a-real-fingerprint")
+    missing_detail = client.get(
+        "/agent-runs/registry/releases/not-a-real-fingerprint",
+        params=_registry_params(),
+    )
     assert missing_detail.status_code == 404
 
 
@@ -687,7 +815,9 @@ def test_registry_pin_backfill_supports_dry_run_and_scoped_update(
     assert updated_action["skill_id"] == "optimize-product-representation"
     assert updated_action["tool_version"] == "v1"
     assert updated_action["skill_version"] == "v1"
-    audit = client.get("/agent-runs/registry/audit").json()["events"]
+    audit = client.get(
+        "/agent-runs/registry/audit", params=_registry_params()
+    ).json()["events"]
     backfill_event = next(
         item for item in audit if item["event_type"] == "registry_pin_backfill_applied"
     )

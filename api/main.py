@@ -40,7 +40,9 @@ from api.routes import agent_runs_registry as agent_runs_registry_route
 from api.routes import agent_runs_control as agent_runs_control_route
 from api.routes import agent_runs_commands as agent_runs_commands_route
 from api.routes import agent_runs as agent_runs_route
+from api.routes import external_agent_credentials as external_agent_credentials_route
 from api.routes import external_agent_jobs as external_agent_jobs_route
+from api.routes import external_agent_job_operator as external_agent_job_operator_route
 
 if FastAPI:
     app = FastAPI(title="Contextual Commerce Optimization API")
@@ -79,7 +81,9 @@ if FastAPI:
     app.include_router(agent_runs_control_route.router)
     app.include_router(agent_runs_commands_route.router)
     app.include_router(agent_runs_route.router)
+    app.include_router(external_agent_credentials_route.router)
     app.include_router(external_agent_jobs_route.router)
+    app.include_router(external_agent_job_operator_route.router)
     if replay_route.router:
         app.include_router(replay_route.router)
     if webhooks_route.router:

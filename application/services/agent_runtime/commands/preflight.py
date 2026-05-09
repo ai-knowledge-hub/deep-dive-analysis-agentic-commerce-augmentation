@@ -141,19 +141,27 @@ def _command_preflight(
                     f"Recovery capability '{requested_capability}' has no executable registry spec."
                 )
 
-    if action and spec and command_type == "retry":
+    if action and spec and command_type in {"approve", "retry"}:
         inputs = spec.normalize_inputs(action.get("inputs") or {})
-        all_actions = deps.agent_actions.list_agent_actions(
-            agent_run_id=str(run.get("id") or ""), limit=500
-        )
         try:
-            PolicyEnforcer().validate_action_execution(
-                run=run,
-                action=action,
-                spec=spec,
-                all_actions=all_actions,
-                inputs=inputs,
-            )
+            if command_type == "approve":
+                PolicyEnforcer().validate_action_approval(
+                    run=run,
+                    action=action,
+                    spec=spec,
+                    inputs=inputs,
+                )
+            else:
+                all_actions = deps.agent_actions.list_agent_actions(
+                    agent_run_id=str(run.get("id") or ""), limit=500
+                )
+                PolicyEnforcer().validate_action_execution(
+                    run=run,
+                    action=action,
+                    spec=spec,
+                    all_actions=all_actions,
+                    inputs=inputs,
+                )
         except PolicyError as exc:
             blockers.append(str(exc))
     elif action and spec:

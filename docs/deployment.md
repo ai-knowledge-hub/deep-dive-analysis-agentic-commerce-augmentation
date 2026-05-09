@@ -134,9 +134,14 @@ Required to enable provider-run flow:
 - `BACKEND_PUBLIC_URL` (public backend URL used to build callback endpoint)
 - `VALIDATION_CALLBACK_SIGNING_SECRET` (HMAC secret for callback signing/verification)
 - `REGISTRY_APPROVAL_SIGNING_SECRET` (HMAC secret for registry ownership approval receipts; falls back to `AGENT_PRINCIPAL_SIGNING_SECRET` outside production)
+- `AGENT_PRINCIPAL_SIGNING_SECRET` (HMAC secret for external/internal agent bearer tokens)
 
 Optional:
 - `VALIDATION_CALLBACK_TTL_SECONDS` (default: `900`)
+- `AGENT_PRINCIPAL_TOKEN_TTL_SECONDS` (default: `3600`)
+- `AGENT_PRINCIPAL_TOKEN_MAX_TTL_SECONDS` (default: `3600`)
+- `AGENT_PRINCIPAL_TOKEN_AUDIENCE` (default: `agent-runtime`)
+- `AGENT_PRINCIPAL_TOKEN_ISSUER` (default: `deep-dive-analysis-agentic-commerce-augmentation`)
 - `OPENAI_MCP_LAUNCH_URL` (default: `https://chatgpt.com/`)
 - `GEMINI_FUNCTION_LAUNCH_URL` (default: `https://gemini.google.com/`)
 

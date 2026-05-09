@@ -112,6 +112,22 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         item for item in payload["capabilities"] if item["name"] == "run_variant"
     )
     assert payload["registry_ownership_source"] == "persistent"
+    assert payload["skill_ids_by_executable_tool"]["experiment.run_variant"] == [
+        "optimize-product-representation"
+    ]
+    assert "run.read" in payload["declared_non_executable_skill_tools"]
+    assert next(
+        item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
+    )["executable"] is False
+    assert tool["executable"] is True
+    assert tool["external_agent_contract"]["minimal_request"] == {
+        "tool_id": "experiment.run_variant",
+        "plan_mode": "single_tool",
+    }
+    assert tool["external_agent_contract"]["required_scopes"]["tool"] == [
+        "tool:experiment.run_variant",
+        "tools:*",
+    ]
     template = next(
         item
         for item in payload["recovery_templates"]

@@ -9,6 +9,15 @@ class PolicyError(ValueError):
     pass
 
 
+_PROFILE_AUTO_EFFECT_CLASSES = {
+    "human_approval_required": set(),
+    "safe_auto": {"read", "recommend", "write_low_risk"},
+    "observe": {"read", "recommend"},
+}
+
+_GOVERNED_APPROVAL_EFFECT_CLASSES = {"external_side_effect", "write_high_risk"}
+
+
 class PolicyEnforcer:
     def validate_action_execution(
         self,
@@ -31,6 +40,21 @@ class PolicyEnforcer:
             run=run,
             all_actions=list(all_actions),
             capability_name=spec.name,
+        )
+
+    def validate_action_approval(
+        self,
+        *,
+        run: Mapping[str, Any],
+        action: Mapping[str, Any],
+        spec: CapabilitySpec,
+        inputs: Mapping[str, Any],
+    ) -> None:
+        self._assert_capability_allowed(run=run, capability_name=spec.name)
+        self._assert_approval_effect_class_allowed(
+            run=run,
+            action=action,
+            effect_class=spec.effect_class,
         )
 
     def _assert_capability_allowed(
@@ -59,10 +83,35 @@ class PolicyEnforcer:
         profile = str(run.get("policy_profile_id") or "").strip().lower()
         if not profile:
             return
-        if profile == "observe" and effect_class not in {"read", "recommend"}:
+        allowed = _PROFILE_AUTO_EFFECT_CLASSES.get(profile)
+        if allowed is None:
+            raise PolicyError(f"Unsupported policy profile '{profile}'")
+        if effect_class not in allowed:
             tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
             raise PolicyError(
-                f"Policy profile '{profile}' forbids effect class '{effect_class}' for tool '{tool_id}'"
+                f"Policy profile '{profile}' forbids auto execution of effect class '{effect_class}' for tool '{tool_id}'"
+            )
+
+    def _assert_approval_effect_class_allowed(
+        self,
+        *,
+        run: Mapping[str, Any],
+        action: Mapping[str, Any],
+        effect_class: str,
+    ) -> None:
+        profile = str(run.get("policy_profile_id") or "").strip().lower()
+        if not profile:
+            return
+        tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
+        if profile not in _PROFILE_AUTO_EFFECT_CLASSES:
+            raise PolicyError(f"Unsupported policy profile '{profile}'")
+        if profile == "observe" and effect_class not in _PROFILE_AUTO_EFFECT_CLASSES["observe"]:
+            raise PolicyError(
+                f"Policy profile '{profile}' forbids approval of effect class '{effect_class}' for tool '{tool_id}'"
+            )
+        if profile in {"human_approval_required", "safe_auto"} and effect_class in _GOVERNED_APPROVAL_EFFECT_CLASSES:
+            raise PolicyError(
+                f"Policy profile '{profile}' requires governed approval for effect class '{effect_class}' on tool '{tool_id}'"
             )
 
     def _assert_required_inputs(

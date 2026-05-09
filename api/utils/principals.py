@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,20 +39,33 @@ def build_agent_principal_token(
     exp: int | None = None,
     signing_secret: str | None = None,
 ) -> str:
-    secret = signing_secret or get_settings().agent_principal_signing_secret
+    settings = get_settings()
+    secret = signing_secret or settings.agent_principal_signing_secret
     if not secret:
         raise ValueError("AGENT_PRINCIPAL_SIGNING_SECRET is not configured")
+    now = int(time.time())
+    ttl_seconds = max(
+        1,
+        min(
+            int(settings.agent_principal_token_ttl_seconds),
+            int(settings.agent_principal_token_max_ttl_seconds),
+        ),
+    )
     payload = {
         "principal_id": principal_id,
         "client_id": client_id,
         "principal_type": principal_type,
+        "iat": now,
+        "exp": int(exp) if exp is not None else now + ttl_seconds,
+        "jti": str(uuid.uuid4()),
+        "kid": _agent_principal_token_key_id(),
+        "aud": settings.agent_principal_token_audience,
+        "iss": settings.agent_principal_token_issuer,
     }
     if agent_profile_id:
         payload["agent_profile_id"] = agent_profile_id
     if scopes:
         payload["scopes"] = list(scopes)
-    if exp is not None:
-        payload["exp"] = int(exp)
     payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )
@@ -62,6 +76,21 @@ def build_agent_principal_token(
         hashlib.sha256,
     ).hexdigest()
     return f"{payload_b64}.{signature}"
+
+
+def agent_principal_token_metadata() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "token_type": "bearer",
+        "signing_algorithm": "hmac-sha256",
+        "current_key_id": _agent_principal_token_key_id(),
+        "audience": settings.agent_principal_token_audience,
+        "issuer": settings.agent_principal_token_issuer,
+        "default_ttl_seconds": int(settings.agent_principal_token_ttl_seconds),
+        "max_ttl_seconds": int(settings.agent_principal_token_max_ttl_seconds),
+        "rotation_supported": False,
+        "issuer_managed": True,
+    }
 
 
 def resolve_principal_context(
@@ -93,10 +122,7 @@ def resolve_principal_context(
             principal_id=str(claims.get("principal_id") or "").strip(),
             client_id=token_client_id,
             user_id=user_id,
-            agent_profile_id=str(
-                claims.get("agent_profile_id") or agent_profile_id or ""
-            ).strip()
-            or None,
+            agent_profile_id=str(claims.get("agent_profile_id") or "").strip() or None,
             auth_method="bearer_token",
             scopes=tuple(
                 str(item).strip()
@@ -108,6 +134,11 @@ def resolve_principal_context(
             raise HTTPException(
                 status_code=401, detail="Agent principal token missing principal_id"
             )
+        _assert_principal_is_active(
+            principal_id=resolved.principal_id,
+            principal_type=resolved.principal_type,
+            tenant_id=resolved.client_id,
+        )
         ensure_principal(
             principal_id=resolved.principal_id,
             principal_type=resolved.principal_type,
@@ -191,6 +222,38 @@ def ensure_principal(
     conn.commit()
 
 
+def _assert_principal_is_active(
+    *, principal_id: str, principal_type: str, tenant_id: str
+) -> None:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT status, principal_type, tenant_id
+            FROM principals
+            WHERE id = ?
+            """,
+            (principal_id,),
+        )
+        .fetchone()
+    )
+    if not row:
+        return
+    if str(row["principal_type"] or "") != principal_type:
+        raise HTTPException(
+            status_code=403,
+            detail="Authenticated principal type does not match registry record",
+        )
+    row_tenant = str(row["tenant_id"] or "")
+    if row_tenant and row_tenant != tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Authenticated principal tenant does not match registry record",
+        )
+    if str(row["status"] or "").strip().lower() != "active":
+        raise HTTPException(status_code=401, detail="Agent principal is not active")
+
+
 def _default_human_principal_id(
     *, user_id: str | None, client_id: str, principal_type: str
 ) -> str:
@@ -214,7 +277,8 @@ def _bearer_token(request: Request) -> str | None:
 
 
 def _verify_agent_principal_token(token: str) -> dict[str, Any]:
-    secret = get_settings().agent_principal_signing_secret
+    settings = get_settings()
+    secret = settings.agent_principal_signing_secret
     if not secret:
         raise HTTPException(
             status_code=401, detail="Agent principal signing secret is not configured"
@@ -239,9 +303,40 @@ def _verify_agent_principal_token(token: str) -> dict[str, Any]:
             status_code=401, detail="Invalid agent principal token payload"
         ) from exc
     exp = payload.get("exp")
-    if exp is not None and int(exp) < int(time.time()):
+    if exp is None:
+        raise HTTPException(status_code=401, detail="Agent principal token missing exp")
+    now = int(time.time())
+    if int(exp) < now:
         raise HTTPException(status_code=401, detail="Expired agent principal token")
+    iat = payload.get("iat")
+    if iat is None:
+        raise HTTPException(status_code=401, detail="Agent principal token missing iat")
+    if int(iat) > now + 60:
+        raise HTTPException(
+            status_code=401, detail="Agent principal token is not yet valid"
+        )
+    max_ttl = int(settings.agent_principal_token_max_ttl_seconds)
+    if int(exp) - int(iat) > max_ttl:
+        raise HTTPException(
+            status_code=401, detail="Agent principal token TTL exceeds maximum"
+        )
+    if not str(payload.get("jti") or "").strip():
+        raise HTTPException(status_code=401, detail="Agent principal token missing jti")
+    if str(payload.get("kid") or "") != _agent_principal_token_key_id():
+        raise HTTPException(
+            status_code=401, detail="Unsupported agent principal token key"
+        )
+    if str(payload.get("aud") or "") != settings.agent_principal_token_audience:
+        raise HTTPException(
+            status_code=401, detail="Invalid agent principal token audience"
+        )
+    if str(payload.get("iss") or "") != settings.agent_principal_token_issuer:
+        raise HTTPException(status_code=401, detail="Invalid agent principal token issuer")
     return payload
+
+
+def _agent_principal_token_key_id() -> str:
+    return "agent-principal-signing-secret:v1"
 
 
 def _urlsafe_b64encode(value: bytes) -> str:
@@ -255,6 +350,7 @@ def _urlsafe_b64decode(value: str) -> bytes:
 
 __all__ = [
     "PrincipalContext",
+    "agent_principal_token_metadata",
     "build_agent_principal_token",
     "ensure_principal",
     "resolve_principal_context",
