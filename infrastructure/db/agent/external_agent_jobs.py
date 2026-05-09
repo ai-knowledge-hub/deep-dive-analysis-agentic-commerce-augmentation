@@ -66,6 +66,7 @@ def create_external_agent_job(
         conn.commit()
         return get_external_agent_job(job_id=job_id, client_id=client_id) or {}
     except sqlite3.IntegrityError:
+        conn.rollback()
         existing = get_external_agent_job_by_idempotency_key(
             client_id=client_id,
             principal_id=principal_id,
@@ -182,39 +183,51 @@ def create_external_agent_job_receipt(
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO external_agent_job_receipts (
-            id,
-            job_id,
-            client_id,
-            principal_id,
-            run_id,
-            receipt_type,
-            status,
-            signature,
-            signature_algorithm,
-            payload_json
+    try:
+        conn.execute(
+            """
+            INSERT INTO external_agent_job_receipts (
+                id,
+                job_id,
+                client_id,
+                principal_id,
+                run_id,
+                receipt_type,
+                status,
+                signature,
+                signature_algorithm,
+                payload_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
+            """,
+            (
+                receipt_id,
+                job_id,
+                client_id,
+                principal_id,
+                run_id,
+                receipt_type,
+                status,
+                signature,
+                signature_algorithm,
+                to_json(payload) or to_json({}),
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
-        """,
-        (
-            receipt_id,
-            job_id,
-            client_id,
-            principal_id,
-            run_id,
-            receipt_type,
-            status,
-            signature,
-            signature_algorithm,
-            to_json(payload) or to_json({}),
-        ),
-    )
-    conn.commit()
-    return get_external_agent_job_receipt(
-        receipt_id=receipt_id, client_id=client_id, principal_id=principal_id
-    ) or {}
+        conn.commit()
+        return get_external_agent_job_receipt(
+            receipt_id=receipt_id, client_id=client_id, principal_id=principal_id
+        ) or {}
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        existing = get_external_agent_job_receipt_for_status(
+            job_id=job_id,
+            client_id=client_id,
+            principal_id=principal_id,
+            status=status,
+        )
+        if existing:
+            return existing
+        raise
 
 
 def list_external_agent_job_receipts(
@@ -258,6 +271,22 @@ def get_external_agent_job_receipt(
         WHERE {' AND '.join(filters)}
         """,
         params,
+    ).fetchone()
+    return _receipt_row(row) if row else None
+
+
+def get_external_agent_job_receipt_for_status(
+    *, job_id: str, client_id: str, principal_id: str, status: str
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_receipts
+        WHERE job_id = ? AND client_id = ? AND principal_id = ? AND status = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (job_id, client_id, principal_id, status),
     ).fetchone()
     return _receipt_row(row) if row else None
 
@@ -318,6 +347,7 @@ __all__ = [
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
     "get_external_agent_job_receipt",
+    "get_external_agent_job_receipt_for_status",
     "list_external_agent_job_receipts",
     "update_external_agent_job_receipt",
     "update_external_agent_job_status",

@@ -616,3 +616,6 @@ ON external_agent_job_receipts(job_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_external_agent_job_receipts_principal_created
 ON external_agent_job_receipts(client_id, principal_id, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_external_agent_job_receipts_job_status
+ON external_agent_job_receipts(job_id, status);

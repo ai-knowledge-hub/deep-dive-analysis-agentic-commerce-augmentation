@@ -24,7 +24,11 @@ if "google" not in sys.modules:
 from api.composition import default_deps
 from api.main import app
 from api.utils.principals import build_agent_principal_token
-from infrastructure.db.agent.external_agent_jobs import create_external_agent_job
+from infrastructure.db.agent.external_agent_jobs import (
+    create_external_agent_job,
+    create_external_agent_job_receipt,
+    get_external_agent_job_by_idempotency_key,
+)
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
 
@@ -190,6 +194,91 @@ def test_external_agent_job_duplicate_insert_reloads_existing_job(client: TestCl
     assert second["id"] == first["id"]
 
 
+def test_external_agent_job_route_conflict_returns_existing_run(
+    client: TestClient, monkeypatch
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-route-race", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    first = created.json()
+    existing = get_external_agent_job_by_idempotency_key(
+        client_id=CLIENT_ID,
+        principal_id="agent-ext-1",
+        idempotency_key="job-route-race",
+    )
+    assert existing is not None
+    deps = default_deps()
+    run_count = len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20))
+
+    monkeypatch.setattr(
+        "api.routes.external_agent_jobs.get_external_agent_job_by_idempotency_key",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        "api.routes.external_agent_jobs.create_external_agent_job",
+        lambda **_: existing,
+    )
+    replay = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-route-race", "tool_id": "experiment.run_variant"},
+    )
+    assert replay.status_code == 200
+    payload = replay.json()
+    assert payload["idempotent_replay"] is True
+    assert payload["job"]["run_id"] == first["run"]["id"]
+    assert payload["run"]["id"] == first["run"]["id"]
+    assert len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20)) == run_count
+
+
+def test_external_agent_job_route_conflict_rechecks_request_hash(
+    client: TestClient, monkeypatch
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-route-race-mismatch",
+            "tool_id": "experiment.run_variant",
+            "objective": {"goal": "first"},
+        },
+    )
+    assert created.status_code == 200
+    existing = get_external_agent_job_by_idempotency_key(
+        client_id=CLIENT_ID,
+        principal_id="agent-ext-1",
+        idempotency_key="job-route-race-mismatch",
+    )
+    assert existing is not None
+    deps = default_deps()
+    run_count = len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20))
+
+    monkeypatch.setattr(
+        "api.routes.external_agent_jobs.get_external_agent_job_by_idempotency_key",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        "api.routes.external_agent_jobs.create_external_agent_job",
+        lambda **_: existing,
+    )
+    mismatch = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-route-race-mismatch",
+            "tool_id": "experiment.run_variant",
+            "objective": {"goal": "second"},
+        },
+    )
+    assert mismatch.status_code == 409
+    assert len(deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=20)) == run_count
+
+
 def test_external_agent_job_requires_machine_auth_and_scopes(client: TestClient):
     unauthenticated = client.post(
         "/external-agent/jobs",
@@ -339,6 +428,47 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
         headers=_headers(other_principal_token),
     )
     assert wrong_principal.status_code == 404
+
+
+def test_external_agent_job_receipt_insert_dedupes_status(client: TestClient):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-receipt-dedupe", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job = payload["job"]
+    run = payload["run"]
+    receipt_response = client.get(
+        f"/external-agent/jobs/{job['id']}/receipt", headers=_headers(token)
+    )
+    assert receipt_response.status_code == 200
+    first_receipt = receipt_response.json()["receipt"]
+
+    duplicate = create_external_agent_job_receipt(
+        receipt_id="duplicate-receipt-id",
+        job_id=job["id"],
+        client_id=CLIENT_ID,
+        principal_id="agent-ext-1",
+        run_id=run["id"],
+        receipt_type="external_agent_job_accepted",
+        status="accepted",
+        signature="duplicate-signature",
+        signature_algorithm="hmac-sha256",
+        payload={"receipt_id": "duplicate-receipt-id", "status": "accepted"},
+    )
+    assert duplicate["id"] == first_receipt["receipt_id"]
+
+    receipt_list = client.get(
+        f"/external-agent/jobs/{job['id']}/receipts", headers=_headers(token)
+    )
+    assert receipt_list.status_code == 200
+    accepted = [
+        item for item in receipt_list.json()["receipts"] if item["status"] == "accepted"
+    ]
+    assert len(accepted) == 1
 
 
 def test_external_agent_job_status_and_receipt_normalize_canceled_run(

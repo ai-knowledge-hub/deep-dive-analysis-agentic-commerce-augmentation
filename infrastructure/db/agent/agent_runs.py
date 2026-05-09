@@ -158,6 +158,19 @@ def get_agent_run(run_id: str, *, client_id: Optional[str] = None) -> Dict[str, 
     return _row(row) if row else None
 
 
+def delete_agent_run(*, run_id: str, client_id: Optional[str] = None) -> bool:
+    conn = get_connection()
+    if client_id:
+        cursor = conn.execute(
+            "DELETE FROM agent_runs WHERE id = ? AND client_id = ?",
+            (run_id, client_id),
+        )
+    else:
+        cursor = conn.execute("DELETE FROM agent_runs WHERE id = ?", (run_id,))
+    conn.commit()
+    return bool(cursor.rowcount and cursor.rowcount > 0)
+
+
 def list_agent_runs(
     *,
     client_id: str,
@@ -403,6 +416,7 @@ __all__ = [
     "create_agent_run",
     "update_agent_run",
     "get_agent_run",
+    "delete_agent_run",
     "list_agent_runs",
     "list_agent_runs_missing_registry_pins",
     "backfill_agent_run_registry_pins",

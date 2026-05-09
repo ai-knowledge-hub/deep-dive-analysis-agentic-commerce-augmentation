@@ -180,6 +180,21 @@ def create_external_agent_job_route(
         request=payload.model_dump(mode="json"),
         response=response,
     )
+    if created["request_hash"] != request_hash:
+        deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
+        raise HTTPException(
+            status_code=409,
+            detail="idempotency_key already used with a different request payload",
+        )
+    if created["run_id"] != run["id"]:
+        deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
+        existing_run = deps.agent_runs.get_agent_run(
+            run_id=created["run_id"], client_id=principal.client_id
+        )
+        if not existing_run:
+            raise HTTPException(status_code=409, detail="idempotent job run is missing")
+        job = _job_status_payload(job=created, run=existing_run)
+        return ExternalAgentJobResponse(job=job, run=existing_run, idempotent_replay=True)
     response["job_id"] = created["id"]
     created = update_external_agent_job_status(
         job_id=created["id"], status=response["status"], response=response
@@ -613,7 +628,7 @@ def _ensure_external_agent_job_receipt(
         "issued_at": datetime.now(timezone.utc).isoformat(),
     }
     signature = _sign_external_agent_job_receipt(receipt_payload)
-    create_external_agent_job_receipt(
+    receipt_row = create_external_agent_job_receipt(
         receipt_id=receipt_payload["receipt_id"],
         job_id=job["id"],
         client_id=job["client_id"],
@@ -625,12 +640,15 @@ def _ensure_external_agent_job_receipt(
         signature_algorithm="hmac-sha256",
         payload=receipt_payload,
     )
+    receipt_payload = receipt_row.get("payload") or receipt_payload
+    signature = receipt_row.get("signature") or signature
     stored = update_external_agent_job_receipt(
         job_id=job["id"],
-        receipt_id=receipt_payload["receipt_id"],
-        receipt_type=receipt_payload["receipt_type"],
+        receipt_id=receipt_row.get("id") or receipt_payload["receipt_id"],
+        receipt_type=receipt_row.get("receipt_type") or receipt_payload["receipt_type"],
         receipt_signature=signature,
-        receipt_signature_algorithm="hmac-sha256",
+        receipt_signature_algorithm=receipt_row.get("signature_algorithm")
+        or "hmac-sha256",
         receipt_payload=receipt_payload,
     )
     job.update(stored or {})
