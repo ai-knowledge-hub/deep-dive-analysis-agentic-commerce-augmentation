@@ -382,7 +382,7 @@ def _diff_registry_payload(
     previous: Dict[str, Any], current: Dict[str, Any]
 ) -> Dict[str, Any]:
     diff: Dict[str, Any] = {}
-    for key in ("skills", "tools", "capabilities", "policy_profiles"):
+    for key in ("skills", "tools", "capabilities", "policy_profiles", "harness_profiles"):
         previous_items = _items_by_identity(previous.get(key))
         current_items = _items_by_identity(current.get(key))
         previous_ids = set(previous_items)
@@ -467,6 +467,7 @@ def _release_payload_summary(
             "tools": len(payload.get("tools") or []),
             "capabilities": len(payload.get("capabilities") or []),
             "policy_profiles": len(payload.get("policy_profiles") or []),
+            "harness_profiles": len(payload.get("harness_profiles") or []),
         },
     }
 

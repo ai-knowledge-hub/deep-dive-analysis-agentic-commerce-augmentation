@@ -1203,6 +1203,22 @@ export type AgentRuntimePolicyProfile = {
   auto_effect_classes: string[];
 };
 
+export type AgentRuntimeHarnessProfile = {
+  id: string;
+  name: string;
+  description: string;
+  default_run_mode: string;
+  default_policy_profile_id: string;
+  allowed_run_modes?: string[];
+  allowed_policy_profile_ids?: string[];
+  planner_mode?: string;
+  retry_strategy?: string;
+  fallback_order?: string[];
+  approval_strategy?: string;
+  memory_policy?: string;
+  stopping_conditions?: string[];
+};
+
 export type AgentRuntimeRecoveryTemplate = {
   id: string;
   capability_name: string;
@@ -1236,6 +1252,7 @@ export type AgentRuntimeRegistryResponse = {
   >;
   recovery_templates?: AgentRuntimeRecoveryTemplate[];
   policy_profiles: AgentRuntimePolicyProfile[];
+  harness_profiles?: AgentRuntimeHarnessProfile[];
 };
 
 export type AgentRegistryToolOwnership = {
@@ -1363,6 +1380,7 @@ export type AgentRegistryRelease = {
     tools: number;
     capabilities: number;
     policy_profiles: number;
+    harness_profiles?: number;
   };
 };
 
@@ -1374,6 +1392,7 @@ export type AgentRegistryReleaseDetail = AgentRegistryRelease & {
     capabilities?: AgentRuntimeCapabilitySpec[];
     skill_ids_by_tool?: Record<string, string[]>;
     policy_profiles?: AgentRuntimePolicyProfile[];
+    harness_profiles?: AgentRuntimeHarnessProfile[];
   };
   audit_events: AgentRegistryAuditEvent[];
 };

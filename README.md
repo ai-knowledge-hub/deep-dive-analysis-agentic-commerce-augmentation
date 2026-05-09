@@ -352,11 +352,12 @@ Completed foundation:
 - Agent runtime persistence, policy profiles, skills/tools registry, registry release/audit trail, command preflight, retries, structured recovery proposals, compensating recommendations, and control-plane surfaces.
 - Backend cleanup has split the agent runtime into `capabilities/`, `commands/`, `registry/`, and `runtime/` subpackages.
 - Command routes are thin HTTP adapters; command orchestration lives in `application/services/agent_runtime/commands/service.py`.
+- Harness profiles now define default run mode, policy posture, fallback/retry/memory strategy, and stopping conditions; run creation applies default harnesses from agent profiles and rejects mismatched autonomy posture.
 - Primary operator surfaces now use the flattened control-plane visual language; the current user guide lives in `docs/operator-experience.md`.
 
 Remaining build tracks:
 - External-agent job APIs with idempotency, retry-safe responses, scoped credentials, and signed execution receipts.
-- Harness profiles that define planner mode, retry posture, fallback order, approval strategy, memory policy, and stopping conditions.
+- Persistent tenant-specific harness/agent-profile defaults plus harness-guided recovery behavior.
 - Real ACP/UCP/browser/CLI fallback execution adapters with narrow permissions and policy review for external side effects.
 - Control-plane UX simplification so Inbox/Runs are primary, Lab is advanced, duplicate dashboards shrink, and risky work flows through Interventions.
 - Continued source hygiene on large frontend pages and remaining hotspots, guarded by bloat and architecture checks.

@@ -25,7 +25,7 @@ class ExternalAgentJobCreateRequest(BaseModel):
     harness_id: Optional[str] = None
     policy_profile_id: Optional[str] = None
     requires_approval: bool = True
-    run_mode: str = "plan_only"
+    run_mode: Optional[str] = None
     plan_mode: Optional[str] = None
     state: str = "battery_ready"
 

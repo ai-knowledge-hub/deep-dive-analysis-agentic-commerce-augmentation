@@ -282,6 +282,29 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert event_payload["events"][0]["effect_class"] == "write_low_risk"
 
 
+def test_create_agent_run_applies_agent_profile_harness_defaults(client: TestClient):
+    token = build_agent_principal_token(
+        principal_id="principal-ext-harness-default",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="external-buyer-assistant",
+        scopes=["agent_runs:write"],
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["harness_id"] == "safe_autonomy_b2b"
+    assert run["run_mode"] == "auto_execute_safe"
+    assert run["policy_profile_id"] == "safe_auto"
+
+
 def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
     response = client.post(
         "/agent-runs",
@@ -317,6 +340,20 @@ def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
     )
     assert bad_harness.status_code == 400
     assert "Unsupported harness_id: pretend_harness" in bad_harness.json()["detail"]
+
+    bad_harness_mode = client.post(
+        "/agent-runs",
+        json={
+            **base,
+            "harness_id": "safe_autonomy_b2b",
+            "run_mode": "plan_only",
+        },
+    )
+    assert bad_harness_mode.status_code == 400
+    assert (
+        "Harness 'safe_autonomy_b2b' does not allow run_mode: plan_only"
+        in bad_harness_mode.json()["detail"]
+    )
 
 
 def test_seed_skill_specs_are_available():
@@ -361,10 +398,17 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     tool_ids = {tool["id"] for tool in payload["tools"]}
     skill_ids = {skill["id"] for skill in payload["skills"]}
     policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
+    harness_ids = {profile["id"] for profile in payload["harness_profiles"]}
 
     assert "experiment.run_variant" in tool_ids
     assert "optimize-product-representation" in skill_ids
     assert "safe_auto" in policy_ids
+    assert "safe_autonomy_b2b" in harness_ids
+    safe_harness = next(
+        profile for profile in payload["harness_profiles"] if profile["id"] == "safe_autonomy_b2b"
+    )
+    assert safe_harness["default_run_mode"] == "auto_execute_safe"
+    assert safe_harness["retry_strategy"] == "last_safe_checkpoint"
     run_variant = next(
         capability
         for capability in payload["capabilities"]
@@ -1332,7 +1376,6 @@ def test_create_agent_run_resolves_machine_principal_from_bearer_token(
         headers={"Authorization": f"Bearer {token}"},
         json={
             "allowed_capabilities": ["seed_hypotheses"],
-            "run_mode": "plan_only",
         },
     )
     assert response.status_code == 200
@@ -1341,6 +1384,8 @@ def test_create_agent_run_resolves_machine_principal_from_bearer_token(
     assert run["principal_id"] == "principal-ext-2"
     assert run["agent_profile_id"] == "external-buyer-assistant"
     assert run["client_id"] == CLIENT_ID
+    assert run["harness_id"] == "safe_autonomy_b2b"
+    assert run["run_mode"] == "auto_execute_safe"
 
     principal_row = get_connection().execute(
         "SELECT * FROM principals WHERE id = ?",

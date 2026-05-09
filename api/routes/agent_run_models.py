@@ -23,7 +23,7 @@ class AgentRunCreateRequest(BaseModel):
     budgets: Dict[str, Any] = Field(default_factory=dict)
     approval_policy: Dict[str, Any] = Field(default_factory=dict)
     requires_approval: bool = True
-    run_mode: str = "plan_only"
+    run_mode: Optional[str] = None
     state: str = "battery_ready"
     status: str = "planned"
 

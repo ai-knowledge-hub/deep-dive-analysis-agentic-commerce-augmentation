@@ -21,6 +21,10 @@ type AllowedRuntimeTool = {
   tool: AgentRuntimeToolSpec | null;
 };
 
+function formatRegistryValue(value?: string | null) {
+  return String(value || "not set").replaceAll("_", " ");
+}
+
 type Props = {
   selectedRun: AgentRun;
   runtimeRegistry: AgentRuntimeRegistryResponse | null;
@@ -88,6 +92,10 @@ export function RegistryPanel({
   onVerifyRegistryApprovalReceipt,
   onRunRegistryBackfill,
 }: Props) {
+  const activeHarness =
+    runtimeRegistry?.harness_profiles?.find(
+      (profile) => profile.id === selectedRun.harness_id,
+    ) ?? null;
   return (
     <section className="control-section registry-panel">
       <div className="control-section__header">
@@ -110,6 +118,9 @@ export function RegistryPanel({
         </span>
         <span className="control-chip">
           Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
+        </span>
+        <span className="control-chip">
+          Harness: {activeHarness?.name ?? selectedRun.harness_id ?? "operator supervised"}
         </span>
         <span className="control-chip">
           Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
@@ -144,6 +155,52 @@ export function RegistryPanel({
           </span>
         ) : null}
       </div>
+
+      <section className="control-section">
+        <div className="control-section__header">
+          <div>
+            <span className="control-section__eyebrow">Harness</span>
+            <h4 className="control-section__title">Execution posture</h4>
+          </div>
+          <span className="control-chip">
+            {activeHarness?.id ?? selectedRun.harness_id ?? "default"}
+          </span>
+        </div>
+        {activeHarness ? (
+          <>
+            <p className="panel__muted">{activeHarness.description}</p>
+            <div className="panel__meta-strip panel__meta-strip--flat">
+              <div>
+                <strong>Planner</strong>: {formatRegistryValue(activeHarness.planner_mode)}
+              </div>
+              <div>
+                <strong>Retry</strong>: {formatRegistryValue(activeHarness.retry_strategy)}
+              </div>
+              <div>
+                <strong>Approval</strong>: {formatRegistryValue(activeHarness.approval_strategy)}
+              </div>
+              <div>
+                <strong>Memory</strong>: {formatRegistryValue(activeHarness.memory_policy)}
+              </div>
+              <div>
+                <strong>Fallback</strong>:{" "}
+                {(activeHarness.fallback_order ?? []).map(formatRegistryValue).join(" -> ") ||
+                  "not set"}
+              </div>
+              <div>
+                <strong>Stops</strong>:{" "}
+                {(activeHarness.stopping_conditions ?? [])
+                  .map(formatRegistryValue)
+                  .join(" · ") || "not set"}
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="panel__muted">
+            Harness metadata is not available in the active registry payload yet.
+          </p>
+        )}
+      </section>
 
       <section className="control-section">
         <div className="control-section__header">
