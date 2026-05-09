@@ -20,6 +20,7 @@ from application.services.agent_runtime.registry.catalog import (
     get_capability_spec,
     get_tool_spec,
     list_capability_specs,
+    list_harness_profiles,
     list_policy_profiles,
     list_recovery_templates,
     list_tool_specs,
@@ -83,6 +84,7 @@ def registry_contract_payload(
         "skill_selection_by_tool": skill_selection_by_tool,
         "recovery_templates": list_recovery_templates(),
         "policy_profiles": list_policy_profiles(),
+        "harness_profiles": list_harness_profiles(),
     }
 
 

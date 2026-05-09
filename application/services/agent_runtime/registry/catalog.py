@@ -10,6 +10,7 @@ from application.services.agent_runtime.agent_first import (
 
 
 REGISTRY_VERSION = "agent-runtime-static-v1"
+SUPPORTED_RUN_MODES = ("plan_only", "auto_execute_safe")
 
 
 @dataclass(frozen=True)
@@ -435,6 +436,52 @@ def list_policy_profiles() -> list[Dict[str, Any]]:
             "auto_effect_classes": ["read", "recommend"],
         },
     ]
+
+
+def policy_profile_supported(profile_id: str | None) -> bool:
+    if not profile_id:
+        return False
+    return str(profile_id).strip().lower() in {
+        profile["id"] for profile in list_policy_profiles()
+    }
+
+
+def run_mode_supported(run_mode: str | None) -> bool:
+    return str(run_mode or "").strip().lower() in set(SUPPORTED_RUN_MODES)
+
+
+def list_harness_profiles() -> list[Dict[str, Any]]:
+    return [
+        {
+            "id": "operator_supervised",
+            "name": "Operator Supervised",
+            "description": "Plan-first harness for human-reviewed execution.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "human_approval_required",
+        },
+        {
+            "id": "safe_autonomy_b2b",
+            "name": "Safe Autonomy B2B",
+            "description": "Bounded external-agent harness for approved low-risk work.",
+            "default_run_mode": "auto_execute_safe",
+            "default_policy_profile_id": "safe_auto",
+        },
+        {
+            "id": "observe_only",
+            "name": "Observe Only",
+            "description": "Read/recommend-only harness for audit and explanation flows.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "observe",
+        },
+    ]
+
+
+def harness_profile_supported(harness_id: str | None) -> bool:
+    if not harness_id:
+        return True
+    return str(harness_id).strip() in {
+        profile["id"] for profile in list_harness_profiles()
+    }
 
 
 def recovery_template_for_capability(capability_name: str) -> Dict[str, Any] | None:

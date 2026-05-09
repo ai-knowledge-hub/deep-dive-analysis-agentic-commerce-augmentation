@@ -19,6 +19,9 @@ from application.services.agent_runtime.commands.recovery import (
 )
 from application.services.agent_runtime.registry import (
     get_capability_spec,
+    harness_profile_supported,
+    policy_profile_supported,
+    run_mode_supported,
     version_context_for_capability,
 )
 
@@ -55,9 +58,17 @@ def create_agent_run_with_initial_plan(
 ) -> Dict[str, Any]:
     _validate_plan_capabilities(allowed_capabilities or [])
     normalized_run_mode = str(run_mode or "plan_only").strip().lower()
+    if not run_mode_supported(normalized_run_mode):
+        raise AgentRunPlanError(f"Unsupported run_mode: {normalized_run_mode}")
     resolved_policy_profile_id = policy_profile_id or policy_profile_for_run_mode(
         normalized_run_mode
     )
+    if not policy_profile_supported(resolved_policy_profile_id):
+        raise AgentRunPlanError(
+            f"Unsupported policy_profile_id: {resolved_policy_profile_id}"
+        )
+    if not harness_profile_supported(harness_id):
+        raise AgentRunPlanError(f"Unsupported harness_id: {harness_id}")
     trace_id = new_trace_id()
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,

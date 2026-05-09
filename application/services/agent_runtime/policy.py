@@ -85,7 +85,7 @@ class PolicyEnforcer:
             return
         allowed = _PROFILE_AUTO_EFFECT_CLASSES.get(profile)
         if allowed is None:
-            return
+            raise PolicyError(f"Unsupported policy profile '{profile}'")
         if effect_class not in allowed:
             tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
             raise PolicyError(
@@ -103,6 +103,8 @@ class PolicyEnforcer:
         if not profile:
             return
         tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
+        if profile not in _PROFILE_AUTO_EFFECT_CLASSES:
+            raise PolicyError(f"Unsupported policy profile '{profile}'")
         if profile == "observe" and effect_class not in _PROFILE_AUTO_EFFECT_CLASSES["observe"]:
             raise PolicyError(
                 f"Policy profile '{profile}' forbids approval of effect class '{effect_class}' for tool '{tool_id}'"

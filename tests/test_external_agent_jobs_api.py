@@ -223,6 +223,37 @@ def test_external_agent_job_action_uses_requested_skill_lineage(
     assert actions[0]["skill_id"] == "promote-and-publish-approved-copy"
 
 
+def test_external_agent_job_rejects_unknown_profiles(client: TestClient):
+    token = _token()
+    base = {
+        "idempotency_key": "job-bad-runtime-profile",
+        "tool_id": "experiment.run_variant",
+    }
+    bad_run_mode = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={**base, "run_mode": "manual"},
+    )
+    assert bad_run_mode.status_code == 400
+    assert "Unsupported run_mode: manual" in bad_run_mode.json()["detail"]
+
+    bad_policy = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={**base, "idempotency_key": "job-bad-policy", "policy_profile_id": "unknown"},
+    )
+    assert bad_policy.status_code == 400
+    assert "Unsupported policy_profile_id: unknown" in bad_policy.json()["detail"]
+
+    bad_harness = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={**base, "idempotency_key": "job-bad-harness", "harness_id": "pretend"},
+    )
+    assert bad_harness.status_code == 400
+    assert "Unsupported harness_id: pretend" in bad_harness.json()["detail"]
+
+
 def test_external_agent_job_rejects_idempotency_payload_mismatch(client: TestClient):
     token = _token()
     first = client.post(

@@ -175,3 +175,29 @@ def test_human_approval_required_allows_low_risk_approval_not_execution():
             all_actions=[],
             inputs={"experiment_id": "exp-1"},
         )
+
+
+def test_policy_rejects_unknown_policy_profile():
+    enforcer = PolicyEnforcer()
+    spec = get_capability_spec("run_variant")
+    assert spec is not None
+    run = {
+        "allowed_capabilities": ["run_variant"],
+        "policy_profile_id": "unknown_profile",
+        "budgets": {},
+    }
+    with pytest.raises(PolicyError, match="Unsupported policy profile"):
+        enforcer.validate_action_execution(
+            run=run,
+            action={"id": "a7", "tool_id": spec.tool_id},
+            spec=spec,
+            all_actions=[],
+            inputs={"experiment_id": "exp-1"},
+        )
+    with pytest.raises(PolicyError, match="Unsupported policy profile"):
+        enforcer.validate_action_approval(
+            run=run,
+            action={"id": "a7", "tool_id": spec.tool_id},
+            spec=spec,
+            inputs={"experiment_id": "exp-1"},
+        )

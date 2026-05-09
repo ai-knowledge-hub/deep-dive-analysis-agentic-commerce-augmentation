@@ -21,6 +21,7 @@ from application.services.agent_runtime.policy import PolicyEnforcer, PolicyErro
 from application.services.agent_runtime.registry import (
     get_capability_spec,
     next_state_for_capability,
+    run_mode_supported,
     validate_outputs,
 )
 
@@ -75,7 +76,9 @@ class AgentRuntimeService:
     def start_run(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
         self._assert_not_terminal(run, action="started")
-        run_mode = str(run.get("run_mode") or "plan_only")
+        run_mode = str(run.get("run_mode") or "plan_only").strip().lower()
+        if not run_mode_supported(run_mode):
+            raise AgentRuntimeError(f"Unsupported run_mode: {run_mode}")
         if run_mode == "plan_only":
             updated = self._deps.agent_runs.update_agent_run(
                 run_id=run_id,
@@ -138,7 +141,9 @@ class AgentRuntimeService:
 
     def step_once(self, *, run_id: str, user_id: Optional[str]) -> RuntimeResult:
         run = self._require_run(run_id)
-        run_mode = str(run.get("run_mode") or "plan_only")
+        run_mode = str(run.get("run_mode") or "plan_only").strip().lower()
+        if not run_mode_supported(run_mode):
+            raise AgentRuntimeError(f"Unsupported run_mode: {run_mode}")
         if run_mode == "plan_only":
             raise PlanOnlyModeError("Run is plan-only. Switch mode to execute steps.")
         if self._normalized_status(run) in _NON_EXECUTABLE_STATUSES:

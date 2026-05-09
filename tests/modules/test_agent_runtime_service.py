@@ -381,6 +381,29 @@ def test_runtime_lifecycle_rejects_terminal_run_transitions(tmp_path):
     assert unchanged["status"] == "completed"
 
 
+def test_runtime_rejects_unknown_run_mode(tmp_path):
+    db_path = tmp_path / "agent-runtime-unknown-run-mode.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="manual",
+        status="planned",
+    )
+    _add_approved_action(deps=deps, run_id=run["id"])
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="Unsupported run_mode"):
+        runtime.start_run(run_id=run["id"])
+    with pytest.raises(AgentRuntimeError, match="Unsupported run_mode"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    unchanged = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert unchanged is not None
+    assert unchanged["status"] == "planned"
+
+
 def test_decide_agent_action_rejects_high_risk_approval_under_safe_auto(tmp_path):
     db_path = tmp_path / "agent-runtime-high-risk-approval.db"
     set_database_path(db_path)

@@ -295,6 +295,30 @@ def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
     assert "Unsupported allowed_capabilities: not_real" in response.json()["detail"]
 
 
+def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
+    base = {"client_id": CLIENT_ID, "user_id": USER_ID, "allowed_capabilities": ["run_variant"]}
+    bad_run_mode = client.post(
+        "/agent-runs",
+        json={**base, "run_mode": "manual"},
+    )
+    assert bad_run_mode.status_code == 400
+    assert "Unsupported run_mode: manual" in bad_run_mode.json()["detail"]
+
+    bad_policy = client.post(
+        "/agent-runs",
+        json={**base, "policy_profile_id": "unknown_profile"},
+    )
+    assert bad_policy.status_code == 400
+    assert "Unsupported policy_profile_id: unknown_profile" in bad_policy.json()["detail"]
+
+    bad_harness = client.post(
+        "/agent-runs",
+        json={**base, "harness_id": "pretend_harness"},
+    )
+    assert bad_harness.status_code == 400
+    assert "Unsupported harness_id: pretend_harness" in bad_harness.json()["detail"]
+
+
 def test_seed_skill_specs_are_available():
     skills = {skill.id for skill in list_skill_specs()}
     assert "discover-protocol-candidates" in skills
