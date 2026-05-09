@@ -192,8 +192,6 @@ Example response:
 }
 ```
 
-## Get Job Events
-
 ## List Job Receipts
 
 Endpoint:
@@ -211,6 +209,23 @@ Behavior:
 - Each receipt item is the signed payload plus `signature` and `signature_algorithm`.
 
 Use this endpoint when an external assistant needs to prove the job moved from `accepted` to a later terminal state.
+
+## Get Job Activity
+
+Endpoint:
+
+```http
+GET /external-agent/jobs/{job_id}/activity
+Authorization: Bearer <agent-principal-token>
+```
+
+Behavior:
+
+- Only the creating principal can read the activity projection.
+- The response combines job creation, signed receipts, and linked run events into one chronological `items` list.
+- Items are normalized as `job`, `receipt`, or `run_event` so external assistants do not have to stitch multiple endpoints together.
+
+Use this endpoint for machine-friendly progress narration and polling.
 
 ## Get Job Events
 
@@ -235,6 +250,7 @@ Implemented now:
 - `GET /external-agent/jobs/{job_id}`
 - `GET /external-agent/jobs/{job_id}/receipt`
 - `GET /external-agent/jobs/{job_id}/receipts`
+- `GET /external-agent/jobs/{job_id}/activity`
 - `GET /external-agent/jobs/{job_id}/events`
 - machine-principal auth requirement
 - idempotent create/replay behavior
@@ -244,11 +260,12 @@ Implemented now:
 - scoped status reads
 - signed latest-status receipts
 - historical receipt ledger
+- job activity projection across job, receipt, and run-event items
 - scoped linked-run event reads
 
 Still to build:
 
-- richer external-agent job event projections beyond linked run events
+- richer domain-specific activity summaries beyond normalized event projection
 - full harness-profile enforcement
 - scoped credential management UI/API
 - production-grade tool permission registry instead of token-scope strings only

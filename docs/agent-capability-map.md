@@ -14,7 +14,7 @@ This document maps the platform narrative verbs to the agents, skills, tools, an
 | Simulations drift | Experiment/runtime agent loop | `retrieval.freeze_protocol`, `experiment.run_control_baseline`, `experiment.run_variant` | Implemented mitigation: frozen retrieval snapshots |
 | Validation jobs fail | `Request Validation And Ingest Result` skill plus `Triage Failed Run` skill | `validation.request_synthetic`, `validation.review_readiness`, `run.read`, `event.read`, `policy.inspect`, `run.retry_safe` | Validation implemented; recovery flow partly implemented |
 | Policy risks appear | Runtime policy plus operator preflight system | `policy.recommend_next_action`, command preflight, approval/reject commands, Interventions UI | Implemented core guardrails |
-| External agents may call the platform | External-agent principal plus job/run API | `POST /external-agent/jobs`, `GET /external-agent/jobs/{job_id}`, `GET /external-agent/jobs/{job_id}/receipt`, `GET /external-agent/jobs/{job_id}/receipts`, `GET /external-agent/jobs/{job_id}/events`, `GET /agent-runs/registry`, scoped principal resolution, registry-pinned skills/tools | First idempotent job facade, signed receipt history, and scoped event feed implemented |
+| External agents may call the platform | External-agent principal plus job/run API | `POST /external-agent/jobs`, `GET /external-agent/jobs/{job_id}`, `GET /external-agent/jobs/{job_id}/receipt`, `GET /external-agent/jobs/{job_id}/receipts`, `GET /external-agent/jobs/{job_id}/activity`, `GET /external-agent/jobs/{job_id}/events`, `GET /agent-runs/registry`, scoped principal resolution, registry-pinned skills/tools | First idempotent job facade, signed receipt history, scoped event feed, and normalized activity projection implemented |
 
 ## Application Agents
 
@@ -60,7 +60,7 @@ Some skills and tool families are already represented in the platform language b
 | --- | --- | --- |
 | `run-safe-browser-fallback-check` | Declared skill for governed browser fallback verification. | Build narrow browser adapters, permission scopes, receipts, and policy review gates. |
 | ACP/UCP execution tools | Protocol discovery/readiness exists, but real execution is still placeholder-heavy. | Replace mocks with concrete ACP/UCP retrieval and execution adapters. |
-| External-agent job contracts | Idempotent job create/status facade exists, links jobs to agent runs, signs latest-status receipts, stores receipt history, and exposes scoped linked-run events. | Add richer scoped credentials, job-specific event projections, and retry-safe contracts for more endpoints. |
+| External-agent job contracts | Idempotent job create/status facade exists, links jobs to agent runs, signs latest-status receipts, stores receipt history, exposes scoped linked-run events, and projects normalized activity. | Add richer scoped credentials, domain-specific activity summaries, and retry-safe contracts for more endpoints. |
 | Harness profiles | `harness_id` is stored on runs. | Make harnesses behavior-defining for planner mode, retries, fallback order, approval strategy, memory policy, and stopping conditions. |
 
 ## How To Use This Map

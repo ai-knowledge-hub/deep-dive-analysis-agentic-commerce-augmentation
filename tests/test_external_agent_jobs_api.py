@@ -260,6 +260,45 @@ def test_external_agent_job_events_are_scoped_to_creating_principal(
     assert wrong_principal.status_code == 404
 
 
+def test_external_agent_job_activity_projects_job_receipts_and_run_events(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-activity", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    job_id = created.json()["job"]["id"]
+
+    receipt_response = client.get(
+        f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
+    )
+    assert receipt_response.status_code == 200
+
+    activity = client.get(
+        f"/external-agent/jobs/{job_id}/activity", headers=_headers(token)
+    )
+    assert activity.status_code == 200
+    payload = activity.json()
+    assert payload["summary"]["status"] == "accepted"
+    assert payload["summary"]["receipt_count"] >= 1
+    assert payload["summary"]["event_count"] >= 1
+    item_types = {item["type"] for item in payload["items"]}
+    assert {"job", "receipt", "run_event"}.issubset(item_types)
+    run_event = next(item for item in payload["items"] if item["type"] == "run_event")
+    assert run_event["subtype"] == "action_proposed"
+    assert run_event["tool_id"] == "experiment.run_variant"
+
+    other_principal_token = _token(principal_id="agent-ext-activity-other")
+    wrong_principal = client.get(
+        f"/external-agent/jobs/{job_id}/activity",
+        headers=_headers(other_principal_token),
+    )
+    assert wrong_principal.status_code == 404
+
+
 def _valid_signature(receipt: dict, secret: str) -> bool:
     signature = receipt["signature"]
     payload_b64, provided_signature = signature.rsplit(".", 1)

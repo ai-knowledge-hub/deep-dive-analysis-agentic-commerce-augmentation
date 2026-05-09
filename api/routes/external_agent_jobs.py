@@ -81,6 +81,13 @@ class ExternalAgentJobReceiptListResponse(BaseModel):
     receipts: List[Dict[str, Any]]
 
 
+class ExternalAgentJobActivityResponse(BaseModel):
+    job: Dict[str, Any]
+    summary: Dict[str, Any]
+    items: List[Dict[str, Any]]
+    page: Dict[str, Any]
+
+
 @router.post("")
 def create_external_agent_job_route(
     payload: ExternalAgentJobCreateRequest,
@@ -271,6 +278,58 @@ def list_external_agent_job_receipts_route(
         reverse=True,
     )
     return ExternalAgentJobReceiptListResponse(receipts=receipts)
+
+
+@router.get("/{job_id}/activity")
+def get_external_agent_job_activity_route(
+    job_id: str,
+    request: Request,
+    limit: int = 100,
+    deps: AppDeps = Depends(_deps),
+) -> ExternalAgentJobActivityResponse:
+    principal = _require_external_agent_principal(request=request)
+    _require_any_scope(
+        principal,
+        "external_agent_jobs:read",
+        "external_agent_jobs:write",
+        "agent_runs:read",
+        "agent_runs:write",
+    )
+    job, run = _require_scoped_job_and_run(
+        deps=deps, job_id=job_id, principal=principal
+    )
+    _ensure_external_agent_job_receipt(job=job, run=run)
+    receipt_rows = list_external_agent_job_receipts(
+        job_id=job_id,
+        client_id=principal.client_id,
+        principal_id=principal.principal_id,
+        limit=limit,
+    )
+    page = list_agent_run_events_page(
+        deps=deps,
+        run_id=job["run_id"],
+        client_id=principal.client_id,
+        limit=max(1, min(int(limit), 2000)),
+        event_type="all",
+    ).to_dict()
+    items = _external_agent_activity_items(
+        job=job,
+        run=run,
+        receipts=receipt_rows,
+        events=page["events"],
+    )
+    return ExternalAgentJobActivityResponse(
+        job=_job_status_payload(job=job, run=run),
+        summary={
+            "status": _job_status_from_run(run),
+            "run_id": run.get("id"),
+            "trace_id": job.get("trace_id") or run.get("trace_id"),
+            "receipt_count": len(receipt_rows),
+            "event_count": len(page["events"]),
+        },
+        items=items,
+        page=page["page"],
+    )
 
 
 @router.get("/{job_id}/events")
@@ -534,6 +593,63 @@ def _ensure_external_agent_job_receipt(
         "signature": signature,
         "signature_algorithm": "hmac-sha256",
     }
+
+
+def _external_agent_activity_items(
+    *,
+    job: Dict[str, Any],
+    run: Dict[str, Any],
+    receipts: List[Dict[str, Any]],
+    events: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = [
+        {
+            "type": "job",
+            "subtype": "external_agent_job_created",
+            "status": job.get("status"),
+            "timestamp": job.get("created_at"),
+            "job_id": job.get("id"),
+            "run_id": job.get("run_id"),
+            "trace_id": job.get("trace_id") or run.get("trace_id"),
+        }
+    ]
+    for receipt in receipts:
+        payload = receipt.get("payload") or {}
+        items.append(
+            {
+                "type": "receipt",
+                "subtype": payload.get("receipt_type") or receipt.get("receipt_type"),
+                "status": payload.get("status") or receipt.get("status"),
+                "timestamp": payload.get("issued_at") or receipt.get("created_at"),
+                "job_id": payload.get("job_id") or receipt.get("job_id"),
+                "run_id": payload.get("run_id") or receipt.get("run_id"),
+                "trace_id": payload.get("trace_id"),
+                "receipt_id": payload.get("receipt_id") or receipt.get("id"),
+                "signature_algorithm": receipt.get("signature_algorithm"),
+            }
+        )
+    for event in events:
+        items.append(
+            {
+                "type": "run_event",
+                "subtype": event.get("event_type"),
+                "status": event.get("status"),
+                "timestamp": event.get("timestamp"),
+                "job_id": job.get("id"),
+                "run_id": event.get("run_id") or job.get("run_id"),
+                "trace_id": event.get("trace_id") or job.get("trace_id"),
+                "event_id": event.get("id"),
+                "action_id": event.get("action_id"),
+                "tool_id": event.get("tool_id"),
+                "skill_id": event.get("skill_id"),
+                "capability_name": event.get("capability_name"),
+                "note": event.get("note"),
+            }
+        )
+    return sorted(
+        items,
+        key=lambda item: str(item.get("timestamp") or ""),
+    )
 
 
 def _sign_external_agent_job_receipt(payload: Dict[str, Any]) -> str:
