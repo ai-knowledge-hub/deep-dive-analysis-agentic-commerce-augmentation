@@ -157,6 +157,100 @@ def update_external_agent_job_receipt(
     return get_external_agent_job(job_id=job_id)
 
 
+def create_external_agent_job_receipt(
+    *,
+    receipt_id: str,
+    job_id: str,
+    client_id: str,
+    principal_id: str,
+    run_id: str,
+    receipt_type: str,
+    status: str,
+    signature: str,
+    signature_algorithm: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO external_agent_job_receipts (
+            id,
+            job_id,
+            client_id,
+            principal_id,
+            run_id,
+            receipt_type,
+            status,
+            signature,
+            signature_algorithm,
+            payload_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
+        """,
+        (
+            receipt_id,
+            job_id,
+            client_id,
+            principal_id,
+            run_id,
+            receipt_type,
+            status,
+            signature,
+            signature_algorithm,
+            to_json(payload) or to_json({}),
+        ),
+    )
+    conn.commit()
+    return get_external_agent_job_receipt(
+        receipt_id=receipt_id, client_id=client_id, principal_id=principal_id
+    ) or {}
+
+
+def list_external_agent_job_receipts(
+    *,
+    job_id: str,
+    client_id: str,
+    principal_id: str,
+    limit: int = 50,
+) -> list[Dict[str, Any]]:
+    rows = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_receipts
+        WHERE job_id = ? AND client_id = ? AND principal_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (job_id, client_id, principal_id, max(1, min(int(limit), 200))),
+    ).fetchall()
+    return [_receipt_row(row) for row in rows]
+
+
+def get_external_agent_job_receipt(
+    *,
+    receipt_id: str,
+    client_id: Optional[str] = None,
+    principal_id: Optional[str] = None,
+) -> Dict[str, Any] | None:
+    filters = ["id = ?"]
+    params: list[Any] = [receipt_id]
+    if client_id:
+        filters.append("client_id = ?")
+        params.append(client_id)
+    if principal_id:
+        filters.append("principal_id = ?")
+        params.append(principal_id)
+    row = get_connection().execute(
+        f"""
+        SELECT *
+        FROM external_agent_job_receipts
+        WHERE {' AND '.join(filters)}
+        """,
+        params,
+    ).fetchone()
+    return _receipt_row(row) if row else None
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -191,10 +285,29 @@ def _row(row) -> Dict[str, Any]:
     }
 
 
+def _receipt_row(row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "job_id": row["job_id"],
+        "client_id": row["client_id"],
+        "principal_id": row["principal_id"],
+        "run_id": row["run_id"],
+        "receipt_type": row["receipt_type"],
+        "status": row["status"],
+        "signature": row["signature"],
+        "signature_algorithm": row["signature_algorithm"],
+        "payload": from_json(row["payload_json"], default={}),
+        "created_at": row["created_at"],
+    }
+
+
 __all__ = [
+    "create_external_agent_job_receipt",
     "create_external_agent_job",
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
+    "get_external_agent_job_receipt",
+    "list_external_agent_job_receipts",
     "update_external_agent_job_receipt",
     "update_external_agent_job_status",
 ]

@@ -25,9 +25,11 @@ from application.services.agent_runtime.registry import get_tool_spec
 from application.services.agent_runtime.runs import create_agent_run_with_initial_plan
 from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
 from infrastructure.db.agent.external_agent_jobs import (
+    create_external_agent_job_receipt,
     create_external_agent_job,
     get_external_agent_job,
     get_external_agent_job_by_idempotency_key,
+    list_external_agent_job_receipts,
     update_external_agent_job_receipt,
     update_external_agent_job_status,
 )
@@ -73,6 +75,10 @@ class ExternalAgentJobReceiptResponse(BaseModel):
 class ExternalAgentJobEventListResponse(BaseModel):
     events: List[Dict[str, Any]]
     page: Dict[str, Any]
+
+
+class ExternalAgentJobReceiptListResponse(BaseModel):
+    receipts: List[Dict[str, Any]]
 
 
 @router.post("")
@@ -225,6 +231,46 @@ def get_external_agent_job_receipt_route(
     )
     receipt = _ensure_external_agent_job_receipt(job=job, run=run)
     return ExternalAgentJobReceiptResponse(receipt=receipt)
+
+
+@router.get("/{job_id}/receipts")
+def list_external_agent_job_receipts_route(
+    job_id: str,
+    request: Request,
+    limit: int = 50,
+    deps: AppDeps = Depends(_deps),
+) -> ExternalAgentJobReceiptListResponse:
+    principal = _require_external_agent_principal(request=request)
+    _require_any_scope(
+        principal,
+        "external_agent_jobs:read",
+        "external_agent_jobs:write",
+        "agent_runs:read",
+        "agent_runs:write",
+    )
+    job, run = _require_scoped_job_and_run(
+        deps=deps, job_id=job_id, principal=principal
+    )
+    _ensure_external_agent_job_receipt(job=job, run=run)
+    rows = list_external_agent_job_receipts(
+        job_id=job_id,
+        client_id=principal.client_id,
+        principal_id=principal.principal_id,
+        limit=limit,
+    )
+    receipts = sorted(
+        [
+            {
+                **(row.get("payload") or {}),
+                "signature": row.get("signature"),
+                "signature_algorithm": row.get("signature_algorithm"),
+            }
+            for row in rows
+        ],
+        key=lambda item: str(item.get("issued_at") or item.get("created_at") or ""),
+        reverse=True,
+    )
+    return ExternalAgentJobReceiptListResponse(receipts=receipts)
 
 
 @router.get("/{job_id}/events")
@@ -462,6 +508,18 @@ def _ensure_external_agent_job_receipt(
         "issued_at": datetime.now(timezone.utc).isoformat(),
     }
     signature = _sign_external_agent_job_receipt(receipt_payload)
+    create_external_agent_job_receipt(
+        receipt_id=receipt_payload["receipt_id"],
+        job_id=job["id"],
+        client_id=job["client_id"],
+        principal_id=job["principal_id"],
+        run_id=job["run_id"],
+        receipt_type=receipt_payload["receipt_type"],
+        status=current_status,
+        signature=signature,
+        signature_algorithm="hmac-sha256",
+        payload=receipt_payload,
+    )
     stored = update_external_agent_job_receipt(
         job_id=job["id"],
         receipt_id=receipt_payload["receipt_id"],

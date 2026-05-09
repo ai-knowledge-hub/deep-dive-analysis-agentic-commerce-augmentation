@@ -116,11 +116,10 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, and linked run events.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, and linked run events.
 
 Next steps:
 
-- Add a historical receipt ledger instead of latest receipt only.
 - Add richer job-specific event projections for external agents.
 - Add scoped credentials for tool/skill access.
 - Add retry-safe responses across more external-agent endpoints.

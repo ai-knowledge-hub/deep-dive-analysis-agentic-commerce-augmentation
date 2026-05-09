@@ -213,6 +213,21 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     assert completed_receipt["receipt_id"] != receipt["receipt_id"]
     assert _valid_signature(completed_receipt, "test-agent-secret")
 
+    receipt_list = client.get(
+        f"/external-agent/jobs/{job_id}/receipts", headers=_headers(token)
+    )
+    assert receipt_list.status_code == 200
+    receipts = receipt_list.json()["receipts"]
+    assert [item["status"] for item in receipts] == ["completed", "accepted"]
+    assert all(_valid_signature(item, "test-agent-secret") for item in receipts)
+
+    other_principal_token = _token(principal_id="agent-ext-receipt-other")
+    wrong_principal = client.get(
+        f"/external-agent/jobs/{job_id}/receipts",
+        headers=_headers(other_principal_token),
+    )
+    assert wrong_principal.status_code == 404
+
 
 def test_external_agent_job_events_are_scoped_to_creating_principal(
     client: TestClient,

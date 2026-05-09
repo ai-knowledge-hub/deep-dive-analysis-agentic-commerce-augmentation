@@ -166,6 +166,7 @@ Behavior:
 - The receipt is signed with HMAC-SHA256.
 - The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, and registry pins.
 - If the linked run status changes, the endpoint issues and stores a new latest-status receipt.
+- The latest receipt is also appended to the immutable receipt history.
 
 Example response:
 
@@ -193,6 +194,26 @@ Example response:
 
 ## Get Job Events
 
+## List Job Receipts
+
+Endpoint:
+
+```http
+GET /external-agent/jobs/{job_id}/receipts
+Authorization: Bearer <agent-principal-token>
+```
+
+Behavior:
+
+- Only the creating principal can read the receipt history.
+- The response returns signed receipts ordered newest first.
+- The endpoint ensures a latest-status receipt exists before listing history.
+- Each receipt item is the signed payload plus `signature` and `signature_algorithm`.
+
+Use this endpoint when an external assistant needs to prove the job moved from `accepted` to a later terminal state.
+
+## Get Job Events
+
 Endpoint:
 
 ```http
@@ -213,6 +234,7 @@ Implemented now:
 - `POST /external-agent/jobs`
 - `GET /external-agent/jobs/{job_id}`
 - `GET /external-agent/jobs/{job_id}/receipt`
+- `GET /external-agent/jobs/{job_id}/receipts`
 - `GET /external-agent/jobs/{job_id}/events`
 - machine-principal auth requirement
 - idempotent create/replay behavior
@@ -221,11 +243,11 @@ Implemented now:
 - linked `agent_run` creation with registry pins, principal, trace id, and initial action plan
 - scoped status reads
 - signed latest-status receipts
+- historical receipt ledger
 - scoped linked-run event reads
 
 Still to build:
 
-- historical receipt ledger instead of latest receipt only
 - richer external-agent job event projections beyond linked run events
 - full harness-profile enforcement
 - scoped credential management UI/API
