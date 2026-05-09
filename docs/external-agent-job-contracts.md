@@ -166,7 +166,7 @@ Status mapping:
 | `paused` | `paused` |
 | `canceled` / `cancelled` | `canceled` |
 
-Receipt metadata on the job status payload is only populated when the stored latest receipt matches the current derived job status. If the run status changed after the last receipt was issued, callers should fetch `/receipt` to mint the latest-status receipt.
+Receipt metadata on the job status payload is only populated when the stored latest receipt matches the current derived job status and signed receipt context. If the run status, run state, registry pins, action digest, or event digest changed after the last receipt was issued, callers should fetch `/receipt` to mint the latest matching receipt.
 
 ## Get Job Receipt
 
@@ -180,9 +180,9 @@ Authorization: Bearer <agent-principal-token>
 Behavior:
 
 - Only the creating principal can read the receipt.
-- The receipt is signed with HMAC-SHA256.
-- The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, and registry pins.
-- If the linked run status changes, the endpoint issues and stores a new latest-status receipt.
+- The receipt is signed with HMAC-SHA256 and includes a `key_id` for the server-side verifier key family.
+- The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, registry pins, and execution evidence digests.
+- If the linked run status or signed context changes, the endpoint issues and stores a new receipt.
 - The latest receipt is also appended to the immutable receipt history.
 
 Example response:
@@ -202,12 +202,51 @@ Example response:
     "requested_tool_id": "experiment.run_variant",
     "registry_version": "agent-runtime-static-v1",
     "registry_fingerprint": "...",
+    "key_id": "agent-principal-signing-secret:v1",
+    "receipt_context_hash": "<sha256>",
+    "evidence": {
+      "action_count": 1,
+      "event_count": 1,
+      "latest_event_id": "<event-id>",
+      "latest_event_timestamp": "...",
+      "action_digest": "<sha256>",
+      "event_digest": "<sha256>",
+      "terminal_action_statuses": []
+    },
     "issued_at": "...",
     "signature": "<payload>.<hmac>",
     "signature_algorithm": "hmac-sha256"
   }
 }
 ```
+
+## Verify Job Receipt
+
+Endpoint:
+
+```http
+POST /external-agent/jobs/{job_id}/receipt/verify
+Authorization: Bearer <agent-principal-token>
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "receipt": {
+    "receipt_id": "<receipt-id>",
+    "signature": "<payload>.<hmac>",
+    "signature_algorithm": "hmac-sha256"
+  }
+}
+```
+
+Behavior:
+
+- Only the creating principal can verify a receipt against the scoped job.
+- The verifier checks the HMAC signature, that the submitted payload matches the signed payload, and that the signed receipt belongs to the scoped job/run/client/principal.
+- The response includes `valid`, `valid_signature`, `valid_payload`, `valid_scope`, `key_id`, `receipt_payload`, and `blockers`.
 
 ## List Job Receipts
 
@@ -224,6 +263,7 @@ Behavior:
 - The response returns signed receipts ordered newest first.
 - The endpoint ensures a latest-status receipt exists before listing history.
 - Each receipt item is the signed payload plus `signature` and `signature_algorithm`.
+- Exact same-status/context receipts are deduped by `receipt_context_hash`; same-status state or evidence changes create new history entries.
 
 Use this endpoint when an external assistant needs to prove the job moved from `accepted` to a later terminal state.
 
@@ -243,6 +283,7 @@ Behavior:
 - Items are normalized as `job`, `receipt`, or `run_event` so external assistants do not have to stitch multiple endpoints together.
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
+- Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
 
 Use this endpoint for machine-friendly progress narration and polling.
 

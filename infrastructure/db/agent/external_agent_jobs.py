@@ -178,6 +178,7 @@ def create_external_agent_job_receipt(
     run_id: str,
     receipt_type: str,
     status: str,
+    receipt_context_hash: str,
     signature: str,
     signature_algorithm: str,
     payload: Dict[str, Any],
@@ -194,11 +195,12 @@ def create_external_agent_job_receipt(
                 run_id,
                 receipt_type,
                 status,
+                receipt_context_hash,
                 signature,
                 signature_algorithm,
                 payload_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
             """,
             (
                 receipt_id,
@@ -208,6 +210,7 @@ def create_external_agent_job_receipt(
                 run_id,
                 receipt_type,
                 status,
+                receipt_context_hash,
                 signature,
                 signature_algorithm,
                 to_json(payload) or to_json({}),
@@ -219,11 +222,12 @@ def create_external_agent_job_receipt(
         ) or {}
     except sqlite3.IntegrityError:
         conn.rollback()
-        existing = get_external_agent_job_receipt_for_status(
+        existing = get_external_agent_job_receipt_for_context_hash(
             job_id=job_id,
             client_id=client_id,
             principal_id=principal_id,
             status=status,
+            receipt_context_hash=receipt_context_hash,
         )
         if existing:
             return existing
@@ -291,6 +295,31 @@ def get_external_agent_job_receipt_for_status(
     return _receipt_row(row) if row else None
 
 
+def get_external_agent_job_receipt_for_context_hash(
+    *,
+    job_id: str,
+    client_id: str,
+    principal_id: str,
+    status: str,
+    receipt_context_hash: str,
+) -> Dict[str, Any] | None:
+    row = get_connection().execute(
+        """
+        SELECT *
+        FROM external_agent_job_receipts
+        WHERE job_id = ?
+          AND client_id = ?
+          AND principal_id = ?
+          AND status = ?
+          AND receipt_context_hash = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (job_id, client_id, principal_id, status, receipt_context_hash),
+    ).fetchone()
+    return _receipt_row(row) if row else None
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -334,6 +363,9 @@ def _receipt_row(row) -> Dict[str, Any]:
         "run_id": row["run_id"],
         "receipt_type": row["receipt_type"],
         "status": row["status"],
+        "receipt_context_hash": row["receipt_context_hash"]
+        if "receipt_context_hash" in row.keys()
+        else None,
         "signature": row["signature"],
         "signature_algorithm": row["signature_algorithm"],
         "payload": from_json(row["payload_json"], default={}),
@@ -347,6 +379,7 @@ __all__ = [
     "get_external_agent_job",
     "get_external_agent_job_by_idempotency_key",
     "get_external_agent_job_receipt",
+    "get_external_agent_job_receipt_for_context_hash",
     "get_external_agent_job_receipt_for_status",
     "list_external_agent_job_receipts",
     "update_external_agent_job_receipt",

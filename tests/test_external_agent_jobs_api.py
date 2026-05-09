@@ -565,7 +565,22 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     assert receipt["run_id"] == run_id
     assert receipt["status"] == "accepted"
     assert receipt["signature_algorithm"] == "hmac-sha256"
+    assert receipt["key_id"] == "agent-principal-signing-secret:v1"
+    assert receipt["receipt_context_hash"]
+    assert receipt["evidence"]["action_count"] >= 1
+    assert receipt["evidence"]["event_count"] >= 1
+    assert receipt["evidence"]["action_digest"]
+    assert receipt["evidence"]["event_digest"]
     assert _valid_signature(receipt, "test-agent-secret")
+
+    verification = client.post(
+        f"/external-agent/jobs/{job_id}/receipt/verify",
+        headers=_headers(token),
+        json={"receipt": receipt},
+    )
+    assert verification.status_code == 200
+    assert verification.json()["valid"] is True
+    assert verification.json()["key_id"] == "agent-principal-signing-secret:v1"
 
     deps = default_deps()
     deps.agent_runs.update_agent_run(run_id=run_id, status="completed")
@@ -662,9 +677,14 @@ def test_external_agent_job_receipt_insert_dedupes_status(client: TestClient):
         run_id=run["id"],
         receipt_type="external_agent_job_accepted",
         status="accepted",
+        receipt_context_hash=first_receipt["receipt_context_hash"],
         signature="duplicate-signature",
         signature_algorithm="hmac-sha256",
-        payload={"receipt_id": "duplicate-receipt-id", "status": "accepted"},
+        payload={
+            "receipt_id": "duplicate-receipt-id",
+            "status": "accepted",
+            "receipt_context_hash": first_receipt["receipt_context_hash"],
+        },
     )
     assert duplicate["id"] == first_receipt["receipt_id"]
 
@@ -803,6 +823,10 @@ def test_external_agent_job_activity_projects_job_receipts_and_run_events(
     assert run_event["tool_id"] == "experiment.run_variant"
     assert payload["summary"]["page_scope"] == "run_events"
     assert payload["event_page"] == payload["page"]
+    assert "anchors" in run_event
+    assert run_event["effect_class"]
+    assert run_event["anchors"]["inputs_hash"]
+    assert run_event["anchors"]["registry_fingerprint"]
 
     other_principal_token = _token(principal_id="agent-ext-activity-other")
     wrong_principal = client.get(
@@ -868,6 +892,38 @@ def test_external_agent_job_activity_accepts_event_cursor_filters(
     next_events = [item for item in next_payload["items"] if item["type"] == "run_event"]
     assert len(next_events) == 1
     assert next_events[0]["subtype"] == "action_proposed"
+
+
+def test_external_agent_job_receipt_refreshes_when_same_status_context_changes(
+    client: TestClient,
+):
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-same-status-context", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    job_id = payload["job"]["id"]
+    run_id = payload["run"]["id"]
+
+    first = client.get(f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token))
+    assert first.status_code == 200
+    first_receipt = first.json()["receipt"]
+    assert first_receipt["status"] == "accepted"
+
+    deps = default_deps()
+    deps.agent_runs.update_agent_run(run_id=run_id, state="experiment_ready")
+
+    second = client.get(f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token))
+    assert second.status_code == 200
+    second_receipt = second.json()["receipt"]
+    assert second_receipt["status"] == "accepted"
+    assert second_receipt["run_state"] == "experiment_ready"
+    assert second_receipt["receipt_id"] != first_receipt["receipt_id"]
+    assert second_receipt["receipt_context_hash"] != first_receipt["receipt_context_hash"]
+    assert _valid_signature(second_receipt, "test-agent-secret")
 
 
 def _valid_signature(receipt: dict, secret: str) -> bool:

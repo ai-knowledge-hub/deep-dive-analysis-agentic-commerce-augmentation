@@ -214,5 +214,12 @@ def _seed_initial_plan(
                 "hypothesis_id": None,
                 "snapshot_version": None,
                 "metric_id": None,
+                "inputs_hash": created_action.get("inputs_hash"),
+                "outputs_hash": created_action.get("outputs_hash"),
+                "registry_version": created_action.get("registry_version"),
+                "registry_fingerprint": created_action.get("registry_fingerprint"),
+                "tool_version": created_action.get("tool_version"),
+                "skill_version": created_action.get("skill_version"),
+                "receipt_id": created_action.get("receipt_id"),
             },
         )

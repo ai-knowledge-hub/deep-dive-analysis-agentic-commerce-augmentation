@@ -32,6 +32,7 @@ from infrastructure.db.agent.external_agent_jobs import (
     create_external_agent_job,
     get_external_agent_job,
     get_external_agent_job_by_idempotency_key,
+    get_external_agent_job_receipt_for_context_hash,
     list_external_agent_job_receipts,
     update_external_agent_job_receipt,
     update_external_agent_job_status,
@@ -73,6 +74,10 @@ class ExternalAgentJobResponse(BaseModel):
 
 
 class ExternalAgentJobReceiptResponse(BaseModel):
+    receipt: Dict[str, Any]
+
+
+class ExternalAgentJobReceiptVerifyRequest(BaseModel):
     receipt: Dict[str, Any]
 
 
@@ -262,8 +267,61 @@ def get_external_agent_job_receipt_route(
     job, run = _require_scoped_job_and_run(
         deps=deps, job_id=job_id, principal=principal
     )
-    receipt = _ensure_external_agent_job_receipt(job=job, run=run)
+    receipt = _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
     return ExternalAgentJobReceiptResponse(receipt=receipt)
+
+
+@router.post("/{job_id}/receipt/verify")
+def verify_external_agent_job_receipt_route(
+    job_id: str,
+    payload: ExternalAgentJobReceiptVerifyRequest,
+    request: Request,
+    deps: AppDeps = Depends(_deps),
+) -> Dict[str, Any]:
+    principal = _require_external_agent_principal(request=request)
+    _require_any_scope(
+        principal,
+        "external_agent_jobs:read",
+        "external_agent_jobs:write",
+        "agent_runs:read",
+        "agent_runs:write",
+    )
+    job, _run = _require_scoped_job_and_run(
+        deps=deps, job_id=job_id, principal=principal
+    )
+    receipt = dict(payload.receipt or {})
+    decoded_payload, valid_signature = _decode_external_agent_job_receipt_signature(
+        str(receipt.get("signature") or "")
+    )
+    unsigned_receipt = {
+        key: value
+        for key, value in receipt.items()
+        if key not in {"signature", "signature_algorithm"}
+    }
+    valid_payload = bool(valid_signature and decoded_payload == unsigned_receipt)
+    valid_scope = bool(
+        decoded_payload.get("job_id") == job["id"]
+        and decoded_payload.get("run_id") == job["run_id"]
+        and decoded_payload.get("client_id") == principal.client_id
+        and decoded_payload.get("principal_id") == principal.principal_id
+    )
+    blockers: List[str] = []
+    if not valid_signature:
+        blockers.append("Receipt signature is invalid.")
+    if valid_signature and not valid_payload:
+        blockers.append("Receipt payload does not match the signed payload.")
+    if valid_signature and not valid_scope:
+        blockers.append("Receipt does not belong to the scoped external-agent job.")
+    return {
+        "valid": not blockers,
+        "valid_signature": valid_signature,
+        "valid_payload": valid_payload,
+        "valid_scope": valid_scope,
+        "key_id": decoded_payload.get("key_id") or receipt.get("key_id"),
+        "signature_algorithm": receipt.get("signature_algorithm"),
+        "receipt_payload": decoded_payload,
+        "blockers": blockers,
+    }
 
 
 @router.get("/{job_id}/receipts")
@@ -284,7 +342,7 @@ def list_external_agent_job_receipts_route(
     job, run = _require_scoped_job_and_run(
         deps=deps, job_id=job_id, principal=principal
     )
-    _ensure_external_agent_job_receipt(job=job, run=run)
+    _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
     rows = list_external_agent_job_receipts(
         job_id=job_id,
         client_id=principal.client_id,
@@ -333,7 +391,7 @@ def get_external_agent_job_activity_route(
     job, run = _require_scoped_job_and_run(
         deps=deps, job_id=job_id, principal=principal
     )
-    _ensure_external_agent_job_receipt(job=job, run=run)
+    _ensure_external_agent_job_receipt(deps=deps, job=job, run=run)
     receipt_rows = list_external_agent_job_receipts(
         job_id=job_id,
         client_id=principal.client_id,
@@ -676,13 +734,19 @@ def _sync_job_status_from_run(*, job: Dict[str, Any], run: Dict[str, Any]) -> Di
 
 
 def _ensure_external_agent_job_receipt(
-    *, job: Dict[str, Any], run: Dict[str, Any]
+    *, deps: AppDeps, job: Dict[str, Any], run: Dict[str, Any]
 ) -> Dict[str, Any]:
     current_status = _job_status_from_run(run)
+    evidence = _job_evidence_summary(deps=deps, run=run)
+    context_hash = _receipt_context_hash(
+        job=job, run=run, current_status=current_status, evidence=evidence
+    )
     if (
         job.get("receipt_id")
         and job.get("receipt_signature")
         and (job.get("receipt_payload") or {}).get("status") == current_status
+        and (job.get("receipt_payload") or {}).get("receipt_context_hash")
+        == context_hash
     ):
         return {
             **(job.get("receipt_payload") or {}),
@@ -706,8 +770,38 @@ def _ensure_external_agent_job_receipt(
         "run_state": run.get("state"),
         "registry_version": run.get("registry_version"),
         "registry_fingerprint": run.get("registry_fingerprint"),
+        "key_id": _external_agent_job_receipt_key_id(),
+        "receipt_context_hash": context_hash,
+        "evidence": evidence,
         "issued_at": datetime.now(timezone.utc).isoformat(),
     }
+    existing_receipt = get_external_agent_job_receipt_for_context_hash(
+        job_id=job["id"],
+        client_id=job["client_id"],
+        principal_id=job["principal_id"],
+        status=current_status,
+        receipt_context_hash=context_hash,
+    )
+    if existing_receipt:
+        receipt_payload = existing_receipt.get("payload") or receipt_payload
+        signature = existing_receipt.get("signature")
+        stored = update_external_agent_job_receipt(
+            job_id=job["id"],
+            receipt_id=existing_receipt.get("id") or receipt_payload["receipt_id"],
+            receipt_type=existing_receipt.get("receipt_type")
+            or receipt_payload["receipt_type"],
+            receipt_signature=signature,
+            receipt_signature_algorithm=existing_receipt.get("signature_algorithm")
+            or "hmac-sha256",
+            receipt_payload=receipt_payload,
+        )
+        job.update(stored or {})
+        return {
+            **receipt_payload,
+            "signature": signature,
+            "signature_algorithm": existing_receipt.get("signature_algorithm")
+            or "hmac-sha256",
+        }
     signature = _sign_external_agent_job_receipt(receipt_payload)
     receipt_row = create_external_agent_job_receipt(
         receipt_id=receipt_payload["receipt_id"],
@@ -717,6 +811,7 @@ def _ensure_external_agent_job_receipt(
         run_id=job["run_id"],
         receipt_type=receipt_payload["receipt_type"],
         status=current_status,
+        receipt_context_hash=context_hash,
         signature=signature,
         signature_algorithm="hmac-sha256",
         payload=receipt_payload,
@@ -785,10 +880,15 @@ def _external_agent_activity_items(
                 "trace_id": event.get("trace_id") or job.get("trace_id"),
                 "event_id": event.get("id"),
                 "action_id": event.get("action_id"),
+                "sequence": event.get("sequence"),
                 "tool_id": event.get("tool_id"),
                 "skill_id": event.get("skill_id"),
+                "effect_class": event.get("effect_class"),
                 "capability_name": event.get("capability_name"),
+                "capability_version": event.get("capability_version"),
+                "is_policy_event": event.get("is_policy_event"),
                 "note": event.get("note"),
+                "anchors": event.get("anchors") or {},
             }
         )
     return sorted(
@@ -808,6 +908,135 @@ def _sign_external_agent_job_receipt(payload: Dict[str, Any]) -> str:
         hashlib.sha256,
     ).hexdigest()
     return f"{payload_b64}.{signature}"
+
+
+def _decode_external_agent_job_receipt_signature(
+    signature: str,
+) -> tuple[Dict[str, Any], bool]:
+    try:
+        payload_b64, provided_signature = signature.rsplit(".", 1)
+    except ValueError:
+        return {}, False
+    expected_signature = hmac.new(
+        _external_agent_job_receipt_secret().encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(provided_signature, expected_signature):
+        return {}, False
+    try:
+        padding = "=" * (-len(payload_b64) % 4)
+        payload_raw = base64.urlsafe_b64decode(payload_b64 + padding)
+        payload = json.loads(payload_raw.decode("utf-8"))
+    except Exception:
+        return {}, False
+    return payload if isinstance(payload, dict) else {}, True
+
+
+def _job_evidence_summary(*, deps: AppDeps, run: Dict[str, Any]) -> Dict[str, Any]:
+    run_id = str(run.get("id") or "")
+    actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
+    events = deps.agent_events.list_agent_events(agent_run_id=run_id, limit=2000)
+    action_items = [
+        {
+            "id": action.get("id"),
+            "sequence": action.get("sequence"),
+            "status": action.get("status"),
+            "capability_name": action.get("capability_name"),
+            "capability_version": action.get("capability_version"),
+            "tool_id": action.get("tool_id"),
+            "skill_id": action.get("skill_id"),
+            "effect_class": action.get("effect_class"),
+            "inputs_hash": action.get("inputs_hash"),
+            "outputs_hash": action.get("outputs_hash"),
+            "registry_version": action.get("registry_version"),
+            "registry_fingerprint": action.get("registry_fingerprint"),
+            "tool_version": action.get("tool_version"),
+            "skill_version": action.get("skill_version"),
+            "receipt_id": action.get("receipt_id"),
+            "error": action.get("error"),
+        }
+        for action in actions
+    ]
+    event_items = [
+        {
+            "id": event.get("id"),
+            "sequence": event.get("sequence"),
+            "event_type": event.get("event_type"),
+            "status": event.get("status"),
+            "action_id": event.get("action_id"),
+            "capability_name": event.get("capability_name"),
+            "capability_version": event.get("capability_version"),
+            "tool_id": event.get("tool_id"),
+            "skill_id": event.get("skill_id"),
+            "effect_class": event.get("effect_class"),
+            "is_policy_event": event.get("is_policy_event"),
+            "timestamp": event.get("timestamp"),
+            "anchors": event.get("anchors") or {},
+        }
+        for event in events
+    ]
+    latest_event = event_items[-1] if event_items else {}
+    return {
+        "action_count": len(action_items),
+        "event_count": len(event_items),
+        "latest_event_id": latest_event.get("id"),
+        "latest_event_timestamp": latest_event.get("timestamp"),
+        "action_digest": _stable_digest(action_items),
+        "event_digest": _stable_digest(event_items),
+        "terminal_action_statuses": [
+            {
+                "id": action.get("id"),
+                "sequence": action.get("sequence"),
+                "status": action.get("status"),
+                "inputs_hash": action.get("inputs_hash"),
+                "outputs_hash": action.get("outputs_hash"),
+                "error": action.get("error"),
+            }
+            for action in action_items
+            if action.get("status") in {"executed", "failed", "rejected", "skipped"}
+        ],
+    }
+
+
+def _receipt_context_hash(
+    *,
+    job: Dict[str, Any],
+    run: Dict[str, Any],
+    current_status: str,
+    evidence: Dict[str, Any],
+) -> str:
+    return _stable_digest(
+        {
+            "job_id": job.get("id"),
+            "run_id": job.get("run_id"),
+            "client_id": job.get("client_id"),
+            "principal_id": job.get("principal_id"),
+            "status": current_status,
+            "trace_id": job.get("trace_id") or run.get("trace_id"),
+            "requested_skill_id": job.get("requested_skill_id"),
+            "requested_tool_id": job.get("requested_tool_id"),
+            "run_status": run.get("status"),
+            "run_state": run.get("state"),
+            "registry_version": run.get("registry_version"),
+            "registry_fingerprint": run.get("registry_fingerprint"),
+            "evidence": evidence,
+        }
+    )
+
+
+def _stable_digest(payload: Any) -> str:
+    normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _external_agent_job_receipt_key_id() -> str:
+    settings = get_settings()
+    if settings.registry_approval_signing_secret:
+        return "registry-approval-signing-secret:v1"
+    if settings.agent_principal_signing_secret:
+        return "agent-principal-signing-secret:v1"
+    return "local-development-external-agent-job-secret:v1"
 
 
 def _external_agent_job_receipt_secret() -> str:
