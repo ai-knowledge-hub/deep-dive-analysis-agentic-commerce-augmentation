@@ -68,7 +68,7 @@ const DEFAULT_ALLOWED_CAPABILITIES = [
   "publish_copy_revision",
 ];
 
-const AGENT_FLOW_STEPS: { id: AgentRun["state"] | string; label: string }[] = [
+const AGENT_FLOW_STEPS: { id: string; label: string }[] = [
   { id: "battery_ready", label: "Battery ready" },
   { id: "retrieval_snapshots_ready", label: "Retrieval snapshots ready" },
   { id: "baseline_scored", label: "Baseline scored" },
