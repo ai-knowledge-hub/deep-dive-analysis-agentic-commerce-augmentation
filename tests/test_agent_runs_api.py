@@ -278,6 +278,19 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(client: Tes
     assert event_payload["events"][0]["effect_class"] == "write_low_risk"
 
 
+def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["not_real"],
+        },
+    )
+    assert response.status_code == 400
+    assert "Unsupported allowed_capabilities: not_real" in response.json()["detail"]
+
+
 def test_seed_skill_specs_are_available():
     skills = {skill.id for skill in list_skill_specs()}
     assert "discover-protocol-candidates" in skills

@@ -117,6 +117,112 @@ def test_external_agent_job_create_is_idempotent_and_status_is_scoped(
     assert wrong_principal.status_code == 404
 
 
+def test_external_agent_job_single_tool_plan_ignores_extra_capabilities(
+    client: TestClient,
+):
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:experiment.run_variant",
+            "tool:hypothesis.seed",
+            "skill:optimize-product-representation",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-single-tool-plan",
+            "tool_id": "experiment.run_variant",
+            "allowed_capabilities": ["seed_hypotheses"],
+        },
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["run"]["allowed_capabilities"] == ["run_variant"]
+    assert payload["run"]["objective"]["plan_mode"] == "single_tool"
+
+    deps = default_deps()
+    actions = deps.agent_actions.list_agent_actions(
+        agent_run_id=payload["run"]["id"], limit=10
+    )
+    assert [action["capability_name"] for action in actions] == ["run_variant"]
+
+
+def test_external_agent_job_workflow_plan_allows_multiple_capabilities(
+    client: TestClient,
+):
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:experiment.run_variant",
+            "tool:hypothesis.seed",
+            "skill:optimize-product-representation",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-workflow-plan",
+            "tool_id": "experiment.run_variant",
+            "allowed_capabilities": ["seed_hypotheses"],
+            "plan_mode": "workflow",
+        },
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["run"]["allowed_capabilities"] == [
+        "run_variant",
+        "seed_hypotheses",
+    ]
+    assert payload["run"]["objective"]["plan_mode"] == "workflow"
+
+    deps = default_deps()
+    actions = deps.agent_actions.list_agent_actions(
+        agent_run_id=payload["run"]["id"], limit=10
+    )
+    assert [action["capability_name"] for action in actions] == [
+        "seed_hypotheses",
+        "run_variant",
+    ]
+
+
+def test_external_agent_job_action_uses_requested_skill_lineage(
+    client: TestClient,
+):
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:validation.review_readiness",
+            "skill:promote-and-publish-approved-copy",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-preferred-skill",
+            "tool_id": "validation.review_readiness",
+            "skill_id": "promote-and-publish-approved-copy",
+        },
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["job"]["requested_skill_id"] == "promote-and-publish-approved-copy"
+
+    deps = default_deps()
+    actions = deps.agent_actions.list_agent_actions(
+        agent_run_id=payload["run"]["id"], limit=10
+    )
+    assert len(actions) == 1
+    assert actions[0]["tool_id"] == "validation.review_readiness"
+    assert actions[0]["skill_id"] == "promote-and-publish-approved-copy"
+
+
 def test_external_agent_job_rejects_idempotency_payload_mismatch(client: TestClient):
     token = _token()
     first = client.post(

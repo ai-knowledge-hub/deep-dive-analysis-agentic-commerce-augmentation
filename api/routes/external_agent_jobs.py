@@ -22,7 +22,10 @@ from application.services.agent_runtime.agent_first import (
     select_skill_for_tool_id,
 )
 from application.services.agent_runtime.registry import get_tool_spec
-from application.services.agent_runtime.runs import create_agent_run_with_initial_plan
+from application.services.agent_runtime.runs import (
+    AgentRunPlanError,
+    create_agent_run_with_initial_plan,
+)
 from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
 from infrastructure.db.agent.external_agent_jobs import (
     create_external_agent_job_receipt,
@@ -59,6 +62,7 @@ class ExternalAgentJobCreateRequest(BaseModel):
     policy_profile_id: Optional[str] = None
     requires_approval: bool = True
     run_mode: str = "plan_only"
+    plan_mode: Optional[str] = None
     state: str = "battery_ready"
 
 
@@ -130,35 +134,40 @@ def create_external_agent_job_route(
         hash_algorithm="sha256",
         payload=registry_payload,
     )
-    run = create_agent_run_with_initial_plan(
-        deps=deps,
-        client_id=principal.client_id,
-        brand_id=payload.brand_id,
-        product_id=payload.product_id,
-        experiment_id=payload.experiment_id,
-        objective={
-            **(payload.objective or {}),
-            "external_job": True,
-            "requested_skill_id": resolved["skill_id"],
-            "requested_tool_id": resolved["tool_id"],
-        },
-        allowed_capabilities=resolved["allowed_capabilities"],
-        capability_versions=payload.capability_versions,
-        budgets=payload.budgets,
-        approval_policy=payload.approval_policy,
-        requires_approval=payload.requires_approval,
-        run_mode=payload.run_mode,
-        state=payload.state,
-        status="planned",
-        principal_type=principal.principal_type,
-        principal_id=principal.principal_id,
-        agent_profile_id=principal.agent_profile_id,
-        harness_id=payload.harness_id,
-        policy_profile_id=payload.policy_profile_id,
-        idempotency_key=payload.idempotency_key,
-        registry_payload=registry_payload,
-        active_registry_fingerprint=active_registry_fingerprint,
-    )
+    try:
+        run = create_agent_run_with_initial_plan(
+            deps=deps,
+            client_id=principal.client_id,
+            brand_id=payload.brand_id,
+            product_id=payload.product_id,
+            experiment_id=payload.experiment_id,
+            objective={
+                **(payload.objective or {}),
+                "external_job": True,
+                "requested_skill_id": resolved["skill_id"],
+                "requested_tool_id": resolved["tool_id"],
+                "plan_mode": resolved["plan_mode"],
+            },
+            allowed_capabilities=resolved["allowed_capabilities"],
+            capability_versions=payload.capability_versions,
+            budgets=payload.budgets,
+            approval_policy=payload.approval_policy,
+            requires_approval=payload.requires_approval,
+            run_mode=payload.run_mode,
+            state=payload.state,
+            status="planned",
+            principal_type=principal.principal_type,
+            principal_id=principal.principal_id,
+            agent_profile_id=principal.agent_profile_id,
+            harness_id=payload.harness_id,
+            policy_profile_id=payload.policy_profile_id,
+            idempotency_key=payload.idempotency_key,
+            registry_payload=registry_payload,
+            active_registry_fingerprint=active_registry_fingerprint,
+            preferred_skill_id=resolved["skill_id"],
+        )
+    except AgentRunPlanError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     response = {
         "job_id": None,
         "run_id": run["id"],
@@ -502,16 +511,31 @@ def _resolve_requested_runtime_contract(
             status_code=400,
             detail="External agent job requires a tool_id, capability_name, or allowed_capabilities",
         )
+    plan_mode = str(
+        payload.plan_mode or ("single_tool" if capability_name else "workflow")
+    ).strip().lower()
+    if plan_mode not in {"single_tool", "workflow"}:
+        raise HTTPException(
+            status_code=400,
+            detail="plan_mode must be 'single_tool' or 'workflow'",
+        )
+    if plan_mode == "single_tool":
+        if not capability_name:
+            raise HTTPException(
+                status_code=400,
+                detail="single_tool plan_mode requires a tool_id or capability_name",
+            )
+        allowed_capabilities = [capability_name]
     return {
         "skill_id": skill_id,
         "tool_id": tool_id,
         "allowed_capabilities": allowed_capabilities,
+        "plan_mode": plan_mode,
         "scope_tool_ids": _tool_ids_for_capabilities(allowed_capabilities),
-        "scope_skill_ids": _dedupe_ids(
-            [
-                *_skill_ids_for_capabilities(allowed_capabilities),
-                *([skill_id] if skill_id else []),
-            ]
+        "scope_skill_ids": _scope_skill_ids_for_capabilities(
+            allowed_capabilities=allowed_capabilities,
+            requested_capability_name=capability_name,
+            requested_skill_id=skill_id,
         ),
     }
 
@@ -551,6 +575,30 @@ def _skill_ids_for_capabilities(capability_names: List[str]) -> List[str]:
         selected = select_skill_for_tool_id(tool_id)
         if selected and selected.id not in skill_ids:
             skill_ids.append(selected.id)
+    return skill_ids
+
+
+def _scope_skill_ids_for_capabilities(
+    *,
+    allowed_capabilities: List[str],
+    requested_capability_name: str | None,
+    requested_skill_id: str | None,
+) -> List[str]:
+    skill_ids: List[str] = []
+    requested_capability = str(requested_capability_name or "").strip()
+    for capability_name in allowed_capabilities:
+        if (
+            requested_skill_id
+            and requested_capability
+            and capability_name == requested_capability
+        ):
+            selected_id = requested_skill_id
+        else:
+            tool_id = capability_to_tool_id(capability_name)
+            selected = select_skill_for_tool_id(tool_id)
+            selected_id = selected.id if selected else None
+        if selected_id and selected_id not in skill_ids:
+            skill_ids.append(selected_id)
     return skill_ids
 
 

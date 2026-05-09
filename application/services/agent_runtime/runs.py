@@ -7,7 +7,7 @@ from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
     new_trace_id,
     policy_profile_for_run_mode,
-    skill_id_for_tool_id,
+    select_skill_for_tool_id,
     tool_effect_class,
 )
 from application.services.agent_runtime.planner import build_initial_plan
@@ -17,7 +17,14 @@ from application.services.agent_runtime.commands.recovery import (
     _compensating_actions_for_capability,
     _hash_payload,
 )
-from application.services.agent_runtime.registry import version_context_for_capability
+from application.services.agent_runtime.registry import (
+    get_capability_spec,
+    version_context_for_capability,
+)
+
+
+class AgentRunPlanError(ValueError):
+    pass
 
 
 def create_agent_run_with_initial_plan(
@@ -44,7 +51,9 @@ def create_agent_run_with_initial_plan(
     idempotency_key: Optional[str],
     registry_payload: Dict[str, Any],
     active_registry_fingerprint: str,
+    preferred_skill_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    _validate_plan_capabilities(allowed_capabilities or [])
     normalized_run_mode = str(run_mode or "plan_only").strip().lower()
     resolved_policy_profile_id = policy_profile_id or policy_profile_for_run_mode(
         normalized_run_mode
@@ -82,8 +91,32 @@ def create_agent_run_with_initial_plan(
         capability_versions=capability_versions or {},
         registry_payload=registry_payload,
         active_registry_fingerprint=active_registry_fingerprint,
+        preferred_skill_id=preferred_skill_id,
     )
     return run
+
+
+def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
+    requested = [
+        str(capability).strip()
+        for capability in allowed_capabilities
+        if str(capability).strip()
+    ]
+    unsupported = [
+        capability for capability in requested if not get_capability_spec(capability)
+    ]
+    if unsupported:
+        raise AgentRunPlanError(
+            "Unsupported allowed_capabilities: " + ", ".join(unsupported)
+        )
+    if requested and not build_initial_plan(
+        experiment_id=None,
+        allowed_capabilities=requested,
+        capability_versions={},
+    ):
+        raise AgentRunPlanError(
+            "allowed_capabilities did not produce any initial plan actions"
+        )
 
 
 def _seed_initial_plan(
@@ -95,6 +128,7 @@ def _seed_initial_plan(
     capability_versions: Dict[str, Any],
     registry_payload: Dict[str, Any],
     active_registry_fingerprint: str,
+    preferred_skill_id: Optional[str],
 ) -> None:
     plan = build_initial_plan(
         experiment_id=experiment_id,
@@ -103,7 +137,8 @@ def _seed_initial_plan(
     )
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)
-        skill_id = skill_id_for_tool_id(tool_id)
+        skill = select_skill_for_tool_id(tool_id, preferred_skill_id=preferred_skill_id)
+        skill_id = skill.id if skill else None
         effect_class = tool_effect_class(tool_id)
         version_context = version_context_for_capability(
             action.capability_name,

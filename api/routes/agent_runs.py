@@ -16,7 +16,10 @@ from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime import registry as agent_registry
-from application.services.agent_runtime.runs import create_agent_run_with_initial_plan
+from application.services.agent_runtime.runs import (
+    AgentRunPlanError,
+    create_agent_run_with_initial_plan,
+)
 from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
 
 
@@ -110,30 +113,33 @@ def create_agent_run(
         hash_algorithm="sha256",
         payload=registry_payload,
     )
-    run = create_agent_run_with_initial_plan(
-        deps=deps,
-        client_id=principal.client_id,
-        brand_id=payload.brand_id,
-        product_id=payload.product_id,
-        experiment_id=payload.experiment_id,
-        objective=payload.objective,
-        allowed_capabilities=payload.allowed_capabilities,
-        capability_versions=payload.capability_versions,
-        budgets=payload.budgets,
-        approval_policy=payload.approval_policy,
-        requires_approval=payload.requires_approval,
-        run_mode=payload.run_mode,
-        state=payload.state,
-        status=payload.status,
-        principal_type=principal.principal_type,
-        principal_id=principal.principal_id,
-        agent_profile_id=principal.agent_profile_id,
-        harness_id=payload.harness_id,
-        policy_profile_id=payload.policy_profile_id,
-        idempotency_key=payload.idempotency_key,
-        registry_payload=registry_payload,
-        active_registry_fingerprint=active_registry_fingerprint,
-    )
+    try:
+        run = create_agent_run_with_initial_plan(
+            deps=deps,
+            client_id=principal.client_id,
+            brand_id=payload.brand_id,
+            product_id=payload.product_id,
+            experiment_id=payload.experiment_id,
+            objective=payload.objective,
+            allowed_capabilities=payload.allowed_capabilities,
+            capability_versions=payload.capability_versions,
+            budgets=payload.budgets,
+            approval_policy=payload.approval_policy,
+            requires_approval=payload.requires_approval,
+            run_mode=payload.run_mode,
+            state=payload.state,
+            status=payload.status,
+            principal_type=principal.principal_type,
+            principal_id=principal.principal_id,
+            agent_profile_id=principal.agent_profile_id,
+            harness_id=payload.harness_id,
+            policy_profile_id=payload.policy_profile_id,
+            idempotency_key=payload.idempotency_key,
+            registry_payload=registry_payload,
+            active_registry_fingerprint=active_registry_fingerprint,
+        )
+    except AgentRunPlanError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"run": run}
 
 
