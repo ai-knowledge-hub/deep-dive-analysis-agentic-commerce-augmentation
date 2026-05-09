@@ -115,3 +115,63 @@ def test_observe_policy_rejects_side_effecting_tool():
             all_actions=[],
             inputs={"experiment_id": "exp-1"},
         )
+
+
+def test_safe_auto_policy_rejects_external_side_effect_execution():
+    enforcer = PolicyEnforcer()
+    spec = get_capability_spec("request_synthetic_validation")
+    assert spec is not None
+    with pytest.raises(PolicyError, match="forbids auto execution"):
+        enforcer.validate_action_execution(
+            run={
+                "allowed_capabilities": ["request_synthetic_validation"],
+                "policy_profile_id": "safe_auto",
+                "budgets": {},
+            },
+            action={"id": "a4", "tool_id": spec.tool_id},
+            spec=spec,
+            all_actions=[],
+            inputs={"experiment_id": "exp-1"},
+        )
+
+
+def test_safe_auto_policy_rejects_governed_approval_for_high_risk_tool():
+    enforcer = PolicyEnforcer()
+    spec = get_capability_spec("publish_copy_revision")
+    assert spec is not None
+    with pytest.raises(PolicyError, match="requires governed approval"):
+        enforcer.validate_action_approval(
+            run={
+                "allowed_capabilities": ["publish_copy_revision"],
+                "policy_profile_id": "safe_auto",
+                "budgets": {},
+            },
+            action={"id": "a5", "tool_id": spec.tool_id},
+            spec=spec,
+            inputs={"experiment_id": "exp-1"},
+        )
+
+
+def test_human_approval_required_allows_low_risk_approval_not_execution():
+    enforcer = PolicyEnforcer()
+    spec = get_capability_spec("run_variant")
+    assert spec is not None
+    run = {
+        "allowed_capabilities": ["run_variant"],
+        "policy_profile_id": "human_approval_required",
+        "budgets": {},
+    }
+    enforcer.validate_action_approval(
+        run=run,
+        action={"id": "a6", "tool_id": spec.tool_id},
+        spec=spec,
+        inputs={"experiment_id": "exp-1"},
+    )
+    with pytest.raises(PolicyError, match="forbids auto execution"):
+        enforcer.validate_action_execution(
+            run=run,
+            action={"id": "a6", "tool_id": spec.tool_id},
+            spec=spec,
+            all_actions=[],
+            inputs={"experiment_id": "exp-1"},
+        )

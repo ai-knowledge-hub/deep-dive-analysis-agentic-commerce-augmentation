@@ -133,7 +133,12 @@ class AgentRuntimeService:
         run_mode = str(run.get("run_mode") or "plan_only")
         if run_mode == "plan_only":
             raise PlanOnlyModeError("Run is plan-only. Switch mode to execute steps.")
-        if str(run.get("status") or "").lower() in {"canceled", "completed"}:
+        if str(run.get("status") or "").lower() in {
+            "canceled",
+            "completed",
+            "failed",
+            "paused",
+        }:
             raise AgentRuntimeError("Run is not executable in its current status")
 
         lock_token = str(uuid.uuid4())
