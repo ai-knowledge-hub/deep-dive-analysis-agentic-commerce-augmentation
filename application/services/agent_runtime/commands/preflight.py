@@ -9,6 +9,8 @@ from application.services.agent_runtime.registry import (
     get_capability_spec,
 )
 from application.services.agent_runtime.commands.recovery import (
+    _default_retry_strategy,
+    _harness_context,
     _requested_recovery_capability,
     _rollback_guidance,
 )
@@ -124,8 +126,18 @@ def _command_preflight(
             "Change-plan creates a proposed recovery action for operator review; it does not execute immediately."
         )
     if command_type == "retry" and action:
-        retry_strategy = str((metadata or {}).get("retry_strategy") or "").strip()
+        retry_strategy = str(
+            (metadata or {}).get("retry_strategy") or _default_retry_strategy(run)
+        ).strip()
         requested_capability = _requested_recovery_capability(metadata)
+        harness_context = _harness_context(run)
+        if not (metadata or {}).get("retry_strategy") and harness_context.get(
+            "retry_strategy"
+        ):
+            warnings.append(
+                "Retry strategy defaulted from harness "
+                f"'{harness_context.get('harness_id')}': {retry_strategy}."
+            )
         if retry_strategy == "create_recovery_action" and requested_capability:
             allowed = [
                 str(item).strip()
@@ -227,6 +239,10 @@ def _command_preflight(
         "side_effects": side_effects,
         "blockers": blockers,
         "warnings": warnings,
+        "harness": _harness_context(run),
+        "recommended_retry_strategy": _default_retry_strategy(run)
+        if command_type == "retry"
+        else None,
         "rollback_guidance": _rollback_guidance(
             command_type=command_type,
             effect_class=str(effect_class or ""),

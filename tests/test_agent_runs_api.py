@@ -1029,6 +1029,96 @@ def test_operator_retry_command_creates_new_proposed_retry_action(client: TestCl
     assert "operator_command_retry" in event_types
 
 
+def test_operator_retry_uses_harness_default_checkpoint_strategy(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="variants_ready",
+        status="failed",
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    failed = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="failed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1", "variant_selection": "top_1"},
+        outputs={},
+        inputs_hash="inputs-1",
+        outputs_hash=None,
+        rationale="Original variant run failed.",
+        confidence=0.55,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+        tool_id="experiment.run_variant",
+        skill_id="optimize-product-representation",
+        effect_class="write_low_risk",
+        error="Transient execution failure.",
+    )
+
+    preflight_response = client.post(
+        f"/agent-runs/{run['id']}/commands/preflight",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "retry",
+            "action_id": failed["id"],
+        },
+    )
+
+    assert preflight_response.status_code == 200
+    preflight = preflight_response.json()["preflight"]
+    assert preflight["recommended_retry_strategy"] == "last_safe_checkpoint"
+    assert preflight["harness"]["harness_id"] == "safe_autonomy_b2b"
+    assert "defaulted from harness" in preflight["warnings"][0]
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "retry",
+            "action_id": failed["id"],
+            "message": "Retry using harness default.",
+        },
+    )
+
+    assert response.status_code == 200
+    retry_action = response.json()["action"]
+    assert retry_action["dedupe_key"] == f"retry:{failed['id']}:last_safe_checkpoint:1"
+    assert retry_action["inputs"]["retry_from"] == "last_safe_checkpoint"
+    assert retry_action["inputs"]["harness_retry_strategy"] == "last_safe_checkpoint"
+    assert retry_action["inputs"]["recovery_context"]["harness"]["harness_id"] == (
+        "safe_autonomy_b2b"
+    )
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    retry_event = next(
+        event
+        for event in events.json()["events"]
+        if event["event_type"] == "action_retry_proposed"
+    )
+    assert retry_event["anchors"]["retry_strategy"] == "last_safe_checkpoint"
+    assert retry_event["anchors"]["harness_id"] == "safe_autonomy_b2b"
+
+
 def test_retry_command_can_create_recovery_action_strategy(client: TestClient):
     deps = default_deps()
     run = deps.agent_runs.create_agent_run(
@@ -1322,6 +1412,46 @@ def test_change_plan_command_creates_recovery_proposal(client: TestClient):
     )
     assert "superseded by a later action" in recovery_event["anchors"][
         "rollback_guidance"
+    ]
+
+
+def test_change_plan_uses_harness_fallback_capability(client: TestClient):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant", "review_validation_readiness"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="failed",
+        status="failed",
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "change_plan",
+            "message": "Let the harness choose the safest recovery proposal.",
+        },
+    )
+
+    assert response.status_code == 200
+    action = response.json()["action"]
+    assert action["capability_name"] == "review_validation_readiness"
+    assert action["inputs"]["recovery_context"]["selection_reason"] == "harness_fallback"
+    assert action["inputs"]["recovery_context"]["harness"]["fallback_order"] == [
+        "registry_recovery_template",
+        "operator_intervention",
     ]
 
 

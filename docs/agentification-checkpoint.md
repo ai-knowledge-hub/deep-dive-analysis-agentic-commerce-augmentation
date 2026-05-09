@@ -131,7 +131,6 @@ Current state: `harness_id` is now behavior-defining for run creation. Static ha
 Next steps:
 
 - Persist harness and agent-profile defaults once the static catalog needs tenant-specific overrides.
-- Use harness retry/fallback posture in command recovery selection.
 - Show harness posture in Interventions.
 
 ### 5. Protocol And Fallback Execution
@@ -223,7 +222,8 @@ Completed:
 - Harnesses now enforce compatible `run_mode` and `policy_profile_id` combinations before a run/action plan is created.
 - External-agent jobs inherit the authenticated agent profile's default harness when the caller does not specify one.
 - Agent Runs shows the active harness posture beside the selected run's skills/tools contract.
-- Backend tests cover harness defaulting, mismatch rejection, registry exposure, and external-agent job inheritance.
+- Retry and change-plan recovery commands now use harness retry/fallback posture when the operator does not explicitly choose a strategy.
+- Backend tests cover harness defaulting, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
 
 ## What Is Left To Build
 
@@ -246,7 +246,6 @@ Goal: continue hardening harnesses beyond the static v1 behavior-defining layer.
 Build:
 
 - Persistent tenant-specific harness and agent-profile defaults.
-- Harness-guided retry and fallback selection in recovery commands.
 - Interventions display of active harness posture and why a run is blocked, paused, or escalated.
 
 ### Priority 3: Real Protocol And Fallback Execution Adapters
