@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
@@ -15,6 +15,7 @@ from api.utils.agent_registry_runtime import (
     registry_ownership,
     registry_payload_and_fingerprint,
 )
+from api.utils.principals import resolve_principal_context
 from api.utils.tenancy import require_admin, require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.agent_first import (
@@ -36,6 +37,13 @@ from infrastructure.db.agent.agent_registry import (
 
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
+_REGISTRY_READ_SCOPES = {
+    "*",
+    "agent_runs:read",
+    "agent_runs:write",
+    "external_agent_jobs:read",
+    "external_agent_jobs:write",
+}
 
 
 def _deps() -> AppDeps:
@@ -72,8 +80,35 @@ def _registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
     return registry_payload_and_fingerprint()
 
 
+def _require_registry_read_access(
+    *, request: Request, client_id: Optional[str], user_id: Optional[str]
+) -> None:
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    scheme, _, token = str(auth_header or "").partition(" ")
+    if scheme.lower() == "bearer" and token.strip():
+        principal = resolve_principal_context(
+            request=request,
+            client_id=client_id,
+            user_id=user_id,
+            principal_type=None,
+            principal_id=None,
+            agent_profile_id=None,
+        )
+        if not set(principal.scopes or ()).intersection(_REGISTRY_READ_SCOPES):
+            raise HTTPException(
+                status_code=403, detail="Missing required registry read scope"
+            )
+        return
+    require_client_id(client_id, user_id)
+
+
 @router.get("/registry")
-def get_agent_runtime_registry() -> Dict[str, Any]:
+def get_agent_runtime_registry(
+    request: Request,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    _require_registry_read_access(request=request, client_id=client_id, user_id=user_id)
     registry_payload, fingerprint = _registry_payload_and_fingerprint()
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
@@ -94,9 +129,13 @@ def get_agent_runtime_registry() -> Dict[str, Any]:
 
 @router.get("/registry/audit")
 def get_agent_runtime_registry_audit(
+    request: Request,
     registry_fingerprint: Optional[str] = None,
     limit: int = 20,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    _require_registry_read_access(request=request, client_id=client_id, user_id=user_id)
     bounded_limit = max(1, min(int(limit), 100))
     return {
         "events": list_agent_registry_audit_events(
@@ -108,9 +147,13 @@ def get_agent_runtime_registry_audit(
 
 @router.get("/registry/releases")
 def get_agent_runtime_registry_releases(
+    request: Request,
     status: Optional[str] = None,
     limit: int = 20,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    _require_registry_read_access(request=request, client_id=client_id, user_id=user_id)
     normalized_status = str(status).strip().lower() if status else None
     if normalized_status and normalized_status not in {"active", "retired"}:
         raise HTTPException(
@@ -128,8 +171,12 @@ def get_agent_runtime_registry_releases(
 @router.get("/registry/releases/{registry_fingerprint}")
 def get_agent_runtime_registry_release_detail(
     registry_fingerprint: str,
+    request: Request,
     audit_limit: int = 20,
+    client_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    _require_registry_read_access(request=request, client_id=client_id, user_id=user_id)
     bounded_audit_limit = max(1, min(int(audit_limit), 100))
     release = get_agent_registry_release_detail(
         registry_fingerprint=registry_fingerprint,

@@ -39,6 +39,18 @@ Skill/tool scopes:
 
 - Tool request requires `tool:<tool_id>` or `tools:*`.
 - Skill request requires `skill:<skill_id>` or `skills:*`.
+- Registry discovery via `GET /agent-runs/registry` requires a tenant/user context or a bearer token with `external_agent_jobs:read`, `external_agent_jobs:write`, `agent_runs:read`, or `agent_runs:write`.
+
+## Discover Runtime Tools
+
+Endpoint:
+
+```http
+GET /agent-runs/registry
+Authorization: Bearer <agent-principal-token>
+```
+
+Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`.
 
 ## Create Job
 

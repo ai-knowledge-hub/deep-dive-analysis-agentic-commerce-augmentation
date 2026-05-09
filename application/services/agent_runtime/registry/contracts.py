@@ -40,12 +40,29 @@ def registry_contract_payload(
         _serialize_capability(capability, ownership)
         for capability in list_capability_specs()
     ]
+    executable_tool_ids = {tool.id for tool in list_tool_specs()}
     skill_ids_by_tool: Dict[str, list[str]] = {}
     for skill in skills:
         for tool_id in skill.get("tool_ids", []) or []:
             skill_ids_by_tool.setdefault(str(tool_id), []).append(str(skill.get("id")))
+    skill_tool_mappings = [
+        {
+            "tool_id": tool_id,
+            "skill_ids": skill_ids,
+            "executable": tool_id in executable_tool_ids,
+        }
+        for tool_id, skill_ids in sorted(skill_ids_by_tool.items())
+    ]
+    skill_ids_by_executable_tool = {
+        item["tool_id"]: item["skill_ids"]
+        for item in skill_tool_mappings
+        if item["executable"]
+    }
+    declared_non_executable_skill_tools = [
+        item["tool_id"] for item in skill_tool_mappings if not item["executable"]
+    ]
     skill_selection_by_tool: Dict[str, Dict[str, Any]] = {}
-    for tool_id in sorted(skill_ids_by_tool):
+    for tool_id in sorted(skill_ids_by_executable_tool):
         selected = select_skill_for_tool_id(tool_id)
         skill_selection_by_tool[tool_id] = {
             "default_skill_id": selected.id if selected else None,
@@ -60,6 +77,9 @@ def registry_contract_payload(
         "tools": tools,
         "capabilities": capabilities,
         "skill_ids_by_tool": skill_ids_by_tool,
+        "skill_ids_by_executable_tool": skill_ids_by_executable_tool,
+        "declared_non_executable_skill_tools": declared_non_executable_skill_tools,
+        "skill_tool_mappings": skill_tool_mappings,
         "skill_selection_by_tool": skill_selection_by_tool,
         "recovery_templates": list_recovery_templates(),
         "policy_profiles": list_policy_profiles(),
@@ -86,6 +106,24 @@ def _serialize_tool(
     tool: ToolSpec, ownership_by_tool: Mapping[str, Mapping[str, Any]]
 ) -> Dict[str, Any]:
     payload = _serialize_spec(tool)
+    candidate_skill_ids = [skill.id for skill in skill_specs_for_tool_id(tool.id)]
+    default_skill = select_skill_for_tool_id(tool.id)
+    payload["executable"] = True
+    payload["external_agent_contract"] = {
+        "job_endpoint": "POST /external-agent/jobs",
+        "accepted_plan_modes": ["single_tool", "workflow"],
+        "required_scopes": {
+            "tool": [f"tool:{tool.id}", "tools:*"],
+            "skill": [f"skill:{skill_id}" for skill_id in candidate_skill_ids]
+            + ["skills:*"],
+        },
+        "default_skill_id": default_skill.id if default_skill else None,
+        "candidate_skill_ids": candidate_skill_ids,
+        "minimal_request": {
+            "tool_id": tool.id,
+            "plan_mode": "single_tool",
+        },
+    }
     ownership = ownership_by_tool.get(tool.id)
     if ownership:
         payload["owner_principal_id"] = str(
@@ -104,6 +142,24 @@ def _serialize_capability(
     capability: CapabilitySpec, ownership_by_tool: Mapping[str, Mapping[str, Any]]
 ) -> Dict[str, Any]:
     payload = _serialize_spec(capability)
+    candidate_skill_ids = [skill.id for skill in skill_specs_for_tool_id(capability.tool_id)]
+    default_skill = select_skill_for_tool_id(capability.tool_id)
+    payload["executable"] = True
+    payload["external_agent_contract"] = {
+        "job_endpoint": "POST /external-agent/jobs",
+        "accepted_plan_modes": ["single_tool", "workflow"],
+        "required_scopes": {
+            "tool": [f"tool:{capability.tool_id}", "tools:*"],
+            "skill": [f"skill:{skill_id}" for skill_id in candidate_skill_ids]
+            + ["skills:*"],
+        },
+        "default_skill_id": default_skill.id if default_skill else None,
+        "candidate_skill_ids": candidate_skill_ids,
+        "minimal_request": {
+            "capability_name": capability.name,
+            "plan_mode": "single_tool",
+        },
+    }
     ownership = ownership_by_tool.get(capability.tool_id)
     if ownership:
         payload["owner_principal_id"] = str(
