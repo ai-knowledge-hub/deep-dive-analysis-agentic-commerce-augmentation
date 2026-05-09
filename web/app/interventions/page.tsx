@@ -41,6 +41,7 @@ import {
   getAgentRunEvents,
   issueAgentRunCommand,
   listAgentRuns,
+  listAgentRuntimeRegistry,
   preflightAgentRunCommand,
 } from "../../lib/api";
 import { buildRunsHref } from "../../lib/routes";
@@ -76,8 +77,12 @@ function InterventionsPageContent() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listAgentRuns({ limit: 16 }, userId);
+      const [response, registry] = await Promise.all([
+        listAgentRuns({ limit: 16 }, userId),
+        listAgentRuntimeRegistry().catch(() => null),
+      ]);
       const nextRuns = response.runs ?? [];
+      const harnessProfiles = registry?.harness_profiles ?? [];
       const detailRows = await Promise.all(
         nextRuns.map(async (run) => {
           try {
@@ -85,9 +90,14 @@ function InterventionsPageContent() {
               getAgentRun(run.id, { limit: 50 }, userId),
               getAgentRunEvents(run.id, { limit: 50, event_type: "all" }, userId),
             ]);
-            return buildDetails(run, detail.actions ?? [], eventData.events ?? []);
+            return buildDetails(
+              { ...run, ...(detail.run ?? {}) },
+              detail.actions ?? [],
+              eventData.events ?? [],
+              harnessProfiles,
+            );
           } catch {
-            return buildDetails(run, [], []);
+            return buildDetails(run, [], [], harnessProfiles);
           }
         }),
       );

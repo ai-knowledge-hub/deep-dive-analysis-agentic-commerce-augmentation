@@ -3,6 +3,7 @@ import type {
   AgentCompensatingAction,
   AgentRun,
   AgentRunEvent,
+  AgentRuntimeHarnessProfile,
 } from "../../lib/types";
 
 export type Priority = "critical" | "high" | "medium" | "low";
@@ -12,15 +13,21 @@ export type InterventionDetail = {
   run: AgentRun;
   actions: AgentAction[];
   events: AgentRunEvent[];
+  harness: AgentRuntimeHarnessProfile | null;
   latestPolicyEvent: AgentRunEvent | null;
   latestFailureEvent: AgentRunEvent | null;
   proposedActions: AgentAction[];
   approvedActions: AgentAction[];
 };
 
+export type HarnessAwareIntervention = {
+  harness: AgentRuntimeHarnessProfile | null;
+};
+
 export type ApprovalItem = {
   kind: "approval";
   run: AgentRun;
+  harness: AgentRuntimeHarnessProfile | null;
   action: AgentAction;
   priority: Priority;
   risk: RiskLevel;
@@ -31,6 +38,7 @@ export type ApprovalItem = {
 export type RetryItem = {
   kind: "retry";
   run: AgentRun;
+  harness: AgentRuntimeHarnessProfile | null;
   control: "start" | "step";
   priority: Priority;
   risk: RiskLevel;
@@ -41,6 +49,7 @@ export type RetryItem = {
 export type PauseItem = {
   kind: "pause";
   run: AgentRun;
+  harness: AgentRuntimeHarnessProfile | null;
   priority: Priority;
   risk: RiskLevel;
   summary: string;
@@ -49,6 +58,7 @@ export type PauseItem = {
 export type EscalationItem = {
   kind: "escalation";
   run: AgentRun;
+  harness: AgentRuntimeHarnessProfile | null;
   priority: Priority;
   risk: RiskLevel;
   title: string;
@@ -59,6 +69,7 @@ export type EscalationItem = {
 export type CommandItem = {
   kind: "command";
   run: AgentRun;
+  harness: AgentRuntimeHarnessProfile | null;
   event: AgentRunEvent;
   priority: Priority;
   risk: RiskLevel;

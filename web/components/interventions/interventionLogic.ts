@@ -1,4 +1,9 @@
-import type { AgentCompensatingAction, AgentRun, AgentRunEvent } from "../../lib/types";
+import type {
+  AgentCompensatingAction,
+  AgentRun,
+  AgentRunEvent,
+  AgentRuntimeHarnessProfile,
+} from "../../lib/types";
 import type {
   ApprovalItem,
   CommandItem,
@@ -106,6 +111,7 @@ export function buildDetails(
   run: AgentRun,
   actions: InterventionDetail["actions"],
   events: AgentRunEvent[],
+  harnessProfiles: AgentRuntimeHarnessProfile[] = [],
 ): InterventionDetail {
   const proposedActions = actions.filter((item) => normalize(item.status) === "proposed");
   const approvedActions = actions.filter((item) => normalize(item.status) === "approved");
@@ -118,6 +124,7 @@ export function buildDetails(
     run,
     actions,
     events,
+    harness: harnessProfiles.find((profile) => profile.id === run.harness_id) ?? null,
     proposedActions,
     approvedActions,
     latestPolicyEvent,
@@ -139,6 +146,7 @@ export function buildApprovalItems(detail: InterventionDetail): ApprovalItem[] {
     return {
       kind: "approval",
       run: detail.run,
+      harness: detail.harness,
       action,
       priority,
       risk,
@@ -173,6 +181,7 @@ export function buildRetryItem(detail: InterventionDetail): RetryItem | null {
   return {
     kind: "retry",
     run: detail.run,
+    harness: detail.harness,
     control,
     priority,
     risk,
@@ -197,6 +206,7 @@ export function buildPauseItem(detail: InterventionDetail): PauseItem | null {
   return {
     kind: "pause",
     run: detail.run,
+    harness: detail.harness,
     priority,
     risk,
     summary:
@@ -218,6 +228,7 @@ export function buildEscalationItem(detail: InterventionDetail): EscalationItem 
   return {
     kind: "escalation",
     run: detail.run,
+    harness: detail.harness,
     priority: runStatus === "failed" ? "critical" : "high",
     risk,
     title:
@@ -260,6 +271,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       return {
         kind: "command" as const,
         run: detail.run,
+        harness: detail.harness,
         event,
         priority,
         risk,
