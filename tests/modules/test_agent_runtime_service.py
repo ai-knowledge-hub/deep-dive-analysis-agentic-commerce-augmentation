@@ -297,6 +297,89 @@ def test_step_once_requires_approved_action(tmp_path):
     with pytest.raises(NoApprovedActionError):
         runtime.step_once(run_id=run["id"], user_id="user-a")
 
+    unchanged = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert unchanged is not None
+    assert unchanged["status"] == "planned"
+    assert unchanged["lock_token"] is None
+
+
+def test_step_once_fails_unsupported_claimed_action_cleanly(tmp_path):
+    db_path = tmp_path / "agent-runtime-unsupported-claimed-action.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    deps.clients.create_client(client_id="client-a", name="Client A")
+    run = deps.agent_runs.create_agent_run(
+        client_id="client-a",
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["registry_drift_capability"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="battery_ready",
+        status="planned",
+    )
+    action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="approved",
+        capability_name="registry_drift_capability",
+        capability_version="v1",
+        inputs={},
+        outputs={},
+        inputs_hash="in",
+        outputs_hash=None,
+        rationale="registry drift",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="Unsupported capability"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+    assert "Unsupported capability" in str(failed_action["error"])
+
+    failed_run = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert failed_run is not None
+    assert failed_run["status"] == "failed"
+    assert failed_run["lock_token"] is None
+
+
+def test_runtime_lifecycle_rejects_terminal_run_transitions(tmp_path):
+    db_path = tmp_path / "agent-runtime-terminal-transitions.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        status="completed",
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="Terminal runs cannot be started"):
+        runtime.start_run(run_id=run["id"])
+    with pytest.raises(AgentRuntimeError, match="Terminal runs cannot be paused"):
+        runtime.pause_run(run_id=run["id"])
+    with pytest.raises(AgentRuntimeError, match="already terminal"):
+        runtime.cancel_run(run_id=run["id"])
+
+    unchanged = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert unchanged is not None
+    assert unchanged["status"] == "completed"
+
 
 def test_decide_agent_action_rejects_high_risk_approval_under_safe_auto(tmp_path):
     db_path = tmp_path / "agent-runtime-high-risk-approval.db"
