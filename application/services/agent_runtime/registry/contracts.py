@@ -20,13 +20,13 @@ from application.services.agent_runtime.registry.catalog import (
     get_capability_spec,
     get_tool_spec,
     list_capability_specs,
-    list_harness_profiles,
     list_policy_profiles,
     list_recovery_templates,
     list_tool_specs,
     recovery_template_for_capability,
     tool_supported,
 )
+from application.services.agent_runtime.registry.harnesses import list_harness_profiles
 
 
 def registry_contract_payload(
