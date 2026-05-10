@@ -79,7 +79,7 @@ function InterventionsPageContent() {
     try {
       const [response, registry] = await Promise.all([
         listAgentRuns({ limit: 16 }, userId),
-        listAgentRuntimeRegistry().catch(() => null),
+        listAgentRuntimeRegistry(userId).catch(() => null),
       ]);
       const nextRuns = response.runs ?? [];
       const harnessProfiles = registry?.harness_profiles ?? [];

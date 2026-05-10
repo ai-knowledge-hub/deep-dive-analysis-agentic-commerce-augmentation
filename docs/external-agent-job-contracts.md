@@ -1,7 +1,7 @@
 # External Agent Job Contracts
 
 Status: current
-Last updated: 2026-05-09
+Last updated: 2026-05-10
 
 This document defines the machine-facing job contract for external assistants calling the agentic commerce control plane.
 
@@ -108,11 +108,18 @@ Supported body fields:
 | `capability_versions` | No | Optional capability version pins. |
 | `budgets` | No | Optional run budget metadata. |
 | `approval_policy` | No | Optional approval metadata. |
-| `harness_id` | No | Stored for future behavior-defining harness profiles. |
-| `policy_profile_id` | No | Optional policy profile override. |
+| `harness_id` | No | Optional harness profile override. When omitted, the runtime resolves the default from the authenticated agent profile. |
+| `policy_profile_id` | No | Optional policy profile override. When omitted, the runtime resolves the default from the selected harness/profile. |
 | `requires_approval` | No | Defaults to `true`. |
-| `run_mode` | No | Defaults to `plan_only`. |
+| `run_mode` | No | Optional run-mode override. When omitted, the runtime resolves the default from the selected harness/profile. |
 | `state` | No | Defaults to `battery_ready`. |
+
+Default harness behavior:
+
+- `run_mode`, `policy_profile_id`, and `harness_id` are now behavior-defining, not future-only metadata.
+- For authenticated external agents with an `agent_profile_id`, omitted harness/run-mode/policy values are resolved from that profile and the runtime registry.
+- For the built-in `buyer-assistant-v1` profile, the default harness is `safe_autonomy_b2b` and the default run mode is `auto_execute_safe`.
+- If the caller provides explicit `harness_id`, `run_mode`, or `policy_profile_id`, the combination must be allowed by the registry profile; incompatible overrides are rejected before a run is created.
 
 Response:
 
@@ -136,6 +143,10 @@ Response:
     "id": "<agent-run-id>",
     "principal_type": "external_agent",
     "principal_id": "external-agent-1",
+    "agent_profile_id": "buyer-assistant-v1",
+    "harness_id": "safe_autonomy_b2b",
+    "policy_profile_id": "safe_auto",
+    "run_mode": "auto_execute_safe",
     "status": "planned"
   },
   "idempotent_replay": false

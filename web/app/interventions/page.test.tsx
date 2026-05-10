@@ -302,6 +302,7 @@ describe("InterventionsPage", () => {
     render(<InterventionsPage />);
 
     await waitFor(() => expect(listAgentRunsMock).toHaveBeenCalled());
+    expect(listAgentRuntimeRegistryMock).toHaveBeenCalledWith("user-a");
 
     expect(
       await screen.findByText(/Experiment exp-fail needs manual recovery/i),

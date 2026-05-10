@@ -629,14 +629,26 @@ export async function verifyExternalAgentJobReceiptForRun(
   );
 }
 
-export async function listAgentRuntimeRegistry(): Promise<AgentRuntimeRegistryResponse> {
-  return request<AgentRuntimeRegistryResponse>("/agent-runs/registry");
+export async function listAgentRuntimeRegistry(
+  userId?: string | null,
+): Promise<AgentRuntimeRegistryResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<AgentRuntimeRegistryResponse>(
+    `/agent-runs/registry${params.toString() ? `?${params.toString()}` : ""}`,
+  );
 }
 
 export async function listAgentRuntimeRegistryAudit(
   payload: { registry_fingerprint?: string | null; limit?: number } = {},
+  userId?: string | null,
 ): Promise<AgentRegistryAuditListResponse> {
   const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
   if (payload.registry_fingerprint) {
     params.set("registry_fingerprint", payload.registry_fingerprint);
   }
@@ -648,8 +660,12 @@ export async function listAgentRuntimeRegistryAudit(
 
 export async function listAgentRuntimeRegistryReleases(
   payload: { status?: "active" | "retired" | string | null; limit?: number } = {},
+  userId?: string | null,
 ): Promise<AgentRegistryReleaseListResponse> {
   const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
   if (payload.status) params.set("status", payload.status);
   if (payload.limit) params.set("limit", String(payload.limit));
   return request<AgentRegistryReleaseListResponse>(
@@ -660,8 +676,12 @@ export async function listAgentRuntimeRegistryReleases(
 export async function getAgentRuntimeRegistryRelease(
   registryFingerprint: string,
   payload: { audit_limit?: number } = {},
+  userId?: string | null,
 ): Promise<AgentRegistryReleaseDetailResponse> {
   const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
   if (payload.audit_limit) params.set("audit_limit", String(payload.audit_limit));
   return request<AgentRegistryReleaseDetailResponse>(
     `/agent-runs/registry/releases/${encodeURIComponent(registryFingerprint)}${

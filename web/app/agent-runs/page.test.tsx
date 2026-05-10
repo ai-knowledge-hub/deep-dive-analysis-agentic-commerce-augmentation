@@ -976,6 +976,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(getAgentRuntimeRegistryReleaseMock).toHaveBeenCalledWith(
       "abcdef1234567890",
       { audit_limit: 5 },
+      "user-a",
     );
     expect(await screen.findByText(/Release detail/i)).toBeInTheDocument();
     expect(
@@ -1049,9 +1050,12 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();
     expect(screen.getByText(/Steward: commerce-optimization/i)).toBeInTheDocument();
-    expect(listAgentRuntimeRegistryMock).toHaveBeenCalled();
-    expect(listAgentRuntimeRegistryAuditMock).toHaveBeenCalledWith({ limit: 5 });
-    expect(listAgentRuntimeRegistryReleasesMock).toHaveBeenCalledWith({ limit: 5 });
+    expect(listAgentRuntimeRegistryMock).toHaveBeenCalledWith("user-a");
+    expect(listAgentRuntimeRegistryAuditMock).toHaveBeenCalledWith({ limit: 5 }, "user-a");
+    expect(listAgentRuntimeRegistryReleasesMock).toHaveBeenCalledWith(
+      { limit: 5 },
+      "user-a",
+    );
   });
 
   it("routes operator chat steering commands through the command API", async () => {
