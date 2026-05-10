@@ -25,6 +25,7 @@ from api.main import app
 from api.routes import agent_runs as agent_runs_route
 from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
+from infrastructure.db.agent.agent_registry import update_agent_registry_harness_profile
 from shared.config.env import get_settings
 from shared.db.connection import get_connection
 from shared.db.connection import init_db, set_database_path
@@ -510,6 +511,72 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
         headers={"Authorization": f"Bearer {missing_scope_token}"},
     )
     assert missing_scope.status_code == 403
+
+
+def test_registry_uses_persistent_harness_profiles_for_fingerprint_and_defaults(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    seeded = get_connection().execute(
+        """
+        SELECT id, source, status
+        FROM agent_registry_harness_profiles
+        WHERE id = ?
+        """,
+        ("safe_autonomy_b2b",),
+    ).fetchone()
+    assert seeded is not None
+    assert seeded["source"] == "registry_default"
+    assert seeded["status"] == "active"
+
+    update_agent_registry_harness_profile(
+        profile_id="safe_autonomy_b2b",
+        source="operator_override",
+        profile={
+            "id": "safe_autonomy_b2b",
+            "name": "Safe Autonomy B2B",
+            "description": "Persisted test override.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "human_approval_required",
+            "allowed_run_modes": ["plan_only"],
+            "allowed_policy_profile_ids": ["human_approval_required"],
+            "planner_mode": "operator_review",
+            "retry_strategy": "operator_confirmed",
+            "fallback_order": ["operator_chat"],
+            "approval_strategy": "human_required",
+            "memory_policy": "write_learnings_after_review",
+            "stopping_conditions": ["operator_pause"],
+        },
+    )
+
+    changed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    changed_harness = next(
+        profile
+        for profile in changed["harness_profiles"]
+        if profile["id"] == "safe_autonomy_b2b"
+    )
+    assert changed["registry_fingerprint"] != first["registry_fingerprint"]
+    assert changed_harness["source"] == "operator_override"
+    assert changed_harness["default_run_mode"] == "plan_only"
+    assert changed_harness["retry_strategy"] == "operator_confirmed"
+
+    token = build_agent_principal_token(
+        principal_id="persistent-harness-agent",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="buyer-assistant-v1",
+        scopes=["agent_runs:write"],
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"allowed_capabilities": ["seed_hypotheses"]},
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["harness_id"] == "safe_autonomy_b2b"
+    assert run["run_mode"] == "plan_only"
+    assert run["policy_profile_id"] == "human_approval_required"
 
 
 def test_agent_runtime_registry_ownership_update_creates_new_release(

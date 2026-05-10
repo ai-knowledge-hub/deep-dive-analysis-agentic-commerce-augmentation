@@ -256,6 +256,175 @@ def list_agent_registry_tool_ownership() -> list[Dict[str, Any]]:
     return [_ownership_row(row) for row in rows]
 
 
+def ensure_agent_registry_harness_profiles(
+    *, profiles: list[Dict[str, Any]], source: str = "registry_default"
+) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    for profile in profiles:
+        profile_id = str(profile.get("id") or "").strip()
+        name = str(profile.get("name") or "").strip()
+        default_run_mode = str(profile.get("default_run_mode") or "").strip()
+        default_policy_profile_id = str(
+            profile.get("default_policy_profile_id") or ""
+        ).strip()
+        if not profile_id or not name or not default_run_mode or not default_policy_profile_id:
+            continue
+        conn.execute(
+            """
+            INSERT INTO agent_registry_harness_profiles (
+                id,
+                name,
+                description,
+                default_run_mode,
+                default_policy_profile_id,
+                allowed_run_modes_json,
+                allowed_policy_profile_ids_json,
+                planner_mode,
+                retry_strategy,
+                fallback_order_json,
+                approval_strategy,
+                memory_policy,
+                stopping_conditions_json,
+                source,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, json(?), json(?), ?, ?, json(?), ?, ?, json(?), ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = agent_registry_harness_profiles.name,
+                description = agent_registry_harness_profiles.description,
+                default_run_mode = agent_registry_harness_profiles.default_run_mode,
+                default_policy_profile_id = agent_registry_harness_profiles.default_policy_profile_id,
+                allowed_run_modes_json = agent_registry_harness_profiles.allowed_run_modes_json,
+                allowed_policy_profile_ids_json = agent_registry_harness_profiles.allowed_policy_profile_ids_json,
+                planner_mode = agent_registry_harness_profiles.planner_mode,
+                retry_strategy = agent_registry_harness_profiles.retry_strategy,
+                fallback_order_json = agent_registry_harness_profiles.fallback_order_json,
+                approval_strategy = agent_registry_harness_profiles.approval_strategy,
+                memory_policy = agent_registry_harness_profiles.memory_policy,
+                stopping_conditions_json = agent_registry_harness_profiles.stopping_conditions_json,
+                source = agent_registry_harness_profiles.source,
+                status = agent_registry_harness_profiles.status,
+                updated_at = agent_registry_harness_profiles.updated_at
+            """,
+            (
+                profile_id,
+                name,
+                str(profile.get("description") or ""),
+                default_run_mode,
+                default_policy_profile_id,
+                to_json(profile.get("allowed_run_modes") or []) or "[]",
+                to_json(profile.get("allowed_policy_profile_ids") or []) or "[]",
+                profile.get("planner_mode"),
+                profile.get("retry_strategy"),
+                to_json(profile.get("fallback_order") or []) or "[]",
+                profile.get("approval_strategy"),
+                profile.get("memory_policy"),
+                to_json(profile.get("stopping_conditions") or []) or "[]",
+                source,
+                str(profile.get("status") or "active"),
+            ),
+        )
+    conn.commit()
+    return list_agent_registry_harness_profiles()
+
+
+def list_agent_registry_harness_profiles(
+    *, status: Optional[str] = "active"
+) -> list[Dict[str, Any]]:
+    filters: list[str] = []
+    params: list[Any] = []
+    if status:
+        filters.append("status = ?")
+        params.append(status)
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    rows = (
+        get_connection()
+        .execute(
+            f"""
+            SELECT *
+            FROM agent_registry_harness_profiles
+            {where_clause}
+            ORDER BY id ASC
+            """,
+            tuple(params),
+        )
+        .fetchall()
+    )
+    return [_harness_profile_row(row) for row in rows]
+
+
+def update_agent_registry_harness_profile(
+    *, profile_id: str, profile: Dict[str, Any], source: str = "operator_override"
+) -> Dict[str, Any]:
+    normalized_id = str(profile_id or profile.get("id") or "").strip()
+    if not normalized_id:
+        return {}
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO agent_registry_harness_profiles (
+            id,
+            name,
+            description,
+            default_run_mode,
+            default_policy_profile_id,
+            allowed_run_modes_json,
+            allowed_policy_profile_ids_json,
+            planner_mode,
+            retry_strategy,
+            fallback_order_json,
+            approval_strategy,
+            memory_policy,
+            stopping_conditions_json,
+            source,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, json(?), json(?), ?, ?, json(?), ?, ?, json(?), ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            default_run_mode = excluded.default_run_mode,
+            default_policy_profile_id = excluded.default_policy_profile_id,
+            allowed_run_modes_json = excluded.allowed_run_modes_json,
+            allowed_policy_profile_ids_json = excluded.allowed_policy_profile_ids_json,
+            planner_mode = excluded.planner_mode,
+            retry_strategy = excluded.retry_strategy,
+            fallback_order_json = excluded.fallback_order_json,
+            approval_strategy = excluded.approval_strategy,
+            memory_policy = excluded.memory_policy,
+            stopping_conditions_json = excluded.stopping_conditions_json,
+            source = excluded.source,
+            status = excluded.status,
+            updated_at = datetime('now')
+        """,
+        (
+            normalized_id,
+            str(profile.get("name") or normalized_id),
+            str(profile.get("description") or ""),
+            str(profile.get("default_run_mode") or "plan_only"),
+            str(profile.get("default_policy_profile_id") or "human_approval_required"),
+            to_json(profile.get("allowed_run_modes") or []) or "[]",
+            to_json(profile.get("allowed_policy_profile_ids") or []) or "[]",
+            profile.get("planner_mode"),
+            profile.get("retry_strategy"),
+            to_json(profile.get("fallback_order") or []) or "[]",
+            profile.get("approval_strategy"),
+            profile.get("memory_policy"),
+            to_json(profile.get("stopping_conditions") or []) or "[]",
+            source,
+            str(profile.get("status") or "active"),
+        ),
+    )
+    conn.commit()
+    row = (
+        conn.execute(
+            "SELECT * FROM agent_registry_harness_profiles WHERE id = ?",
+            (normalized_id,),
+        ).fetchone()
+    )
+    return _harness_profile_row(row) if row else {}
+
+
 def update_agent_registry_tool_ownership(
     *,
     tool_id: str,
@@ -483,8 +652,33 @@ def _ownership_row(row) -> Dict[str, Any]:
     }
 
 
+def _harness_profile_row(row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "default_run_mode": row["default_run_mode"],
+        "default_policy_profile_id": row["default_policy_profile_id"],
+        "allowed_run_modes": from_json(row["allowed_run_modes_json"], []),
+        "allowed_policy_profile_ids": from_json(
+            row["allowed_policy_profile_ids_json"], []
+        ),
+        "planner_mode": row["planner_mode"],
+        "retry_strategy": row["retry_strategy"],
+        "fallback_order": from_json(row["fallback_order_json"], []),
+        "approval_strategy": row["approval_strategy"],
+        "memory_policy": row["memory_policy"],
+        "stopping_conditions": from_json(row["stopping_conditions_json"], []),
+        "source": row["source"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
 __all__ = [
     "create_agent_registry_audit_event",
+    "ensure_agent_registry_harness_profiles",
     "ensure_agent_registry_tool_ownership",
     "ensure_agent_registry_version",
     "get_active_agent_registry_version",
@@ -492,7 +686,9 @@ __all__ = [
     "get_agent_registry_version",
     "get_latest_agent_registry_version",
     "list_agent_registry_audit_events",
+    "list_agent_registry_harness_profiles",
     "list_agent_registry_tool_ownership",
     "list_agent_registry_versions",
+    "update_agent_registry_harness_profile",
     "update_agent_registry_tool_ownership",
 ]

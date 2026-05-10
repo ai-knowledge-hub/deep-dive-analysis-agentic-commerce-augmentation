@@ -11,7 +11,7 @@ _DEFAULT_AGENT_PROFILE_HARNESSES = {
 }
 
 
-def list_harness_profiles() -> list[Dict[str, Any]]:
+def list_static_harness_profiles() -> list[Dict[str, Any]]:
     return [
         {
             "id": "operator_supervised",
@@ -64,6 +64,20 @@ def list_harness_profiles() -> list[Dict[str, Any]]:
             "stopping_conditions": ["recommendation_produced", "operator_pause"],
         },
     ]
+
+
+def list_harness_profiles() -> list[Dict[str, Any]]:
+    try:
+        from infrastructure.db.agent.agent_registry import (
+            list_agent_registry_harness_profiles,
+        )
+
+        profiles = list_agent_registry_harness_profiles(status="active")
+        if profiles:
+            return profiles
+    except Exception:
+        pass
+    return list_static_harness_profiles()
 
 
 def get_harness_profile(harness_id: str | None) -> Dict[str, Any] | None:
