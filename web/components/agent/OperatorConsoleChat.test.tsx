@@ -13,6 +13,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "planned",
           state: "variants_ready",
@@ -95,6 +96,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "planned",
           state: "variants_ready",
@@ -177,6 +179,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "planned",
           state: "variants_ready",
@@ -241,6 +244,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "planned",
           state: "variants_ready",
@@ -307,6 +311,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "failed",
           state: "experiment_run_completed",
@@ -426,6 +431,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "failed",
           state: "experiment_run_completed",
@@ -544,6 +550,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "paused",
           state: "variants_ready",
@@ -622,6 +629,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "running",
           state: "variants_ready",
@@ -668,6 +676,7 @@ describe("OperatorConsoleChat", () => {
       <OperatorConsoleChat
         run={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-12345678",
           status: "running",
           state: "variants_ready",

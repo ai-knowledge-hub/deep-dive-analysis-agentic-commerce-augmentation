@@ -6,9 +6,7 @@ from application.services.agent_runtime.registry.catalog import (
     default_tool_ownership_records,
     get_capability_spec,
     get_tool_spec,
-    harness_profile_supported,
     list_capability_specs,
-    list_harness_profiles,
     list_policy_profiles,
     list_recovery_templates,
     list_tool_specs,
@@ -16,6 +14,12 @@ from application.services.agent_runtime.registry.catalog import (
     recovery_template_for_capability,
     run_mode_supported,
     tool_supported,
+)
+from application.services.agent_runtime.registry.harnesses import (
+    default_harness_id_for_agent_profile,
+    get_harness_profile,
+    harness_profile_supported,
+    list_harness_profiles,
 )
 from application.services.agent_runtime.registry.contracts import (
     next_state_for_capability,
@@ -31,6 +35,8 @@ __all__ = [
     "REGISTRY_VERSION",
     "ToolSpec",
     "default_tool_ownership_records",
+    "default_harness_id_for_agent_profile",
+    "get_harness_profile",
     "harness_profile_supported",
     "list_harness_profiles",
     "get_tool_spec",

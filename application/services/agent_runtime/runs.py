@@ -18,7 +18,9 @@ from application.services.agent_runtime.commands.recovery import (
     _hash_payload,
 )
 from application.services.agent_runtime.registry import (
+    default_harness_id_for_agent_profile,
     get_capability_spec,
+    get_harness_profile,
     harness_profile_supported,
     policy_profile_supported,
     run_mode_supported,
@@ -43,7 +45,7 @@ def create_agent_run_with_initial_plan(
     budgets: Dict[str, Any],
     approval_policy: Dict[str, Any],
     requires_approval: bool,
-    run_mode: str,
+    run_mode: str | None,
     state: str,
     status: str,
     principal_type: str,
@@ -57,18 +59,32 @@ def create_agent_run_with_initial_plan(
     preferred_skill_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     _validate_plan_capabilities(allowed_capabilities or [])
-    normalized_run_mode = str(run_mode or "plan_only").strip().lower()
+    resolved_harness_id = harness_id or default_harness_id_for_agent_profile(
+        agent_profile_id=agent_profile_id,
+        principal_type=principal_type,
+    )
+    if not harness_profile_supported(resolved_harness_id):
+        raise AgentRunPlanError(f"Unsupported harness_id: {resolved_harness_id}")
+    harness_profile = get_harness_profile(resolved_harness_id) or {}
+    normalized_run_mode = str(
+        run_mode or harness_profile.get("default_run_mode") or "plan_only"
+    ).strip().lower()
     if not run_mode_supported(normalized_run_mode):
         raise AgentRunPlanError(f"Unsupported run_mode: {normalized_run_mode}")
-    resolved_policy_profile_id = policy_profile_id or policy_profile_for_run_mode(
-        normalized_run_mode
+    resolved_policy_profile_id = (
+        policy_profile_id
+        or harness_profile.get("default_policy_profile_id")
+        or policy_profile_for_run_mode(normalized_run_mode)
     )
     if not policy_profile_supported(resolved_policy_profile_id):
         raise AgentRunPlanError(
             f"Unsupported policy_profile_id: {resolved_policy_profile_id}"
         )
-    if not harness_profile_supported(harness_id):
-        raise AgentRunPlanError(f"Unsupported harness_id: {harness_id}")
+    _validate_harness_runtime_posture(
+        harness_profile=harness_profile,
+        run_mode=normalized_run_mode,
+        policy_profile_id=resolved_policy_profile_id,
+    )
     trace_id = new_trace_id()
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,
@@ -87,8 +103,8 @@ def create_agent_run_with_initial_plan(
         principal_type=principal_type,
         principal_id=principal_id,
         agent_profile_id=agent_profile_id,
-        harness_id=harness_id,
-        policy_profile_id=resolved_policy_profile_id,
+        harness_id=resolved_harness_id,
+        policy_profile_id=str(resolved_policy_profile_id),
         idempotency_key=idempotency_key,
         trace_id=trace_id,
         registry_version=str(registry_payload["registry_version"]),
@@ -127,6 +143,30 @@ def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
     ):
         raise AgentRunPlanError(
             "allowed_capabilities did not produce any initial plan actions"
+        )
+
+
+def _validate_harness_runtime_posture(
+    *, harness_profile: Dict[str, Any], run_mode: str, policy_profile_id: str
+) -> None:
+    harness_id = str(harness_profile.get("id") or "").strip()
+    allowed_run_modes = {
+        str(item).strip()
+        for item in list(harness_profile.get("allowed_run_modes") or [])
+        if str(item).strip()
+    }
+    if allowed_run_modes and run_mode not in allowed_run_modes:
+        raise AgentRunPlanError(
+            f"Harness '{harness_id}' does not allow run_mode: {run_mode}"
+        )
+    allowed_policy_profiles = {
+        str(item).strip()
+        for item in list(harness_profile.get("allowed_policy_profile_ids") or [])
+        if str(item).strip()
+    }
+    if allowed_policy_profiles and policy_profile_id not in allowed_policy_profiles:
+        raise AgentRunPlanError(
+            f"Harness '{harness_id}' does not allow policy_profile_id: {policy_profile_id}"
         )
 
 

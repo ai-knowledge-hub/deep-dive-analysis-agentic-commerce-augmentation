@@ -68,7 +68,7 @@ const DEFAULT_ALLOWED_CAPABILITIES = [
   "publish_copy_revision",
 ];
 
-const AGENT_FLOW_STEPS: { id: AgentRun["state"] | string; label: string }[] = [
+const AGENT_FLOW_STEPS: { id: string; label: string }[] = [
   { id: "battery_ready", label: "Battery ready" },
   { id: "retrieval_snapshots_ready", label: "Retrieval snapshots ready" },
   { id: "baseline_scored", label: "Baseline scored" },
@@ -572,12 +572,13 @@ function AgentRunsPageContent() {
   );
 
   const loadRuntimeRegistry = useCallback(async () => {
+    if (!userId) return;
     try {
-      const response = await listAgentRuntimeRegistry();
+      const response = await listAgentRuntimeRegistry(userId);
       setRuntimeRegistry(response);
       const [auditResponse, releasesResponse] = await Promise.all([
-        listAgentRuntimeRegistryAudit({ limit: 5 }),
-        listAgentRuntimeRegistryReleases({ limit: 5 }),
+        listAgentRuntimeRegistryAudit({ limit: 5 }, userId),
+        listAgentRuntimeRegistryReleases({ limit: 5 }, userId),
       ]);
       setRegistryAuditEvents(auditResponse.events ?? []);
       setRegistryReleases(releasesResponse.releases ?? []);
@@ -586,7 +587,7 @@ function AgentRunsPageContent() {
       setRegistryAuditEvents([]);
       setRegistryReleases([]);
     }
-  }, []);
+  }, [userId]);
 
   const loadRuns = useCallback(async () => {
     if (!userId) return;
@@ -651,19 +652,24 @@ function AgentRunsPageContent() {
   );
 
   const loadRegistryReleaseDetail = useCallback(async (registryFingerprint: string) => {
+    if (!userId) return;
     setRegistryReleaseBusy(registryFingerprint);
     setRegistryReceiptVerification(null);
     try {
-      const response = await getAgentRuntimeRegistryRelease(registryFingerprint, {
-        audit_limit: 5,
-      });
+      const response = await getAgentRuntimeRegistryRelease(
+        registryFingerprint,
+        {
+          audit_limit: 5,
+        },
+        userId,
+      );
       setSelectedRegistryRelease(response.release);
     } catch {
       setSelectedRegistryRelease(null);
     } finally {
       setRegistryReleaseBusy(null);
     }
-  }, []);
+  }, [userId]);
 
   const verifyRegistryApprovalReceipt = useCallback(async (event: AgentRegistryAuditEvent) => {
     const approvalReceipt = approvalReceiptForEvent(event);

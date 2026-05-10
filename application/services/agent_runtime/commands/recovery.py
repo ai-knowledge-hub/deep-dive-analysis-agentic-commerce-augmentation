@@ -12,6 +12,7 @@ from application.services.agent_runtime.agent_first import (
 )
 from application.services.agent_runtime.registry import (
     get_capability_spec,
+    get_harness_profile,
     version_context_for_capability,
 )
 
@@ -229,6 +230,52 @@ def _requested_recovery_capability(metadata: Optional[Dict[str, Any]]) -> str:
     return str(raw or "").strip()
 
 
+def _active_harness(run: Dict[str, Any]) -> Dict[str, Any]:
+    return get_harness_profile(str(run.get("harness_id") or "")) or {}
+
+
+def _harness_context(run: Dict[str, Any]) -> Dict[str, Any]:
+    harness = _active_harness(run)
+    return {
+        "harness_id": harness.get("id") or run.get("harness_id"),
+        "retry_strategy": harness.get("retry_strategy"),
+        "fallback_order": list(harness.get("fallback_order") or []),
+        "approval_strategy": harness.get("approval_strategy"),
+        "memory_policy": harness.get("memory_policy"),
+        "stopping_conditions": list(harness.get("stopping_conditions") or []),
+    }
+
+
+def _default_retry_strategy(run: Dict[str, Any]) -> str:
+    strategy = str(_active_harness(run).get("retry_strategy") or "").strip()
+    if strategy in {"last_safe_checkpoint", "same_action", "create_recovery_action"}:
+        return strategy
+    if strategy in {"operator_confirmed", "none"}:
+        return "same_action"
+    return "same_action"
+
+
+def _fallback_capability_for_run(
+    *, run: Dict[str, Any], requested_capability: str, allowed: List[str]
+) -> str:
+    if requested_capability in allowed:
+        return requested_capability
+    harness = _active_harness(run)
+    fallback_order = [str(item).strip() for item in list(harness.get("fallback_order") or [])]
+    if "registry_recovery_template" in fallback_order:
+        for candidate in (
+            "review_validation_readiness",
+            "recommend_next_action",
+        ):
+            if candidate in allowed:
+                return candidate
+    if "operator_chat" in fallback_order and "recommend_next_action" in allowed:
+        return "recommend_next_action"
+    if "recommend_next_action" in allowed:
+        return "recommend_next_action"
+    return allowed[0] if allowed else ""
+
+
 def create_change_plan_recovery_action(
     *,
     deps: AppDeps,
@@ -250,12 +297,10 @@ def create_change_plan_recovery_action(
         if str(item).strip()
     ]
     requested_capability = _requested_recovery_capability(metadata)
-    capability_name = (
-        requested_capability
-        if requested_capability in allowed
-        else "recommend_next_action"
-        if "recommend_next_action" in allowed
-        else allowed[0]
+    capability_name = _fallback_capability_for_run(
+        run=run,
+        requested_capability=requested_capability,
+        allowed=allowed,
     )
     tool_id = capability_to_tool_id(capability_name)
     skill_id = skill_id_for_tool_id(
@@ -283,6 +328,15 @@ def create_change_plan_recovery_action(
         strategy=str(metadata.get("recovery_strategy") or "propose_next_action"),
     )
     inputs = dict(recovery_template.get("inputs") or {})
+    recovery_context = dict(inputs.get("recovery_context") or {})
+    recovery_context.setdefault("harness", _harness_context(run))
+    recovery_context.setdefault(
+        "selection_reason",
+        "requested_capability"
+        if requested_capability and requested_capability == capability_name
+        else "harness_fallback",
+    )
+    inputs["recovery_context"] = recovery_context
     rollback_guidance = recovery_template.get(
         "rollback_guidance"
     ) or _capability_rollback_guidance(capability_name, effect_class)
@@ -353,6 +407,9 @@ def create_change_plan_recovery_action(
                 "recovery_strategy", "propose_next_action"
             ),
             "recovery_template_id": recovery_template.get("id"),
+            "harness_id": run.get("harness_id"),
+            "harness_retry_strategy": _harness_context(run).get("retry_strategy"),
+            "harness_fallback_order": _harness_context(run).get("fallback_order"),
             "side_effects": recovery_action.get("side_effects"),
             "rollback_guidance": recovery_action.get("rollback_guidance"),
             "compensating_actions": recovery_action.get("compensating_actions"),
@@ -375,7 +432,7 @@ def create_retry_action(
     )
     next_sequence = max([int(item.get("sequence") or 0) for item in actions] or [0]) + 1
     retry_count = int(action.get("retry_count") or 0) + 1
-    retry_strategy = str(metadata.get("retry_strategy") or "same_action").strip()
+    retry_strategy = str(metadata.get("retry_strategy") or _default_retry_strategy(run)).strip()
     allowed = [
         str(item).strip()
         for item in list(run.get("allowed_capabilities") or [])
@@ -383,18 +440,21 @@ def create_retry_action(
     ]
     if retry_strategy == "create_recovery_action":
         requested_capability = _requested_recovery_capability(metadata)
-        capability_name = (
-            requested_capability
-            if requested_capability in allowed
-            else "recommend_next_action"
-            if "recommend_next_action" in allowed
-            else str(action.get("capability_name") or "")
+        capability_name = _fallback_capability_for_run(
+            run=run,
+            requested_capability=requested_capability,
+            allowed=allowed,
         )
+        if not capability_name:
+            capability_name = str(action.get("capability_name") or "")
     else:
         capability_name = str(action.get("capability_name") or "")
     retry_inputs = dict(action.get("inputs") or {})
     if retry_strategy == "last_safe_checkpoint":
         retry_inputs["retry_from"] = "last_safe_checkpoint"
+        retry_inputs["harness_retry_strategy"] = _harness_context(run).get(
+            "retry_strategy"
+        )
     if retry_strategy == "create_recovery_action":
         retry_inputs["recovery_from_action_id"] = action.get("id")
     tool_id = capability_to_tool_id(capability_name)
@@ -421,6 +481,11 @@ def create_retry_action(
             strategy=retry_strategy,
         )
         retry_inputs = dict(recovery_template.get("inputs") or retry_inputs)
+    retry_context = dict(retry_inputs.get("recovery_context") or {})
+    if retry_strategy in {"last_safe_checkpoint", "create_recovery_action"}:
+        retry_context.setdefault("harness", _harness_context(run))
+        retry_context.setdefault("strategy", retry_strategy)
+        retry_inputs["recovery_context"] = retry_context
     rollback_guidance = recovery_template.get(
         "rollback_guidance"
     ) or _capability_rollback_guidance(capability_name, effect_class)
@@ -495,6 +560,9 @@ def create_retry_action(
             "retry_count": retry_count,
             "retry_strategy": retry_strategy,
             "recovery_template_id": recovery_template.get("id"),
+            "harness_id": run.get("harness_id"),
+            "harness_retry_strategy": _harness_context(run).get("retry_strategy"),
+            "harness_fallback_order": _harness_context(run).get("fallback_order"),
             "side_effects": retry_action.get("side_effects"),
             "rollback_guidance": retry_action.get("rollback_guidance"),
             "compensating_actions": retry_action.get("compensating_actions"),

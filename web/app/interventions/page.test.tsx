@@ -13,6 +13,7 @@ const decideAgentActionMock = vi.fn();
 const controlAgentRunMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
+const listAgentRuntimeRegistryMock = vi.fn();
 let searchParamsValue = "";
 
 vi.mock("next/navigation", () => ({
@@ -55,6 +56,7 @@ vi.mock("../../lib/api", () => ({
   decideAgentAction: (...args: unknown[]) => decideAgentActionMock(...args),
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
+  listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
 }));
@@ -69,6 +71,7 @@ describe("InterventionsPage", () => {
     controlAgentRunMock.mockReset();
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
+    listAgentRuntimeRegistryMock.mockReset();
     searchParamsValue = "";
 
     listAgentRunsMock.mockResolvedValue({
@@ -76,26 +79,72 @@ describe("InterventionsPage", () => {
         {
           id: "run-1",
           experiment_id: "exp-failed",
+          harness_id: "safe_autonomy_b2b",
+          policy_profile_id: "human_approval_required",
+          run_mode: "plan_only",
           status: "failed",
           state: "validation_completed",
         },
         {
           id: "run-2",
           experiment_id: "exp-approve",
+          harness_id: "safe_autonomy_b2b",
+          policy_profile_id: "human_approval_required",
+          run_mode: "plan_only",
           status: "planned",
           state: "variants_ready",
         },
         {
           id: "run-3",
           experiment_id: "exp-retry",
+          harness_id: "safe_autonomy_b2b",
+          policy_profile_id: "human_approval_required",
+          run_mode: "plan_only",
           status: "planned",
           state: "variants_ready",
         },
         {
           id: "run-4",
           experiment_id: "exp-active",
+          harness_id: "operator_supervised",
+          policy_profile_id: "human_approval_required",
+          run_mode: "auto_execute_safe",
           status: "running",
           state: "experiment_run_completed",
+        },
+      ],
+    });
+
+    listAgentRuntimeRegistryMock.mockResolvedValue({
+      skills: [],
+      tools: [],
+      capabilities: [],
+      skill_ids_by_tool: {},
+      policy_profiles: [],
+      harness_profiles: [
+        {
+          id: "safe_autonomy_b2b",
+          name: "Safe Autonomy B2B",
+          description: "Auto-executes low-risk work and escalates risky changes.",
+          default_run_mode: "auto_execute_safe",
+          default_policy_profile_id: "human_approval_required",
+          retry_strategy: "last_safe_checkpoint",
+          fallback_order: ["registry_recovery_template", "operator_intervention"],
+          approval_strategy: "auto_low_risk_human_governed_high_risk",
+          memory_policy: "trace_scoped",
+          stopping_conditions: ["budget_exhausted", "policy_violation"],
+        },
+        {
+          id: "operator_supervised",
+          name: "Operator Supervised",
+          description: "Keeps execution gated by a human operator.",
+          default_run_mode: "plan_only",
+          default_policy_profile_id: "human_approval_required",
+          retry_strategy: "manual_review",
+          fallback_order: ["operator_intervention"],
+          approval_strategy: "human_approval_required",
+          memory_policy: "trace_scoped",
+          stopping_conditions: ["operator_pause"],
         },
       ],
     });
@@ -253,6 +302,7 @@ describe("InterventionsPage", () => {
     render(<InterventionsPage />);
 
     await waitFor(() => expect(listAgentRunsMock).toHaveBeenCalled());
+    expect(listAgentRuntimeRegistryMock).toHaveBeenCalledWith("user-a");
 
     expect(
       await screen.findByText(/Experiment exp-fail needs manual recovery/i),
@@ -275,6 +325,13 @@ describe("InterventionsPage", () => {
     expect(
       screen.getByText(/Compensating action: Ask policy for the safest/i),
     ).toBeInTheDocument();
+    expect(screen.getAllByText(/Harness/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Safe Autonomy B2B/i)[0]).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/registry recovery template -> operator intervention/i)[0],
+    ).toBeInTheDocument();
+    expect(screen.getByText(/last safe checkpoint/i)).toBeInTheDocument();
+    expect(screen.getByText(/operator pause/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-acti is executing/i),
     ).toBeInTheDocument();

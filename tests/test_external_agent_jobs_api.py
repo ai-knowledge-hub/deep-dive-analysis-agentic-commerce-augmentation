@@ -108,6 +108,9 @@ def test_external_agent_job_create_is_idempotent_and_status_is_scoped(
     assert first_payload["run"]["principal_id"] == "agent-ext-1"
     assert first_payload["run"]["idempotency_key"] == "job-123"
     assert first_payload["run"]["allowed_capabilities"] == ["run_variant"]
+    assert first_payload["run"]["harness_id"] == "safe_autonomy_b2b"
+    assert first_payload["run"]["run_mode"] == "auto_execute_safe"
+    assert first_payload["run"]["policy_profile_id"] == "safe_auto"
 
     second = client.post(
         "/external-agent/jobs", headers=_headers(token), json=payload
