@@ -67,16 +67,6 @@ def list_static_harness_profiles() -> list[Dict[str, Any]]:
 
 
 def list_harness_profiles() -> list[Dict[str, Any]]:
-    try:
-        from infrastructure.db.agent.agent_registry import (
-            list_agent_registry_harness_profiles,
-        )
-
-        profiles = list_agent_registry_harness_profiles(status="active")
-        if profiles:
-            return profiles
-    except Exception:
-        pass
     return list_static_harness_profiles()
 
 

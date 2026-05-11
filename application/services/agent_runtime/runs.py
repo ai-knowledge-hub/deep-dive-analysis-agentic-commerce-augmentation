@@ -63,9 +63,12 @@ def create_agent_run_with_initial_plan(
         agent_profile_id=agent_profile_id,
         principal_type=principal_type,
     )
-    if not harness_profile_supported(resolved_harness_id):
+    harness_profile = _harness_profile_from_registry_payload(
+        registry_payload=registry_payload,
+        harness_id=resolved_harness_id,
+    )
+    if not harness_profile:
         raise AgentRunPlanError(f"Unsupported harness_id: {resolved_harness_id}")
-    harness_profile = get_harness_profile(resolved_harness_id) or {}
     normalized_run_mode = str(
         run_mode or harness_profile.get("default_run_mode") or "plan_only"
     ).strip().lower()
@@ -144,6 +147,16 @@ def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
         raise AgentRunPlanError(
             "allowed_capabilities did not produce any initial plan actions"
         )
+
+
+def _harness_profile_from_registry_payload(
+    *, registry_payload: Dict[str, Any], harness_id: str | None
+) -> Dict[str, Any] | None:
+    normalized = str(harness_id or "").strip()
+    for profile in list(registry_payload.get("harness_profiles") or []):
+        if str(profile.get("id") or "").strip() == normalized:
+            return dict(profile)
+    return get_harness_profile(normalized) if harness_profile_supported(normalized) else None
 
 
 def _validate_harness_runtime_posture(
