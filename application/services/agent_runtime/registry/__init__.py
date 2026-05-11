@@ -20,6 +20,7 @@ from application.services.agent_runtime.registry.harnesses import (
     get_harness_profile,
     harness_profile_supported,
     list_harness_profiles,
+    list_static_harness_profiles,
 )
 from application.services.agent_runtime.registry.contracts import (
     next_state_for_capability,
@@ -39,6 +40,7 @@ __all__ = [
     "get_harness_profile",
     "harness_profile_supported",
     "list_harness_profiles",
+    "list_static_harness_profiles",
     "get_tool_spec",
     "tool_supported",
     "list_tool_specs",

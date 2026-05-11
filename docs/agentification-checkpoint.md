@@ -126,12 +126,12 @@ Next steps:
 
 ### 4. Harness Profiles
 
-Current state: `harness_id` is now behavior-defining for run creation. Static harness profiles are exposed through the runtime registry, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded.
+Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded.
 
 Next steps:
 
-- Persist harness and agent-profile defaults once the static catalog needs tenant-specific overrides.
-- Show harness posture in Interventions.
+- Add a guarded admin edit flow for harness profiles once tenant-specific overrides are ready for operators.
+- Persist agent-profile-to-harness default mappings after the profile model grows beyond the built-in defaults.
 
 ### 5. Protocol And Fallback Execution
 
@@ -218,6 +218,7 @@ Completed:
 Completed:
 
 - Runtime registry now exposes concrete harness profiles with planner mode, retry strategy, fallback order, approval strategy, memory policy, stopping conditions, default run mode, and default policy profile.
+- Harness profiles are seeded into `agent_registry_harness_profiles`; registry payloads and fingerprints now prefer active persisted profiles while falling back to static defaults.
 - Agent profile IDs now resolve to default harnesses during run creation; buyer-assistant external agents default to `safe_autonomy_b2b`.
 - Harnesses now enforce compatible `run_mode` and `policy_profile_id` combinations before a run/action plan is created.
 - External-agent jobs inherit the authenticated agent profile's default harness when the caller does not specify one.
@@ -245,8 +246,8 @@ Goal: continue hardening harnesses beyond the static v1 behavior-defining layer.
 
 Build:
 
-- Persistent tenant-specific harness and agent-profile defaults.
-- Interventions display of active harness posture and why a run is blocked, paused, or escalated.
+- Guarded admin edit flow for tenant-specific harness profile overrides.
+- Persistent agent-profile default mappings.
 
 ### Priority 3: Real Protocol And Fallback Execution Adapters
 

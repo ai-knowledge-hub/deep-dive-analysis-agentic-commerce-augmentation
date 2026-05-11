@@ -15,16 +15,11 @@ from application.services.agent_runtime.registry.catalog import (
     REGISTRY_VERSION,
     CapabilitySpec,
     ToolSpec,
-    capability_supported,
-    default_tool_ownership_records,
     get_capability_spec,
-    get_tool_spec,
     list_capability_specs,
     list_policy_profiles,
     list_recovery_templates,
     list_tool_specs,
-    recovery_template_for_capability,
-    tool_supported,
 )
 from application.services.agent_runtime.registry.harnesses import list_harness_profiles
 
@@ -33,6 +28,7 @@ def registry_contract_payload(
     ownership_by_tool: Mapping[str, Mapping[str, Any]]
     | Sequence[Mapping[str, Any]]
     | None = None,
+    harness_profiles: Sequence[Mapping[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     ownership = _normalize_ownership_by_tool(ownership_by_tool)
     skills = [_serialize_spec(skill) for skill in list_skill_specs()]
@@ -84,7 +80,7 @@ def registry_contract_payload(
         "skill_selection_by_tool": skill_selection_by_tool,
         "recovery_templates": list_recovery_templates(),
         "policy_profiles": list_policy_profiles(),
-        "harness_profiles": list_harness_profiles(),
+        "harness_profiles": _normalize_harness_profiles(harness_profiles),
     }
 
 
@@ -92,8 +88,14 @@ def registry_fingerprint(
     ownership_by_tool: Mapping[str, Mapping[str, Any]]
     | Sequence[Mapping[str, Any]]
     | None = None,
+    harness_profiles: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
-    return _hash_payload(registry_contract_payload(ownership_by_tool=ownership_by_tool))
+    return _hash_payload(
+        registry_contract_payload(
+            ownership_by_tool=ownership_by_tool,
+            harness_profiles=harness_profiles,
+        )
+    )
 
 
 def _serialize_spec(value: Any) -> Dict[str, Any]:
@@ -196,6 +198,19 @@ def _normalize_ownership_by_tool(
         tool_id = str(item.get("tool_id") or "").strip()
         if tool_id:
             normalized[tool_id] = dict(item)
+    return normalized
+
+
+def _normalize_harness_profiles(
+    harness_profiles: Sequence[Mapping[str, Any]] | None,
+) -> list[Dict[str, Any]]:
+    profiles = harness_profiles if harness_profiles is not None else list_harness_profiles()
+    normalized = []
+    for profile in profiles:
+        item = dict(profile)
+        item.pop("created_at", None)
+        item.pop("updated_at", None)
+        normalized.append(item)
     return normalized
 
 
@@ -314,26 +329,3 @@ def _matches_schema_type(value: Any, expected: str) -> bool:
     if expected == "object":
         return isinstance(value, dict)
     return True
-
-
-__all__ = [
-    "CapabilitySpec",
-    "REGISTRY_VERSION",
-    "ToolSpec",
-    "default_tool_ownership_records",
-    "get_tool_spec",
-    "tool_supported",
-    "list_tool_specs",
-    "get_capability_spec",
-    "capability_supported",
-    "list_capability_specs",
-    "list_policy_profiles",
-    "list_recovery_templates",
-    "next_state_for_capability",
-    "registry_contract_payload",
-    "registry_fingerprint",
-    "validate_inputs",
-    "validate_outputs",
-    "version_context_for_capability",
-    "recovery_template_for_capability",
-]

@@ -11,7 +11,7 @@ _DEFAULT_AGENT_PROFILE_HARNESSES = {
 }
 
 
-def list_harness_profiles() -> list[Dict[str, Any]]:
+def list_static_harness_profiles() -> list[Dict[str, Any]]:
     return [
         {
             "id": "operator_supervised",
@@ -64,6 +64,10 @@ def list_harness_profiles() -> list[Dict[str, Any]]:
             "stopping_conditions": ["recommendation_produced", "operator_pause"],
         },
     ]
+
+
+def list_harness_profiles() -> list[Dict[str, Any]]:
+    return list_static_harness_profiles()
 
 
 def get_harness_profile(harness_id: str | None) -> Dict[str, Any] | None:
