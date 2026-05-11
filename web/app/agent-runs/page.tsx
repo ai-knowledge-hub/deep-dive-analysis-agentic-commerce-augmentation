@@ -2007,9 +2007,11 @@ function AgentRunsPageContent() {
                       summarizeRegistryAuditDiff={summarizeRegistryAuditDiff}
                       registryAuditDiffRows={registryAuditDiffRows}
                       approvalReceiptForEvent={approvalReceiptForEvent}
+                      userId={userId}
                       onLoadRegistryReleaseDetail={loadRegistryReleaseDetail}
                       onVerifyRegistryApprovalReceipt={verifyRegistryApprovalReceipt}
                       onRunRegistryBackfill={runRegistryBackfill}
+                      onRegistryChanged={loadRuntimeRegistry}
                     />
                     <RunActionsPanel
                       actions={actions}

@@ -4,6 +4,7 @@ import React from "react";
 import type {
   AgentRegistryAuditEvent,
   AgentRegistryApprovalReceiptVerifyResponse,
+  AgentRegistryHarnessProfilePreflight,
   AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
   AgentRegistryReleaseDetail,
@@ -13,6 +14,7 @@ import type {
   AgentRuntimeSkillSpec,
   AgentRuntimeToolSpec,
 } from "../../lib/types";
+import { updateAgentRuntimeRegistryHarnessProfile } from "../../lib/api";
 
 type RegistryAuditDiffRow = { label: string; value: string };
 
@@ -23,6 +25,17 @@ type AllowedRuntimeTool = {
 
 function formatRegistryValue(value?: string | null) {
   return String(value || "not set").replaceAll("_", " ");
+}
+
+function formatListInput(value?: string[]) {
+  return (value ?? []).join("\n");
+}
+
+function parseListInput(value: string) {
+  return value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 type Props = {
@@ -46,9 +59,11 @@ type Props = {
   summarizeRegistryAuditDiff: (event: AgentRegistryAuditEvent) => string;
   registryAuditDiffRows: (event: AgentRegistryAuditEvent) => RegistryAuditDiffRow[];
   approvalReceiptForEvent: (event: AgentRegistryAuditEvent) => Record<string, unknown> | null;
+  userId?: string | null;
   onLoadRegistryReleaseDetail: (registryFingerprint: string) => void;
   onVerifyRegistryApprovalReceipt: (event: AgentRegistryAuditEvent) => void;
   onRunRegistryBackfill: (dryRun: boolean) => void;
+  onRegistryChanged: () => void;
 };
 
 function ReceiptVerificationNotice({
@@ -88,14 +103,78 @@ export function RegistryPanel({
   summarizeRegistryAuditDiff,
   registryAuditDiffRows,
   approvalReceiptForEvent,
+  userId,
   onLoadRegistryReleaseDetail,
   onVerifyRegistryApprovalReceipt,
   onRunRegistryBackfill,
+  onRegistryChanged,
 }: Props) {
   const activeHarness =
     runtimeRegistry?.harness_profiles?.find(
       (profile) => profile.id === selectedRun.harness_id,
     ) ?? null;
+  const [harnessEditorOpen, setHarnessEditorOpen] = React.useState(false);
+  const [harnessDescription, setHarnessDescription] = React.useState("");
+  const [harnessRetryStrategy, setHarnessRetryStrategy] = React.useState("");
+  const [harnessFallbackOrder, setHarnessFallbackOrder] = React.useState("");
+  const [harnessPreflight, setHarnessPreflight] =
+    React.useState<AgentRegistryHarnessProfilePreflight | null>(null);
+  const [harnessEditBusy, setHarnessEditBusy] = React.useState(false);
+  const [harnessEditNotice, setHarnessEditNotice] = React.useState<{
+    type: "info" | "error";
+    text: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    setHarnessDescription(activeHarness?.description ?? "");
+    setHarnessRetryStrategy(activeHarness?.retry_strategy ?? "");
+    setHarnessFallbackOrder(formatListInput(activeHarness?.fallback_order));
+    setHarnessPreflight(null);
+    setHarnessEditNotice(null);
+  }, [activeHarness?.description, activeHarness?.fallback_order, activeHarness?.retry_strategy]);
+
+  async function updateHarnessProfile(dryRun: boolean) {
+    if (!activeHarness || !userId) return;
+    setHarnessEditBusy(true);
+    setHarnessEditNotice(null);
+    try {
+      const response = await updateAgentRuntimeRegistryHarnessProfile(
+        activeHarness.id,
+        {
+          description: harnessDescription,
+          retry_strategy: harnessRetryStrategy,
+          fallback_order: parseListInput(harnessFallbackOrder),
+          dry_run: dryRun,
+          preflight_confirmed: !dryRun,
+        },
+        userId,
+      );
+      setHarnessPreflight(response.preflight ?? null);
+      if (dryRun) {
+        setHarnessEditNotice({
+          type: response.preflight?.allowed ? "info" : "error",
+          text: response.preflight?.summary ?? "Harness profile preview complete.",
+        });
+        return;
+      }
+      setHarnessEditNotice({
+        type: "info",
+        text: `Harness profile saved. Registry ${String(
+          response.registry_fingerprint ?? "",
+        ).slice(0, 12)} is now active.`,
+      });
+      setHarnessEditorOpen(false);
+      onRegistryChanged();
+    } catch (err) {
+      setHarnessEditNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Unable to update harness profile.",
+      });
+    } finally {
+      setHarnessEditBusy(false);
+    }
+  }
+
   return (
     <section className="control-section registry-panel">
       <div className="control-section__header">
@@ -194,6 +273,100 @@ export function RegistryPanel({
                   .join(" · ") || "not set"}
               </div>
             </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={() => setHarnessEditorOpen((open) => !open)}
+              >
+                {harnessEditorOpen ? "Close editor" : "Edit harness posture"}
+              </button>
+            </div>
+            {harnessEditorOpen ? (
+              <div className="registry-panel__subsection">
+                <div className="panel__eyebrow">Guarded edit</div>
+                <label className="field">
+                  <span className="field__label">Description</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={harnessDescription}
+                    onChange={(event) => setHarnessDescription(event.target.value)}
+                    rows={3}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Retry strategy</span>
+                  <input
+                    className="panel__input"
+                    value={harnessRetryStrategy}
+                    onChange={(event) => setHarnessRetryStrategy(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Fallback order</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={harnessFallbackOrder}
+                    onChange={(event) => setHarnessFallbackOrder(event.target.value)}
+                    rows={3}
+                    placeholder="One fallback per line"
+                  />
+                </label>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    onClick={() => updateHarnessProfile(true)}
+                    disabled={harnessEditBusy || !userId}
+                  >
+                    {harnessEditBusy ? "Checking" : "Preview change"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--primary button--sm"
+                    onClick={() => updateHarnessProfile(false)}
+                    disabled={harnessEditBusy || !userId || !harnessPreflight?.allowed}
+                  >
+                    Apply confirmed change
+                  </button>
+                </div>
+                {harnessPreflight ? (
+                  <div
+                    className={`panel__notice ${
+                      harnessPreflight.allowed ? "panel__notice--info" : "panel__notice--error"
+                    }`}
+                  >
+                    <div className="table__strong">
+                      {harnessPreflight.changed_fields?.length ?? 0} fields will change
+                    </div>
+                    <p className="panel__muted">
+                      {harnessPreflight.summary} Rollback:{" "}
+                      {harnessPreflight.rollback_guidance}
+                    </p>
+                    {harnessPreflight.blockers?.length ? (
+                      <ul className="panel__list panel__list--compact">
+                        {harnessPreflight.blockers.map((blocker) => (
+                          <li key={blocker} className="agent-guardrail-reason">
+                            {blocker}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                {harnessEditNotice ? (
+                  <div
+                    className={`panel__notice ${
+                      harnessEditNotice.type === "error"
+                        ? "panel__notice--error"
+                        : "panel__notice--info"
+                    }`}
+                  >
+                    {harnessEditNotice.text}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : (
           <p className="panel__muted">

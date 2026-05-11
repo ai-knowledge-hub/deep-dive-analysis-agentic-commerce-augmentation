@@ -579,6 +579,105 @@ def test_registry_uses_persistent_harness_profiles_for_fingerprint_and_defaults(
     assert run["policy_profile_id"] == "human_approval_required"
 
 
+def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    preflight_response = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "retry_strategy": "operator_confirmed",
+            "fallback_order": ["operator_chat"],
+        },
+    )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["requires_confirmation"] is True
+    assert preflight_payload["preflight"]["allowed"] is True
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "description",
+        "retry_strategy",
+        "fallback_order",
+    ]
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    non_admin = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": "user-b",
+            "description": "Operator-governed safe autonomy.",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert non_admin.status_code == 403
+
+    invalid = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "default_run_mode": "plan_only",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert invalid.status_code == 400
+    assert "allowed_run_modes must include default_run_mode" in str(
+        invalid.json()["detail"]["preflight"]["blockers"]
+    )
+
+    response = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "retry_strategy": "operator_confirmed",
+            "fallback_order": ["operator_chat"],
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dry_run"] is False
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+    assert payload["harness_profile"]["source"] == "operator_override"
+    assert payload["harness_profile"]["retry_strategy"] == "operator_confirmed"
+    assert payload["audit_event"]["event_type"] == "registry_harness_profile_updated"
+    assert payload["audit_event"]["diff"]["changed_fields"] == [
+        "description",
+        "retry_strategy",
+        "fallback_order",
+    ]
+
+    refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    harness = next(
+        item
+        for item in refreshed["harness_profiles"]
+        if item["id"] == "safe_autonomy_b2b"
+    )
+    assert refreshed["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert harness["description"] == "Operator-governed safe autonomy."
+    assert harness["retry_strategy"] == "operator_confirmed"
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params=_registry_params(registry_fingerprint=payload["registry_fingerprint"]),
+    ).json()["events"]
+    assert any(item["event_type"] == "registry_harness_profile_updated" for item in audit)
+
+
 def test_agent_runtime_registry_ownership_update_creates_new_release(
     client: TestClient,
 ):

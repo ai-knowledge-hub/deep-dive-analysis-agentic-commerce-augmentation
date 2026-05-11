@@ -1217,6 +1217,7 @@ export type AgentRuntimeHarnessProfile = {
   approval_strategy?: string;
   memory_policy?: string;
   stopping_conditions?: string[];
+  source?: string;
 };
 
 export type AgentRuntimeRecoveryTemplate = {
@@ -1307,6 +1308,38 @@ export type AgentRegistryOwnershipUpdateResponse = {
     signature_algorithm?: string;
   };
   approval_event?: AgentRegistryAuditEvent;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  registry_status?: string | null;
+};
+
+export type AgentRegistryHarnessProfilePreflight = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  harness_id?: string;
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | string[] | null;
+      to?: string | string[] | null;
+      changed?: boolean;
+    }
+  >;
+  changed_fields?: string[];
+  proposed_profile?: AgentRuntimeHarnessProfile;
+  rollback_guidance?: string;
+  summary?: string;
+};
+
+export type AgentRegistryHarnessProfileUpdateResponse = {
+  dry_run?: boolean;
+  preflight?: AgentRegistryHarnessProfilePreflight;
+  harness_profile: AgentRuntimeHarnessProfile;
+  audit_event?: AgentRegistryAuditEvent;
   registry_version?: string | null;
   registry_fingerprint?: string | null;
   registry_status?: string | null;

@@ -224,6 +224,7 @@ Completed:
 - External-agent jobs inherit the authenticated agent profile's default harness when the caller does not specify one.
 - Agent Runs shows the active harness posture beside the selected run's skills/tools contract.
 - Retry and change-plan recovery commands now use harness retry/fallback posture when the operator does not explicitly choose a strategy.
+- Backend harness profile edits are guarded by preflight, explicit confirmation, admin-only apply, registry release creation, and `registry_harness_profile_updated` audit events.
 - Backend tests cover harness defaulting, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
 
 ## What Is Left To Build
@@ -246,7 +247,7 @@ Goal: continue hardening harnesses beyond the static v1 behavior-defining layer.
 
 Build:
 
-- Guarded admin edit flow for tenant-specific harness profile overrides.
+- Operator UI for the guarded harness profile edit flow.
 - Persistent agent-profile default mappings.
 
 ### Priority 3: Real Protocol And Fallback Execution Adapters
