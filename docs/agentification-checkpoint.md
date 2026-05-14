@@ -219,13 +219,14 @@ Completed:
 
 - Runtime registry now exposes concrete harness profiles with planner mode, retry strategy, fallback order, approval strategy, memory policy, stopping conditions, default run mode, and default policy profile.
 - Harness profiles are seeded into `agent_registry_harness_profiles`; registry payloads and fingerprints now prefer active persisted profiles while falling back to static defaults.
-- Agent profile IDs now resolve to default harnesses during run creation; buyer-assistant external agents default to `safe_autonomy_b2b`.
+- Agent profile IDs now resolve to persisted default mappings during run creation; buyer-assistant external agents default to `safe_autonomy_b2b` unless an operator-persisted profile override says otherwise.
+- Runtime registry payloads now expose `agent_profile_defaults`, and the active registry fingerprint includes these mappings alongside tools, skills, policy profiles, and harness profiles.
 - Harnesses now enforce compatible `run_mode` and `policy_profile_id` combinations before a run/action plan is created.
 - External-agent jobs inherit the authenticated agent profile's default harness when the caller does not specify one.
 - Agent Runs shows the active harness posture beside the selected run's skills/tools contract.
 - Retry and change-plan recovery commands now use harness retry/fallback posture when the operator does not explicitly choose a strategy.
 - Backend harness profile edits are guarded by preflight, explicit confirmation, admin-only apply, registry release creation, and `registry_harness_profile_updated` audit events.
-- Backend tests cover harness defaulting, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
+- Backend tests cover harness defaulting, persisted agent-profile defaults, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
 
 ## What Is Left To Build
 
@@ -247,8 +248,8 @@ Goal: continue hardening harnesses beyond the static v1 behavior-defining layer.
 
 Build:
 
-- Operator UI for the guarded harness profile edit flow.
-- Persistent agent-profile default mappings.
+- Operator UI polish for guarded harness profile edits, including richer field coverage beyond description/retry/fallback.
+- Guarded admin edit flow for persisted agent-profile default mappings.
 
 ### Priority 3: Real Protocol And Fallback Execution Adapters
 

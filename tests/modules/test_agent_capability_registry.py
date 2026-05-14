@@ -112,6 +112,11 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         item for item in payload["capabilities"] if item["name"] == "run_variant"
     )
     assert payload["registry_ownership_source"] == "persistent"
+    assert any(
+        item["id"] == "buyer-assistant-v1"
+        and item["default_harness_id"] == "safe_autonomy_b2b"
+        for item in payload["agent_profile_defaults"]
+    )
     assert payload["skill_ids_by_executable_tool"]["experiment.run_variant"] == [
         "optimize-product-representation"
     ]

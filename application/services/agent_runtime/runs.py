@@ -56,12 +56,18 @@ def create_agent_run_with_initial_plan(
     idempotency_key: Optional[str],
     registry_payload: Dict[str, Any],
     active_registry_fingerprint: str,
+    agent_profile_defaults: Optional[Dict[str, Any]] = None,
     preferred_skill_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     _validate_plan_capabilities(allowed_capabilities or [])
-    resolved_harness_id = harness_id or default_harness_id_for_agent_profile(
-        agent_profile_id=agent_profile_id,
-        principal_type=principal_type,
+    profile_defaults = dict(agent_profile_defaults or {})
+    resolved_harness_id = (
+        harness_id
+        or profile_defaults.get("default_harness_id")
+        or default_harness_id_for_agent_profile(
+            agent_profile_id=agent_profile_id,
+            principal_type=principal_type,
+        )
     )
     harness_profile = _harness_profile_from_registry_payload(
         registry_payload=registry_payload,
@@ -77,6 +83,7 @@ def create_agent_run_with_initial_plan(
     resolved_policy_profile_id = (
         policy_profile_id
         or harness_profile.get("default_policy_profile_id")
+        or profile_defaults.get("default_policy_profile_id")
         or policy_profile_for_run_mode(normalized_run_mode)
     )
     if not policy_profile_supported(resolved_policy_profile_id):
@@ -132,9 +139,7 @@ def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
         for capability in allowed_capabilities
         if str(capability).strip()
     ]
-    unsupported = [
-        capability for capability in requested if not get_capability_spec(capability)
-    ]
+    unsupported = [item for item in requested if not get_capability_spec(item)]
     if unsupported:
         raise AgentRunPlanError(
             "Unsupported allowed_capabilities: " + ", ".join(unsupported)
@@ -144,9 +149,7 @@ def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
         allowed_capabilities=requested,
         capability_versions={},
     ):
-        raise AgentRunPlanError(
-            "allowed_capabilities did not produce any initial plan actions"
-        )
+        raise AgentRunPlanError("allowed_capabilities did not produce any initial plan actions")
 
 
 def _harness_profile_from_registry_payload(
@@ -169,18 +172,14 @@ def _validate_harness_runtime_posture(
         if str(item).strip()
     }
     if allowed_run_modes and run_mode not in allowed_run_modes:
-        raise AgentRunPlanError(
-            f"Harness '{harness_id}' does not allow run_mode: {run_mode}"
-        )
+        raise AgentRunPlanError(f"Harness '{harness_id}' does not allow run_mode: {run_mode}")
     allowed_policy_profiles = {
         str(item).strip()
         for item in list(harness_profile.get("allowed_policy_profile_ids") or [])
         if str(item).strip()
     }
     if allowed_policy_profiles and policy_profile_id not in allowed_policy_profiles:
-        raise AgentRunPlanError(
-            f"Harness '{harness_id}' does not allow policy_profile_id: {policy_profile_id}"
-        )
+        raise AgentRunPlanError(f"Harness '{harness_id}' does not allow policy_profile_id: {policy_profile_id}")
 
 
 def _seed_initial_plan(

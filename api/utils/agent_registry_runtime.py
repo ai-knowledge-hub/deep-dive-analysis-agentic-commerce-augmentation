@@ -9,6 +9,7 @@ from application.services.agent_runtime.registry import (
     registry_contract_payload as _default_registry_contract_payload,
     registry_fingerprint as _default_registry_fingerprint,
 )
+from api.utils.agent_profile_defaults import registry_agent_profile_defaults
 from infrastructure.db.agent.agent_registry import (
     ensure_agent_registry_harness_profiles,
     ensure_agent_registry_tool_ownership,
@@ -36,10 +37,12 @@ def registry_harness_profiles() -> List[Dict[str, Any]]:
 def registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
     ownership = registry_ownership()
     harness_profiles = registry_harness_profiles()
+    agent_profile_defaults = registry_agent_profile_defaults()
     try:
         registry_payload = _registry_contract_payload()(
             ownership_by_tool=ownership,
             harness_profiles=harness_profiles,
+            agent_profile_defaults=agent_profile_defaults,
         )
     except TypeError:
         registry_payload = _registry_contract_payload()()
@@ -47,6 +50,7 @@ def registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
         fingerprint = _registry_fingerprint()(
             ownership_by_tool=ownership,
             harness_profiles=harness_profiles,
+            agent_profile_defaults=agent_profile_defaults,
         )
     except TypeError:
         fingerprint = _registry_fingerprint()()

@@ -25,6 +25,10 @@ from api.main import app
 from api.routes import agent_runs as agent_runs_route
 from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
+from infrastructure.db.agent.agent_profiles import (
+    get_agent_profile,
+    update_agent_profile_defaults,
+)
 from infrastructure.db.agent.agent_registry import update_agent_registry_harness_profile
 from shared.config.env import get_settings
 from shared.db.connection import get_connection
@@ -306,6 +310,38 @@ def test_create_agent_run_applies_agent_profile_harness_defaults(client: TestCli
     assert run["policy_profile_id"] == "safe_auto"
 
 
+def test_create_agent_run_uses_persistent_agent_profile_defaults(client: TestClient):
+    update_agent_profile_defaults(
+        profile_id="buyer-assistant-v1",
+        principal_id="external_agent:buyer-assistant-v1",
+        principal_type="external_agent",
+        name="Buyer Assistant v1",
+        default_harness_id="operator_supervised",
+        default_policy_profile_id="human_approval_required",
+        risk_tier="operator_reviewed",
+        channel_type="external_job_api",
+    )
+    token = build_agent_principal_token(
+        principal_id="principal-ext-persisted-profile",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="buyer-assistant-v1",
+        scopes=["agent_runs:write"],
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"allowed_capabilities": ["run_variant"]},
+    )
+
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["agent_profile_id"] == "buyer-assistant-v1"
+    assert run["harness_id"] == "operator_supervised"
+    assert run["run_mode"] == "plan_only"
+    assert run["policy_profile_id"] == "human_approval_required"
+
+
 def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
     response = client.post(
         "/agent-runs",
@@ -400,11 +436,18 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     skill_ids = {skill["id"] for skill in payload["skills"]}
     policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
     harness_ids = {profile["id"] for profile in payload["harness_profiles"]}
+    agent_profile_ids = {
+        profile["id"] for profile in payload["agent_profile_defaults"]
+    }
 
     assert "experiment.run_variant" in tool_ids
     assert "optimize-product-representation" in skill_ids
     assert "safe_auto" in policy_ids
     assert "safe_autonomy_b2b" in harness_ids
+    assert {"human", "buyer-assistant-v1", "external-buyer-assistant"}.issubset(
+        agent_profile_ids
+    )
+    assert get_agent_profile(profile_id="buyer-assistant-v1") is not None
     safe_harness = next(
         profile for profile in payload["harness_profiles"] if profile["id"] == "safe_autonomy_b2b"
     )
