@@ -138,6 +138,8 @@ export function RegistryPanel({
   const [profileName, setProfileName] = React.useState("");
   const [profileHarnessId, setProfileHarnessId] = React.useState("");
   const [profilePolicyId, setProfilePolicyId] = React.useState("");
+  const [profileRiskTier, setProfileRiskTier] = React.useState("");
+  const [profileChannelType, setProfileChannelType] = React.useState("");
   const [profilePreflight, setProfilePreflight] =
     React.useState<AgentRegistryProfileDefaultPreflight | null>(null);
   const [profileEditBusy, setProfileEditBusy] = React.useState(false);
@@ -158,12 +160,16 @@ export function RegistryPanel({
     setProfileName(activeAgentProfile?.name ?? "");
     setProfileHarnessId(activeAgentProfile?.default_harness_id ?? "");
     setProfilePolicyId(activeAgentProfile?.default_policy_profile_id ?? "");
+    setProfileRiskTier(activeAgentProfile?.risk_tier ?? "");
+    setProfileChannelType(activeAgentProfile?.channel_type ?? "");
     setProfilePreflight(null);
     setProfileEditNotice(null);
   }, [
+    activeAgentProfile?.channel_type,
     activeAgentProfile?.default_harness_id,
     activeAgentProfile?.default_policy_profile_id,
     activeAgentProfile?.name,
+    activeAgentProfile?.risk_tier,
   ]);
 
   async function updateHarnessProfile(dryRun: boolean) {
@@ -219,6 +225,8 @@ export function RegistryPanel({
           name: profileName,
           default_harness_id: profileHarnessId,
           default_policy_profile_id: profilePolicyId,
+          risk_tier: profileRiskTier,
+          channel_type: profileChannelType,
           dry_run: dryRun,
           preflight_confirmed: !dryRun,
         },
@@ -470,6 +478,12 @@ export function RegistryPanel({
                 <strong>Policy</strong>: {formatRegistryValue(activeAgentProfile.default_policy_profile_id)}
               </div>
               <div>
+                <strong>Risk</strong>: {formatRegistryValue(activeAgentProfile.risk_tier)}
+              </div>
+              <div>
+                <strong>Channel</strong>: {formatRegistryValue(activeAgentProfile.channel_type)}
+              </div>
+              <div>
                 <strong>Source</strong>: {formatRegistryValue(activeAgentProfile.source)}
               </div>
             </div>
@@ -520,6 +534,24 @@ export function RegistryPanel({
                       </option>
                     ))}
                   </select>
+                </label>
+                <label className="field">
+                  <span className="field__label">Risk tier</span>
+                  <input
+                    className="panel__input"
+                    value={profileRiskTier}
+                    onChange={(event) => setProfileRiskTier(event.target.value)}
+                    placeholder="bounded_low_risk"
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Channel type</span>
+                  <input
+                    className="panel__input"
+                    value={profileChannelType}
+                    onChange={(event) => setProfileChannelType(event.target.value)}
+                    placeholder="external_job_api"
+                  />
                 </label>
                 <div className="panel__actions">
                   <button

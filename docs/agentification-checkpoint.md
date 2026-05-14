@@ -228,6 +228,7 @@ Completed:
 - Backend harness profile edits are guarded by preflight, explicit confirmation, admin-only apply, registry release creation, and `registry_harness_profile_updated` audit events.
 - Agent profile default edits are guarded by preflight, explicit confirmation, admin-only apply, registry release creation, and `registry_agent_profile_default_updated` audit events.
 - Agent Runs exposes guarded editing for both the selected run's harness posture and active agent-profile default mapping.
+- Agent profile default editing now includes risk tier and channel type so operators can inspect and adjust execution posture metadata from the Runs registry panel.
 - Backend tests cover harness defaulting, persisted agent-profile defaults, guarded profile edits, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
 
 ## What Is Left To Build
@@ -251,7 +252,7 @@ Goal: continue hardening harnesses beyond the static v1 behavior-defining layer.
 Build:
 
 - Operator UI polish for guarded harness profile edits, including richer field coverage beyond description/retry/fallback.
-- Operator UI polish for agent-profile default edits, including risk tier and channel type.
+- Optional richer harness UI editing for default run mode, default policy, approval strategy, memory policy, and stopping conditions.
 
 ### Priority 3: Real Protocol And Fallback Execution Adapters
 
