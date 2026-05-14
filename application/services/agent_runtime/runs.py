@@ -82,8 +82,8 @@ def create_agent_run_with_initial_plan(
         raise AgentRunPlanError(f"Unsupported run_mode: {normalized_run_mode}")
     resolved_policy_profile_id = (
         policy_profile_id
-        or harness_profile.get("default_policy_profile_id")
         or profile_defaults.get("default_policy_profile_id")
+        or harness_profile.get("default_policy_profile_id")
         or policy_profile_for_run_mode(normalized_run_mode)
     )
     if not policy_profile_supported(resolved_policy_profile_id):

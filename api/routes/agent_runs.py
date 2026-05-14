@@ -75,7 +75,9 @@ def create_agent_run(
         requested_principal_id=payload.principal_id,
         requested_agent_profile_id=payload.agent_profile_id,
     )
-    registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
+    registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint(
+        client_id=principal.client_id
+    )
     ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=active_registry_fingerprint,

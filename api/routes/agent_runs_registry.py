@@ -76,13 +76,9 @@ def _registry_ownership() -> List[Dict[str, Any]]:
     return registry_ownership()
 
 
-def _registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
-    return registry_payload_and_fingerprint()
-
-
 def _require_registry_read_access(
     *, request: Request, client_id: Optional[str], user_id: Optional[str]
-) -> None:
+) -> str:
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
     scheme, _, token = str(auth_header or "").partition(" ")
     if scheme.lower() == "bearer" and token.strip():
@@ -98,8 +94,8 @@ def _require_registry_read_access(
             raise HTTPException(
                 status_code=403, detail="Missing required registry read scope"
             )
-        return
-    require_client_id(client_id, user_id)
+        return principal.client_id
+    return require_client_id(client_id, user_id)
 
 
 @router.get("/registry")
@@ -108,8 +104,12 @@ def get_agent_runtime_registry(
     client_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    _require_registry_read_access(request=request, client_id=client_id, user_id=user_id)
-    registry_payload, fingerprint = _registry_payload_and_fingerprint()
+    resolved_client_id = _require_registry_read_access(
+        request=request, client_id=client_id, user_id=user_id
+    )
+    registry_payload, fingerprint = registry_payload_and_fingerprint(
+        client_id=resolved_client_id
+    )
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=fingerprint,
@@ -235,7 +235,7 @@ def update_agent_runtime_registry_tool_ownership(
         raise HTTPException(
             status_code=400, detail="Invalid registry ownership payload"
         )
-    registry_payload, fingerprint = _registry_payload_and_fingerprint()
+    registry_payload, fingerprint = registry_payload_and_fingerprint()
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=fingerprint,
@@ -296,7 +296,7 @@ def backfill_agent_runtime_registry_pins(
 ) -> Dict[str, Any]:
     client_id = require_client_id(payload.client_id, payload.user_id)
     bounded_limit = max(1, min(int(payload.limit), 500))
-    registry_payload, active_registry_fingerprint = _registry_payload_and_fingerprint()
+    registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
     snapshot = ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=active_registry_fingerprint,

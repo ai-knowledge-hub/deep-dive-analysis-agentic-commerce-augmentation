@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.utils.agent_registry_harnesses import registry_harness_profile_preflight
@@ -10,7 +10,7 @@ from api.utils.agent_registry_runtime import (
     registry_harness_profiles,
     registry_payload_and_fingerprint,
 )
-from api.utils.tenancy import require_admin
+from api.utils.agent_registry_auth import require_registry_write_access
 from infrastructure.db.agent.agent_registry import (
     create_agent_registry_audit_event,
     ensure_agent_registry_version,
@@ -42,6 +42,7 @@ class AgentRegistryHarnessProfileUpdateRequest(BaseModel):
 def update_agent_runtime_registry_harness_profile(
     harness_id: str,
     payload: AgentRegistryHarnessProfileUpdateRequest,
+    request: Request,
 ) -> Dict[str, Any]:
     current = _current_harness_profile(harness_id)
     if not current:
@@ -59,7 +60,7 @@ def update_agent_runtime_registry_harness_profile(
             status_code=409,
             detail="Registry harness profile preflight confirmation required",
         )
-    require_admin(payload.user_id)
+    principal = require_registry_write_access(request)
     if not preflight.get("allowed"):
         raise HTTPException(
             status_code=400,
@@ -84,9 +85,11 @@ def update_agent_runtime_registry_harness_profile(
         event_type="registry_harness_profile_updated",
         registry_version=str(snapshot.get("registry_version") or ""),
         registry_fingerprint=str(snapshot.get("registry_fingerprint") or ""),
-        source="operator_approval",
+        source=principal.principal_id,
         diff={
             "harness_id": harness_id,
+            "actor_principal_id": principal.principal_id,
+            "actor_principal_type": principal.principal_type,
             "preflight": preflight,
             "changed_fields": preflight.get("changed_fields") or [],
         },

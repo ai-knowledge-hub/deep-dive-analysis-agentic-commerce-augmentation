@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import types
 
@@ -22,6 +23,7 @@ from api.main import app
 from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
 from infrastructure.db.agent.agent_profiles import update_agent_profile_defaults
+from infrastructure.db.agent.agent_registry import update_agent_registry_harness_profile
 from shared.config.env import get_settings
 from shared.db.connection import get_connection
 from shared.db.connection import init_db, set_database_path
@@ -332,6 +334,70 @@ def test_create_agent_run_uses_persistent_agent_profile_defaults(client: TestCli
     assert run["harness_id"] == "operator_supervised"
     assert run["run_mode"] == "plan_only"
     assert run["policy_profile_id"] == "human_approval_required"
+
+
+def test_create_agent_run_prefers_profile_policy_and_pins_tenant_registry(
+    client: TestClient,
+):
+    update_agent_registry_harness_profile(
+        profile_id="safe_autonomy_b2b",
+        source="operator_override",
+        profile={
+            "id": "safe_autonomy_b2b",
+            "name": "Safe Autonomy B2B",
+            "description": "Allows a tenant-specific human-approval profile default.",
+            "default_run_mode": "auto_execute_safe",
+            "default_policy_profile_id": "safe_auto",
+            "allowed_run_modes": ["auto_execute_safe"],
+            "allowed_policy_profile_ids": ["safe_auto", "human_approval_required"],
+            "planner_mode": "bounded_single_or_workflow",
+            "retry_strategy": "last_safe_checkpoint",
+            "fallback_order": ["registry_recovery_template"],
+            "approval_strategy": "auto_low_risk_human_governed_high_risk",
+            "memory_policy": "write_execution_receipts_and_learnings",
+            "stopping_conditions": ["policy_block"],
+        },
+    )
+    update_agent_profile_defaults(
+        profile_id="buyer-assistant-v1",
+        principal_id="external_agent:buyer-assistant-v1",
+        principal_type="external_agent",
+        name="Buyer Assistant v1 Tenant",
+        tenant_id=CLIENT_ID,
+        default_harness_id="safe_autonomy_b2b",
+        default_policy_profile_id="human_approval_required",
+        risk_tier="operator_reviewed",
+        channel_type="external_job_api",
+    )
+    token = build_agent_principal_token(
+        principal_id="principal-ext-tenant-profile",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="buyer-assistant-v1",
+        scopes=["agent_runs:write"],
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"allowed_capabilities": ["run_variant"]},
+    )
+
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["policy_profile_id"] == "human_approval_required"
+    registry_row = get_connection().execute(
+        "SELECT payload_json FROM agent_registry_versions WHERE registry_fingerprint = ?",
+        (run["registry_fingerprint"],),
+    ).fetchone()
+    assert registry_row is not None
+    registry_payload = json.loads(registry_row["payload_json"])
+    profile = next(
+        item
+        for item in registry_payload["agent_profile_defaults"]
+        if item["id"] == "buyer-assistant-v1"
+    )
+    assert profile["tenant_id"] == CLIENT_ID
+    assert profile["default_policy_profile_id"] == "human_approval_required"
 
 
 def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
