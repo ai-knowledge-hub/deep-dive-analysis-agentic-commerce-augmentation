@@ -720,9 +720,18 @@ export async function updateAgentRuntimeRegistryOwnership(
 export async function updateAgentRuntimeRegistryHarnessProfile(
   harnessId: string,
   payload: {
+    name?: string;
     description?: string;
+    default_run_mode?: string;
+    default_policy_profile_id?: string;
+    allowed_run_modes?: string[];
+    allowed_policy_profile_ids?: string[];
+    planner_mode?: string;
     retry_strategy?: string;
     fallback_order?: string[];
+    approval_strategy?: string;
+    memory_policy?: string;
+    stopping_conditions?: string[];
     dry_run?: boolean;
     preflight_confirmed?: boolean;
   },
@@ -734,9 +743,18 @@ export async function updateAgentRuntimeRegistryHarnessProfile(
       method: "PATCH",
       body: JSON.stringify({
         user_id: userId ?? undefined,
+        name: payload.name ?? undefined,
         description: payload.description ?? undefined,
+        default_run_mode: payload.default_run_mode ?? undefined,
+        default_policy_profile_id: payload.default_policy_profile_id ?? undefined,
+        allowed_run_modes: payload.allowed_run_modes ?? undefined,
+        allowed_policy_profile_ids: payload.allowed_policy_profile_ids ?? undefined,
+        planner_mode: payload.planner_mode ?? undefined,
         retry_strategy: payload.retry_strategy ?? undefined,
         fallback_order: payload.fallback_order ?? undefined,
+        approval_strategy: payload.approval_strategy ?? undefined,
+        memory_policy: payload.memory_policy ?? undefined,
+        stopping_conditions: payload.stopping_conditions ?? undefined,
         dry_run: payload.dry_run ?? true,
         preflight_confirmed: payload.preflight_confirmed ?? false,
       }),

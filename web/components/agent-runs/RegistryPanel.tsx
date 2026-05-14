@@ -124,9 +124,18 @@ export function RegistryPanel({
         (!selectedRun.agent_profile_id && profile.id === selectedRun.principal_type),
     ) ?? null;
   const [harnessEditorOpen, setHarnessEditorOpen] = React.useState(false);
+  const [harnessName, setHarnessName] = React.useState("");
   const [harnessDescription, setHarnessDescription] = React.useState("");
+  const [harnessDefaultRunMode, setHarnessDefaultRunMode] = React.useState("");
+  const [harnessDefaultPolicyId, setHarnessDefaultPolicyId] = React.useState("");
+  const [harnessAllowedRunModes, setHarnessAllowedRunModes] = React.useState("");
+  const [harnessAllowedPolicyIds, setHarnessAllowedPolicyIds] = React.useState("");
+  const [harnessPlannerMode, setHarnessPlannerMode] = React.useState("");
   const [harnessRetryStrategy, setHarnessRetryStrategy] = React.useState("");
   const [harnessFallbackOrder, setHarnessFallbackOrder] = React.useState("");
+  const [harnessApprovalStrategy, setHarnessApprovalStrategy] = React.useState("");
+  const [harnessMemoryPolicy, setHarnessMemoryPolicy] = React.useState("");
+  const [harnessStoppingConditions, setHarnessStoppingConditions] = React.useState("");
   const [harnessPreflight, setHarnessPreflight] =
     React.useState<AgentRegistryHarnessProfilePreflight | null>(null);
   const [harnessEditBusy, setHarnessEditBusy] = React.useState(false);
@@ -149,12 +158,34 @@ export function RegistryPanel({
   } | null>(null);
 
   React.useEffect(() => {
+    setHarnessName(activeHarness?.name ?? "");
     setHarnessDescription(activeHarness?.description ?? "");
+    setHarnessDefaultRunMode(activeHarness?.default_run_mode ?? "");
+    setHarnessDefaultPolicyId(activeHarness?.default_policy_profile_id ?? "");
+    setHarnessAllowedRunModes(formatListInput(activeHarness?.allowed_run_modes));
+    setHarnessAllowedPolicyIds(formatListInput(activeHarness?.allowed_policy_profile_ids));
+    setHarnessPlannerMode(activeHarness?.planner_mode ?? "");
     setHarnessRetryStrategy(activeHarness?.retry_strategy ?? "");
     setHarnessFallbackOrder(formatListInput(activeHarness?.fallback_order));
+    setHarnessApprovalStrategy(activeHarness?.approval_strategy ?? "");
+    setHarnessMemoryPolicy(activeHarness?.memory_policy ?? "");
+    setHarnessStoppingConditions(formatListInput(activeHarness?.stopping_conditions));
     setHarnessPreflight(null);
     setHarnessEditNotice(null);
-  }, [activeHarness?.description, activeHarness?.fallback_order, activeHarness?.retry_strategy]);
+  }, [
+    activeHarness?.allowed_policy_profile_ids,
+    activeHarness?.allowed_run_modes,
+    activeHarness?.approval_strategy,
+    activeHarness?.default_policy_profile_id,
+    activeHarness?.default_run_mode,
+    activeHarness?.description,
+    activeHarness?.fallback_order,
+    activeHarness?.memory_policy,
+    activeHarness?.name,
+    activeHarness?.planner_mode,
+    activeHarness?.retry_strategy,
+    activeHarness?.stopping_conditions,
+  ]);
 
   React.useEffect(() => {
     setProfileName(activeAgentProfile?.name ?? "");
@@ -180,9 +211,18 @@ export function RegistryPanel({
       const response = await updateAgentRuntimeRegistryHarnessProfile(
         activeHarness.id,
         {
+          name: harnessName,
           description: harnessDescription,
+          default_run_mode: harnessDefaultRunMode,
+          default_policy_profile_id: harnessDefaultPolicyId,
+          allowed_run_modes: parseListInput(harnessAllowedRunModes),
+          allowed_policy_profile_ids: parseListInput(harnessAllowedPolicyIds),
+          planner_mode: harnessPlannerMode,
           retry_strategy: harnessRetryStrategy,
           fallback_order: parseListInput(harnessFallbackOrder),
+          approval_strategy: harnessApprovalStrategy,
+          memory_policy: harnessMemoryPolicy,
+          stopping_conditions: parseListInput(harnessStoppingConditions),
           dry_run: dryRun,
           preflight_confirmed: !dryRun,
         },
@@ -369,12 +409,87 @@ export function RegistryPanel({
               <div className="registry-panel__subsection">
                 <div className="panel__eyebrow">Guarded edit</div>
                 <label className="field">
+                  <span className="field__label">Name</span>
+                  <input
+                    className="panel__input"
+                    value={harnessName}
+                    onChange={(event) => setHarnessName(event.target.value)}
+                  />
+                </label>
+                <label className="field">
                   <span className="field__label">Description</span>
                   <textarea
                     className="panel__textarea"
                     value={harnessDescription}
                     onChange={(event) => setHarnessDescription(event.target.value)}
                     rows={3}
+                  />
+                </label>
+                <div className="insight-grid insight-grid--two">
+                  <label className="field">
+                    <span className="field__label">Default run mode</span>
+                    <select
+                      className="panel__input"
+                      value={harnessDefaultRunMode}
+                      onChange={(event) => setHarnessDefaultRunMode(event.target.value)}
+                    >
+                      {harnessDefaultRunMode &&
+                      !["plan_only", "auto_execute_safe"].includes(harnessDefaultRunMode) ? (
+                        <option value={harnessDefaultRunMode}>{harnessDefaultRunMode}</option>
+                      ) : null}
+                      <option value="plan_only">plan_only</option>
+                      <option value="auto_execute_safe">auto_execute_safe</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span className="field__label">Default policy</span>
+                    <select
+                      className="panel__input"
+                      value={harnessDefaultPolicyId}
+                      onChange={(event) => setHarnessDefaultPolicyId(event.target.value)}
+                    >
+                      {harnessDefaultPolicyId &&
+                      !(runtimeRegistry?.policy_profiles ?? []).some(
+                        (profile) => profile.id === harnessDefaultPolicyId,
+                      ) ? (
+                        <option value={harnessDefaultPolicyId}>{harnessDefaultPolicyId}</option>
+                      ) : null}
+                      {(runtimeRegistry?.policy_profiles ?? []).map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="insight-grid insight-grid--two">
+                  <label className="field">
+                    <span className="field__label">Allowed run modes</span>
+                    <textarea
+                      className="panel__textarea"
+                      value={harnessAllowedRunModes}
+                      onChange={(event) => setHarnessAllowedRunModes(event.target.value)}
+                      rows={3}
+                      placeholder="One run mode per line"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">Allowed policies</span>
+                    <textarea
+                      className="panel__textarea"
+                      value={harnessAllowedPolicyIds}
+                      onChange={(event) => setHarnessAllowedPolicyIds(event.target.value)}
+                      rows={3}
+                      placeholder="One policy profile id per line"
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span className="field__label">Planner mode</span>
+                  <input
+                    className="panel__input"
+                    value={harnessPlannerMode}
+                    onChange={(event) => setHarnessPlannerMode(event.target.value)}
                   />
                 </label>
                 <label className="field">
@@ -395,6 +510,38 @@ export function RegistryPanel({
                     placeholder="One fallback per line"
                   />
                 </label>
+                <div className="insight-grid insight-grid--two">
+                  <label className="field">
+                    <span className="field__label">Approval strategy</span>
+                    <input
+                      className="panel__input"
+                      value={harnessApprovalStrategy}
+                      onChange={(event) => setHarnessApprovalStrategy(event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">Memory policy</span>
+                    <input
+                      className="panel__input"
+                      value={harnessMemoryPolicy}
+                      onChange={(event) => setHarnessMemoryPolicy(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span className="field__label">Stopping conditions</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={harnessStoppingConditions}
+                    onChange={(event) => setHarnessStoppingConditions(event.target.value)}
+                    rows={3}
+                    placeholder="One stopping condition per line"
+                  />
+                </label>
+                <p className="panel__muted">
+                  Confirmed apply is protected by registry-write authorization; preview
+                  should be used first to catch policy/run-mode mismatches.
+                </p>
                 <div className="panel__actions">
                   <button
                     type="button"
