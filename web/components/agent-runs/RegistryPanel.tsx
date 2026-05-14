@@ -4,6 +4,8 @@ import React from "react";
 import type {
   AgentRegistryAuditEvent,
   AgentRegistryApprovalReceiptVerifyResponse,
+  AgentRegistryHarnessProfilePreflight,
+  AgentRegistryProfileDefaultPreflight,
   AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
   AgentRegistryReleaseDetail,
@@ -13,6 +15,10 @@ import type {
   AgentRuntimeSkillSpec,
   AgentRuntimeToolSpec,
 } from "../../lib/types";
+import {
+  updateAgentRuntimeRegistryHarnessProfile,
+  updateAgentRuntimeRegistryProfileDefault,
+} from "../../lib/api";
 
 type RegistryAuditDiffRow = { label: string; value: string };
 
@@ -23,6 +29,17 @@ type AllowedRuntimeTool = {
 
 function formatRegistryValue(value?: string | null) {
   return String(value || "not set").replaceAll("_", " ");
+}
+
+function formatListInput(value?: string[]) {
+  return (value ?? []).join("\n");
+}
+
+function parseListInput(value: string) {
+  return value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 type Props = {
@@ -46,9 +63,11 @@ type Props = {
   summarizeRegistryAuditDiff: (event: AgentRegistryAuditEvent) => string;
   registryAuditDiffRows: (event: AgentRegistryAuditEvent) => RegistryAuditDiffRow[];
   approvalReceiptForEvent: (event: AgentRegistryAuditEvent) => Record<string, unknown> | null;
+  userId?: string | null;
   onLoadRegistryReleaseDetail: (registryFingerprint: string) => void;
   onVerifyRegistryApprovalReceipt: (event: AgentRegistryAuditEvent) => void;
   onRunRegistryBackfill: (dryRun: boolean) => void;
+  onRegistryChanged: () => void;
 };
 
 function ReceiptVerificationNotice({
@@ -88,14 +107,157 @@ export function RegistryPanel({
   summarizeRegistryAuditDiff,
   registryAuditDiffRows,
   approvalReceiptForEvent,
+  userId,
   onLoadRegistryReleaseDetail,
   onVerifyRegistryApprovalReceipt,
   onRunRegistryBackfill,
+  onRegistryChanged,
 }: Props) {
   const activeHarness =
     runtimeRegistry?.harness_profiles?.find(
       (profile) => profile.id === selectedRun.harness_id,
     ) ?? null;
+  const activeAgentProfile =
+    runtimeRegistry?.agent_profile_defaults?.find(
+      (profile) =>
+        profile.id === selectedRun.agent_profile_id ||
+        (!selectedRun.agent_profile_id && profile.id === selectedRun.principal_type),
+    ) ?? null;
+  const [harnessEditorOpen, setHarnessEditorOpen] = React.useState(false);
+  const [harnessDescription, setHarnessDescription] = React.useState("");
+  const [harnessRetryStrategy, setHarnessRetryStrategy] = React.useState("");
+  const [harnessFallbackOrder, setHarnessFallbackOrder] = React.useState("");
+  const [harnessPreflight, setHarnessPreflight] =
+    React.useState<AgentRegistryHarnessProfilePreflight | null>(null);
+  const [harnessEditBusy, setHarnessEditBusy] = React.useState(false);
+  const [harnessEditNotice, setHarnessEditNotice] = React.useState<{
+    type: "info" | "error";
+    text: string;
+  } | null>(null);
+  const [profileEditorOpen, setProfileEditorOpen] = React.useState(false);
+  const [profileName, setProfileName] = React.useState("");
+  const [profileHarnessId, setProfileHarnessId] = React.useState("");
+  const [profilePolicyId, setProfilePolicyId] = React.useState("");
+  const [profileRiskTier, setProfileRiskTier] = React.useState("");
+  const [profileChannelType, setProfileChannelType] = React.useState("");
+  const [profilePreflight, setProfilePreflight] =
+    React.useState<AgentRegistryProfileDefaultPreflight | null>(null);
+  const [profileEditBusy, setProfileEditBusy] = React.useState(false);
+  const [profileEditNotice, setProfileEditNotice] = React.useState<{
+    type: "info" | "error";
+    text: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    setHarnessDescription(activeHarness?.description ?? "");
+    setHarnessRetryStrategy(activeHarness?.retry_strategy ?? "");
+    setHarnessFallbackOrder(formatListInput(activeHarness?.fallback_order));
+    setHarnessPreflight(null);
+    setHarnessEditNotice(null);
+  }, [activeHarness?.description, activeHarness?.fallback_order, activeHarness?.retry_strategy]);
+
+  React.useEffect(() => {
+    setProfileName(activeAgentProfile?.name ?? "");
+    setProfileHarnessId(activeAgentProfile?.default_harness_id ?? "");
+    setProfilePolicyId(activeAgentProfile?.default_policy_profile_id ?? "");
+    setProfileRiskTier(activeAgentProfile?.risk_tier ?? "");
+    setProfileChannelType(activeAgentProfile?.channel_type ?? "");
+    setProfilePreflight(null);
+    setProfileEditNotice(null);
+  }, [
+    activeAgentProfile?.channel_type,
+    activeAgentProfile?.default_harness_id,
+    activeAgentProfile?.default_policy_profile_id,
+    activeAgentProfile?.name,
+    activeAgentProfile?.risk_tier,
+  ]);
+
+  async function updateHarnessProfile(dryRun: boolean) {
+    if (!activeHarness || !userId) return;
+    setHarnessEditBusy(true);
+    setHarnessEditNotice(null);
+    try {
+      const response = await updateAgentRuntimeRegistryHarnessProfile(
+        activeHarness.id,
+        {
+          description: harnessDescription,
+          retry_strategy: harnessRetryStrategy,
+          fallback_order: parseListInput(harnessFallbackOrder),
+          dry_run: dryRun,
+          preflight_confirmed: !dryRun,
+        },
+        userId,
+      );
+      setHarnessPreflight(response.preflight ?? null);
+      if (dryRun) {
+        setHarnessEditNotice({
+          type: response.preflight?.allowed ? "info" : "error",
+          text: response.preflight?.summary ?? "Harness profile preview complete.",
+        });
+        return;
+      }
+      setHarnessEditNotice({
+        type: "info",
+        text: `Harness profile saved. Registry ${String(
+          response.registry_fingerprint ?? "",
+        ).slice(0, 12)} is now active.`,
+      });
+      setHarnessEditorOpen(false);
+      onRegistryChanged();
+    } catch (err) {
+      setHarnessEditNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Unable to update harness profile.",
+      });
+    } finally {
+      setHarnessEditBusy(false);
+    }
+  }
+
+  async function updateProfileDefault(dryRun: boolean) {
+    if (!activeAgentProfile || !userId) return;
+    setProfileEditBusy(true);
+    setProfileEditNotice(null);
+    try {
+      const response = await updateAgentRuntimeRegistryProfileDefault(
+        activeAgentProfile.id,
+        {
+          name: profileName,
+          default_harness_id: profileHarnessId,
+          default_policy_profile_id: profilePolicyId,
+          risk_tier: profileRiskTier,
+          channel_type: profileChannelType,
+          dry_run: dryRun,
+          preflight_confirmed: !dryRun,
+        },
+        userId,
+      );
+      setProfilePreflight(response.preflight ?? null);
+      if (dryRun) {
+        setProfileEditNotice({
+          type: response.preflight?.allowed ? "info" : "error",
+          text: response.preflight?.summary ?? "Agent profile default preview complete.",
+        });
+        return;
+      }
+      setProfileEditNotice({
+        type: "info",
+        text: `Agent profile default saved. Registry ${String(
+          response.registry_fingerprint ?? "",
+        ).slice(0, 12)} is now active.`,
+      });
+      setProfileEditorOpen(false);
+      onRegistryChanged();
+    } catch (err) {
+      setProfileEditNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Unable to update profile default.",
+      });
+    } finally {
+      setProfileEditBusy(false);
+    }
+  }
+
   return (
     <section className="control-section registry-panel">
       <div className="control-section__header">
@@ -194,10 +356,259 @@ export function RegistryPanel({
                   .join(" · ") || "not set"}
               </div>
             </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={() => setHarnessEditorOpen((open) => !open)}
+              >
+                {harnessEditorOpen ? "Close editor" : "Edit harness posture"}
+              </button>
+            </div>
+            {harnessEditorOpen ? (
+              <div className="registry-panel__subsection">
+                <div className="panel__eyebrow">Guarded edit</div>
+                <label className="field">
+                  <span className="field__label">Description</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={harnessDescription}
+                    onChange={(event) => setHarnessDescription(event.target.value)}
+                    rows={3}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Retry strategy</span>
+                  <input
+                    className="panel__input"
+                    value={harnessRetryStrategy}
+                    onChange={(event) => setHarnessRetryStrategy(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Fallback order</span>
+                  <textarea
+                    className="panel__textarea"
+                    value={harnessFallbackOrder}
+                    onChange={(event) => setHarnessFallbackOrder(event.target.value)}
+                    rows={3}
+                    placeholder="One fallback per line"
+                  />
+                </label>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    onClick={() => updateHarnessProfile(true)}
+                    disabled={harnessEditBusy || !userId}
+                  >
+                    {harnessEditBusy ? "Checking" : "Preview change"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--primary button--sm"
+                    onClick={() => updateHarnessProfile(false)}
+                    disabled={harnessEditBusy || !userId || !harnessPreflight?.allowed}
+                  >
+                    Apply confirmed change
+                  </button>
+                </div>
+                {harnessPreflight ? (
+                  <div
+                    className={`panel__notice ${
+                      harnessPreflight.allowed ? "panel__notice--info" : "panel__notice--error"
+                    }`}
+                  >
+                    <div className="table__strong">
+                      {harnessPreflight.changed_fields?.length ?? 0} fields will change
+                    </div>
+                    <p className="panel__muted">
+                      {harnessPreflight.summary} Rollback:{" "}
+                      {harnessPreflight.rollback_guidance}
+                    </p>
+                    {harnessPreflight.blockers?.length ? (
+                      <ul className="panel__list panel__list--compact">
+                        {harnessPreflight.blockers.map((blocker) => (
+                          <li key={blocker} className="agent-guardrail-reason">
+                            {blocker}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                {harnessEditNotice ? (
+                  <div
+                    className={`panel__notice ${
+                      harnessEditNotice.type === "error"
+                        ? "panel__notice--error"
+                        : "panel__notice--info"
+                    }`}
+                  >
+                    {harnessEditNotice.text}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : (
           <p className="panel__muted">
             Harness metadata is not available in the active registry payload yet.
+          </p>
+        )}
+      </section>
+
+      <section className="control-section">
+        <div className="control-section__header">
+          <div>
+            <span className="control-section__eyebrow">Profile default</span>
+            <h4 className="control-section__title">Agent profile mapping</h4>
+          </div>
+          <span className="control-chip">
+            {activeAgentProfile?.id ?? selectedRun.agent_profile_id ?? "human"}
+          </span>
+        </div>
+        {activeAgentProfile ? (
+          <>
+            <div className="panel__meta-strip panel__meta-strip--flat">
+              <div>
+                <strong>Harness</strong>: {formatRegistryValue(activeAgentProfile.default_harness_id)}
+              </div>
+              <div>
+                <strong>Policy</strong>: {formatRegistryValue(activeAgentProfile.default_policy_profile_id)}
+              </div>
+              <div>
+                <strong>Risk</strong>: {formatRegistryValue(activeAgentProfile.risk_tier)}
+              </div>
+              <div>
+                <strong>Channel</strong>: {formatRegistryValue(activeAgentProfile.channel_type)}
+              </div>
+              <div>
+                <strong>Source</strong>: {formatRegistryValue(activeAgentProfile.source)}
+              </div>
+            </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={() => setProfileEditorOpen((open) => !open)}
+              >
+                {profileEditorOpen ? "Close profile editor" : "Edit profile default"}
+              </button>
+            </div>
+            {profileEditorOpen ? (
+              <div className="registry-panel__subsection">
+                <div className="panel__eyebrow">Guarded edit</div>
+                <label className="field">
+                  <span className="field__label">Name</span>
+                  <input
+                    className="panel__input"
+                    value={profileName}
+                    onChange={(event) => setProfileName(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Default harness</span>
+                  <select
+                    className="panel__input"
+                    value={profileHarnessId}
+                    onChange={(event) => setProfileHarnessId(event.target.value)}
+                  >
+                    {(runtimeRegistry?.harness_profiles ?? []).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field__label">Default policy</span>
+                  <select
+                    className="panel__input"
+                    value={profilePolicyId}
+                    onChange={(event) => setProfilePolicyId(event.target.value)}
+                  >
+                    {(runtimeRegistry?.policy_profiles ?? []).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field__label">Risk tier</span>
+                  <input
+                    className="panel__input"
+                    value={profileRiskTier}
+                    onChange={(event) => setProfileRiskTier(event.target.value)}
+                    placeholder="bounded_low_risk"
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Channel type</span>
+                  <input
+                    className="panel__input"
+                    value={profileChannelType}
+                    onChange={(event) => setProfileChannelType(event.target.value)}
+                    placeholder="external_job_api"
+                  />
+                </label>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    onClick={() => updateProfileDefault(true)}
+                    disabled={profileEditBusy || !userId}
+                  >
+                    {profileEditBusy ? "Checking" : "Preview profile change"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--primary button--sm"
+                    onClick={() => updateProfileDefault(false)}
+                    disabled={profileEditBusy || !userId || !profilePreflight?.allowed}
+                  >
+                    Apply confirmed default
+                  </button>
+                </div>
+                {profilePreflight ? (
+                  <div
+                    className={`panel__notice ${
+                      profilePreflight.allowed ? "panel__notice--info" : "panel__notice--error"
+                    }`}
+                  >
+                    <div className="table__strong">
+                      {profilePreflight.changed_fields?.length ?? 0} fields will change
+                    </div>
+                    <p className="panel__muted">{profilePreflight.summary}</p>
+                    {profilePreflight.blockers?.length ? (
+                      <ul className="panel__list panel__list--compact">
+                        {profilePreflight.blockers.map((blocker) => (
+                          <li key={blocker} className="agent-guardrail-reason">
+                            {blocker}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                {profileEditNotice ? (
+                  <div
+                    className={`panel__notice ${
+                      profileEditNotice.type === "error"
+                        ? "panel__notice--error"
+                        : "panel__notice--info"
+                    }`}
+                  >
+                    {profileEditNotice.text}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="panel__muted">
+            No persisted default mapping is available for this run’s agent profile yet.
           </p>
         )}
       </section>

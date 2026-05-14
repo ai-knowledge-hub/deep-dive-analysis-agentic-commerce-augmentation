@@ -11,6 +11,7 @@ from api.routes.agent_run_models import (
     AgentRunEventListResponse,
     AgentRunListResponse,
 )
+from api.utils.agent_profile_defaults import agent_profile_defaults
 from api.utils.agent_registry_runtime import registry_payload_and_fingerprint
 from api.utils.agent_run_authorization import (
     filter_agent_runs_for_principal,
@@ -105,6 +106,10 @@ def create_agent_run(
             idempotency_key=payload.idempotency_key,
             registry_payload=registry_payload,
             active_registry_fingerprint=active_registry_fingerprint,
+            agent_profile_defaults=agent_profile_defaults(
+                agent_profile_id=principal.agent_profile_id,
+                client_id=principal.client_id,
+            ),
         )
     except AgentRunPlanError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

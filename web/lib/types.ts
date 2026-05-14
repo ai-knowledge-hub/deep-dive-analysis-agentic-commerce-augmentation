@@ -1217,6 +1217,20 @@ export type AgentRuntimeHarnessProfile = {
   approval_strategy?: string;
   memory_policy?: string;
   stopping_conditions?: string[];
+  source?: string;
+};
+
+export type AgentRuntimeProfileDefault = {
+  id: string;
+  principal_id?: string | null;
+  tenant_id?: string | null;
+  principal_type?: "human" | "internal_agent" | "external_agent" | string | null;
+  name: string;
+  default_harness_id?: string | null;
+  default_policy_profile_id?: string | null;
+  risk_tier?: string | null;
+  channel_type?: string | null;
+  source?: string | null;
 };
 
 export type AgentRuntimeRecoveryTemplate = {
@@ -1253,6 +1267,7 @@ export type AgentRuntimeRegistryResponse = {
   recovery_templates?: AgentRuntimeRecoveryTemplate[];
   policy_profiles: AgentRuntimePolicyProfile[];
   harness_profiles?: AgentRuntimeHarnessProfile[];
+  agent_profile_defaults?: AgentRuntimeProfileDefault[];
 };
 
 export type AgentRegistryToolOwnership = {
@@ -1307,6 +1322,70 @@ export type AgentRegistryOwnershipUpdateResponse = {
     signature_algorithm?: string;
   };
   approval_event?: AgentRegistryAuditEvent;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  registry_status?: string | null;
+};
+
+export type AgentRegistryHarnessProfilePreflight = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  harness_id?: string;
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | string[] | null;
+      to?: string | string[] | null;
+      changed?: boolean;
+    }
+  >;
+  changed_fields?: string[];
+  proposed_profile?: AgentRuntimeHarnessProfile;
+  rollback_guidance?: string;
+  summary?: string;
+};
+
+export type AgentRegistryHarnessProfileUpdateResponse = {
+  dry_run?: boolean;
+  preflight?: AgentRegistryHarnessProfilePreflight;
+  harness_profile: AgentRuntimeHarnessProfile;
+  audit_event?: AgentRegistryAuditEvent;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  registry_status?: string | null;
+};
+
+export type AgentRegistryProfileDefaultPreflight = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  agent_profile_id?: string;
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | null;
+      to?: string | null;
+      changed?: boolean;
+    }
+  >;
+  changed_fields?: string[];
+  proposed_profile?: AgentRuntimeProfileDefault;
+  rollback_guidance?: string;
+  summary?: string;
+};
+
+export type AgentRegistryProfileDefaultUpdateResponse = {
+  dry_run?: boolean;
+  preflight?: AgentRegistryProfileDefaultPreflight;
+  agent_profile: AgentRuntimeProfileDefault;
+  audit_event?: AgentRegistryAuditEvent;
   registry_version?: string | null;
   registry_fingerprint?: string | null;
   registry_status?: string | null;
@@ -1381,6 +1460,7 @@ export type AgentRegistryRelease = {
     capabilities: number;
     policy_profiles: number;
     harness_profiles?: number;
+    agent_profile_defaults?: number;
   };
 };
 
@@ -1393,6 +1473,7 @@ export type AgentRegistryReleaseDetail = AgentRegistryRelease & {
     skill_ids_by_tool?: Record<string, string[]>;
     policy_profiles?: AgentRuntimePolicyProfile[];
     harness_profiles?: AgentRuntimeHarnessProfile[];
+    agent_profile_defaults?: AgentRuntimeProfileDefault[];
   };
   audit_events: AgentRegistryAuditEvent[];
 };

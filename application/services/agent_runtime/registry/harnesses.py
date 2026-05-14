@@ -11,6 +11,55 @@ _DEFAULT_AGENT_PROFILE_HARNESSES = {
 }
 
 
+def list_static_agent_profile_defaults() -> list[Dict[str, Any]]:
+    return [
+        {
+            "id": "human",
+            "principal_type": "human",
+            "principal_id": "human:default",
+            "name": "Human Operator",
+            "default_harness_id": "operator_supervised",
+            "default_policy_profile_id": "human_approval_required",
+            "risk_tier": "operator_reviewed",
+            "channel_type": "web_ui",
+            "source": "static_code",
+        },
+        {
+            "id": "internal_agent",
+            "principal_type": "internal_agent",
+            "principal_id": "internal_agent:default",
+            "name": "Internal Agent",
+            "default_harness_id": "operator_supervised",
+            "default_policy_profile_id": "human_approval_required",
+            "risk_tier": "operator_reviewed",
+            "channel_type": "runtime",
+            "source": "static_code",
+        },
+        {
+            "id": "buyer-assistant-v1",
+            "principal_type": "external_agent",
+            "principal_id": "external_agent:buyer-assistant-v1",
+            "name": "Buyer Assistant v1",
+            "default_harness_id": "safe_autonomy_b2b",
+            "default_policy_profile_id": "safe_auto",
+            "risk_tier": "bounded_low_risk",
+            "channel_type": "external_job_api",
+            "source": "static_code",
+        },
+        {
+            "id": "external-buyer-assistant",
+            "principal_type": "external_agent",
+            "principal_id": "external_agent:buyer-assistant-v1",
+            "name": "External Buyer Assistant",
+            "default_harness_id": "safe_autonomy_b2b",
+            "default_policy_profile_id": "safe_auto",
+            "risk_tier": "bounded_low_risk",
+            "channel_type": "external_job_api",
+            "source": "static_code",
+        },
+    ]
+
+
 def list_static_harness_profiles() -> list[Dict[str, Any]]:
     return [
         {

@@ -637,6 +637,7 @@ def _release_payload_summary(
             "capabilities": len(payload.get("capabilities") or []),
             "policy_profiles": len(payload.get("policy_profiles") or []),
             "harness_profiles": len(payload.get("harness_profiles") or []),
+            "agent_profile_defaults": len(payload.get("agent_profile_defaults") or []),
         },
     }
 

@@ -26,6 +26,7 @@ from api.composition import default_deps
 from api.main import app
 from api.routes.external_agent_job_models import ExternalAgentJobCreateRequest
 from api.utils.principals import build_agent_principal_token
+from infrastructure.db.agent.agent_profiles import update_agent_profile_defaults
 from infrastructure.db.agent.external_agent_jobs import (
     create_external_agent_job,
     create_external_agent_job_receipt,
@@ -134,6 +135,34 @@ def test_external_agent_job_create_is_idempotent_and_status_is_scoped(
         headers=_headers(other_principal_token),
     )
     assert wrong_principal.status_code == 404
+
+
+def test_external_agent_job_uses_persistent_agent_profile_defaults(client: TestClient):
+    update_agent_profile_defaults(
+        profile_id="buyer-assistant-v1",
+        principal_id="external_agent:buyer-assistant-v1",
+        principal_type="external_agent",
+        name="Buyer Assistant v1",
+        default_harness_id="operator_supervised",
+        default_policy_profile_id="human_approval_required",
+        risk_tier="operator_reviewed",
+        channel_type="external_job_api",
+    )
+    token = _token()
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-persisted-profile-defaults",
+            "tool_id": "experiment.run_variant",
+        },
+    )
+    assert created.status_code == 200
+    run = created.json()["run"]
+    assert run["agent_profile_id"] == "buyer-assistant-v1"
+    assert run["harness_id"] == "operator_supervised"
+    assert run["run_mode"] == "plan_only"
+    assert run["policy_profile_id"] == "human_approval_required"
 
 
 def test_external_agent_job_single_tool_plan_ignores_extra_capabilities(

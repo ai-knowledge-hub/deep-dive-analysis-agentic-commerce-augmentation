@@ -22,6 +22,9 @@ from application.services.agent_runtime.registry.catalog import (
     list_tool_specs,
 )
 from application.services.agent_runtime.registry.harnesses import list_harness_profiles
+from application.services.agent_runtime.registry.profile_defaults import (
+    normalize_agent_profile_defaults,
+)
 
 
 def registry_contract_payload(
@@ -29,6 +32,7 @@ def registry_contract_payload(
     | Sequence[Mapping[str, Any]]
     | None = None,
     harness_profiles: Sequence[Mapping[str, Any]] | None = None,
+    agent_profile_defaults: Sequence[Mapping[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     ownership = _normalize_ownership_by_tool(ownership_by_tool)
     skills = [_serialize_spec(skill) for skill in list_skill_specs()]
@@ -81,6 +85,7 @@ def registry_contract_payload(
         "recovery_templates": list_recovery_templates(),
         "policy_profiles": list_policy_profiles(),
         "harness_profiles": _normalize_harness_profiles(harness_profiles),
+        "agent_profile_defaults": normalize_agent_profile_defaults(agent_profile_defaults),
     }
 
 
@@ -89,11 +94,13 @@ def registry_fingerprint(
     | Sequence[Mapping[str, Any]]
     | None = None,
     harness_profiles: Sequence[Mapping[str, Any]] | None = None,
+    agent_profile_defaults: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
     return _hash_payload(
         registry_contract_payload(
             ownership_by_tool=ownership_by_tool,
             harness_profiles=harness_profiles,
+            agent_profile_defaults=agent_profile_defaults,
         )
     )
 
