@@ -1,0 +1,837 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import sys
+import types
+
+import pytest
+from fastapi.testclient import TestClient
+
+if "google" not in sys.modules:
+    google_pkg = types.ModuleType("google")
+    genai_pkg = types.ModuleType("google.genai")
+    genai_types_pkg = types.ModuleType("google.genai.types")
+    genai_pkg.Client = lambda *args, **kwargs: None
+    genai_pkg.types = genai_types_pkg
+    google_pkg.genai = genai_pkg
+    sys.modules["google"] = google_pkg
+    sys.modules["google.genai"] = genai_pkg
+    sys.modules["google.genai.types"] = genai_types_pkg
+
+from api.composition import default_deps
+from api.main import app
+from api.routes import agent_runs as agent_runs_route
+from api.utils.principals import build_agent_principal_token
+from infrastructure.db.agent.agent_profiles import get_agent_profile
+from infrastructure.db.agent.agent_registry import update_agent_registry_harness_profile
+from shared.config.env import get_settings
+from shared.db.connection import get_connection
+from shared.db.connection import init_db, set_database_path
+
+CLIENT_ID = "client-a"
+USER_ID = "user-a"
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_PRINCIPAL_SIGNING_SECRET", "test-agent-secret")
+    monkeypatch.setenv("ADMIN_USER_IDS", USER_ID)
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        "api.utils.tenancy.settings.admin_user_ids",
+        USER_ID,
+    )
+    db_path = tmp_path / "agent-runs-registry-api.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    deps.clients.create_client(client_id=CLIENT_ID, name="Client A")
+    deps.clients.create_client(client_id="client-b", name="Client B")
+    return TestClient(app)
+
+
+def _registry_params(**params):
+    return {"client_id": CLIENT_ID, "user_id": USER_ID, **params}
+
+
+def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
+    client: TestClient,
+):
+    unauthorized = client.get("/agent-runs/registry")
+    assert unauthorized.status_code == 400
+
+    response = client.get("/agent-runs/registry", params=_registry_params())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["registry_version"] == "agent-runtime-static-v1"
+    assert payload["registry_hash_algorithm"] == "sha256"
+    assert len(payload["registry_fingerprint"]) == 64
+    assert payload["registry_snapshot_id"] == payload["registry_fingerprint"]
+    assert payload["registry_source"] == "static_code"
+    assert payload["registry_status"] == "active"
+    assert payload["registry_ownership_source"] == "persistent"
+    assert client.get(
+        "/agent-runs/registry", params=_registry_params()
+    ).json()["registry_fingerprint"] == payload["registry_fingerprint"]
+    row = get_connection().execute(
+        """
+        SELECT registry_version, registry_fingerprint, source, status, payload_json
+        FROM agent_registry_versions
+        WHERE registry_fingerprint = ?
+        """,
+        (payload["registry_fingerprint"],),
+    ).fetchone()
+    assert row is not None
+    assert row["registry_version"] == "agent-runtime-static-v1"
+    assert row["source"] == "static_code"
+    assert row["status"] == "active"
+    assert '"registry_version":"agent-runtime-static-v1"' in row["payload_json"].replace(" ", "")
+    tool_ids = {tool["id"] for tool in payload["tools"]}
+    skill_ids = {skill["id"] for skill in payload["skills"]}
+    policy_ids = {profile["id"] for profile in payload["policy_profiles"]}
+    harness_ids = {profile["id"] for profile in payload["harness_profiles"]}
+    agent_profile_ids = {
+        profile["id"] for profile in payload["agent_profile_defaults"]
+    }
+
+    assert "experiment.run_variant" in tool_ids
+    assert "optimize-product-representation" in skill_ids
+    assert "safe_auto" in policy_ids
+    assert "safe_autonomy_b2b" in harness_ids
+    assert {"human", "buyer-assistant-v1", "external-buyer-assistant"}.issubset(
+        agent_profile_ids
+    )
+    assert get_agent_profile(profile_id="buyer-assistant-v1") is not None
+    safe_harness = next(
+        profile for profile in payload["harness_profiles"] if profile["id"] == "safe_autonomy_b2b"
+    )
+    assert safe_harness["default_run_mode"] == "auto_execute_safe"
+    assert safe_harness["retry_strategy"] == "last_safe_checkpoint"
+    run_variant = next(
+        capability
+        for capability in payload["capabilities"]
+        if capability["name"] == "run_variant"
+    )
+    assert run_variant["summary"]
+    assert run_variant["input_schema"]["properties"]["experiment_id"]["type"] == "string"
+    assert run_variant["output_schema"]["properties"]["metric_id"]["type"] == "string"
+    assert "metric_id" in run_variant["output_schema"]["required"]
+    assert "variant_id" in run_variant["output_schema"]["required"]
+    posterior = next(
+        capability
+        for capability in payload["capabilities"]
+        if capability["name"] == "update_posterior_and_decisions"
+    )
+    assert "new_metric_id" in posterior["output_schema"]["required"]
+    assert "variant_id" in posterior["output_schema"]["required"]
+    validation_template = next(
+        item
+        for item in payload["recovery_templates"]
+        if item["capability_name"] == "request_synthetic_validation"
+    )
+    assert validation_template["default_inputs"]["auto_run"] is False
+    assert run_variant["review_checklist"]
+    assert run_variant["owner_principal_id"] == "platform.commerce-optimization"
+    assert run_variant["steward_team"] == "commerce-optimization"
+    assert run_variant["ownership_source"] == "registry_default"
+    ownership_row = get_connection().execute(
+        """
+        SELECT owner_principal_id, steward_team, source
+        FROM agent_registry_tool_ownership
+        WHERE tool_id = ?
+        """,
+        ("experiment.run_variant",),
+    ).fetchone()
+    assert ownership_row is not None
+    assert ownership_row["owner_principal_id"] == "platform.commerce-optimization"
+    assert ownership_row["steward_team"] == "commerce-optimization"
+    assert ownership_row["source"] == "registry_default"
+    assert payload["skill_ids_by_tool"]["experiment.run_variant"] == [
+        "optimize-product-representation"
+    ]
+    assert payload["skill_ids_by_executable_tool"]["experiment.run_variant"] == [
+        "optimize-product-representation"
+    ]
+    assert payload["skill_ids_by_tool"]["run.read"] == ["triage-failed-run"]
+    assert "run.read" in payload["declared_non_executable_skill_tools"]
+    run_read_mapping = next(
+        item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
+    )
+    assert run_read_mapping["executable"] is False
+    run_variant_tool = next(
+        tool for tool in payload["tools"] if tool["id"] == "experiment.run_variant"
+    )
+    assert run_variant_tool["executable"] is True
+    assert run_variant_tool["external_agent_contract"]["required_scopes"]["tool"] == [
+        "tool:experiment.run_variant",
+        "tools:*",
+    ]
+    assert "skill:optimize-product-representation" in run_variant_tool[
+        "external_agent_contract"
+    ]["required_scopes"]["skill"]
+    assert run_variant["external_agent_contract"]["minimal_request"] == {
+        "capability_name": "run_variant",
+        "plan_mode": "single_tool",
+    }
+    assert payload["skill_ids_by_tool"]["validation.review_readiness"] == [
+        "request-validation-and-ingest-result",
+        "promote-and-publish-approved-copy",
+    ]
+    assert payload["skill_selection_by_tool"]["validation.review_readiness"] == {
+        "default_skill_id": "request-validation-and-ingest-result",
+        "candidate_skill_ids": [
+            "request-validation-and-ingest-result",
+            "promote-and-publish-approved-copy",
+        ],
+    }
+
+    token = build_agent_principal_token(
+        principal_id="registry-reader",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["external_agent_jobs:read"],
+    )
+    bearer_response = client.get(
+        "/agent-runs/registry",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert bearer_response.status_code == 200
+
+    missing_scope_token = build_agent_principal_token(
+        principal_id="registry-reader",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        scopes=["tool:experiment.run_variant"],
+    )
+    missing_scope = client.get(
+        "/agent-runs/registry",
+        headers={"Authorization": f"Bearer {missing_scope_token}"},
+    )
+    assert missing_scope.status_code == 403
+
+
+def test_registry_uses_persistent_harness_profiles_for_fingerprint_and_defaults(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    seeded = get_connection().execute(
+        """
+        SELECT id, source, status
+        FROM agent_registry_harness_profiles
+        WHERE id = ?
+        """,
+        ("safe_autonomy_b2b",),
+    ).fetchone()
+    assert seeded is not None
+    assert seeded["source"] == "registry_default"
+    assert seeded["status"] == "active"
+
+    update_agent_registry_harness_profile(
+        profile_id="safe_autonomy_b2b",
+        source="operator_override",
+        profile={
+            "id": "safe_autonomy_b2b",
+            "name": "Safe Autonomy B2B",
+            "description": "Persisted test override.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "human_approval_required",
+            "allowed_run_modes": ["plan_only"],
+            "allowed_policy_profile_ids": ["human_approval_required"],
+            "planner_mode": "operator_review",
+            "retry_strategy": "operator_confirmed",
+            "fallback_order": ["operator_chat"],
+            "approval_strategy": "human_required",
+            "memory_policy": "write_learnings_after_review",
+            "stopping_conditions": ["operator_pause"],
+        },
+    )
+
+    changed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    changed_harness = next(
+        profile
+        for profile in changed["harness_profiles"]
+        if profile["id"] == "safe_autonomy_b2b"
+    )
+    assert changed["registry_fingerprint"] != first["registry_fingerprint"]
+    assert changed_harness["source"] == "operator_override"
+    assert changed_harness["default_run_mode"] == "plan_only"
+    assert changed_harness["retry_strategy"] == "operator_confirmed"
+
+    token = build_agent_principal_token(
+        principal_id="persistent-harness-agent",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="buyer-assistant-v1",
+        scopes=["agent_runs:write"],
+    )
+    response = client.post(
+        "/agent-runs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"allowed_capabilities": ["seed_hypotheses"]},
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["harness_id"] == "safe_autonomy_b2b"
+    assert run["run_mode"] == "plan_only"
+    assert run["policy_profile_id"] == "human_approval_required"
+
+
+def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    preflight_response = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "retry_strategy": "operator_confirmed",
+            "fallback_order": ["operator_chat"],
+        },
+    )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["requires_confirmation"] is True
+    assert preflight_payload["preflight"]["allowed"] is True
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "description",
+        "retry_strategy",
+        "fallback_order",
+    ]
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    non_admin = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": "user-b",
+            "description": "Operator-governed safe autonomy.",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert non_admin.status_code == 403
+
+    invalid = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "default_run_mode": "plan_only",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert invalid.status_code == 400
+    assert "allowed_run_modes must include default_run_mode" in str(
+        invalid.json()["detail"]["preflight"]["blockers"]
+    )
+
+    response = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "retry_strategy": "operator_confirmed",
+            "fallback_order": ["operator_chat"],
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dry_run"] is False
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+    assert payload["harness_profile"]["source"] == "operator_override"
+    assert payload["harness_profile"]["retry_strategy"] == "operator_confirmed"
+    assert payload["audit_event"]["event_type"] == "registry_harness_profile_updated"
+    assert payload["audit_event"]["diff"]["changed_fields"] == [
+        "description",
+        "retry_strategy",
+        "fallback_order",
+    ]
+
+    refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    harness = next(
+        item
+        for item in refreshed["harness_profiles"]
+        if item["id"] == "safe_autonomy_b2b"
+    )
+    assert refreshed["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert harness["description"] == "Operator-governed safe autonomy."
+    assert harness["retry_strategy"] == "operator_confirmed"
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params=_registry_params(registry_fingerprint=payload["registry_fingerprint"]),
+    ).json()["events"]
+    assert any(item["event_type"] == "registry_harness_profile_updated" for item in audit)
+
+
+def test_agent_runtime_registry_agent_profile_default_update_is_guarded_and_audited(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    preflight_response = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "default_harness_id": "operator_supervised",
+            "default_policy_profile_id": "human_approval_required",
+        },
+    )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["allowed"] is True
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "name",
+        "default_harness_id",
+        "default_policy_profile_id",
+    ]
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    non_admin = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": "user-b",
+            "name": "Buyer Assistant v1 Guarded",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert non_admin.status_code == 403
+
+    invalid = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "default_harness_id": "safe_autonomy_b2b",
+            "default_policy_profile_id": "human_approval_required",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert invalid.status_code == 400
+    assert "must be allowed by default_harness_id" in str(
+        invalid.json()["detail"]["preflight"]["blockers"]
+    )
+
+    response = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "default_harness_id": "operator_supervised",
+            "default_policy_profile_id": "human_approval_required",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+    assert payload["agent_profile"]["source"] == "operator_override"
+    assert payload["audit_event"]["event_type"] == "registry_agent_profile_default_updated"
+    refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    agent_profile = next(
+        item
+        for item in refreshed["agent_profile_defaults"]
+        if item["id"] == "buyer-assistant-v1"
+    )
+    assert agent_profile["default_harness_id"] == "operator_supervised"
+    assert agent_profile["default_policy_profile_id"] == "human_approval_required"
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params=_registry_params(registry_fingerprint=payload["registry_fingerprint"]),
+    ).json()["events"]
+    assert any(
+        item["event_type"] == "registry_agent_profile_default_updated" for item in audit
+    )
+
+
+def test_agent_runtime_registry_ownership_update_creates_new_release(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    preflight_response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+        },
+    )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["requires_confirmation"] is True
+    assert preflight_payload["preflight"]["risk_level"] == "medium"
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "owner_principal_id",
+        "steward_team",
+    ]
+    assert preflight_payload["ownership"]["source"] == "registry_default"
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": USER_ID,
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dry_run"] is False
+    assert payload["preflight"]["requires_confirmation"] is True
+    receipt = payload["approval_receipt"]
+    assert receipt["receipt_type"] == "registry_ownership_approval"
+    assert receipt["actor_user_id"] == USER_ID
+    assert receipt["tool_id"] == "experiment.run_variant"
+    assert receipt["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert receipt["signature_algorithm"] == "hmac-sha256"
+    payload_b64, signature = receipt["signature"].rsplit(".", 1)
+    expected_signature = hmac.new(
+        b"test-agent-secret",
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    assert hmac.compare_digest(signature, expected_signature)
+    assert payload["ownership"]["owner_principal_id"] == "platform.growth"
+    assert payload["ownership"]["steward_team"] == "growth-ops"
+    assert payload["ownership"]["source"] == "operator_override"
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+
+    refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    run_variant = next(
+        capability
+        for capability in refreshed["capabilities"]
+        if capability["name"] == "run_variant"
+    )
+    assert refreshed["registry_fingerprint"] == payload["registry_fingerprint"]
+    assert run_variant["owner_principal_id"] == "platform.growth"
+    assert run_variant["steward_team"] == "growth-ops"
+    assert run_variant["ownership_source"] == "operator_override"
+
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params=_registry_params(registry_fingerprint=payload["registry_fingerprint"]),
+    ).json()["events"]
+    assert audit
+    approval_events = [
+        item for item in audit if item["event_type"] == "registry_ownership_approved"
+    ]
+    assert approval_events
+    assert (
+        approval_events[0]["diff"]["approval_receipt"]["signature"]
+        == receipt["signature"]
+    )
+    changed_events = [item for item in audit if item["event_type"] == "registry_changed"]
+    assert changed_events
+    assert changed_events[0]["previous_registry_fingerprint"] == first["registry_fingerprint"]
+
+    verify_response = client.post(
+        "/agent-runs/registry/approval-receipts/verify",
+        json={
+            "approval_receipt": receipt,
+            "registry_fingerprint": payload["registry_fingerprint"],
+            "audit_event_id": approval_events[0]["id"],
+            "require_audit_event": True,
+        },
+    )
+    assert verify_response.status_code == 200
+    verification = verify_response.json()["verification"]
+    assert verification["valid"] is True
+    assert verification["valid_signature"] is True
+    assert verification["valid_payload"] is True
+    assert verification["valid_audit_event"] is True
+    assert verification["audit_event"]["id"] == approval_events[0]["id"]
+
+    tampered_receipt = {
+        **receipt,
+        "ownership": {
+            **receipt["ownership"],
+            "steward_team": "unexpected-team",
+        },
+    }
+    tampered_response = client.post(
+        "/agent-runs/registry/approval-receipts/verify",
+        json={"approval_receipt": tampered_receipt},
+    )
+    assert tampered_response.status_code == 200
+    tampered = tampered_response.json()["verification"]
+    assert tampered["valid"] is False
+    assert tampered["valid_signature"] is True
+    assert tampered["valid_payload"] is False
+    assert "Receipt payload does not match the signed payload." in tampered["blockers"]
+
+    missing = client.patch(
+        "/agent-runs/registry/ownership/not.real",
+        json={
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+        },
+    )
+    assert missing.status_code == 404
+
+
+def test_agent_runtime_registry_ownership_update_requires_admin(
+    client: TestClient,
+):
+    response = client.patch(
+        "/agent-runs/registry/ownership/experiment.run_variant",
+        json={
+            "user_id": "not-admin",
+            "owner_principal_id": "platform.growth",
+            "steward_team": "growth-ops",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 403
+
+
+def test_agent_runtime_registry_endpoint_audits_fingerprint_changes(
+    client: TestClient, monkeypatch
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    changed_contract = agent_runs_route.registry_contract_payload()
+    changed_contract = {
+        **changed_contract,
+        "tools": [
+            *changed_contract["tools"],
+            {
+                "id": "test.synthetic_tool",
+                "capability_name": "synthetic_tool",
+                "summary": "Synthetic test tool.",
+                "default_version": "v-test",
+            },
+        ],
+    }
+    changed_fingerprint = hashlib.sha256(
+        json.dumps(
+            changed_contract,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    monkeypatch.setattr(
+        agent_runs_route, "registry_contract_payload", lambda: changed_contract
+    )
+    monkeypatch.setattr(agent_runs_route, "registry_fingerprint", lambda: changed_fingerprint)
+
+    changed = client.get("/agent-runs/registry", params=_registry_params()).json()
+
+    assert changed["registry_fingerprint"] == changed_fingerprint
+    assert changed["registry_status"] == "active"
+    row = get_connection().execute(
+        """
+        SELECT previous_registry_fingerprint, registry_fingerprint, diff_json
+        FROM agent_registry_audit_events
+        WHERE registry_fingerprint = ?
+        """,
+        (changed_fingerprint,),
+    ).fetchone()
+    assert row is not None
+    assert row["previous_registry_fingerprint"] == first["registry_fingerprint"]
+    diff = json.loads(row["diff_json"])
+    assert diff["tools"]["added"] == ["test.synthetic_tool"]
+    status_rows = get_connection().execute(
+        """
+        SELECT registry_fingerprint, status
+        FROM agent_registry_versions
+        WHERE registry_fingerprint IN (?, ?)
+        """,
+        (first["registry_fingerprint"], changed_fingerprint),
+    ).fetchall()
+    statuses = {item["registry_fingerprint"]: item["status"] for item in status_rows}
+    assert statuses[first["registry_fingerprint"]] == "retired"
+    assert statuses[changed_fingerprint] == "active"
+
+    audit_response = client.get(
+        "/agent-runs/registry/audit", params=_registry_params(limit=5)
+    )
+    assert audit_response.status_code == 200
+    audit_payload = audit_response.json()
+    assert audit_payload["events"][0]["registry_fingerprint"] == changed_fingerprint
+    assert audit_payload["events"][0]["diff"]["tools"]["added"] == [
+        "test.synthetic_tool"
+    ]
+
+    filtered_response = client.get(
+        "/agent-runs/registry/audit",
+        params=_registry_params(registry_fingerprint=changed_fingerprint),
+    )
+    assert filtered_response.status_code == 200
+    assert len(filtered_response.json()["events"]) == 1
+
+    releases_response = client.get(
+        "/agent-runs/registry/releases", params=_registry_params()
+    )
+    assert releases_response.status_code == 200
+    releases = releases_response.json()["releases"]
+    assert releases[0]["registry_fingerprint"] == changed_fingerprint
+    assert releases[0]["status"] == "active"
+    assert releases[0]["counts"]["tools"] == len(changed_contract["tools"])
+    assert any(
+        item["registry_fingerprint"] == first["registry_fingerprint"]
+        and item["status"] == "retired"
+        for item in releases
+    )
+
+    active_response = client.get(
+        "/agent-runs/registry/releases",
+        params=_registry_params(status="active"),
+    )
+    assert active_response.status_code == 200
+    assert [item["status"] for item in active_response.json()["releases"]] == ["active"]
+
+    invalid_status = client.get(
+        "/agent-runs/registry/releases",
+        params=_registry_params(status="draft"),
+    )
+    assert invalid_status.status_code == 400
+
+    detail_response = client.get(
+        f"/agent-runs/registry/releases/{changed_fingerprint}",
+        params=_registry_params(audit_limit=5),
+    )
+    assert detail_response.status_code == 200
+    release_detail = detail_response.json()["release"]
+    assert release_detail["registry_fingerprint"] == changed_fingerprint
+    assert release_detail["payload"]["tools"][-1]["id"] == "test.synthetic_tool"
+    assert release_detail["counts"]["capabilities"] == len(
+        changed_contract["capabilities"]
+    )
+    assert release_detail["audit_events"][0]["registry_fingerprint"] == changed_fingerprint
+
+    missing_detail = client.get(
+        "/agent-runs/registry/releases/not-a-real-fingerprint",
+        params=_registry_params(),
+    )
+    assert missing_detail.status_code == 404
+
+
+def test_registry_pin_backfill_supports_dry_run_and_scoped_update(
+    client: TestClient,
+):
+    deps = default_deps()
+    run = deps.agent_runs.create_agent_run(
+        client_id=CLIENT_ID,
+        brand_id=None,
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["run_variant"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="plan_only",
+        state="battery_ready",
+        status="planned",
+    )
+    action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="proposed",
+        capability_name="run_variant",
+        capability_version="v1",
+        inputs={},
+        outputs={},
+        inputs_hash=None,
+        outputs_hash=None,
+        rationale=None,
+        confidence=None,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    dry_run = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_payload = dry_run.json()
+    assert dry_payload["dry_run"] is True
+    assert dry_payload["runs"]["matched"] == 1
+    assert dry_payload["runs"]["updated"] == 0
+    assert dry_payload["actions"]["matched"] == 1
+    assert dry_payload["actions"]["updated"] == 0
+    assert deps.agent_runs.get_agent_run(run_id=run["id"])["registry_fingerprint"] is None
+    assert deps.agent_actions.get_agent_action(action["id"])["registry_fingerprint"] is None
+
+    applied = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": False},
+    )
+    assert applied.status_code == 200
+    applied_payload = applied.json()
+    assert applied_payload["dry_run"] is False
+    assert applied_payload["runs"]["updated"] == 1
+    assert applied_payload["actions"]["updated"] == 1
+    updated_run = deps.agent_runs.get_agent_run(run_id=run["id"])
+    updated_action = deps.agent_actions.get_agent_action(action["id"])
+    assert updated_run["registry_version"] == "agent-runtime-static-v1"
+    assert len(updated_run["registry_fingerprint"]) == 64
+    assert updated_action["registry_version"] == "agent-runtime-static-v1"
+    assert updated_action["registry_fingerprint"] == updated_run["registry_fingerprint"]
+    assert updated_action["tool_id"] == "experiment.run_variant"
+    assert updated_action["skill_id"] == "optimize-product-representation"
+    assert updated_action["tool_version"] == "v1"
+    assert updated_action["skill_version"] == "v1"
+    audit = client.get(
+        "/agent-runs/registry/audit", params=_registry_params()
+    ).json()["events"]
+    backfill_event = next(
+        item for item in audit if item["event_type"] == "registry_pin_backfill_applied"
+    )
+    assert backfill_event["source"] == "operator_backfill"
+    assert backfill_event["registry_fingerprint"] == updated_run["registry_fingerprint"]
+    assert backfill_event["diff"]["client_id"] == CLIENT_ID
+    assert backfill_event["diff"]["runs"]["updated"] == 1
+    assert backfill_event["diff"]["actions"]["updated"] == 1
+
+    second_apply = client.post(
+        "/agent-runs/registry/backfill-pins",
+        json={"client_id": CLIENT_ID, "dry_run": False},
+    )
+    assert second_apply.status_code == 200
+    assert second_apply.json()["runs"]["matched"] == 0
+    assert second_apply.json()["actions"]["matched"] == 0
