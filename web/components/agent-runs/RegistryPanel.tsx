@@ -5,6 +5,7 @@ import type {
   AgentRegistryAuditEvent,
   AgentRegistryApprovalReceiptVerifyResponse,
   AgentRegistryHarnessProfilePreflight,
+  AgentRegistryProfileDefaultPreflight,
   AgentRegistryPinBackfillResponse,
   AgentRegistryRelease,
   AgentRegistryReleaseDetail,
@@ -14,7 +15,10 @@ import type {
   AgentRuntimeSkillSpec,
   AgentRuntimeToolSpec,
 } from "../../lib/types";
-import { updateAgentRuntimeRegistryHarnessProfile } from "../../lib/api";
+import {
+  updateAgentRuntimeRegistryHarnessProfile,
+  updateAgentRuntimeRegistryProfileDefault,
+} from "../../lib/api";
 
 type RegistryAuditDiffRow = { label: string; value: string };
 
@@ -113,6 +117,12 @@ export function RegistryPanel({
     runtimeRegistry?.harness_profiles?.find(
       (profile) => profile.id === selectedRun.harness_id,
     ) ?? null;
+  const activeAgentProfile =
+    runtimeRegistry?.agent_profile_defaults?.find(
+      (profile) =>
+        profile.id === selectedRun.agent_profile_id ||
+        (!selectedRun.agent_profile_id && profile.id === selectedRun.principal_type),
+    ) ?? null;
   const [harnessEditorOpen, setHarnessEditorOpen] = React.useState(false);
   const [harnessDescription, setHarnessDescription] = React.useState("");
   const [harnessRetryStrategy, setHarnessRetryStrategy] = React.useState("");
@@ -124,6 +134,17 @@ export function RegistryPanel({
     type: "info" | "error";
     text: string;
   } | null>(null);
+  const [profileEditorOpen, setProfileEditorOpen] = React.useState(false);
+  const [profileName, setProfileName] = React.useState("");
+  const [profileHarnessId, setProfileHarnessId] = React.useState("");
+  const [profilePolicyId, setProfilePolicyId] = React.useState("");
+  const [profilePreflight, setProfilePreflight] =
+    React.useState<AgentRegistryProfileDefaultPreflight | null>(null);
+  const [profileEditBusy, setProfileEditBusy] = React.useState(false);
+  const [profileEditNotice, setProfileEditNotice] = React.useState<{
+    type: "info" | "error";
+    text: string;
+  } | null>(null);
 
   React.useEffect(() => {
     setHarnessDescription(activeHarness?.description ?? "");
@@ -132,6 +153,18 @@ export function RegistryPanel({
     setHarnessPreflight(null);
     setHarnessEditNotice(null);
   }, [activeHarness?.description, activeHarness?.fallback_order, activeHarness?.retry_strategy]);
+
+  React.useEffect(() => {
+    setProfileName(activeAgentProfile?.name ?? "");
+    setProfileHarnessId(activeAgentProfile?.default_harness_id ?? "");
+    setProfilePolicyId(activeAgentProfile?.default_policy_profile_id ?? "");
+    setProfilePreflight(null);
+    setProfileEditNotice(null);
+  }, [
+    activeAgentProfile?.default_harness_id,
+    activeAgentProfile?.default_policy_profile_id,
+    activeAgentProfile?.name,
+  ]);
 
   async function updateHarnessProfile(dryRun: boolean) {
     if (!activeHarness || !userId) return;
@@ -172,6 +205,48 @@ export function RegistryPanel({
       });
     } finally {
       setHarnessEditBusy(false);
+    }
+  }
+
+  async function updateProfileDefault(dryRun: boolean) {
+    if (!activeAgentProfile || !userId) return;
+    setProfileEditBusy(true);
+    setProfileEditNotice(null);
+    try {
+      const response = await updateAgentRuntimeRegistryProfileDefault(
+        activeAgentProfile.id,
+        {
+          name: profileName,
+          default_harness_id: profileHarnessId,
+          default_policy_profile_id: profilePolicyId,
+          dry_run: dryRun,
+          preflight_confirmed: !dryRun,
+        },
+        userId,
+      );
+      setProfilePreflight(response.preflight ?? null);
+      if (dryRun) {
+        setProfileEditNotice({
+          type: response.preflight?.allowed ? "info" : "error",
+          text: response.preflight?.summary ?? "Agent profile default preview complete.",
+        });
+        return;
+      }
+      setProfileEditNotice({
+        type: "info",
+        text: `Agent profile default saved. Registry ${String(
+          response.registry_fingerprint ?? "",
+        ).slice(0, 12)} is now active.`,
+      });
+      setProfileEditorOpen(false);
+      onRegistryChanged();
+    } catch (err) {
+      setProfileEditNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Unable to update profile default.",
+      });
+    } finally {
+      setProfileEditBusy(false);
     }
   }
 
@@ -371,6 +446,137 @@ export function RegistryPanel({
         ) : (
           <p className="panel__muted">
             Harness metadata is not available in the active registry payload yet.
+          </p>
+        )}
+      </section>
+
+      <section className="control-section">
+        <div className="control-section__header">
+          <div>
+            <span className="control-section__eyebrow">Profile default</span>
+            <h4 className="control-section__title">Agent profile mapping</h4>
+          </div>
+          <span className="control-chip">
+            {activeAgentProfile?.id ?? selectedRun.agent_profile_id ?? "human"}
+          </span>
+        </div>
+        {activeAgentProfile ? (
+          <>
+            <div className="panel__meta-strip panel__meta-strip--flat">
+              <div>
+                <strong>Harness</strong>: {formatRegistryValue(activeAgentProfile.default_harness_id)}
+              </div>
+              <div>
+                <strong>Policy</strong>: {formatRegistryValue(activeAgentProfile.default_policy_profile_id)}
+              </div>
+              <div>
+                <strong>Source</strong>: {formatRegistryValue(activeAgentProfile.source)}
+              </div>
+            </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={() => setProfileEditorOpen((open) => !open)}
+              >
+                {profileEditorOpen ? "Close profile editor" : "Edit profile default"}
+              </button>
+            </div>
+            {profileEditorOpen ? (
+              <div className="registry-panel__subsection">
+                <div className="panel__eyebrow">Guarded edit</div>
+                <label className="field">
+                  <span className="field__label">Name</span>
+                  <input
+                    className="panel__input"
+                    value={profileName}
+                    onChange={(event) => setProfileName(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">Default harness</span>
+                  <select
+                    className="panel__input"
+                    value={profileHarnessId}
+                    onChange={(event) => setProfileHarnessId(event.target.value)}
+                  >
+                    {(runtimeRegistry?.harness_profiles ?? []).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field__label">Default policy</span>
+                  <select
+                    className="panel__input"
+                    value={profilePolicyId}
+                    onChange={(event) => setProfilePolicyId(event.target.value)}
+                  >
+                    {(runtimeRegistry?.policy_profiles ?? []).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    onClick={() => updateProfileDefault(true)}
+                    disabled={profileEditBusy || !userId}
+                  >
+                    {profileEditBusy ? "Checking" : "Preview profile change"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--primary button--sm"
+                    onClick={() => updateProfileDefault(false)}
+                    disabled={profileEditBusy || !userId || !profilePreflight?.allowed}
+                  >
+                    Apply confirmed default
+                  </button>
+                </div>
+                {profilePreflight ? (
+                  <div
+                    className={`panel__notice ${
+                      profilePreflight.allowed ? "panel__notice--info" : "panel__notice--error"
+                    }`}
+                  >
+                    <div className="table__strong">
+                      {profilePreflight.changed_fields?.length ?? 0} fields will change
+                    </div>
+                    <p className="panel__muted">{profilePreflight.summary}</p>
+                    {profilePreflight.blockers?.length ? (
+                      <ul className="panel__list panel__list--compact">
+                        {profilePreflight.blockers.map((blocker) => (
+                          <li key={blocker} className="agent-guardrail-reason">
+                            {blocker}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                {profileEditNotice ? (
+                  <div
+                    className={`panel__notice ${
+                      profileEditNotice.type === "error"
+                        ? "panel__notice--error"
+                        : "panel__notice--info"
+                    }`}
+                  >
+                    {profileEditNotice.text}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="panel__muted">
+            No persisted default mapping is available for this run’s agent profile yet.
           </p>
         )}
       </section>

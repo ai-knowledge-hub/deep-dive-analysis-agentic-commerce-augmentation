@@ -721,6 +721,98 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
     assert any(item["event_type"] == "registry_harness_profile_updated" for item in audit)
 
 
+def test_agent_runtime_registry_agent_profile_default_update_is_guarded_and_audited(
+    client: TestClient,
+):
+    first = client.get("/agent-runs/registry", params=_registry_params()).json()
+    preflight_response = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "default_harness_id": "operator_supervised",
+            "default_policy_profile_id": "human_approval_required",
+        },
+    )
+    assert preflight_response.status_code == 200
+    preflight_payload = preflight_response.json()
+    assert preflight_payload["dry_run"] is True
+    assert preflight_payload["preflight"]["allowed"] is True
+    assert preflight_payload["preflight"]["changed_fields"] == [
+        "name",
+        "default_harness_id",
+        "default_policy_profile_id",
+    ]
+
+    unconfirmed = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "dry_run": False,
+        },
+    )
+    assert unconfirmed.status_code == 409
+
+    non_admin = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": "user-b",
+            "name": "Buyer Assistant v1 Guarded",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert non_admin.status_code == 403
+
+    invalid = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "default_harness_id": "safe_autonomy_b2b",
+            "default_policy_profile_id": "human_approval_required",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert invalid.status_code == 400
+    assert "must be allowed by default_harness_id" in str(
+        invalid.json()["detail"]["preflight"]["blockers"]
+    )
+
+    response = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "default_harness_id": "operator_supervised",
+            "default_policy_profile_id": "human_approval_required",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["registry_fingerprint"] != first["registry_fingerprint"]
+    assert payload["agent_profile"]["source"] == "operator_override"
+    assert payload["audit_event"]["event_type"] == "registry_agent_profile_default_updated"
+    refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
+    agent_profile = next(
+        item
+        for item in refreshed["agent_profile_defaults"]
+        if item["id"] == "buyer-assistant-v1"
+    )
+    assert agent_profile["default_harness_id"] == "operator_supervised"
+    assert agent_profile["default_policy_profile_id"] == "human_approval_required"
+    audit = client.get(
+        "/agent-runs/registry/audit",
+        params=_registry_params(registry_fingerprint=payload["registry_fingerprint"]),
+    ).json()["events"]
+    assert any(
+        item["event_type"] == "registry_agent_profile_default_updated" for item in audit
+    )
+
+
 def test_agent_runtime_registry_ownership_update_creates_new_release(
     client: TestClient,
 ):

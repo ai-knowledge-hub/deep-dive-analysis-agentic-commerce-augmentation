@@ -1359,6 +1359,38 @@ export type AgentRegistryHarnessProfileUpdateResponse = {
   registry_status?: string | null;
 };
 
+export type AgentRegistryProfileDefaultPreflight = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  agent_profile_id?: string;
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | null;
+      to?: string | null;
+      changed?: boolean;
+    }
+  >;
+  changed_fields?: string[];
+  proposed_profile?: AgentRuntimeProfileDefault;
+  rollback_guidance?: string;
+  summary?: string;
+};
+
+export type AgentRegistryProfileDefaultUpdateResponse = {
+  dry_run?: boolean;
+  preflight?: AgentRegistryProfileDefaultPreflight;
+  agent_profile: AgentRuntimeProfileDefault;
+  audit_event?: AgentRegistryAuditEvent;
+  registry_version?: string | null;
+  registry_fingerprint?: string | null;
+  registry_status?: string | null;
+};
+
 export type AgentRegistryApprovalReceiptVerifyResponse = {
   verification: {
     valid: boolean;

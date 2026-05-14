@@ -14,6 +14,7 @@ import {
   AgentRegistryApprovalReceiptVerifyResponse,
   AgentRegistryAuditListResponse,
   AgentRegistryHarnessProfileUpdateResponse,
+  AgentRegistryProfileDefaultUpdateResponse,
   AgentRegistryOwnershipUpdateResponse,
   AgentRegistryPinBackfillResponse,
   AgentRegistryReleaseDetailResponse,
@@ -736,6 +737,33 @@ export async function updateAgentRuntimeRegistryHarnessProfile(
         description: payload.description ?? undefined,
         retry_strategy: payload.retry_strategy ?? undefined,
         fallback_order: payload.fallback_order ?? undefined,
+        dry_run: payload.dry_run ?? true,
+        preflight_confirmed: payload.preflight_confirmed ?? false,
+      }),
+    },
+  );
+}
+
+export async function updateAgentRuntimeRegistryProfileDefault(
+  profileId: string,
+  payload: {
+    name?: string;
+    default_harness_id?: string;
+    default_policy_profile_id?: string;
+    risk_tier?: string;
+    channel_type?: string;
+    dry_run?: boolean;
+    preflight_confirmed?: boolean;
+  },
+  userId?: string | null,
+): Promise<AgentRegistryProfileDefaultUpdateResponse> {
+  return request<AgentRegistryProfileDefaultUpdateResponse>(
+    `/agent-runs/registry/agent-profiles/${encodeURIComponent(profileId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        user_id: userId ?? undefined,
+        ...payload,
         dry_run: payload.dry_run ?? true,
         preflight_confirmed: payload.preflight_confirmed ?? false,
       }),
