@@ -5,6 +5,8 @@ Last updated: 2026-05-06
 
 This is the current user-facing product guide for the agentic commerce control plane. It replaces the older human-led lab guide as the default way to understand the web app.
 
+For a compact diagram of UX modes and transitions, use `docs/ux-flow-schema.md`.
+
 ## Product Posture
 
 The product is an agent-first commerce execution control plane.
