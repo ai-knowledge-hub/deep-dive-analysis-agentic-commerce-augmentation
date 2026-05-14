@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.utils.agent_profile_defaults import registry_agent_profile_defaults
 from api.utils.agent_registry_profile_defaults import (
     registry_agent_profile_default_preflight,
 )
+from api.utils.agent_registry_auth import require_registry_write_access
 from api.utils.agent_registry_runtime import registry_payload_and_fingerprint
-from api.utils.tenancy import require_admin
 from infrastructure.db.agent.agent_profiles import update_agent_profile_defaults
 from infrastructure.db.agent.agent_registry import (
     create_agent_registry_audit_event,
@@ -35,6 +35,7 @@ class AgentRegistryProfileDefaultUpdateRequest(BaseModel):
 def update_agent_runtime_registry_agent_profile_default(
     profile_id: str,
     payload: AgentRegistryProfileDefaultUpdateRequest,
+    request: Request,
 ) -> Dict[str, Any]:
     current = _current_agent_profile_default(profile_id)
     if not current:
@@ -52,7 +53,7 @@ def update_agent_runtime_registry_agent_profile_default(
             status_code=409,
             detail="Registry agent profile default preflight confirmation required",
         )
-    require_admin(payload.user_id)
+    principal = require_registry_write_access(request)
     if not preflight.get("allowed"):
         raise HTTPException(
             status_code=400,
@@ -84,9 +85,11 @@ def update_agent_runtime_registry_agent_profile_default(
         event_type="registry_agent_profile_default_updated",
         registry_version=str(snapshot.get("registry_version") or ""),
         registry_fingerprint=str(snapshot.get("registry_fingerprint") or ""),
-        source="operator_approval",
+        source=principal.principal_id,
         diff={
             "agent_profile_id": profile_id,
+            "actor_principal_id": principal.principal_id,
+            "actor_principal_type": principal.principal_type,
             "preflight": preflight,
             "changed_fields": preflight.get("changed_fields") or [],
         },

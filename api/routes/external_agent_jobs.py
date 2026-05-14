@@ -152,7 +152,9 @@ def create_external_agent_job_route(
             retry_after_seconds=POLL_RETRY_AFTER_SECONDS,
         )
 
-    registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint()
+    registry_payload, active_registry_fingerprint = registry_payload_and_fingerprint(
+        client_id=principal.client_id
+    )
     ensure_agent_registry_version(
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=active_registry_fingerprint,

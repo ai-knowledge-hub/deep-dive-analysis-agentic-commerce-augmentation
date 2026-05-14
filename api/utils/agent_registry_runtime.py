@@ -34,10 +34,12 @@ def registry_harness_profiles() -> List[Dict[str, Any]]:
     return profiles or list_agent_registry_harness_profiles(status="active")
 
 
-def registry_payload_and_fingerprint() -> tuple[Dict[str, Any], str]:
+def registry_payload_and_fingerprint(
+    *, client_id: str | None = None
+) -> tuple[Dict[str, Any], str]:
     ownership = registry_ownership()
     harness_profiles = registry_harness_profiles()
-    agent_profile_defaults = registry_agent_profile_defaults()
+    agent_profile_defaults = registry_agent_profile_defaults(client_id=client_id)
     try:
         registry_payload = _registry_contract_payload()(
             ownership_by_tool=ownership,

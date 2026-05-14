@@ -56,6 +56,16 @@ def _registry_params(**params):
     return {"client_id": CLIENT_ID, "user_id": USER_ID, **params}
 
 
+def _registry_write_headers(scopes=None) -> dict[str, str]:
+    token = build_agent_principal_token(
+        principal_id="registry-admin-agent",
+        client_id=CLIENT_ID,
+        principal_type="internal_agent",
+        scopes=scopes or ["registry:write"],
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     client: TestClient,
 ):
@@ -271,11 +281,8 @@ def test_registry_uses_persistent_harness_profiles_for_fingerprint_and_defaults(
         headers={"Authorization": f"Bearer {token}"},
         json={"allowed_capabilities": ["seed_hypotheses"]},
     )
-    assert response.status_code == 200
-    run = response.json()["run"]
-    assert run["harness_id"] == "safe_autonomy_b2b"
-    assert run["run_mode"] == "plan_only"
-    assert run["policy_profile_id"] == "human_approval_required"
+    assert response.status_code == 400
+    assert "does not allow policy_profile_id: safe_auto" in response.json()["detail"]
 
 
 def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
@@ -315,16 +322,29 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
     non_admin = client.patch(
         "/agent-runs/registry/harnesses/safe_autonomy_b2b",
         json={
-            "user_id": "user-b",
+            "user_id": USER_ID,
             "description": "Operator-governed safe autonomy.",
             "dry_run": False,
             "preflight_confirmed": True,
         },
     )
-    assert non_admin.status_code == 403
+    assert non_admin.status_code == 401
+
+    missing_scope = client.patch(
+        "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        headers=_registry_write_headers(scopes=["agent_runs:write"]),
+        json={
+            "user_id": USER_ID,
+            "description": "Operator-governed safe autonomy.",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert missing_scope.status_code == 403
 
     invalid = client.patch(
         "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        headers=_registry_write_headers(),
         json={
             "user_id": USER_ID,
             "default_run_mode": "plan_only",
@@ -339,6 +359,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
 
     response = client.patch(
         "/agent-runs/registry/harnesses/safe_autonomy_b2b",
+        headers=_registry_write_headers(),
         json={
             "user_id": USER_ID,
             "description": "Operator-governed safe autonomy.",
@@ -360,6 +381,10 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
         "retry_strategy",
         "fallback_order",
     ]
+    assert (
+        payload["audit_event"]["diff"]["actor_principal_id"]
+        == "registry-admin-agent"
+    )
 
     refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
     harness = next(
@@ -413,16 +438,29 @@ def test_agent_runtime_registry_agent_profile_default_update_is_guarded_and_audi
     non_admin = client.patch(
         "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
         json={
-            "user_id": "user-b",
+            "user_id": USER_ID,
             "name": "Buyer Assistant v1 Guarded",
             "dry_run": False,
             "preflight_confirmed": True,
         },
     )
-    assert non_admin.status_code == 403
+    assert non_admin.status_code == 401
+
+    missing_scope = client.patch(
+        "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        headers=_registry_write_headers(scopes=["agent_runs:write"]),
+        json={
+            "user_id": USER_ID,
+            "name": "Buyer Assistant v1 Guarded",
+            "dry_run": False,
+            "preflight_confirmed": True,
+        },
+    )
+    assert missing_scope.status_code == 403
 
     invalid = client.patch(
         "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        headers=_registry_write_headers(),
         json={
             "user_id": USER_ID,
             "default_harness_id": "safe_autonomy_b2b",
@@ -438,6 +476,7 @@ def test_agent_runtime_registry_agent_profile_default_update_is_guarded_and_audi
 
     response = client.patch(
         "/agent-runs/registry/agent-profiles/buyer-assistant-v1",
+        headers=_registry_write_headers(),
         json={
             "user_id": USER_ID,
             "name": "Buyer Assistant v1 Guarded",
@@ -452,6 +491,10 @@ def test_agent_runtime_registry_agent_profile_default_update_is_guarded_and_audi
     assert payload["registry_fingerprint"] != first["registry_fingerprint"]
     assert payload["agent_profile"]["source"] == "operator_override"
     assert payload["audit_event"]["event_type"] == "registry_agent_profile_default_updated"
+    assert (
+        payload["audit_event"]["diff"]["actor_principal_id"]
+        == "registry-admin-agent"
+    )
     refreshed = client.get("/agent-runs/registry", params=_registry_params()).json()
     agent_profile = next(
         item
