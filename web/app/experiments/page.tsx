@@ -85,6 +85,7 @@ import {
   BatteryGenerationReportNotice,
   type BatteryGenerationReport,
 } from "../../components/experiments/BatteryGenerationReportNotice";
+import { BatteryCreationPanel } from "../../components/experiments/BatteryCreationPanel";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
@@ -2708,126 +2709,24 @@ function ExperimentsPageContent() {
                 ) : null}
                 {showManualControls ? (
                   <>
-                {batteryStatus ? (
-                  <p className="panel__success">{batteryStatus}</p>
-                ) : null}
-                <p className="panel__subheading">
-                  Step 1 · Create query battery foundation
-                </p>
-                <label className="panel__label">
-                  Battery name
-                  <input
-                    className="panel__input"
-                    value={batteryForm.name}
-                    onChange={(event) =>
-                      setBatteryForm((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                    placeholder="Baseline coverage"
-                  />
-                </label>
-                <label className="panel__label">
-                  Purpose
-                  <input
-                    className="panel__input"
-                    value={batteryForm.purpose}
-                    onChange={(event) =>
-                      setBatteryForm((prev) => ({
-                        ...prev,
-                        purpose: event.target.value,
-                      }))
-                    }
-                    placeholder="Why this battery exists"
-                  />
-                </label>
-                <label className="panel__label">
-                  Generation mode
-                  <select
-                    className="panel__input"
-                    value={batteryForm.generationMode}
-                    onChange={(event) =>
-                      setBatteryForm((prev) => ({
-                        ...prev,
-                        generationMode: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="bottom_up">Bottom-up</option>
-                    <option value="top_down">Top-down</option>
-                    <option value="hybrid">Hybrid</option>
-                  </select>
-                </label>
-                <label className="panel__toggle">
-                  <input
-                    type="checkbox"
-                    checked={batteryUseLlm}
-                    onChange={(event) => setBatteryUseLlm(event.target.checked)}
-                  />
-                  <span>Use LLM-assisted query generation</span>
-                </label>
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleCreateBattery}
-                  disabled={isSubmitting || batteryForm.name.trim() === ""}
-                >
-                  {isSubmitting ? (
-                    <>
-                      Creating battery<span className="button__dots" />
-                    </>
-                  ) : (
-                    "Create battery"
-                  )}
-                </button>
-                {batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata ? (
-                  <div className="panel__notice panel__notice--info">
-                    Bottom-up has weak product metadata. Use Advanced overrides below or we
-                    will offer fallback to top-down at generation time.
-                  </div>
-                ) : null}
-                <details
-                  open={advancedOverridesOpen}
-                  onToggle={(event) =>
-                    setAdvancedOverridesOpen(event.currentTarget.open)
-                  }
-                >
-                  <summary className="panel__label">
-                    Advanced overrides (optional)
-                  </summary>
-                  <div className="panel__form">
-                    <label className="panel__label">
-                      Seed queries (optional, one per line)
-                      <textarea
-                        className="panel__textarea"
-                        value={batterySeedQueries}
-                        onChange={(event) => setBatterySeedQueries(event.target.value)}
-                        rows={3}
-                      />
-                    </label>
-                    <label className="panel__label">
-                      Seed features (recommended for bottom-up)
-                      <textarea
-                        className="panel__textarea"
-                        value={batterySeedFeatures}
-                        onChange={(event) => setBatterySeedFeatures(event.target.value)}
-                        rows={2}
-                        placeholder="lightweight cushioning, breathable upper, stable heel support"
-                      />
-                    </label>
-                    <label className="panel__label">
-                      Seed use-cases (recommended for bottom-up)
-                      <textarea
-                        className="panel__textarea"
-                        value={batterySeedUseCases}
-                        onChange={(event) => setBatterySeedUseCases(event.target.value)}
-                        rows={2}
-                        placeholder="daily training, long-distance running, injury prevention"
-                      />
-                    </label>
-                  </div>
-                </details>
+                <BatteryCreationPanel
+                  status={batteryStatus}
+                  form={batteryForm}
+                  useLlm={batteryUseLlm}
+                  isSubmitting={isSubmitting}
+                  hasBottomUpMetadata={hasBottomUpMetadata}
+                  advancedOverridesOpen={advancedOverridesOpen}
+                  seedQueries={batterySeedQueries}
+                  seedFeatures={batterySeedFeatures}
+                  seedUseCases={batterySeedUseCases}
+                  onFormChange={setBatteryForm}
+                  onUseLlmChange={setBatteryUseLlm}
+                  onAdvancedOverridesOpenChange={setAdvancedOverridesOpen}
+                  onSeedQueriesChange={setBatterySeedQueries}
+                  onSeedFeaturesChange={setBatterySeedFeatures}
+                  onSeedUseCasesChange={setBatterySeedUseCases}
+                  onCreateBattery={handleCreateBattery}
+                />
                 <label className="panel__label">
                   Generate for battery
                   <select
