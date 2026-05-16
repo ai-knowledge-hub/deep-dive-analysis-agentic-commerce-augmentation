@@ -22,8 +22,7 @@ import {
   updateAgentRuntimeRegistryHarnessProfile,
   updateAgentRuntimeRegistryProfileDefault,
 } from "../../lib/api";
-
-type RegistryAuditDiffRow = { label: string; value: string };
+import type { RegistryAuditDiffRow } from "./registryAudit";
 
 type RegistryPreflightSummary = {
   allowed?: boolean;
