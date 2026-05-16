@@ -1427,8 +1427,16 @@ export type AgentRegistryAuditDiff = {
     sample_ids?: string[];
   };
   tool_id?: string;
+  harness_id?: string;
+  agent_profile_id?: string;
+  actor_principal_id?: string;
+  actor_principal_type?: string;
+  changed_fields?: string[];
   approval_receipt?: Record<string, unknown>;
-  preflight?: AgentRegistryOwnershipPreflight;
+  preflight?:
+    | AgentRegistryOwnershipPreflight
+    | AgentRegistryHarnessProfilePreflight
+    | AgentRegistryProfileDefaultPreflight;
 };
 
 export type AgentRegistryAuditEvent = {

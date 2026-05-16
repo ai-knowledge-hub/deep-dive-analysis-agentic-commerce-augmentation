@@ -195,6 +195,16 @@ function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
     const actions = event.diff.actions?.updated ?? 0;
     return `Backfilled ${runs} runs · ${actions} actions`;
   }
+  if (event.event_type === "registry_harness_profile_updated") {
+    const changed = event.diff.changed_fields;
+    const count = Array.isArray(changed) ? changed.length : 0;
+    return `Harness profile update · ${count} fields changed`;
+  }
+  if (event.event_type === "registry_agent_profile_default_updated") {
+    const changed = event.diff.changed_fields;
+    const count = Array.isArray(changed) ? changed.length : 0;
+    return `Agent profile default update · ${count} fields changed`;
+  }
   const sections = [
     ["skills", event.diff.skills],
     ["tools", event.diff.tools],
@@ -245,6 +255,28 @@ function registryAuditDiffRows(event: AgentRegistryAuditEvent): RegistryAuditDif
       {
         label: "Client",
         value: String(event.diff.client_id || "unknown client"),
+      },
+    ];
+  }
+  if (
+    event.event_type === "registry_harness_profile_updated" ||
+    event.event_type === "registry_agent_profile_default_updated"
+  ) {
+    const changed = Array.isArray(event.diff.changed_fields)
+      ? event.diff.changed_fields.join(", ")
+      : "unknown";
+    return [
+      {
+        label: "Target",
+        value: String(event.diff.harness_id || event.diff.agent_profile_id || "registry posture"),
+      },
+      {
+        label: "Actor",
+        value: String(event.diff.actor_principal_id || event.source || "signed principal"),
+      },
+      {
+        label: "Changed",
+        value: changed || "none",
       },
     ];
   }

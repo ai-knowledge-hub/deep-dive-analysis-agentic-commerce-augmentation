@@ -231,6 +231,7 @@ Completed:
 - Agent profile default editing now includes risk tier and channel type so operators can inspect and adjust execution posture metadata from the Runs registry panel.
 - Harness profile editing now covers the full execution posture exposed by the registry: name, description, default run mode, default policy, allowed modes/policies, planner mode, retry strategy, fallback order, approval strategy, memory policy, and stopping conditions.
 - Agent Runs now lets operators save a local registry-write bearer credential, and frontend registry mutation helpers attach it only to protected registry apply calls.
+- Guarded registry apply flows now show explicit risk/effect/confirmation posture, field-level change previews, rollback guidance, and applied audit/release metadata for harness and agent-profile updates.
 - Backend tests cover harness defaulting, persisted agent-profile defaults, guarded profile edits, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
 
 ## What Is Left To Build
@@ -254,7 +255,7 @@ Goal: continue hardening harnesses beyond the static v1 behavior-defining layer.
 Build:
 
 - Production token issuance/rotation UX for registry-write credentials, replacing local paste-in credentials with a managed operator flow.
-- Dedicated guardrail copy for high-impact harness changes, including who approved the change and how to roll it back.
+- Signed receipt support for harness/profile posture approvals if these changes need the same cryptographic receipt treatment as ownership approvals.
 
 ### Priority 3: Real Protocol And Fallback Execution Adapters
 

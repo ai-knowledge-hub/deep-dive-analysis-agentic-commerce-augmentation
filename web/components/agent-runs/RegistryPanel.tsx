@@ -25,6 +25,26 @@ import {
 
 type RegistryAuditDiffRow = { label: string; value: string };
 
+type RegistryPreflightSummary = {
+  allowed?: boolean;
+  requires_confirmation?: boolean;
+  risk_level?: string;
+  effect_class?: string;
+  changed_fields?: string[];
+  blockers?: string[];
+  warnings?: string[];
+  changes?: Record<
+    string,
+    {
+      from?: string | string[] | null;
+      to?: string | string[] | null;
+      changed?: boolean;
+    }
+  >;
+  rollback_guidance?: string;
+  summary?: string;
+};
+
 type AllowedRuntimeTool = {
   capability: AgentRuntimeCapabilitySpec;
   tool: AgentRuntimeToolSpec | null;
@@ -43,6 +63,11 @@ function parseListInput(value: string) {
     .split(/\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatChangeValue(value?: string | string[] | null) {
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "not set";
+  return formatRegistryValue(value);
 }
 
 type Props = {
@@ -88,6 +113,114 @@ function ReceiptVerificationNotice({
       {verification.result.valid
         ? "Receipt verified against signature and registry audit trail."
         : `Receipt verification failed: ${verification.result.blockers.join(" ")}`}
+    </div>
+  );
+}
+
+function RegistryChangePreflight({
+  label,
+  preflight,
+}: {
+  label: string;
+  preflight: RegistryPreflightSummary | null;
+}) {
+  if (!preflight) return null;
+  const changedFields = preflight.changed_fields ?? [];
+  const changedRows = Object.entries(preflight.changes ?? {})
+    .filter(([, change]) => change.changed)
+    .slice(0, 6);
+  return (
+    <div
+      className={`panel__notice ${
+        preflight.allowed ? "panel__notice--info" : "panel__notice--error"
+      }`}
+    >
+      <div className="table__strong">
+        {label}: {changedFields.length} fields will change ·{" "}
+        {formatRegistryValue(preflight.risk_level)} risk
+      </div>
+      <p className="panel__muted">
+        {preflight.summary ?? "Review this registry change before applying it."}
+      </p>
+      <div className="control-chip-row">
+        <span className="control-chip">
+          Effect: {formatRegistryValue(preflight.effect_class)}
+        </span>
+        <span className="control-chip">
+          Confirmation: {preflight.requires_confirmation ? "required" : "not required"}
+        </span>
+        <span className={preflight.allowed ? "control-chip" : "control-chip control-chip--attention"}>
+          {preflight.allowed ? "Allowed" : "Blocked"}
+        </span>
+      </div>
+      {changedRows.length ? (
+        <div className="run-event-list">
+          {changedRows.map(([field, change]) => (
+            <div key={field} className="run-event-list__item">
+              <div>
+                <div className="table__strong">{field.replaceAll("_", " ")}</div>
+                <div className="table__muted">
+                  {formatChangeValue(change.from)} {"->"} {formatChangeValue(change.to)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {preflight.warnings?.length ? (
+        <ul className="panel__list panel__list--compact">
+          {preflight.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+      {preflight.blockers?.length ? (
+        <ul className="panel__list panel__list--compact">
+          {preflight.blockers.map((blocker) => (
+            <li key={blocker} className="agent-guardrail-reason">
+              {blocker}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {preflight.rollback_guidance ? (
+        <p className="panel__muted">Rollback: {preflight.rollback_guidance}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function RegistryApplyAuditSummary({
+  event,
+  registryFingerprint,
+  registryStatus,
+}: {
+  event?: AgentRegistryAuditEvent | null;
+  registryFingerprint?: string | null;
+  registryStatus?: string | null;
+}) {
+  if (!event && !registryFingerprint) return null;
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div className="table__strong">
+        Registry change applied{event?.id ? ` · audit ${event.id.slice(0, 8)}` : ""}
+      </div>
+      <div className="control-chip-row">
+        <span className="control-chip">
+          Event: {event?.event_type?.replaceAll("_", " ") ?? "registry update"}
+        </span>
+        <span className="control-chip">
+          Actor: {String(event?.diff?.actor_principal_id ?? event?.source ?? "signed principal")}
+        </span>
+        <span className="control-chip">
+          Release: {registryFingerprint ? registryFingerprint.slice(0, 12) : "pending"}
+        </span>
+        <span className="control-chip">Status: {registryStatus ?? "active"}</span>
+      </div>
+      <p className="panel__muted">
+        This change is recorded in the registry audit trail. Use Registry releases to inspect
+        the full payload and rollback context.
+      </p>
     </div>
   );
 }
@@ -141,6 +274,12 @@ export function RegistryPanel({
   const [harnessStoppingConditions, setHarnessStoppingConditions] = React.useState("");
   const [harnessPreflight, setHarnessPreflight] =
     React.useState<AgentRegistryHarnessProfilePreflight | null>(null);
+  const [harnessAppliedAudit, setHarnessAppliedAudit] =
+    React.useState<AgentRegistryAuditEvent | null>(null);
+  const [harnessAppliedRegistry, setHarnessAppliedRegistry] = React.useState<{
+    fingerprint?: string | null;
+    status?: string | null;
+  } | null>(null);
   const [harnessEditBusy, setHarnessEditBusy] = React.useState(false);
   const [harnessEditNotice, setHarnessEditNotice] = React.useState<{
     type: "info" | "error";
@@ -159,6 +298,12 @@ export function RegistryPanel({
   const [profileChannelType, setProfileChannelType] = React.useState("");
   const [profilePreflight, setProfilePreflight] =
     React.useState<AgentRegistryProfileDefaultPreflight | null>(null);
+  const [profileAppliedAudit, setProfileAppliedAudit] =
+    React.useState<AgentRegistryAuditEvent | null>(null);
+  const [profileAppliedRegistry, setProfileAppliedRegistry] = React.useState<{
+    fingerprint?: string | null;
+    status?: string | null;
+  } | null>(null);
   const [profileEditBusy, setProfileEditBusy] = React.useState(false);
   const [profileEditNotice, setProfileEditNotice] = React.useState<{
     type: "info" | "error";
@@ -185,6 +330,8 @@ export function RegistryPanel({
     setHarnessMemoryPolicy(activeHarness?.memory_policy ?? "");
     setHarnessStoppingConditions(formatListInput(activeHarness?.stopping_conditions));
     setHarnessPreflight(null);
+    setHarnessAppliedAudit(null);
+    setHarnessAppliedRegistry(null);
     setHarnessEditNotice(null);
   }, [
     activeHarness?.allowed_policy_profile_ids,
@@ -208,6 +355,8 @@ export function RegistryPanel({
     setProfileRiskTier(activeAgentProfile?.risk_tier ?? "");
     setProfileChannelType(activeAgentProfile?.channel_type ?? "");
     setProfilePreflight(null);
+    setProfileAppliedAudit(null);
+    setProfileAppliedRegistry(null);
     setProfileEditNotice(null);
   }, [
     activeAgentProfile?.channel_type,
@@ -221,6 +370,8 @@ export function RegistryPanel({
     if (!activeHarness || !userId) return;
     setHarnessEditBusy(true);
     setHarnessEditNotice(null);
+    setHarnessAppliedAudit(null);
+    setHarnessAppliedRegistry(null);
     try {
       const response = await updateAgentRuntimeRegistryHarnessProfile(
         activeHarness.id,
@@ -256,6 +407,11 @@ export function RegistryPanel({
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now active.`,
       });
+      setHarnessAppliedAudit(response.audit_event ?? null);
+      setHarnessAppliedRegistry({
+        fingerprint: response.registry_fingerprint,
+        status: response.registry_status,
+      });
       setHarnessEditorOpen(false);
       onRegistryChanged();
     } catch (err) {
@@ -272,6 +428,8 @@ export function RegistryPanel({
     if (!activeAgentProfile || !userId) return;
     setProfileEditBusy(true);
     setProfileEditNotice(null);
+    setProfileAppliedAudit(null);
+    setProfileAppliedRegistry(null);
     try {
       const response = await updateAgentRuntimeRegistryProfileDefault(
         activeAgentProfile.id,
@@ -299,6 +457,11 @@ export function RegistryPanel({
         text: `Agent profile default saved. Registry ${String(
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now active.`,
+      });
+      setProfileAppliedAudit(response.audit_event ?? null);
+      setProfileAppliedRegistry({
+        fingerprint: response.registry_fingerprint,
+        status: response.registry_status,
       });
       setProfileEditorOpen(false);
       onRegistryChanged();
@@ -645,30 +808,10 @@ export function RegistryPanel({
                     Apply confirmed change
                   </button>
                 </div>
-                {harnessPreflight ? (
-                  <div
-                    className={`panel__notice ${
-                      harnessPreflight.allowed ? "panel__notice--info" : "panel__notice--error"
-                    }`}
-                  >
-                    <div className="table__strong">
-                      {harnessPreflight.changed_fields?.length ?? 0} fields will change
-                    </div>
-                    <p className="panel__muted">
-                      {harnessPreflight.summary} Rollback:{" "}
-                      {harnessPreflight.rollback_guidance}
-                    </p>
-                    {harnessPreflight.blockers?.length ? (
-                      <ul className="panel__list panel__list--compact">
-                        {harnessPreflight.blockers.map((blocker) => (
-                          <li key={blocker} className="agent-guardrail-reason">
-                            {blocker}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ) : null}
+                <RegistryChangePreflight
+                  label="Harness posture preflight"
+                  preflight={harnessPreflight}
+                />
                 {harnessEditNotice ? (
                   <div
                     className={`panel__notice ${
@@ -682,6 +825,11 @@ export function RegistryPanel({
                 ) : null}
               </div>
             ) : null}
+            <RegistryApplyAuditSummary
+              event={harnessAppliedAudit}
+              registryFingerprint={harnessAppliedRegistry?.fingerprint}
+              registryStatus={harnessAppliedRegistry?.status}
+            />
           </>
         ) : (
           <p className="panel__muted">
@@ -803,27 +951,10 @@ export function RegistryPanel({
                     Apply confirmed default
                   </button>
                 </div>
-                {profilePreflight ? (
-                  <div
-                    className={`panel__notice ${
-                      profilePreflight.allowed ? "panel__notice--info" : "panel__notice--error"
-                    }`}
-                  >
-                    <div className="table__strong">
-                      {profilePreflight.changed_fields?.length ?? 0} fields will change
-                    </div>
-                    <p className="panel__muted">{profilePreflight.summary}</p>
-                    {profilePreflight.blockers?.length ? (
-                      <ul className="panel__list panel__list--compact">
-                        {profilePreflight.blockers.map((blocker) => (
-                          <li key={blocker} className="agent-guardrail-reason">
-                            {blocker}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ) : null}
+                <RegistryChangePreflight
+                  label="Agent profile default preflight"
+                  preflight={profilePreflight}
+                />
                 {profileEditNotice ? (
                   <div
                     className={`panel__notice ${
@@ -837,6 +968,11 @@ export function RegistryPanel({
                 ) : null}
               </div>
             ) : null}
+            <RegistryApplyAuditSummary
+              event={profileAppliedAudit}
+              registryFingerprint={profileAppliedRegistry?.fingerprint}
+              registryStatus={profileAppliedRegistry?.status}
+            />
           </>
         ) : (
           <p className="panel__muted">
