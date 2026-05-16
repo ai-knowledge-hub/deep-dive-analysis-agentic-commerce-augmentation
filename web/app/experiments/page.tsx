@@ -88,7 +88,9 @@ import {
 import { BatteryCreationPanel } from "../../components/experiments/BatteryCreationPanel";
 import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetailsPanel";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
+import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
+import { GeneratedQueryPreviewPanel } from "../../components/experiments/GeneratedQueryPreviewPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import {
@@ -2764,142 +2766,28 @@ function ExperimentsPageContent() {
                   />
                 ) : null}
                 {selectedBattery ? (
-                  <details
+                  <AudienceSegmentsPanel
                     open={audienceSegmentsOpen}
-                    onToggle={(event) =>
-                      setAudienceSegmentsOpen(event.currentTarget.open)
-                    }
-                    className="panel__card"
-                  >
-                    <summary className="panel__label">
-                      Audience segments for top-down generation
-                    </summary>
-                    <p className="panel__muted">
-                      These are session-derived behavioral segments used to condition
-                      top-down/hybrid query generation. Disable any segment to exclude it.
-                    </p>
-                    {audienceSegmentsStatus ? (
-                      <p className="panel__status">{audienceSegmentsStatus}</p>
-                    ) : null}
-                    {audienceSegments.length === 0 ? (
-                      <div className="panel__notice panel__notice--info">
-                        No session-derived segments yet. Fallback stays active: canonical
-                        intent spec + product metadata + stored archetypes.
-                      </div>
-                    ) : (
-                      <ul className="panel__list">
-                        {audienceSegments.map((segment) => (
-                          <li key={segment.id}>
-                            <div
-                              className="panel__row"
-                              style={{ justifyContent: "space-between" }}
-                            >
-                              <div>
-                                <strong>{segment.label}</strong>
-                                {typeof segment.support === "number" ? (
-                                  <span className="panel__muted">
-                                    {" "}
-                                    · support {segment.support}
-                                  </span>
-                                ) : null}
-                                {typeof segment.confidence === "number" ? (
-                                  <span className="panel__muted">
-                                    {" "}
-                                    · confidence{" "}
-                                    {Math.round(segment.confidence * 100)}%
-                                  </span>
-                                ) : null}
-                                {segment.description ? (
-                                  <p className="panel__muted">{segment.description}</p>
-                                ) : null}
-                              </div>
-                              <button
-                                type="button"
-                                className="button button--ghost"
-                                onClick={() =>
-                                  handleSegmentToggle(segment.id, !segment.active)
-                                }
-                              >
-                                {segment.active ? "Disable" : "Enable"}
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </details>
+                    status={audienceSegmentsStatus}
+                    segments={audienceSegments}
+                    onOpenChange={setAudienceSegmentsOpen}
+                    onSegmentToggle={handleSegmentToggle}
+                  />
                 ) : null}
-                {generatedCandidates.length > 0 ? (
-                  <div className="panel__card">
-                    <div className="panel__header">
-                      <h4>Preview & approve queries</h4>
-                      <button
-                        type="button"
-                        className="button button--ghost"
-                        onClick={() => setGeneratedCandidates([])}
-                      >
-                        Clear preview
-                      </button>
-                    </div>
-                    <div className="panel__form">
-                      {generatedCandidates.map((candidate, index) => (
-                        <div
-                          className="panel__row panel__row--dense"
-                          key={`${candidate.query_text}-${index}`}
-                        >
-                          <label className="panel__toggle">
-                            <input
-                              type="checkbox"
-                              checked={candidate.selected}
-                              onChange={(event) =>
-                                setGeneratedCandidates((current) =>
-                                  current.map((item, idx) =>
-                                    idx === index
-                                      ? { ...item, selected: event.target.checked }
-                                      : item,
-                                  ),
-                                )
-                              }
-                            />
-                            <span>{candidate.query_text}</span>
-                          </label>
-                          <input
-                            className="panel__input panel__input--tiny"
-                            type="number"
-                            min={0}
-                            step={0.1}
-                            value={candidate.weight ?? 1}
-                            onChange={(event) =>
-                              setGeneratedCandidates((current) =>
-                                current.map((item, idx) =>
-                                  idx === index
-                                    ? { ...item, weight: Number(event.target.value) }
-                                    : item,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        className="panel__action panel__action--prominent"
-                        onClick={() =>
-                          handleSaveGeneratedCandidates(experimentForm.batteryId)
-                        }
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            Saving queries<span className="button__dots" />
-                          </>
-                        ) : (
-                          "Save selected queries"
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+                <GeneratedQueryPreviewPanel
+                  candidates={generatedCandidates}
+                  isSubmitting={isSubmitting}
+                  selectedBatteryId={experimentForm.batteryId}
+                  onCandidateChange={(index, patch) =>
+                    setGeneratedCandidates((current) =>
+                      current.map((item, idx) =>
+                        idx === index ? { ...item, ...patch } : item,
+                      ),
+                    )
+                  }
+                  onClear={() => setGeneratedCandidates([])}
+                  onSaveSelected={handleSaveGeneratedCandidates}
+                />
                   </>
                 ) : null}
                 <p className="panel__subheading">Experiment context</p>
