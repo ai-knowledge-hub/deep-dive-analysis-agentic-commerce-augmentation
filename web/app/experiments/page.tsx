@@ -85,7 +85,8 @@ import {
   BatteryGenerationReportNotice,
   type BatteryGenerationReport,
 } from "../../components/experiments/BatteryGenerationReportNotice";
-import { FlowStatusPanel } from "../../components/experiments/FlowStatusPanel";
+import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
+import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -2639,81 +2640,16 @@ function ExperimentsPageContent() {
                 </div>
               </section>
             ) : null}
-            <section className="panel__card panel__card--primary lab-loop">
-            <div className="panel__header">
-              <h3>Lab Loop</h3>
-              <div className="lab-loop__badges">
-                <span className="panel__badge">
-                  {labMode === "lab" ? "Lab mode" : "Manual mode"}
-                </span>
-                {selectedExperimentId ? (
-                  <span className="panel__badge panel__badge--secondary">
-                    Experiment active
-                  </span>
-                ) : null}
-                {selectedExperiment?.battery_id ? (
-                  <span className="panel__badge panel__badge--secondary">
-                    Battery linked
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <p className="lab-loop__meta">
-              {variants.length} variants · {runs.length} runs · {metrics.length} metrics ·{" "}
-              {beliefCount} beliefs
-            </p>
-            <p className="lab-loop__hint">
-              The lab loop turns hypotheses into evidence and updates brand
-              beliefs with every run.
-            </p>
-            {labMode === "lab" ? (
-              <section className="panel__notice panel__notice--info lab-contract">
-                <strong>Lab mode contract:</strong> Automation handles the default path
-                (battery, queries, baseline/hypothesis variants, and optional auto-run).
-                <div className="panel__actions">
-                  <label className="panel__toggle">
-                    <input
-                      type="checkbox"
-                      checked={labAutoRunEnabled}
-                      onChange={(event) => setLabAutoRunEnabled(event.target.checked)}
-                    />
-                    <span>Auto-run baseline + hypothesis after experiment creation</span>
-                  </label>
-                  {!showManualControls ? (
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(true)}
-                    >
-                      Show manual controls
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(false)}
-                    >
-                      Hide manual controls
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={() => {
-                      setLabMode("manual");
-                      setLabShowManualControls(true);
-                      setExperimentStatus(
-                        "Switched to Manual mode for explicit control over each step.",
-                      );
-                    }}
-                  >
-                    Switch to Manual for this experiment
-                  </button>
-                </div>
-              </section>
-            ) : null}
-            <FlowStatusPanel
+            <LabLoopPanel
               labMode={labMode}
+              selectedExperimentId={selectedExperimentId}
+              batteryLinked={Boolean(selectedExperiment?.battery_id)}
+              variantCount={variants.length}
+              runCount={runs.length}
+              metricCount={metrics.length}
+              beliefCount={beliefCount}
+              labAutoRunEnabled={labAutoRunEnabled}
+              showManualControls={showManualControls}
               currentFlowStep={currentFlowStep}
               activeFlowSteps={activeFlowSteps}
               labLoopSteps={labLoopSteps}
@@ -2724,55 +2660,25 @@ function ExperimentsPageContent() {
               showValidationCheckpoint={
                 labMode === "lab" && runs.length > 0 && !hasValidationSignals
               }
+              onLabAutoRunEnabledChange={setLabAutoRunEnabled}
+              onShowManualControlsChange={setLabShowManualControls}
+              onSwitchToManual={() => {
+                setLabMode("manual");
+                setLabShowManualControls(true);
+                setExperimentStatus(
+                  "Switched to Manual mode for explicit control over each step.",
+                );
+              }}
               onOpenBeliefsTimeline={handleOpenBeliefsTimeline}
               onUseLatestBelief={handleUseLatestBelief}
               onRunNextFlowAction={handleRunNextFlowAction}
               onOpenValidation={() => router.push(validationHref)}
             />
-          </section>
-          <section className="panel__card panel__card--secondary">
-            <div className="panel__header">
-              <h3>Agent operator mode</h3>
-              <span className="panel__badge panel__badge--secondary">
-                Experimental
-              </span>
-            </div>
-            <p className="panel__subheading">Optional orchestrated path</p>
-            <p className="panel__step-helper">
-              Use governed automation to run approved capabilities on this experiment.
-              The same protocol gates apply (frozen snapshots, baseline-first, approvals).
-            </p>
-            <div className="panel__meta-strip">
-              <div>
-                <strong>Latest agent run</strong>:{" "}
-                {latestAgentRun
-                  ? `${latestAgentRun.status ?? "unknown"} · ${latestAgentRun.state ?? "unknown"}`
-                  : "none yet"}
-              </div>
-              <div>
-                <strong>Run mode</strong>: {latestAgentRun?.run_mode ?? "plan_only"}
-              </div>
-            </div>
-            <div className="panel__actions panel__actions--priority">
-              <button
-                type="button"
-                className="panel__action panel__action--prominent"
-                onClick={() =>
-                  router.push(runsWorkspaceHref)
-                }
-                disabled={!selectedExperimentId}
-              >
-                Start in Runs
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() => router.push(runsWorkspaceHref)}
-              >
-                View Runs
-              </button>
-            </div>
-          </section>
+            <AgentOperatorModePanel
+              latestAgentRun={latestAgentRun}
+              hasSelectedExperiment={Boolean(selectedExperimentId)}
+              onOpenRuns={() => router.push(runsWorkspaceHref)}
+            />
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}

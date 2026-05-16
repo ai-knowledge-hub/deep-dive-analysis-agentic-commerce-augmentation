@@ -1,18 +1,18 @@
 import type { BrandBelief, ExperimentRun } from "../../lib/types";
 
-type FlowStep = {
+export type FlowStep = {
   id: number;
   label: string;
   done: boolean;
 };
 
-type LabLoopStep = {
+export type LabLoopStep = {
   label: string;
   status: string;
   tone: string;
 };
 
-type NextFlowActionView = {
+export type NextFlowActionView = {
   label: string;
   helper: string;
 };
