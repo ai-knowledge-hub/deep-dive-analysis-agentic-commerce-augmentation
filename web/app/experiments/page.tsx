@@ -86,9 +86,11 @@ import {
   type BatteryGenerationReport,
 } from "../../components/experiments/BatteryGenerationReportNotice";
 import { BatteryCreationPanel } from "../../components/experiments/BatteryCreationPanel";
+import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetailsPanel";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
+import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -2727,202 +2729,34 @@ function ExperimentsPageContent() {
                   onSeedUseCasesChange={setBatterySeedUseCases}
                   onCreateBattery={handleCreateBattery}
                 />
-                <label className="panel__label">
-                  Generate for battery
-                  <select
-                    className="panel__input"
-                    value={experimentForm.batteryId}
-                    onChange={(event) =>
-                      setExperimentForm((prev) => ({
-                        ...prev,
-                        batteryId: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Select battery</option>
-                    {batteries.map((battery) => (
-                      <option key={battery.id} value={battery.id}>
-                        {battery.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="panel__subheading">Step 2 · Generate queries</p>
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={() => handleGenerateQueries(experimentForm.batteryId)}
-                  disabled={Boolean(queryGenerationDisabledReason)}
-                >
-                  {isGeneratingQueries ? (
-                    <>
-                      Generating queries<span className="button__dots" />
-                    </>
-                  ) : (
-                    "Generate queries"
-                  )}
-                </button>
-                {queryGenerationDisabledReason ? (
-                  <p className="panel__muted">{queryGenerationDisabledReason}</p>
-                ) : null}
+                <QueryGenerationPanel
+                  batteries={batteries}
+                  selectedBatteryId={experimentForm.batteryId}
+                  isGenerating={isGeneratingQueries}
+                  disabledReason={queryGenerationDisabledReason}
+                  onBatteryIdChange={(batteryId) =>
+                    setExperimentForm((prev) => ({ ...prev, batteryId }))
+                  }
+                  onGenerateQueries={handleGenerateQueries}
+                />
                 <p className="panel__subheading">
                   Step 2a · Review and save battery details and queries
                 </p>
-                <details
+                <BatteryDetailsPanel
                   open={batteryDetailsOpen}
-                  onToggle={(event) =>
-                    setBatteryDetailsOpen(event.currentTarget.open)
-                  }
-                >
-                  <summary className="panel__label">
-                    Battery details and query settings
-                  </summary>
-                  {selectedBattery ? (
-                    <div className="panel__form">
-                      <label className="panel__label">
-                        Battery name
-                        <input
-                          className="panel__input"
-                          value={batteryEdit.name}
-                          onChange={(event) =>
-                            setBatteryEdit((prev) => ({
-                              ...prev,
-                              name: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="panel__label">
-                        Purpose
-                        <input
-                          className="panel__input"
-                          value={batteryEdit.purpose}
-                          onChange={(event) =>
-                            setBatteryEdit((prev) => ({
-                              ...prev,
-                              purpose: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="panel__label">
-                        Status
-                        <select
-                          className="panel__input"
-                          value={batteryEdit.status}
-                          onChange={(event) =>
-                            setBatteryEdit((prev) => ({
-                              ...prev,
-                              status: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="draft">Draft</option>
-                          <option value="active">Active</option>
-                          <option value="paused">Paused</option>
-                        </select>
-                      </label>
-                      {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
-                      {queries.length === 0 ? (
-                        <p className="panel__empty">No queries yet.</p>
-                      ) : (
-                        <ul className="panel__list">
-                          {queries.map((query) => (
-                            <li key={query.id}>
-                              <div className="panel__meta">
-                                <span>{query.query_text}</span>
-                                <label className="panel__toggle">
-                                  <input
-                                    type="checkbox"
-                                    checked={query.enabled}
-                                    onChange={(event) =>
-                                      handleQueryToggle(
-                                        selectedBattery.id,
-                                        query.id,
-                                        event.target.checked,
-                                      )
-                                    }
-                                  />
-                                  <span>Enabled</span>
-                                </label>
-                                <button
-                                  type="button"
-                                  className="panel__action panel__action--ghost"
-                                  onClick={() =>
-                                    handleQueryDelete(selectedBattery.id, query.id)
-                                  }
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                              <div className="panel__meta">
-                                <span className="panel__muted">Weight</span>
-                                <input
-                                  className="panel__input panel__input--inline"
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  defaultValue={query.weight ?? 1}
-                                  onBlur={(event) =>
-                                    handleQueryWeight(
-                                      selectedBattery.id,
-                                      query.id,
-                                      Number(event.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {batteryMetrics ? (
-                        <div className="panel__metrics">
-                          <p className="panel__muted">
-                            Total: {batteryMetrics.total_queries ?? 0} · Enabled:{" "}
-                            {batteryMetrics.enabled_queries ?? 0} · Unique:{" "}
-                            {batteryMetrics.unique_queries ?? 0}
-                          </p>
-                          <p className="panel__muted">
-                            Redundancy:{" "}
-                            {batteryMetrics.redundancy_rate !== undefined
-                              ? `${Number(batteryMetrics.redundancy_rate) * 100}%`
-                              : "—"}
-                          </p>
-                          <p className="panel__muted">
-                            Quality score:{" "}
-                            {batteryMetrics.quality_score !== undefined
-                              ? `${batteryMetrics.quality_score}/100`
-                              : "—"}
-                            {batteryMetrics.avg_words
-                              ? ` · Avg words: ${batteryMetrics.avg_words}`
-                              : ""}
-                          </p>
-                          {Array.isArray(batteryMetrics.quality_issues) &&
-                          batteryMetrics.quality_issues.length > 0 ? (
-                            <ul className="panel__list panel__list--compact">
-                              {batteryMetrics.quality_issues.map((issue, index) => (
-                                <li key={`${issue}-${index}`}>{issue}</li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="panel__action panel__action--prominent"
-                        onClick={handleUpdateBattery}
-                        disabled={isSubmitting}
-                      >
-                        Save battery details
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="panel__empty">
-                      Select a battery to review details and query settings.
-                    </p>
-                  )}
-                </details>
+                  selectedBattery={selectedBattery}
+                  edit={batteryEdit}
+                  queryStatus={queryStatus}
+                  queries={queries}
+                  metrics={batteryMetrics}
+                  isSubmitting={isSubmitting}
+                  onOpenChange={setBatteryDetailsOpen}
+                  onEditChange={setBatteryEdit}
+                  onQueryToggle={handleQueryToggle}
+                  onQueryDelete={handleQueryDelete}
+                  onQueryWeight={handleQueryWeight}
+                  onUpdateBattery={handleUpdateBattery}
+                />
                 {batteryGenerationReport ? (
                   <BatteryGenerationReportNotice
                     report={batteryGenerationReport}
