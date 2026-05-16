@@ -86,6 +86,7 @@ import {
   type BatteryGenerationReport,
 } from "../../components/experiments/BatteryGenerationReportNotice";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
+import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
 import {
   buildExperimentHref,
@@ -2682,46 +2683,14 @@ function ExperimentsPageContent() {
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
-          <section className="panel__card panel__card--primary">
-            <div className="panel__header">
-              <h3>
-                {labMode === "lab"
-                  ? "Lab Setup Flow"
-                  : "Experiment Setup Flow"}
-              </h3>
-              <div className="panel__meta">
-                <button
-                  type="button"
-                  className="panel__action panel__action--ghost"
-                  onClick={() => setSetupFlowCollapsed((open) => !open)}
-                >
-                  {setupFlowCollapsed ? "Expand setup" : "Collapse setup"}
-                </button>
-              </div>
-            </div>
-            <div className="panel__meta">
-              <span className="panel__badge panel__badge--secondary">
-                Protocol snapshot:{" "}
-                {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0
-                  ? `v${currentProtocolSnapshotVersion}`
-                  : "pending"}
-              </span>
-              <span className="panel__badge panel__badge--secondary">
-                Hypotheses:{" "}
-                {executionState?.phases?.hypotheses_ready?.done ? "ready" : "pending"}
-              </span>
-            </div>
-            <p className="panel__subheading">Setup phase · Step 1</p>
-            <p className="panel__muted">
-              {labMode === "lab"
-                ? "Prepare battery and queries first. Experiment context is initialized once and then stays in the background."
-                : "Prepare battery and queries first. Experiment context auto-initializes when Step 4 starts."}
-            </p>
-            {setupFlowCollapsed ? (
-              <p className="panel__empty">
-                Setup is collapsed. Expand to edit battery and query controls.
-              </p>
-            ) : productId ? (
+          <ExperimentSetupFlowPanel
+            labMode={labMode}
+            collapsed={setupFlowCollapsed}
+            hasProduct={Boolean(productId)}
+            protocolSnapshotVersion={currentProtocolSnapshotVersion}
+            hypothesesReady={Boolean(executionState?.phases?.hypotheses_ready?.done)}
+            onCollapsedChange={setSetupFlowCollapsed}
+          >
               <div className="panel__form">
                 {labMode === "lab" && !showManualControls ? (
                   <section className="panel__notice panel__notice--info">
@@ -3206,10 +3175,7 @@ function ExperimentsPageContent() {
                 </p>
                 {experimentStatus ? <p className="panel__success">{experimentStatus}</p> : null}
               </div>
-            ) : (
-              <p className="panel__empty">Select a product to create a battery.</p>
-            )}
-          </section>
+          </ExperimentSetupFlowPanel>
 
           <div className="detail__grid">
             <section className="panel__card panel__card--primary panel__card--full-row" ref={variantsSectionRef}>
