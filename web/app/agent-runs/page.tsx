@@ -43,6 +43,10 @@ import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefi
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
 import { ActionDiffDrawer } from "../../components/agent-runs/ActionDiffDrawer";
+import {
+  AgentTimelinePanel,
+  type AgentTimelineEventView,
+} from "../../components/agent-runs/AgentTimelinePanel";
 import { ExecutionControlsSummary } from "../../components/agent-runs/ExecutionControlsSummary";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
@@ -964,7 +968,7 @@ function AgentRunsPageContent() {
     return counts;
   }, [actions]);
 
-  const timelineEvents = useMemo(() => {
+  const timelineEvents = useMemo<AgentTimelineEventView[]>(() => {
     return (runEvents ?? []).map((event) => ({
       id: event.id,
       actionId: event.action_id ?? null,
@@ -1003,6 +1007,35 @@ function AgentRunsPageContent() {
     });
     return ["all", ...Array.from(all).sort()];
   }, [actions, runEvents, timelineCapabilityFilter]);
+
+  const copyEventLink = useCallback(
+    async (event: AgentTimelineEventView) => {
+      setSelectedEventId(event.id);
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("event_id", event.id);
+      if (selectedRunId) params.set("run_id", selectedRunId);
+      const target = `${window.location.origin}${RUNS_ROUTE}${
+        params.toString() ? `?${params.toString()}` : ""
+      }`;
+      try {
+        if (!window.navigator.clipboard?.writeText) {
+          throw new Error("Clipboard unavailable");
+        }
+        await window.navigator.clipboard.writeText(target);
+        setCopyLinkNotice({
+          type: "info",
+          text: "Event deep link copied.",
+        });
+      } catch {
+        setCopyLinkNotice({
+          type: "error",
+          text: "Could not copy link. Copy from browser URL instead.",
+        });
+      }
+    },
+    [searchParams, selectedRunId],
+  );
 
   const applyTimelinePreset = useCallback(
     (presetId: Exclude<TimelinePresetId, "custom">) => {
@@ -1849,289 +1882,58 @@ function AgentRunsPageContent() {
                       onDecision={handleDecision}
                       formatJsonPreview={formatJsonPreview}
                     />
-                    <section className="agent-timeline control-section">
-                      <div className="control-section__header">
-                        <div>
-                          <span className="control-section__eyebrow">Timeline</span>
-                          <h4 className="control-section__title">Execution timeline</h4>
-                        </div>
-                        <div className="panel__row panel__row--compact">
-                          <span className="control-chip">
-                            {timelineEvents.length}/{actions.length} events
-                          </span>
-                          <span className="control-chip">
-                            Live: {livePollingActive ? "on" : "paused"}
-                          </span>
-                          {eventsPage?.has_more_before ? (
-                            <button
-                              type="button"
-                              className="button button--ghost button--sm"
-                              onClick={loadOlderEvents}
-                              disabled={loadingOlderEvents || loading}
-                            >
-                              {loadingOlderEvents ? "Loading..." : "Load older events"}
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="agent-timeline__filters">
-                        {TIMELINE_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            className={`button button--ghost button--sm ${
-                              timelinePreset === preset.id ? "is-active" : ""
-                            }`}
-                            onClick={() => applyTimelinePreset(preset.id)}
-                          >
-                            {preset.label}
-                          </button>
-                        ))}
-                        {timelinePreset === "custom" ? (
-                          <span className="panel__badge panel__badge--secondary">Custom view</span>
-                        ) : null}
-                      </div>
-                      {copyLinkNotice ? (
-                        <div
-                          className={`panel__notice ${
-                            copyLinkNotice.type === "error"
-                              ? "panel__notice--error"
-                              : "panel__notice--info"
-                          }`}
-                        >
-                          {copyLinkNotice.text}
-                        </div>
-                      ) : null}
-                      <div className="agent-timeline__filters">
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "all" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("all")}
-                        >
-                          All
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "failed" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("failed")}
-                        >
-                          Failed
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "policy" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("policy")}
-                        >
-                          Policy
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "command" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("command")}
-                        >
-                          Commands
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "executed" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("executed")}
-                        >
-                          Executed
-                        </button>
-                        <select
-                          aria-label="Timeline status filter"
-                          className="input"
-                          style={{ minWidth: 170 }}
-                          value={timelineStatusFilter}
-                          onChange={(event) =>
-                            setTimelineStatusFilter(event.target.value as TimelineStatusFilter)
-                          }
-                        >
-                          <option value="all">All statuses</option>
-                          <option value="proposed">Proposed</option>
-                          <option value="approved">Approved</option>
-                          <option value="executing">Executing</option>
-                          <option value="executed">Executed</option>
-                          <option value="failed">Failed</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
-                        <select
-                          aria-label="Timeline capability filter"
-                          className="input"
-                          style={{ minWidth: 220 }}
-                          value={timelineCapabilityFilter}
-                          onChange={(event) => setTimelineCapabilityFilter(event.target.value)}
-                        >
-                          {timelineCapabilityOptions.map((item) => (
-                            <option key={item} value={item}>
-                              {item === "all" ? "All capabilities" : item}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          aria-label="Timeline window filter"
-                          className="input"
-                          style={{ minWidth: 160 }}
-                          value={timelineTimeWindow}
-                          onChange={(event) =>
-                            setTimelineTimeWindow(event.target.value as TimelineWindowFilter)
-                          }
-                        >
-                          <option value="all">All time</option>
-                          <option value="24h">Last 24h</option>
-                          <option value="7d">Last 7d</option>
-                        </select>
-                      </div>
-                      {timelineEvents.length === 0 ? (
-                        <p className="panel__muted">No timeline events yet.</p>
-                      ) : (
-                        <div className="agent-timeline__list">
-                          {timelineEvents.map((event) => (
-                            <div
-                              key={event.id}
-                              id={`agent-event-${event.id}`}
-                              className={`agent-timeline__item ${
-                                selectedEventId === event.id ? "is-focused" : ""
-                              }`}
-                              onClick={() => setSelectedEventId(event.id)}
-                            >
-                              <div className="agent-timeline__meta">
-                                <span className="agent-timeline__seq">#{event.sequence}</span>
-                                <span className="agent-timeline__cap">{event.capability}</span>
-                                {event.skillId ? (
-                                  <span className="panel__badge panel__badge--secondary">
-                                    {event.skillId}
-                                  </span>
-                                ) : null}
-                                {event.toolId ? (
-                                  <span className="panel__badge panel__badge--secondary">
-                                    {event.toolId}
-                                  </span>
-                                ) : null}
-                                <span
-                                  className={`agent-timeline__status is-${event.status}`}
-                                >
-                                  {event.status}
-                                </span>
-                                <span className="agent-timeline__time">
-                                  {event.when
-                                    ? new Date(event.when).toLocaleString()
-                                    : "time unavailable"}
-                                </span>
-                              </div>
-                              <div className="agent-timeline__actions">
-                                {event.actionId ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    onClick={(clickEvent) => {
-                                      clickEvent.stopPropagation();
-                                      setSelectedEventId(event.id);
-                                      setSelectedActionId(event.actionId);
-                                      setDiffDrawerOpen(false);
-                                    }}
-                                  >
-                                    Focus action
-                                  </button>
-                                ) : null}
-                                {selectedRun?.experiment_id || event.anchors?.experiment_id ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    onClick={(clickEvent) => {
-                                      clickEvent.stopPropagation();
-                                      setSelectedEventId(event.id);
-                                      router.push(
-                                        buildExperimentHref(
-                                          event.anchors?.experiment_id ||
-                                            selectedRun?.experiment_id,
-                                          { runId: selectedRun?.id },
-                                        ),
-                                      )
-                                    }}
-                                  >
-                                    Open experiment
-                                  </button>
-                                ) : null}
-                                {event.anchors?.validation_job_id ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    onClick={(clickEvent) => {
-                                      clickEvent.stopPropagation();
-                                      setSelectedEventId(event.id);
-                                      router.push(
-                                        buildValidationHref(
-                                          {
-                                            experimentId:
-                                              event.anchors?.experiment_id ||
-                                              selectedRun?.experiment_id,
-                                            runId: selectedRun?.id,
-                                          },
-                                        ),
-                                      );
-                                    }}
-                                  >
-                                    Open validation
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="button button--ghost button--sm"
-                                  onClick={async (clickEvent) => {
-                                    clickEvent.stopPropagation();
-                                    setSelectedEventId(event.id);
-                                    if (typeof window === "undefined") return;
-                                    const params = new URLSearchParams(searchParams.toString());
-                                    params.set("event_id", event.id);
-                                    if (selectedRunId) params.set("run_id", selectedRunId);
-                                    const target = `${window.location.origin}${RUNS_ROUTE}${
-                                      params.toString() ? `?${params.toString()}` : ""
-                                    }`;
-                                    try {
-                                      if (!window.navigator.clipboard?.writeText) {
-                                        throw new Error("Clipboard unavailable");
-                                      }
-                                      await window.navigator.clipboard.writeText(target);
-                                      setCopyLinkNotice({
-                                        type: "info",
-                                        text: "Event deep link copied.",
-                                      });
-                                    } catch {
-                                      setCopyLinkNotice({
-                                        type: "error",
-                                        text: "Could not copy link. Copy from browser URL instead.",
-                                      });
-                                    }
-                                  }}
-                                >
-                                  Copy link
-                                </button>
-                              </div>
-                              {event.note ? (
-                                <p
-                                  className={`agent-timeline__note ${
-                                    event.isPolicy ? "is-policy" : ""
-                                  }`}
-                                >
-                                  {event.note}
-                                </p>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </section>
+                    <AgentTimelinePanel
+                      events={timelineEvents}
+                      actionCount={actions.length}
+                      livePollingActive={livePollingActive}
+                      hasMoreBefore={eventsPage?.has_more_before}
+                      loadingOlderEvents={loadingOlderEvents}
+                      loading={loading}
+                      selectedEventId={selectedEventId}
+                      timelinePreset={timelinePreset}
+                      timelineFilter={timelineFilter}
+                      timelineStatusFilter={timelineStatusFilter}
+                      timelineCapabilityFilter={timelineCapabilityFilter}
+                      timelineCapabilityOptions={timelineCapabilityOptions}
+                      timelineTimeWindow={timelineTimeWindow}
+                      copyLinkNotice={copyLinkNotice}
+                      onLoadOlderEvents={loadOlderEvents}
+                      onApplyTimelinePreset={applyTimelinePreset}
+                      onTimelineFilterChange={setTimelineFilter}
+                      onTimelineStatusFilterChange={setTimelineStatusFilter}
+                      onTimelineCapabilityFilterChange={setTimelineCapabilityFilter}
+                      onTimelineTimeWindowChange={setTimelineTimeWindow}
+                      onSelectEvent={setSelectedEventId}
+                      onFocusAction={(event) => {
+                        setSelectedEventId(event.id);
+                        if (event.actionId) setSelectedActionId(event.actionId);
+                        setDiffDrawerOpen(false);
+                      }}
+                      canOpenExperiment={(event) =>
+                        Boolean(selectedRun?.experiment_id || event.anchors?.experiment_id)
+                      }
+                      onOpenExperiment={(event) => {
+                        setSelectedEventId(event.id);
+                        router.push(
+                          buildExperimentHref(
+                            event.anchors?.experiment_id || selectedRun?.experiment_id,
+                            { runId: selectedRun?.id },
+                          ),
+                        );
+                      }}
+                      canOpenValidation={(event) => Boolean(event.anchors?.validation_job_id)}
+                      onOpenValidation={(event) => {
+                        setSelectedEventId(event.id);
+                        router.push(
+                          buildValidationHref({
+                            experimentId:
+                              event.anchors?.experiment_id || selectedRun?.experiment_id,
+                            runId: selectedRun?.id,
+                          }),
+                        );
+                      }}
+                      onCopyEventLink={(event) => void copyEventLink(event)}
+                    />
                     <SelectedActionDetailPanel
                       selectedAction={selectedAction}
                       selectedCapabilitySpec={selectedCapabilitySpec}
