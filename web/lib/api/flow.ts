@@ -39,6 +39,7 @@ import {
   getSessionsStorageKey,
   readCachedSessions,
   request,
+  registryWriteAuthHeaders,
   requestStream,
   requestStreamWithEvents,
   writeCachedSessions,
@@ -706,6 +707,7 @@ export async function updateAgentRuntimeRegistryOwnership(
     `/agent-runs/registry/ownership/${encodeURIComponent(toolId)}`,
     {
       method: "PATCH",
+      headers: registryWriteAuthHeaders(),
       body: JSON.stringify({
         user_id: userId ?? undefined,
         owner_principal_id: payload.owner_principal_id,
@@ -741,6 +743,7 @@ export async function updateAgentRuntimeRegistryHarnessProfile(
     `/agent-runs/registry/harnesses/${encodeURIComponent(harnessId)}`,
     {
       method: "PATCH",
+      headers: registryWriteAuthHeaders(),
       body: JSON.stringify({
         user_id: userId ?? undefined,
         name: payload.name ?? undefined,
@@ -779,6 +782,7 @@ export async function updateAgentRuntimeRegistryProfileDefault(
     `/agent-runs/registry/agent-profiles/${encodeURIComponent(profileId)}`,
     {
       method: "PATCH",
+      headers: registryWriteAuthHeaders(),
       body: JSON.stringify({
         user_id: userId ?? undefined,
         ...payload,

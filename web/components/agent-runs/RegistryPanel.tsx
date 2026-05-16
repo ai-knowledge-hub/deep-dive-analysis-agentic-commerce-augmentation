@@ -16,6 +16,9 @@ import type {
   AgentRuntimeToolSpec,
 } from "../../lib/types";
 import {
+  clearRegistryWriteToken,
+  getRegistryWriteToken,
+  setRegistryWriteToken,
   updateAgentRuntimeRegistryHarnessProfile,
   updateAgentRuntimeRegistryProfileDefault,
 } from "../../lib/api";
@@ -143,6 +146,11 @@ export function RegistryPanel({
     type: "info" | "error";
     text: string;
   } | null>(null);
+  const [registryWriteTokenInput, setRegistryWriteTokenInput] = React.useState("");
+  const [registryWriteTokenSaved, setRegistryWriteTokenSaved] = React.useState(false);
+  const [registryWriteTokenNotice, setRegistryWriteTokenNotice] = React.useState<string | null>(
+    null,
+  );
   const [profileEditorOpen, setProfileEditorOpen] = React.useState(false);
   const [profileName, setProfileName] = React.useState("");
   const [profileHarnessId, setProfileHarnessId] = React.useState("");
@@ -156,6 +164,12 @@ export function RegistryPanel({
     type: "info" | "error";
     text: string;
   } | null>(null);
+
+  React.useEffect(() => {
+    const savedToken = getRegistryWriteToken();
+    setRegistryWriteTokenSaved(Boolean(savedToken));
+    setRegistryWriteTokenInput("");
+  }, []);
 
   React.useEffect(() => {
     setHarnessName(activeHarness?.name ?? "");
@@ -298,6 +312,24 @@ export function RegistryPanel({
     }
   }
 
+  function saveRegistryWriteCredential() {
+    setRegistryWriteToken(registryWriteTokenInput);
+    setRegistryWriteTokenSaved(Boolean(getRegistryWriteToken()));
+    setRegistryWriteTokenInput("");
+    setRegistryWriteTokenNotice(
+      getRegistryWriteToken()
+        ? "Registry-write bearer token saved locally for guarded apply actions."
+        : "Registry-write bearer token cleared.",
+    );
+  }
+
+  function clearRegistryWriteCredential() {
+    clearRegistryWriteToken();
+    setRegistryWriteTokenSaved(false);
+    setRegistryWriteTokenInput("");
+    setRegistryWriteTokenNotice("Registry-write bearer token cleared.");
+  }
+
   return (
     <section className="control-section registry-panel">
       <div className="control-section__header">
@@ -357,6 +389,59 @@ export function RegistryPanel({
           </span>
         ) : null}
       </div>
+
+      <section className="control-section">
+        <div className="control-section__header">
+          <div>
+            <span className="control-section__eyebrow">Credential</span>
+            <h4 className="control-section__title">Registry-write access</h4>
+          </div>
+          <span className={registryWriteTokenSaved ? "control-chip" : "control-chip control-chip--attention"}>
+            {registryWriteTokenSaved ? "Bearer token saved" : "Apply locked"}
+          </span>
+        </div>
+        <p className="panel__muted">
+          Preview runs without elevated access. Confirmed registry changes require a
+          signed bearer token with `registry:write` or `agent_registry:write` scope.
+        </p>
+        <div className="insight-grid insight-grid--two">
+          <label className="field">
+            <span className="field__label">Registry-write bearer token</span>
+            <input
+              className="panel__input"
+              type="password"
+              value={registryWriteTokenInput}
+              onChange={(event) => setRegistryWriteTokenInput(event.target.value)}
+              placeholder={
+                registryWriteTokenSaved
+                  ? "Saved locally; paste a new token to replace"
+                  : "Bearer token"
+              }
+            />
+          </label>
+          <div className="panel__actions">
+            <button
+              type="button"
+              className="button button--ghost button--sm"
+              onClick={saveRegistryWriteCredential}
+              disabled={!registryWriteTokenInput.trim() && !registryWriteTokenSaved}
+            >
+              Save credential
+            </button>
+            <button
+              type="button"
+              className="button button--ghost button--sm"
+              onClick={clearRegistryWriteCredential}
+              disabled={!registryWriteTokenSaved}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        {registryWriteTokenNotice ? (
+          <div className="panel__notice panel__notice--info">{registryWriteTokenNotice}</div>
+        ) : null}
+      </section>
 
       <section className="control-section">
         <div className="control-section__header">

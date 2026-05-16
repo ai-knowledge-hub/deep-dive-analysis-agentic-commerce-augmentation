@@ -91,6 +91,9 @@ vi.mock("../../lib/api", () => ({
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
+  getRegistryWriteToken: () => undefined,
+  setRegistryWriteToken: vi.fn(),
+  clearRegistryWriteToken: vi.fn(),
 }));
 
 describe("AgentRunsPage timeline presets", () => {
