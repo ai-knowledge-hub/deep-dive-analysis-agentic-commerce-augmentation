@@ -58,6 +58,10 @@ import {
   shortKeyList,
   toFiniteNumber,
 } from "../../components/agent-runs/actionDiffUtils";
+import {
+  CreateAgentRunDrawer,
+  type CreateAgentRunForm,
+} from "../../components/agent-runs/CreateAgentRunDrawer";
 import { ExecutionControlsSummary } from "../../components/agent-runs/ExecutionControlsSummary";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
@@ -216,7 +220,7 @@ function AgentRunsPageContent() {
     text: string;
   } | null>(null);
 
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<CreateAgentRunForm>({
     experiment_id: experimentIdParam || "",
     requires_approval: true,
     run_mode: "plan_only" as "plan_only" | "auto_execute_safe",
@@ -1816,171 +1820,16 @@ function AgentRunsPageContent() {
           </div>
         </div>
 
-        {drawerOpen && (
-          <div className="drawer">
-            <div className="drawer__overlay" onClick={() => setDrawerOpen(false)} />
-            <div className="drawer__panel">
-              <div className="drawer__header">
-                <h2 className="drawer__title">New agent run</h2>
-                <button className="drawer__close" onClick={() => setDrawerOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <div className="drawer__body">
-                <label className="field">
-                  <span className="field__label">Experiment (optional)</span>
-                  <select
-                    className="field__input"
-                    value={createForm.experiment_id}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({ ...p, experiment_id: e.target.value }))
-                    }
-                  >
-                    <option value="">None (global agent run)</option>
-                    {experiments.map((experiment) => (
-                      <option key={experiment.id} value={experiment.id}>
-                        {experiment.name || "Untitled"} · {experiment.id.slice(0, 8)} ·{" "}
-                        {formatDateCompact(experiment.updated_at || experiment.created_at)}
-                      </option>
-                    ))}
-                  </select>
-                  {experiments.length === 0 ? (
-                    <div className="panel__muted">
-                      No experiments found in current scope. You can still create a global run.
-                    </div>
-                  ) : null}
-                </label>
-
-                <details className="admin-advanced-defaults">
-                  <summary>Manual experiment id (advanced)</summary>
-                  <label className="field">
-                    <span className="field__label">Override with UUID</span>
-                    <input
-                      className="field__input"
-                      value={createForm.experiment_id}
-                      onChange={(e) =>
-                        setCreateForm((p) => ({ ...p, experiment_id: e.target.value.trim() }))
-                      }
-                      placeholder="paste experiment uuid"
-                    />
-                  </label>
-                </details>
-
-                <label className="field field--row">
-                  <span className="field__label">Requires approval</span>
-                  <input
-                    type="checkbox"
-                    checked={createForm.requires_approval}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({ ...p, requires_approval: e.target.checked }))
-                    }
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Run mode</span>
-                  <select
-                    className="field__input"
-                    value={createForm.run_mode}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({
-                        ...p,
-                        run_mode:
-                          e.target.value === "auto_execute_safe"
-                            ? "auto_execute_safe"
-                            : "plan_only",
-                      }))
-                    }
-                  >
-                    <option value="plan_only">Plan only (recommended)</option>
-                    <option value="auto_execute_safe">Auto-execute safe steps</option>
-                  </select>
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Allowed capabilities</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={createForm.allowed_capabilities.join("\n")}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({
-                        ...p,
-                        allowed_capabilities: e.target.value
-                          .split("\n")
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      }))
-                    }
-                    rows={7}
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Objective (JSON)</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={formatJsonPreview(createForm.objective)}
-                    onChange={(e) => {
-                      try {
-                        const parsed = JSON.parse(e.target.value || "{}");
-                        setCreateForm((p) => ({ ...p, objective: parsed }));
-                      } catch {
-                        // keep last valid json
-                      }
-                    }}
-                    rows={8}
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Budgets (JSON)</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={formatJsonPreview(createForm.budgets)}
-                    onChange={(e) => {
-                      try {
-                        const parsed = JSON.parse(e.target.value || "{}");
-                        setCreateForm((p) => ({ ...p, budgets: parsed }));
-                      } catch {
-                        // keep last valid json
-                      }
-                    }}
-                    rows={6}
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Approval policy (JSON)</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={formatJsonPreview(createForm.approval_policy)}
-                    onChange={(e) => {
-                      try {
-                        const parsed = JSON.parse(e.target.value || "{}");
-                        setCreateForm((p) => ({ ...p, approval_policy: parsed }));
-                      } catch {
-                        // keep last valid json
-                      }
-                    }}
-                    rows={6}
-                  />
-                </label>
-              </div>
-              <div className="drawer__footer">
-                <button className="button button--ghost" onClick={() => setDrawerOpen(false)}>
-                  Cancel
-                </button>
-                <button
-                  className="button button--ghost"
-                  onClick={() => handleCreate()}
-                  disabled={!userId || loading}
-                >
-                  Create run
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <CreateAgentRunDrawer
+          open={drawerOpen}
+          experiments={experiments}
+          form={createForm}
+          loading={loading}
+          canCreate={Boolean(userId)}
+          onClose={() => setDrawerOpen(false)}
+          onFormChange={(patch) => setCreateForm((current) => ({ ...current, ...patch }))}
+          onCreate={handleCreate}
+        />
 
         <ActionDiffDrawer
           open={diffDrawerOpen}
