@@ -475,12 +475,13 @@ export function RegistryPanel({
   }
 
   function saveRegistryWriteCredential() {
+    if (!registryWriteTokenInput.trim()) return;
     setRegistryWriteToken(registryWriteTokenInput);
     setRegistryWriteTokenSaved(Boolean(getRegistryWriteToken()));
     setRegistryWriteTokenInput("");
     setRegistryWriteTokenNotice(
       getRegistryWriteToken()
-        ? "Registry-write bearer token saved locally for guarded apply actions."
+        ? "Registry-write bearer token loaded for this browser tab only."
         : "Registry-write bearer token cleared.",
     );
   }
@@ -564,7 +565,8 @@ export function RegistryPanel({
         </div>
         <p className="panel__muted">
           Preview runs without elevated access. Confirmed registry changes require a
-          signed bearer token with `registry:write` or `agent_registry:write` scope.
+          signed bearer token with `registry:write` or `agent_registry:write` scope. The
+          pasted token is kept in memory for this browser tab only and is cleared on reload.
         </p>
         <div className="insight-grid insight-grid--two">
           <label className="field">
@@ -576,7 +578,7 @@ export function RegistryPanel({
               onChange={(event) => setRegistryWriteTokenInput(event.target.value)}
               placeholder={
                 registryWriteTokenSaved
-                  ? "Saved locally; paste a new token to replace"
+                  ? "Loaded for this tab; paste a new token to replace"
                   : "Bearer token"
               }
             />
@@ -586,7 +588,7 @@ export function RegistryPanel({
               type="button"
               className="button button--ghost button--sm"
               onClick={saveRegistryWriteCredential}
-              disabled={!registryWriteTokenInput.trim() && !registryWriteTokenSaved}
+              disabled={!registryWriteTokenInput.trim()}
             >
               Save credential
             </button>

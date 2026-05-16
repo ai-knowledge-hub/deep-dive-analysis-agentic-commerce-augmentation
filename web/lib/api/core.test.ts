@@ -10,26 +10,27 @@ import {
 
 describe("registry write auth helpers", () => {
   beforeEach(() => {
-    const storage = new Map<string, string>();
+    clearRegistryWriteToken();
     Object.defineProperty(window, "localStorage", {
       value: {
-        getItem: (key: string) => storage.get(key) ?? null,
-        setItem: (key: string, value: string) => storage.set(key, value),
-        removeItem: (key: string) => storage.delete(key),
-        clear: () => storage.clear(),
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
       },
       configurable: true,
     });
     vi.restoreAllMocks();
   });
 
-  it("stores normalized registry-write bearer tokens locally", () => {
+  it("stores normalized registry-write bearer tokens in memory only", () => {
     setRegistryWriteToken("Bearer token-123 ");
 
     expect(getRegistryWriteToken()).toBe("token-123");
     expect(registryWriteAuthHeaders()).toEqual({
       Authorization: "Bearer token-123",
     });
+    expect(vi.mocked(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(vi.mocked(window.localStorage.getItem)).not.toHaveBeenCalled();
 
     clearRegistryWriteToken();
     expect(getRegistryWriteToken()).toBeUndefined();

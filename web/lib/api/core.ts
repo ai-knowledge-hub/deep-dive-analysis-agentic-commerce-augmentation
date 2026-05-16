@@ -30,7 +30,7 @@ function resolveApiBase(): string {
 const CLIENT_ID_STORAGE_KEY = "client_id";
 const BRAND_ID_STORAGE_KEY = "brand_id";
 const PRODUCT_ID_STORAGE_KEY = "product_id";
-const REGISTRY_WRITE_TOKEN_STORAGE_KEY = "registry_write_token";
+let registryWriteToken: string | undefined;
 
 export function getSessionsStorageKey(userId: string, clientId?: string): string {
   const clientTag = clientId ? `.${clientId}` : "";
@@ -85,25 +85,16 @@ export function getProductId(): string | undefined {
 }
 
 export function getRegistryWriteToken(): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  return normalizeRegistryWriteToken(
-    window.localStorage.getItem(REGISTRY_WRITE_TOKEN_STORAGE_KEY),
-  );
+  return registryWriteToken;
 }
 
 export function setRegistryWriteToken(token: string): void {
-  if (typeof window === "undefined") return;
   const normalized = normalizeRegistryWriteToken(token);
-  if (!normalized) {
-    window.localStorage.removeItem(REGISTRY_WRITE_TOKEN_STORAGE_KEY);
-    return;
-  }
-  window.localStorage.setItem(REGISTRY_WRITE_TOKEN_STORAGE_KEY, normalized);
+  registryWriteToken = normalized;
 }
 
 export function clearRegistryWriteToken(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(REGISTRY_WRITE_TOKEN_STORAGE_KEY);
+  registryWriteToken = undefined;
 }
 
 export function registryWriteAuthHeaders(): HeadersInit | undefined {
