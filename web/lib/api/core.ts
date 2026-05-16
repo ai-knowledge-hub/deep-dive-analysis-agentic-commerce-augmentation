@@ -30,6 +30,7 @@ function resolveApiBase(): string {
 const CLIENT_ID_STORAGE_KEY = "client_id";
 const BRAND_ID_STORAGE_KEY = "brand_id";
 const PRODUCT_ID_STORAGE_KEY = "product_id";
+let registryWriteToken: string | undefined;
 
 export function getSessionsStorageKey(userId: string, clientId?: string): string {
   const clientTag = clientId ? `.${clientId}` : "";
@@ -83,12 +84,32 @@ export function getProductId(): string | undefined {
   return undefined;
 }
 
+export function getRegistryWriteToken(): string | undefined {
+  return registryWriteToken;
+}
+
+export function setRegistryWriteToken(token: string): void {
+  const normalized = normalizeRegistryWriteToken(token);
+  registryWriteToken = normalized;
+}
+
+export function clearRegistryWriteToken(): void {
+  registryWriteToken = undefined;
+}
+
+export function registryWriteAuthHeaders(): HeadersInit | undefined {
+  const token = getRegistryWriteToken();
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
   const response = await fetch(`${resolveApiBase()}${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...headerRecord(initHeaders),
     },
-    ...init,
   });
   if (!response.ok) {
     throw new Error(`API error ${response.status}`);
@@ -100,11 +121,13 @@ export async function requestStream<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
   const response = await fetch(`${resolveApiBase()}${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...headerRecord(initHeaders),
     },
-    ...init,
   });
   if (!response.ok) {
     throw new Error(`API error ${response.status}`);
@@ -156,11 +179,13 @@ export async function requestStreamWithEvents<T>(
   init: RequestInit | undefined,
   handlers: StreamHandlers<T>,
 ): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
   const response = await fetch(`${resolveApiBase()}${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...headerRecord(initHeaders),
     },
-    ...init,
   });
   if (!response.ok) {
     throw new Error(`API error ${response.status}`);
@@ -213,6 +238,23 @@ export async function requestStreamWithEvents<T>(
     return lastPayload;
   }
   return response.json();
+}
+
+function normalizeRegistryWriteToken(token?: string | null): string | undefined {
+  const normalized = String(token ?? "")
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  return normalized || undefined;
+}
+
+function headerRecord(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  const result: Record<string, string> = {};
+  new Headers(headers).forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
 }
 
 export function listCachedSessions(userId: string): SessionSummary[] {

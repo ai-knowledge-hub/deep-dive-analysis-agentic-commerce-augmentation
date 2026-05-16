@@ -43,12 +43,51 @@ import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefi
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { OperatorConsoleChat } from "../../components/agent/OperatorConsoleChat";
 import { ActionDiffDrawer } from "../../components/agent-runs/ActionDiffDrawer";
+import {
+  AgentTimelinePanel,
+  type AgentTimelineEventView,
+} from "../../components/agent-runs/AgentTimelinePanel";
+import {
+  budgetSeverity,
+  buildDetailedDiffEntries,
+  collectNumericValues,
+  formatJsonPreview,
+  getStringDiffCandidates,
+  keyDiffSummary,
+  safeRecord,
+  shortKeyList,
+  toFiniteNumber,
+} from "../../components/agent-runs/actionDiffUtils";
+import {
+  CreateAgentRunDrawer,
+  type CreateAgentRunForm,
+} from "../../components/agent-runs/CreateAgentRunDrawer";
 import { ExecutionControlsSummary } from "../../components/agent-runs/ExecutionControlsSummary";
+import { ExternalAgentJobPanel } from "../../components/agent-runs/ExternalAgentJobPanel";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
 import { RunSelectionRail } from "../../components/agent-runs/RunSelectionRail";
 import { SelectedActionDetailPanel } from "../../components/agent-runs/SelectedActionDetailPanel";
+import {
+  approvalReceiptForEvent,
+  formatDateCompact,
+  registryAuditDiffRows,
+  summarizeRegistryAuditDiff,
+} from "../../components/agent-runs/registryAudit";
 import { sortRunsForOperatorAttention } from "../../components/agent-runs/runAttention";
+import {
+  TIMELINE_EVENT_TYPES,
+  TIMELINE_PRESET_IDS,
+  TIMELINE_PRESET_STORAGE_KEY,
+  TIMELINE_PRESETS,
+  TIMELINE_STATUS_TYPES,
+  TIMELINE_WINDOWS,
+  type TimelineEventFilter,
+  type TimelinePresetId,
+  type TimelineStatusFilter,
+  type TimelineWindowFilter,
+  resolveSinceForWindow,
+} from "../../components/agent-runs/timelineFilters";
 import { buildExperimentHref, buildValidationHref } from "../../lib/routes";
 
 const RUNS_ROUTE = "/runs";
@@ -78,370 +117,6 @@ const AGENT_FLOW_STEPS: { id: string; label: string }[] = [
   { id: "validation_completed", label: "Validation completed" },
   { id: "posterior_updated", label: "Posterior updated" },
 ];
-
-const TIMELINE_PRESET_STORAGE_KEY = "agent_runs.timeline_preset.v1";
-
-type TimelineStatusFilter =
-  | "all"
-  | "proposed"
-  | "approved"
-  | "executing"
-  | "executed"
-  | "failed"
-  | "rejected";
-type TimelineWindowFilter = "all" | "24h" | "7d";
-type TimelinePresetId =
-  | "all_activity"
-  | "commands_24h"
-  | "policy_failures_24h"
-  | "variant_execution_7d"
-  | "validation_focus_7d"
-  | "custom";
-type TimelineEventFilter = "all" | "failed" | "policy" | "executed" | "command";
-
-const TIMELINE_EVENT_TYPES = new Set(["all", "failed", "policy", "executed", "command"]);
-const TIMELINE_STATUS_TYPES = new Set([
-  "all",
-  "proposed",
-  "approved",
-  "executing",
-  "executed",
-  "failed",
-  "rejected",
-]);
-const TIMELINE_WINDOWS = new Set(["all", "24h", "7d"]);
-const TIMELINE_PRESET_IDS = new Set([
-  "all_activity",
-  "commands_24h",
-  "policy_failures_24h",
-  "variant_execution_7d",
-  "validation_focus_7d",
-  "custom",
-]);
-
-const TIMELINE_PRESETS: Array<{
-  id: Exclude<TimelinePresetId, "custom">;
-  label: string;
-  eventType: TimelineEventFilter;
-  status: TimelineStatusFilter;
-  capabilityName: string;
-  timeWindow: TimelineWindowFilter;
-}> = [
-  {
-    id: "all_activity",
-    label: "All activity",
-    eventType: "all",
-    status: "all",
-    capabilityName: "all",
-    timeWindow: "all",
-  },
-  {
-    id: "commands_24h",
-    label: "Commands (24h)",
-    eventType: "command",
-    status: "all",
-    capabilityName: "all",
-    timeWindow: "24h",
-  },
-  {
-    id: "policy_failures_24h",
-    label: "Policy failures (24h)",
-    eventType: "policy",
-    status: "failed",
-    capabilityName: "all",
-    timeWindow: "24h",
-  },
-  {
-    id: "variant_execution_7d",
-    label: "Variant execution (7d)",
-    eventType: "executed",
-    status: "executed",
-    capabilityName: "run_variant",
-    timeWindow: "7d",
-  },
-  {
-    id: "validation_focus_7d",
-    label: "Validation focus (7d)",
-    eventType: "all",
-    status: "all",
-    capabilityName: "request_synthetic_validation",
-    timeWindow: "7d",
-  },
-];
-
-function formatJsonPreview(value: unknown): string {
-  try {
-    return JSON.stringify(value ?? {}, null, 2);
-  } catch {
-    return String(value ?? "");
-  }
-}
-
-function formatDateCompact(value?: string | null): string {
-  if (!value) return "unknown date";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "unknown date";
-  return parsed.toLocaleDateString();
-}
-
-function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): string {
-  if (event.event_type === "registry_ownership_approved") {
-    const receipt = event.diff.approval_receipt;
-    const toolId = String(event.diff.tool_id || receipt?.tool_id || "registry tool");
-    return `Ownership approval receipt for ${toolId}`;
-  }
-  if (event.event_type === "registry_pin_backfill_applied") {
-    const runs = event.diff.runs?.updated ?? 0;
-    const actions = event.diff.actions?.updated ?? 0;
-    return `Backfilled ${runs} runs · ${actions} actions`;
-  }
-  const sections = [
-    ["skills", event.diff.skills],
-    ["tools", event.diff.tools],
-    ["capabilities", event.diff.capabilities],
-    ["policies", event.diff.policy_profiles],
-  ] as const;
-  const changes = sections.flatMap(([label, section]) => {
-    const added = section?.added?.length ?? 0;
-    const removed = section?.removed?.length ?? 0;
-    const changed = section?.changed?.length ?? 0;
-    const total = added + removed + changed;
-    return total > 0 ? [`${label}: +${added} -${removed} ~${changed}`] : [];
-  });
-  if (event.diff.skill_ids_by_tool_changed) {
-    changes.push("tool-skill map changed");
-  }
-  return changes.length > 0 ? changes.join(" · ") : "No structural diff recorded";
-}
-
-type RegistryAuditDiffRow = { label: string; value: string };
-
-function registryAuditDiffRows(event: AgentRegistryAuditEvent): RegistryAuditDiffRow[] {
-  if (event.event_type === "registry_ownership_approved") {
-    const receipt = event.diff.approval_receipt;
-    const toolId = String(event.diff.tool_id || receipt?.tool_id || "unknown tool");
-    return [
-      { label: "Tool", value: toolId },
-      {
-        label: "Receipt",
-        value: String(receipt?.receipt_id || "unsigned receipt metadata unavailable"),
-      },
-      {
-        label: "Actor",
-        value: String(receipt?.actor_user_id || "unknown actor"),
-      },
-    ];
-  }
-  if (event.event_type === "registry_pin_backfill_applied") {
-    return [
-      {
-        label: "Runs",
-        value: `${event.diff.runs?.updated ?? 0}/${event.diff.runs?.matched ?? 0} updated`,
-      },
-      {
-        label: "Actions",
-        value: `${event.diff.actions?.updated ?? 0}/${event.diff.actions?.matched ?? 0} updated`,
-      },
-      {
-        label: "Client",
-        value: String(event.diff.client_id || "unknown client"),
-      },
-    ];
-  }
-  const sections = [
-    ["Skills", event.diff.skills],
-    ["Tools", event.diff.tools],
-    ["Capabilities", event.diff.capabilities],
-    ["Policies", event.diff.policy_profiles],
-  ] as const;
-  const rows: RegistryAuditDiffRow[] = sections.flatMap(([label, section]) => {
-    const values = [
-      ...(section?.added ?? []).map((item) => `+${item}`),
-      ...(section?.removed ?? []).map((item) => `-${item}`),
-      ...(section?.changed ?? []).map((item) => `~${item}`),
-    ];
-    return values.length > 0
-      ? [{ label, value: values.slice(0, 5).join(", ") }]
-      : [];
-  });
-  if (event.diff.skill_ids_by_tool_changed) {
-    rows.push({ label: "Tool-skill map", value: "Changed" });
-  }
-  return rows.length > 0 ? rows : [{ label: "Diff", value: "No structural diff recorded" }];
-}
-
-function approvalReceiptForEvent(event: AgentRegistryAuditEvent): Record<string, unknown> | null {
-  const receipt = event.diff.approval_receipt;
-  return receipt && typeof receipt === "object" ? receipt : null;
-}
-
-function toFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function collectNumericValues(value: unknown, keys: Set<string>): number[] {
-  if (!value || typeof value !== "object") return [];
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => collectNumericValues(item, keys));
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  return entries.flatMap(([key, nested]) => {
-    const direct = keys.has(key) ? toFiniteNumber(nested) : null;
-    return [...(direct == null ? [] : [direct]), ...collectNumericValues(nested, keys)];
-  });
-}
-
-function keyDiffSummary(
-  current: Record<string, unknown>,
-  previous: Record<string, unknown>,
-): { added: string[]; changed: string[]; removed: string[] } {
-  const currentKeys = new Set(Object.keys(current));
-  const previousKeys = new Set(Object.keys(previous));
-  const added = [...currentKeys].filter((key) => !previousKeys.has(key));
-  const removed = [...previousKeys].filter((key) => !currentKeys.has(key));
-  const changed = [...currentKeys].filter((key) => {
-    if (!previousKeys.has(key)) return false;
-    const nextValue = formatJsonPreview(current[key]);
-    const prevValue = formatJsonPreview(previous[key]);
-    return nextValue !== prevValue;
-  });
-  return { added, changed, removed };
-}
-
-function shortKeyList(keys: string[], max = 6): string {
-  if (keys.length === 0) return "None";
-  const sliced = keys.slice(0, max);
-  return keys.length > max ? `${sliced.join(", ")} +${keys.length - max} more` : sliced.join(", ");
-}
-
-function safeRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
-}
-
-function buildDetailedDiffEntries(
-  current: Record<string, unknown>,
-  previous: Record<string, unknown>,
-): {
-  added: { key: string; current: string }[];
-  changed: { key: string; current: string; previous: string }[];
-  removed: { key: string; previous: string }[];
-} {
-  const currentKeys = new Set(Object.keys(current));
-  const previousKeys = new Set(Object.keys(previous));
-  const added = [...currentKeys]
-    .filter((key) => !previousKeys.has(key))
-    .map((key) => ({
-      key,
-      current: formatJsonPreview(current[key]),
-    }));
-  const removed = [...previousKeys]
-    .filter((key) => !currentKeys.has(key))
-    .map((key) => ({
-      key,
-      previous: formatJsonPreview(previous[key]),
-    }));
-  const changed = [...currentKeys]
-    .filter((key) => previousKeys.has(key))
-    .map((key) => ({
-      key,
-      current: formatJsonPreview(current[key]),
-      previous: formatJsonPreview(previous[key]),
-    }))
-    .filter((entry) => entry.current !== entry.previous);
-  return { added, changed, removed };
-}
-
-type TextDiffLine = { kind: "same" | "added" | "removed"; text: string };
-
-function buildTextDiffLines(previousText: string, currentText: string): TextDiffLine[] {
-  const before = previousText.split("\n");
-  const after = currentText.split("\n");
-  const rows: TextDiffLine[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < before.length && j < after.length) {
-    if (before[i] === after[j]) {
-      rows.push({ kind: "same", text: after[j] });
-      i += 1;
-      j += 1;
-      continue;
-    }
-    if (i + 1 < before.length && before[i + 1] === after[j]) {
-      rows.push({ kind: "removed", text: before[i] });
-      i += 1;
-      continue;
-    }
-    if (j + 1 < after.length && before[i] === after[j + 1]) {
-      rows.push({ kind: "added", text: after[j] });
-      j += 1;
-      continue;
-    }
-    rows.push({ kind: "removed", text: before[i] });
-    rows.push({ kind: "added", text: after[j] });
-    i += 1;
-    j += 1;
-  }
-  while (i < before.length) {
-    rows.push({ kind: "removed", text: before[i] });
-    i += 1;
-  }
-  while (j < after.length) {
-    rows.push({ kind: "added", text: after[j] });
-    j += 1;
-  }
-  return rows;
-}
-
-function getStringDiffCandidates(
-  current: Record<string, unknown>,
-  previous: Record<string, unknown>,
-): { key: string; current: string; previous: string; lines: TextDiffLine[] }[] {
-  const keys = Object.keys(current).filter((key) => key in previous);
-  return keys
-    .map((key) => {
-      const next = current[key];
-      const prev = previous[key];
-      if (typeof next !== "string" || typeof prev !== "string") return null;
-      if (next === prev) return null;
-      const isCopyLike =
-        next.length >= 40 ||
-        prev.length >= 40 ||
-        next.includes("\n") ||
-        prev.includes("\n");
-      if (!isCopyLike) return null;
-      return {
-        key,
-        current: next,
-        previous: prev,
-        lines: buildTextDiffLines(prev, next),
-      };
-    })
-    .filter(Boolean) as { key: string; current: string; previous: string; lines: TextDiffLine[] }[];
-}
-
-function budgetSeverity(
-  used: number,
-  limit: number | null,
-  percent: number | null,
-): "ok" | "warn" | "danger" {
-  if (limit == null) return "ok";
-  if (used >= limit) return "danger";
-  if ((percent ?? 0) >= 80) return "warn";
-  return "ok";
-}
-
-function resolveSinceForWindow(windowId: "all" | "24h" | "7d"): string | null {
-  if (windowId === "all") return null;
-  const now = Date.now();
-  const deltaMs = windowId === "24h" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-  return new Date(now - deltaMs).toISOString();
-}
 
 function AgentRunsPageContent() {
   const router = useRouter();
@@ -546,7 +221,7 @@ function AgentRunsPageContent() {
     text: string;
   } | null>(null);
 
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<CreateAgentRunForm>({
     experiment_id: experimentIdParam || "",
     requires_approval: true,
     run_mode: "plan_only" as "plan_only" | "auto_execute_safe",
@@ -1140,7 +815,7 @@ function AgentRunsPageContent() {
     return counts;
   }, [actions]);
 
-  const timelineEvents = useMemo(() => {
+  const timelineEvents = useMemo<AgentTimelineEventView[]>(() => {
     return (runEvents ?? []).map((event) => ({
       id: event.id,
       actionId: event.action_id ?? null,
@@ -1179,6 +854,35 @@ function AgentRunsPageContent() {
     });
     return ["all", ...Array.from(all).sort()];
   }, [actions, runEvents, timelineCapabilityFilter]);
+
+  const copyEventLink = useCallback(
+    async (event: AgentTimelineEventView) => {
+      setSelectedEventId(event.id);
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("event_id", event.id);
+      if (selectedRunId) params.set("run_id", selectedRunId);
+      const target = `${window.location.origin}${RUNS_ROUTE}${
+        params.toString() ? `?${params.toString()}` : ""
+      }`;
+      try {
+        if (!window.navigator.clipboard?.writeText) {
+          throw new Error("Clipboard unavailable");
+        }
+        await window.navigator.clipboard.writeText(target);
+        setCopyLinkNotice({
+          type: "info",
+          text: "Event deep link copied.",
+        });
+      } catch {
+        setCopyLinkNotice({
+          type: "error",
+          text: "Could not copy link. Copy from browser URL instead.",
+        });
+      }
+    },
+    [searchParams, selectedRunId],
+  );
 
   const applyTimelinePreset = useCallback(
     (presetId: Exclude<TimelinePresetId, "custom">) => {
@@ -1884,110 +1588,12 @@ function AgentRunsPageContent() {
                       </div>
                     </div>
                     {selectedRun.principal_type === "external_agent" ? (
-                      <section className="control-section">
-                        <div className="control-section__header">
-                          <div>
-                            <span className="control-section__eyebrow">External agent</span>
-                            <h4 className="control-section__title">Job supervision</h4>
-                          </div>
-                          <span
-                            className={`control-chip ${
-                              externalAgentJob?.verification?.valid
-                                ? "control-chip--success"
-                                : externalAgentJob?.latest_receipt
-                                  ? "control-chip--attention"
-                                  : ""
-                            }`}
-                          >
-                            {externalAgentJob?.verification?.valid
-                              ? "Receipt verified"
-                              : externalAgentJob?.latest_receipt
-                                ? "Receipt unverified"
-                                : "No receipt"}
-                          </span>
-                        </div>
-                        <p className="panel__muted">
-                          This run was submitted by an external machine principal. Operator
-                          controls act on the linked run; the machine-facing job contract remains
-                          scoped to the creating principal.
-                        </p>
-                        {externalAgentJob ? (
-                          <>
-                            <div className="panel__meta-strip panel__meta-strip--flat">
-                              <div>
-                                <strong>Job</strong>: {externalAgentJob.job.id.slice(0, 8)}
-                              </div>
-                              <div>
-                                <strong>Principal</strong>:{" "}
-                                {externalAgentJob.job.principal_id ?? "unknown"}
-                              </div>
-                              <div>
-                                <strong>Profile</strong>:{" "}
-                                {externalAgentJob.job.agent_profile_id ?? "none"}
-                              </div>
-                              <div>
-                                <strong>Idempotency</strong>:{" "}
-                                {externalAgentJob.job.idempotency_key ?? "missing"}
-                              </div>
-                              <div>
-                                <strong>Job status</strong>:{" "}
-                                {externalAgentJob.job.status ?? "unknown"}
-                              </div>
-                              <div>
-                                <strong>Tool</strong>:{" "}
-                                {externalAgentJob.job.requested_tool_id ?? "workflow"}
-                              </div>
-                              <div>
-                                <strong>Skill</strong>:{" "}
-                                {externalAgentJob.job.requested_skill_id ?? "auto-selected"}
-                              </div>
-                              <div>
-                                <strong>Receipts</strong>: {externalAgentJob.receipts.length}
-                              </div>
-                            </div>
-                            {externalAgentJob.latest_receipt ? (
-                              <div className="panel__notice">
-                                Latest receipt:{" "}
-                                {String(
-                                  externalAgentJob.latest_receipt.receipt_type ?? "external job",
-                                )}{" "}
-                                · {String(externalAgentJob.latest_receipt.status ?? "unknown")} ·{" "}
-                                {String(
-                                  externalAgentJob.latest_receipt.receipt_context_hash ?? "",
-                                ).slice(0, 12)}
-                                <button
-                                  type="button"
-                                  className="button button--ghost button--sm"
-                                  onClick={verifyExternalAgentReceipt}
-                                  disabled={externalAgentJobVerificationBusy || loading}
-                                >
-                                  {externalAgentJobVerificationBusy
-                                    ? "Verifying"
-                                    : "Verify receipt"}
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="panel__notice panel__notice--warning">
-                                No stored receipt is available yet. Ask the external agent to
-                                refresh its job receipt when an auditable checkpoint is needed.
-                              </div>
-                            )}
-                            {externalAgentJob.verification?.blockers?.length ? (
-                              <ul className="panel__list panel__list--compact">
-                                {externalAgentJob.verification.blockers.map((blocker) => (
-                                  <li key={blocker} className="agent-guardrail-reason">
-                                    {blocker}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                          </>
-                        ) : (
-                          <div className="panel__notice panel__notice--warning">
-                            No external-agent job record is linked to this run yet.
-                          </div>
-                        )}
-                      </section>
+                      <ExternalAgentJobPanel
+                        externalAgentJob={externalAgentJob}
+                        verificationBusy={externalAgentJobVerificationBusy}
+                        loading={loading}
+                        onVerifyReceipt={verifyExternalAgentReceipt}
+                      />
                     ) : null}
                     <RegistryPanel
                       selectedRun={selectedRun}
@@ -2025,289 +1631,58 @@ function AgentRunsPageContent() {
                       onDecision={handleDecision}
                       formatJsonPreview={formatJsonPreview}
                     />
-                    <section className="agent-timeline control-section">
-                      <div className="control-section__header">
-                        <div>
-                          <span className="control-section__eyebrow">Timeline</span>
-                          <h4 className="control-section__title">Execution timeline</h4>
-                        </div>
-                        <div className="panel__row panel__row--compact">
-                          <span className="control-chip">
-                            {timelineEvents.length}/{actions.length} events
-                          </span>
-                          <span className="control-chip">
-                            Live: {livePollingActive ? "on" : "paused"}
-                          </span>
-                          {eventsPage?.has_more_before ? (
-                            <button
-                              type="button"
-                              className="button button--ghost button--sm"
-                              onClick={loadOlderEvents}
-                              disabled={loadingOlderEvents || loading}
-                            >
-                              {loadingOlderEvents ? "Loading..." : "Load older events"}
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="agent-timeline__filters">
-                        {TIMELINE_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            className={`button button--ghost button--sm ${
-                              timelinePreset === preset.id ? "is-active" : ""
-                            }`}
-                            onClick={() => applyTimelinePreset(preset.id)}
-                          >
-                            {preset.label}
-                          </button>
-                        ))}
-                        {timelinePreset === "custom" ? (
-                          <span className="panel__badge panel__badge--secondary">Custom view</span>
-                        ) : null}
-                      </div>
-                      {copyLinkNotice ? (
-                        <div
-                          className={`panel__notice ${
-                            copyLinkNotice.type === "error"
-                              ? "panel__notice--error"
-                              : "panel__notice--info"
-                          }`}
-                        >
-                          {copyLinkNotice.text}
-                        </div>
-                      ) : null}
-                      <div className="agent-timeline__filters">
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "all" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("all")}
-                        >
-                          All
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "failed" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("failed")}
-                        >
-                          Failed
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "policy" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("policy")}
-                        >
-                          Policy
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "command" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("command")}
-                        >
-                          Commands
-                        </button>
-                        <button
-                          type="button"
-                          className={`button button--ghost button--sm ${
-                            timelineFilter === "executed" ? "is-active" : ""
-                          }`}
-                          onClick={() => setTimelineFilter("executed")}
-                        >
-                          Executed
-                        </button>
-                        <select
-                          aria-label="Timeline status filter"
-                          className="input"
-                          style={{ minWidth: 170 }}
-                          value={timelineStatusFilter}
-                          onChange={(event) =>
-                            setTimelineStatusFilter(event.target.value as TimelineStatusFilter)
-                          }
-                        >
-                          <option value="all">All statuses</option>
-                          <option value="proposed">Proposed</option>
-                          <option value="approved">Approved</option>
-                          <option value="executing">Executing</option>
-                          <option value="executed">Executed</option>
-                          <option value="failed">Failed</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
-                        <select
-                          aria-label="Timeline capability filter"
-                          className="input"
-                          style={{ minWidth: 220 }}
-                          value={timelineCapabilityFilter}
-                          onChange={(event) => setTimelineCapabilityFilter(event.target.value)}
-                        >
-                          {timelineCapabilityOptions.map((item) => (
-                            <option key={item} value={item}>
-                              {item === "all" ? "All capabilities" : item}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          aria-label="Timeline window filter"
-                          className="input"
-                          style={{ minWidth: 160 }}
-                          value={timelineTimeWindow}
-                          onChange={(event) =>
-                            setTimelineTimeWindow(event.target.value as TimelineWindowFilter)
-                          }
-                        >
-                          <option value="all">All time</option>
-                          <option value="24h">Last 24h</option>
-                          <option value="7d">Last 7d</option>
-                        </select>
-                      </div>
-                      {timelineEvents.length === 0 ? (
-                        <p className="panel__muted">No timeline events yet.</p>
-                      ) : (
-                        <div className="agent-timeline__list">
-                          {timelineEvents.map((event) => (
-                            <div
-                              key={event.id}
-                              id={`agent-event-${event.id}`}
-                              className={`agent-timeline__item ${
-                                selectedEventId === event.id ? "is-focused" : ""
-                              }`}
-                              onClick={() => setSelectedEventId(event.id)}
-                            >
-                              <div className="agent-timeline__meta">
-                                <span className="agent-timeline__seq">#{event.sequence}</span>
-                                <span className="agent-timeline__cap">{event.capability}</span>
-                                {event.skillId ? (
-                                  <span className="panel__badge panel__badge--secondary">
-                                    {event.skillId}
-                                  </span>
-                                ) : null}
-                                {event.toolId ? (
-                                  <span className="panel__badge panel__badge--secondary">
-                                    {event.toolId}
-                                  </span>
-                                ) : null}
-                                <span
-                                  className={`agent-timeline__status is-${event.status}`}
-                                >
-                                  {event.status}
-                                </span>
-                                <span className="agent-timeline__time">
-                                  {event.when
-                                    ? new Date(event.when).toLocaleString()
-                                    : "time unavailable"}
-                                </span>
-                              </div>
-                              <div className="agent-timeline__actions">
-                                {event.actionId ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    onClick={(clickEvent) => {
-                                      clickEvent.stopPropagation();
-                                      setSelectedEventId(event.id);
-                                      setSelectedActionId(event.actionId);
-                                      setDiffDrawerOpen(false);
-                                    }}
-                                  >
-                                    Focus action
-                                  </button>
-                                ) : null}
-                                {selectedRun?.experiment_id || event.anchors?.experiment_id ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    onClick={(clickEvent) => {
-                                      clickEvent.stopPropagation();
-                                      setSelectedEventId(event.id);
-                                      router.push(
-                                        buildExperimentHref(
-                                          event.anchors?.experiment_id ||
-                                            selectedRun?.experiment_id,
-                                          { runId: selectedRun?.id },
-                                        ),
-                                      )
-                                    }}
-                                  >
-                                    Open experiment
-                                  </button>
-                                ) : null}
-                                {event.anchors?.validation_job_id ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--sm"
-                                    onClick={(clickEvent) => {
-                                      clickEvent.stopPropagation();
-                                      setSelectedEventId(event.id);
-                                      router.push(
-                                        buildValidationHref(
-                                          {
-                                            experimentId:
-                                              event.anchors?.experiment_id ||
-                                              selectedRun?.experiment_id,
-                                            runId: selectedRun?.id,
-                                          },
-                                        ),
-                                      );
-                                    }}
-                                  >
-                                    Open validation
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="button button--ghost button--sm"
-                                  onClick={async (clickEvent) => {
-                                    clickEvent.stopPropagation();
-                                    setSelectedEventId(event.id);
-                                    if (typeof window === "undefined") return;
-                                    const params = new URLSearchParams(searchParams.toString());
-                                    params.set("event_id", event.id);
-                                    if (selectedRunId) params.set("run_id", selectedRunId);
-                                    const target = `${window.location.origin}${RUNS_ROUTE}${
-                                      params.toString() ? `?${params.toString()}` : ""
-                                    }`;
-                                    try {
-                                      if (!window.navigator.clipboard?.writeText) {
-                                        throw new Error("Clipboard unavailable");
-                                      }
-                                      await window.navigator.clipboard.writeText(target);
-                                      setCopyLinkNotice({
-                                        type: "info",
-                                        text: "Event deep link copied.",
-                                      });
-                                    } catch {
-                                      setCopyLinkNotice({
-                                        type: "error",
-                                        text: "Could not copy link. Copy from browser URL instead.",
-                                      });
-                                    }
-                                  }}
-                                >
-                                  Copy link
-                                </button>
-                              </div>
-                              {event.note ? (
-                                <p
-                                  className={`agent-timeline__note ${
-                                    event.isPolicy ? "is-policy" : ""
-                                  }`}
-                                >
-                                  {event.note}
-                                </p>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </section>
+                    <AgentTimelinePanel
+                      events={timelineEvents}
+                      actionCount={actions.length}
+                      livePollingActive={livePollingActive}
+                      hasMoreBefore={eventsPage?.has_more_before}
+                      loadingOlderEvents={loadingOlderEvents}
+                      loading={loading}
+                      selectedEventId={selectedEventId}
+                      timelinePreset={timelinePreset}
+                      timelineFilter={timelineFilter}
+                      timelineStatusFilter={timelineStatusFilter}
+                      timelineCapabilityFilter={timelineCapabilityFilter}
+                      timelineCapabilityOptions={timelineCapabilityOptions}
+                      timelineTimeWindow={timelineTimeWindow}
+                      copyLinkNotice={copyLinkNotice}
+                      onLoadOlderEvents={loadOlderEvents}
+                      onApplyTimelinePreset={applyTimelinePreset}
+                      onTimelineFilterChange={setTimelineFilter}
+                      onTimelineStatusFilterChange={setTimelineStatusFilter}
+                      onTimelineCapabilityFilterChange={setTimelineCapabilityFilter}
+                      onTimelineTimeWindowChange={setTimelineTimeWindow}
+                      onSelectEvent={setSelectedEventId}
+                      onFocusAction={(event) => {
+                        setSelectedEventId(event.id);
+                        if (event.actionId) setSelectedActionId(event.actionId);
+                        setDiffDrawerOpen(false);
+                      }}
+                      canOpenExperiment={(event) =>
+                        Boolean(selectedRun?.experiment_id || event.anchors?.experiment_id)
+                      }
+                      onOpenExperiment={(event) => {
+                        setSelectedEventId(event.id);
+                        router.push(
+                          buildExperimentHref(
+                            event.anchors?.experiment_id || selectedRun?.experiment_id,
+                            { runId: selectedRun?.id },
+                          ),
+                        );
+                      }}
+                      canOpenValidation={(event) => Boolean(event.anchors?.validation_job_id)}
+                      onOpenValidation={(event) => {
+                        setSelectedEventId(event.id);
+                        router.push(
+                          buildValidationHref({
+                            experimentId:
+                              event.anchors?.experiment_id || selectedRun?.experiment_id,
+                            runId: selectedRun?.id,
+                          }),
+                        );
+                      }}
+                      onCopyEventLink={(event) => void copyEventLink(event)}
+                    />
                     <SelectedActionDetailPanel
                       selectedAction={selectedAction}
                       selectedCapabilitySpec={selectedCapabilitySpec}
@@ -2348,171 +1723,16 @@ function AgentRunsPageContent() {
           </div>
         </div>
 
-        {drawerOpen && (
-          <div className="drawer">
-            <div className="drawer__overlay" onClick={() => setDrawerOpen(false)} />
-            <div className="drawer__panel">
-              <div className="drawer__header">
-                <h2 className="drawer__title">New agent run</h2>
-                <button className="drawer__close" onClick={() => setDrawerOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <div className="drawer__body">
-                <label className="field">
-                  <span className="field__label">Experiment (optional)</span>
-                  <select
-                    className="field__input"
-                    value={createForm.experiment_id}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({ ...p, experiment_id: e.target.value }))
-                    }
-                  >
-                    <option value="">None (global agent run)</option>
-                    {experiments.map((experiment) => (
-                      <option key={experiment.id} value={experiment.id}>
-                        {experiment.name || "Untitled"} · {experiment.id.slice(0, 8)} ·{" "}
-                        {formatDateCompact(experiment.updated_at || experiment.created_at)}
-                      </option>
-                    ))}
-                  </select>
-                  {experiments.length === 0 ? (
-                    <div className="panel__muted">
-                      No experiments found in current scope. You can still create a global run.
-                    </div>
-                  ) : null}
-                </label>
-
-                <details className="admin-advanced-defaults">
-                  <summary>Manual experiment id (advanced)</summary>
-                  <label className="field">
-                    <span className="field__label">Override with UUID</span>
-                    <input
-                      className="field__input"
-                      value={createForm.experiment_id}
-                      onChange={(e) =>
-                        setCreateForm((p) => ({ ...p, experiment_id: e.target.value.trim() }))
-                      }
-                      placeholder="paste experiment uuid"
-                    />
-                  </label>
-                </details>
-
-                <label className="field field--row">
-                  <span className="field__label">Requires approval</span>
-                  <input
-                    type="checkbox"
-                    checked={createForm.requires_approval}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({ ...p, requires_approval: e.target.checked }))
-                    }
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Run mode</span>
-                  <select
-                    className="field__input"
-                    value={createForm.run_mode}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({
-                        ...p,
-                        run_mode:
-                          e.target.value === "auto_execute_safe"
-                            ? "auto_execute_safe"
-                            : "plan_only",
-                      }))
-                    }
-                  >
-                    <option value="plan_only">Plan only (recommended)</option>
-                    <option value="auto_execute_safe">Auto-execute safe steps</option>
-                  </select>
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Allowed capabilities</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={createForm.allowed_capabilities.join("\n")}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({
-                        ...p,
-                        allowed_capabilities: e.target.value
-                          .split("\n")
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      }))
-                    }
-                    rows={7}
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Objective (JSON)</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={formatJsonPreview(createForm.objective)}
-                    onChange={(e) => {
-                      try {
-                        const parsed = JSON.parse(e.target.value || "{}");
-                        setCreateForm((p) => ({ ...p, objective: parsed }));
-                      } catch {
-                        // keep last valid json
-                      }
-                    }}
-                    rows={8}
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Budgets (JSON)</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={formatJsonPreview(createForm.budgets)}
-                    onChange={(e) => {
-                      try {
-                        const parsed = JSON.parse(e.target.value || "{}");
-                        setCreateForm((p) => ({ ...p, budgets: parsed }));
-                      } catch {
-                        // keep last valid json
-                      }
-                    }}
-                    rows={6}
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">Approval policy (JSON)</span>
-                  <textarea
-                    className="field__input field__textarea"
-                    value={formatJsonPreview(createForm.approval_policy)}
-                    onChange={(e) => {
-                      try {
-                        const parsed = JSON.parse(e.target.value || "{}");
-                        setCreateForm((p) => ({ ...p, approval_policy: parsed }));
-                      } catch {
-                        // keep last valid json
-                      }
-                    }}
-                    rows={6}
-                  />
-                </label>
-              </div>
-              <div className="drawer__footer">
-                <button className="button button--ghost" onClick={() => setDrawerOpen(false)}>
-                  Cancel
-                </button>
-                <button
-                  className="button button--ghost"
-                  onClick={() => handleCreate()}
-                  disabled={!userId || loading}
-                >
-                  Create run
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <CreateAgentRunDrawer
+          open={drawerOpen}
+          experiments={experiments}
+          form={createForm}
+          loading={loading}
+          canCreate={Boolean(userId)}
+          onClose={() => setDrawerOpen(false)}
+          onFormChange={(patch) => setCreateForm((current) => ({ ...current, ...patch }))}
+          onCreate={handleCreate}
+        />
 
         <ActionDiffDrawer
           open={diffDrawerOpen}

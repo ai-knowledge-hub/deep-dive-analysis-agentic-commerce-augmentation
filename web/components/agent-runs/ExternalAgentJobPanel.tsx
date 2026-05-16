@@ -1,0 +1,109 @@
+"use client";
+
+import React from "react";
+import type { ExternalAgentJobOperatorDetail } from "../../lib/types";
+
+type Props = {
+  externalAgentJob: ExternalAgentJobOperatorDetail | null;
+  verificationBusy: boolean;
+  loading: boolean;
+  onVerifyReceipt: () => void;
+};
+
+export function ExternalAgentJobPanel({
+  externalAgentJob,
+  verificationBusy,
+  loading,
+  onVerifyReceipt,
+}: Props) {
+  return (
+    <section className="control-section">
+      <div className="control-section__header">
+        <div>
+          <span className="control-section__eyebrow">External agent</span>
+          <h4 className="control-section__title">Job supervision</h4>
+        </div>
+        <span className={`control-chip ${receiptChipClass(externalAgentJob)}`}>
+          {externalAgentJob?.verification?.valid
+            ? "Receipt verified"
+            : externalAgentJob?.latest_receipt
+              ? "Receipt unverified"
+              : "No receipt"}
+        </span>
+      </div>
+      <p className="panel__muted">
+        This run was submitted by an external machine principal. Operator controls act on the
+        linked run; the machine-facing job contract remains scoped to the creating principal.
+      </p>
+      {externalAgentJob ? (
+        <>
+          <div className="panel__meta-strip panel__meta-strip--flat">
+            <div>
+              <strong>Job</strong>: {externalAgentJob.job.id.slice(0, 8)}
+            </div>
+            <div>
+              <strong>Principal</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
+            </div>
+            <div>
+              <strong>Profile</strong>: {externalAgentJob.job.agent_profile_id ?? "none"}
+            </div>
+            <div>
+              <strong>Idempotency</strong>: {externalAgentJob.job.idempotency_key ?? "missing"}
+            </div>
+            <div>
+              <strong>Job status</strong>: {externalAgentJob.job.status ?? "unknown"}
+            </div>
+            <div>
+              <strong>Tool</strong>: {externalAgentJob.job.requested_tool_id ?? "workflow"}
+            </div>
+            <div>
+              <strong>Skill</strong>: {externalAgentJob.job.requested_skill_id ?? "auto-selected"}
+            </div>
+            <div>
+              <strong>Receipts</strong>: {externalAgentJob.receipts.length}
+            </div>
+          </div>
+          {externalAgentJob.latest_receipt ? (
+            <div className="panel__notice">
+              Latest receipt: {String(externalAgentJob.latest_receipt.receipt_type ?? "external job")} ·{" "}
+              {String(externalAgentJob.latest_receipt.status ?? "unknown")} ·{" "}
+              {String(externalAgentJob.latest_receipt.receipt_context_hash ?? "").slice(0, 12)}
+              <button
+                type="button"
+                className="button button--ghost button--sm"
+                onClick={onVerifyReceipt}
+                disabled={verificationBusy || loading}
+              >
+                {verificationBusy ? "Verifying" : "Verify receipt"}
+              </button>
+            </div>
+          ) : (
+            <div className="panel__notice panel__notice--warning">
+              No stored receipt is available yet. Ask the external agent to refresh its job receipt
+              when an auditable checkpoint is needed.
+            </div>
+          )}
+          {externalAgentJob.verification?.blockers?.length ? (
+            <ul className="panel__list panel__list--compact">
+              {externalAgentJob.verification.blockers.map((blocker) => (
+                <li key={blocker} className="agent-guardrail-reason">
+                  {blocker}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : (
+        <div className="panel__notice panel__notice--warning">
+          No external-agent job record is linked to this run yet.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function receiptChipClass(externalAgentJob: ExternalAgentJobOperatorDetail | null) {
+  if (externalAgentJob?.verification?.valid) return "control-chip--success";
+  if (externalAgentJob?.latest_receipt) return "control-chip--attention";
+  return "";
+}
