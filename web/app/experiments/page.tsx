@@ -85,6 +85,7 @@ import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetails
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
 import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
+import { ExperimentMetricsPanel } from "../../components/experiments/ExperimentMetricsPanel";
 import { GeneratedQueryPreviewPanel } from "../../components/experiments/GeneratedQueryPreviewPanel";
 import { LabVariantAutomationPanel } from "../../components/experiments/LabVariantAutomationPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
@@ -2458,30 +2459,6 @@ function ExperimentsPageContent() {
   }, [metrics, metricsTrendMetric]);
   const recentMetrics = useMemo(() => metricsHistory.slice(0, 5), [metricsHistory]);
 
-  const renderSparkline = (values: number[]) => {
-    if (values.length === 0) return null;
-    const width = 120;
-    const height = 36;
-    const max = Math.max(...values, 1);
-    const min = Math.min(...values, 0);
-    const range = max - min || 1;
-    const points = values.map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${x},${y}`;
-    });
-    return (
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <polyline
-          fill="none"
-          stroke="rgba(28, 200, 134, 0.7)"
-          strokeWidth="2"
-          points={points.join(" ")}
-        />
-      </svg>
-    );
-  };
-
   const formatTimestamp = useCallback((value?: string | null) => {
     if (!value) return "—";
     const date = new Date(value);
@@ -2969,92 +2946,20 @@ function ExperimentsPageContent() {
             }}
           />
 
-          <section className="panel__card panel__card--secondary" ref={metricsSectionRef}>
-            <div className="panel__header">
-              <h3>Metrics</h3>
-              <div className="panel__meta">
-                <span className="panel__muted">Experiment-scoped (compact)</span>
-              </div>
-            </div>
-            <div className="panel__meta panel__meta--stack">
-              <span className="panel__muted">
-                Entries: {metricsHistory.length}
-                {latestMetricEntry?.created_at
-                  ? ` · Last update: ${new Date(latestMetricEntry.created_at).toLocaleString()}`
-                  : ""}
-              </span>
-              {renderSparkline(metricsTrend) ?? (
-                <span className="panel__muted">No trend yet.</span>
-              )}
-            </div>
-            <div className="panel__actions">
-              <button
-                type="button"
-                className={`panel__action panel__action--ghost ${
-                  metricsTrendMetric === "win_rate" ? "is-active" : ""
-                }`}
-                onClick={() => setMetricsTrendMetric("win_rate")}
-              >
-                Win rate
-              </button>
-              <button
-                type="button"
-                className={`panel__action panel__action--ghost ${
-                  metricsTrendMetric === "avg_score" ? "is-active" : ""
-                }`}
-                onClick={() => setMetricsTrendMetric("avg_score")}
-              >
-                Avg score
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() => setMetricsHistoryExpanded((open) => !open)}
-                disabled={metricsHistory.length === 0}
-              >
-                {metricsHistoryExpanded ? "Hide history" : "Show history"}
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() => router.push("/overview")}
-              >
-                Open Overview analytics
-              </button>
-            </div>
-            {metricsHistory.length === 0 ? (
-              <p className="panel__empty">No metrics history yet.</p>
-            ) : !metricsHistoryExpanded ? (
-              <p className="panel__muted">
-                History is collapsed to keep this page focused on execution.
-              </p>
-            ) : (
-              <ul className="panel__list">
-                {recentMetrics.map((metric) => {
-                  const values = (metric.metrics ?? {}) as Record<string, unknown>;
-                  const variantLabel =
-                    variants.find((variant) => variant.id === metric.variant_id)
-                      ?.label ?? metric.variant_id;
-                  return (
-                    <li key={metric.id}>
-                      <div className="panel__meta">
-                        <span>{variantLabel}</span>
-                        <span className="panel__muted">
-                          {metric.created_at
-                            ? new Date(metric.created_at).toLocaleDateString()
-                            : ""}
-                        </span>
-                      </div>
-                      <span className="panel__muted">
-                        Win rate: {renderMetricValue(values.win_rate)} · Avg score:{" "}
-                        {renderMetricValue(values.avg_score)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <ExperimentMetricsPanel
+            ref={metricsSectionRef}
+            metricsHistory={metricsHistory}
+            recentMetrics={recentMetrics}
+            variants={variants}
+            metricsTrend={metricsTrend}
+            metricsTrendMetric={metricsTrendMetric}
+            metricsHistoryExpanded={metricsHistoryExpanded}
+            latestMetricCreatedAt={latestMetricEntry?.created_at}
+            renderMetricValue={renderMetricValue}
+            onTrendMetricChange={setMetricsTrendMetric}
+            onHistoryExpandedChange={setMetricsHistoryExpanded}
+            onOpenOverview={() => router.push("/overview")}
+          />
 
           <section className="panel__card panel__card--primary panel__card--full-row">
             <div className="panel__header">
