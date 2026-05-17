@@ -74,12 +74,7 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
-import { ExperimentOutcomeReview } from "../../components/experiments/ExperimentOutcomeReview";
-import { ExperimentRunSettings } from "../../components/experiments/ExperimentRunSettings";
 import { ExperimentHistoryPanel } from "../../components/experiments/ExperimentHistoryPanel";
-import { ExperimentVariantRunItem } from "../../components/experiments/ExperimentVariantRunItem";
-import { NextTestNotice } from "../../components/experiments/NextTestNotice";
-import { OutcomeSnapshot } from "../../components/experiments/OutcomeSnapshot";
 import { VariantCreationPanel } from "../../components/experiments/VariantCreationPanel";
 import {
   BatteryGenerationReportNotice,
@@ -94,6 +89,7 @@ import { GeneratedQueryPreviewPanel } from "../../components/experiments/Generat
 import { LabVariantAutomationPanel } from "../../components/experiments/LabVariantAutomationPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
+import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
 import {
   buildExperimentHref,
@@ -2873,95 +2869,47 @@ function ExperimentsPageContent() {
               />
                 </>
               )}
-              <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
-              <p className="panel__step-helper">
-                Runs in retrieval-backed mode use frozen protocol snapshots to keep variant comparisons fair.
-              </p>
-              <ExperimentRunSettings
+              <VariantRunPanel
+                labMode={labMode}
+                showManualControls={showManualControls}
+                variants={variants}
+                metricsByVariant={metricsByVariant}
+                hypothesisLabelById={hypothesisLabelById}
+                hypothesisStatementById={hypothesisStatementById}
+                expandedHypothesisId={expandedHypothesisId}
+                expandedVariantId={expandedVariantId}
+                runningVariantId={runningVariantId}
+                canRunVariantTests={canRunVariantTests}
                 runMode={experimentRunMode}
                 retrievalMaxResults={retrievalMaxResults}
                 currentProtocolSnapshotVersion={currentProtocolSnapshotVersion}
                 runVariantDisabledReason={runVariantDisabledReason}
-                onRunModeChange={setExperimentRunMode}
-                onRetrievalMaxResultsChange={setRetrievalMaxResults}
-              />
-              {variants.length === 0 ? (
-                <p className="panel__empty">Add variants to run experiments.</p>
-              ) : (
-                <ul className="panel__list">
-                  {variants.map((variant) => {
-                    const resolvedDescription = resolveVariantDescription(variant);
-                    const hypothesisId = variant.hypothesis_id ?? null;
-                    const tested = metricsByVariant.has(variant.id);
-                    const metricValues = tested
-                      ? (((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
-                          string,
-                          unknown
-                        >) ?? null)
-                      : null;
-                    return (
-                      <li key={variant.id}>
-                        <ExperimentVariantRunItem
-                          variant={variant}
-                          tested={tested}
-                          hypothesisLabel={
-                            hypothesisId
-                              ? hypothesisLabelById.get(hypothesisId) ?? "Hypothesis-linked"
-                              : "Hypothesis-linked"
-                          }
-                          hypothesisStatement={
-                            hypothesisId
-                              ? (hypothesisStatementById.get(hypothesisId) ?? null)
-                              : null
-                          }
-                          hypothesisExpanded={
-                            Boolean(hypothesisId) && expandedHypothesisId === hypothesisId
-                          }
-                          copyExpanded={expandedVariantId === variant.id}
-                          resolvedDescription={resolvedDescription}
-                          metricValues={metricValues}
-                          runButtonProminent={!(labMode === "lab" && !showManualControls)}
-                          running={runningVariantId === variant.id}
-                          canRun={canRunVariantTests}
-                          renderMetricValue={renderMetricValue}
-                          onToggleHypothesis={() =>
-                            setExpandedHypothesisId((current) =>
-                              current === hypothesisId ? null : hypothesisId,
-                            )
-                          }
-                          onToggleCopy={() =>
-                            setExpandedVariantId((current) =>
-                              current === variant.id ? null : variant.id,
-                            )
-                          }
-                          onRun={() => handleRunVariant(variant.id)}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <NextTestNotice
                 nextTest={nextTest}
-                canRunVariantTests={canRunVariantTests}
-                runningVariantId={runningVariantId}
+                nextTestStatus={nextTestStatus}
                 isSubmitting={isSubmitting}
                 isCreatingSuggestedVariant={isCreatingSuggestedVariant}
-                onRunRecommended={handleRunRecommended}
-                onCreateSuggestedVariant={handleCreateSuggestedVariant}
-              />
-              {nextTestStatus ? (
-                <p className="panel__success">{nextTestStatus}</p>
-              ) : null}
-              <OutcomeSnapshot
-                snapshot={outcomeSnapshot}
+                outcomeSnapshot={outcomeSnapshot}
                 hasValidationSignals={hasValidationSignals}
-                onOpenValidation={() => router.push(validationHref)}
-              />
-              <ExperimentOutcomeReview
                 latestMetric={latestMetric}
                 experimentGapSummary={experimentGapSummary}
                 renderMetricValue={renderMetricValue}
+                resolveVariantDescription={resolveVariantDescription}
+                onRunModeChange={setExperimentRunMode}
+                onRetrievalMaxResultsChange={setRetrievalMaxResults}
+                onToggleHypothesis={(hypothesisId) =>
+                  setExpandedHypothesisId((current) =>
+                    current === hypothesisId ? null : hypothesisId,
+                  )
+                }
+                onToggleCopy={(variantId) =>
+                  setExpandedVariantId((current) =>
+                    current === variantId ? null : variantId,
+                  )
+                }
+                onRunVariant={handleRunVariant}
+                onRunRecommended={handleRunRecommended}
+                onCreateSuggestedVariant={handleCreateSuggestedVariant}
+                onOpenValidation={() => router.push(validationHref)}
               />
             </VariantsIterationPanel>
 
