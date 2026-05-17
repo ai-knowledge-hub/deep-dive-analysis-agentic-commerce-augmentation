@@ -86,6 +86,7 @@ import { AgentOperatorModePanel } from "../../components/experiments/AgentOperat
 import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { ExperimentMetricsPanel } from "../../components/experiments/ExperimentMetricsPanel";
+import { ExperimentValidationPanel } from "../../components/experiments/ExperimentValidationPanel";
 import { GeneratedQueryPreviewPanel } from "../../components/experiments/GeneratedQueryPreviewPanel";
 import { LabVariantAutomationPanel } from "../../components/experiments/LabVariantAutomationPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
@@ -2961,59 +2962,17 @@ function ExperimentsPageContent() {
             onOpenOverview={() => router.push("/overview")}
           />
 
-          <section className="panel__card panel__card--primary panel__card--full-row">
-            <div className="panel__header">
-              <h3>Step 7 · Validate synthetic and observed results</h3>
-              <span
-                className={`panel__badge ${
-                  hasValidationSignals ? "panel__badge--success" : "panel__badge--secondary"
-                }`}
-              >
-                {hasValidationSignals ? "Validation started" : "Validation pending"}
-              </span>
-            </div>
-            <p className="panel__muted">
-              Validation is required to ground lab signals with observed evidence and build
-              decision trust.
-            </p>
-            <div className="panel__meta panel__meta--stack">
-              <span className="panel__muted">
-                Logged: {validationSummary?.total_logged ?? 0} · Verified:{" "}
-                {validationSummary?.verified_runs ?? 0} · Accuracy:{" "}
-                {typeof validationSummary?.accuracy === "number"
-                  ? `${Math.round(validationSummary.accuracy * 100)}%`
-                  : "—"}
-              </span>
-              <span className="panel__muted">
-                Observed logs: {validationSummary?.observed_signals_logged ?? 0} · Observed
-                accuracy:{" "}
-                {typeof validationSummary?.observed_accuracy === "number"
-                  ? `${Math.round(validationSummary.observed_accuracy * 100)}%`
-                  : "—"}
-              </span>
-            </div>
-            <div className="panel__actions">
-              <button
-                type="button"
-                className="panel__action panel__action--prominent"
-                onClick={() => router.push(validationHref)}
-              >
-                Open Validation
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() =>
-                  variantsSectionRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  })
-                }
-              >
-                Back to variants (Step 8)
-              </button>
-            </div>
-          </section>
+          <ExperimentValidationPanel
+            hasValidationSignals={hasValidationSignals}
+            validationSummary={validationSummary}
+            onOpenValidation={() => router.push(validationHref)}
+            onBackToVariants={() =>
+              variantsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
+            }
+          />
 
           {brandId ? (
             validationSummary?.unlock_ready ? (
