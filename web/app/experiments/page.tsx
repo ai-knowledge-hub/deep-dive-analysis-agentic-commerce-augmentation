@@ -91,8 +91,10 @@ import { AgentOperatorModePanel } from "../../components/experiments/AgentOperat
 import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { GeneratedQueryPreviewPanel } from "../../components/experiments/GeneratedQueryPreviewPanel";
+import { LabVariantAutomationPanel } from "../../components/experiments/LabVariantAutomationPanel";
 import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
+import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -2799,113 +2801,31 @@ function ExperimentsPageContent() {
           </ExperimentSetupFlowPanel>
 
           <div className="detail__grid">
-            <section className="panel__card panel__card--primary panel__card--full-row" ref={variantsSectionRef}>
-              <div className="panel__header">
-                <h3>{labMode === "lab" ? "Variants and Iteration" : "Variants"}</h3>
-                <div className="panel__meta">
-                  {variants.length > 0 && (
-                    <span className="panel__badge">{variants.length}</span>
-                  )}
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={handleRecommendNextTest}
-                    disabled={!selectedExperimentId || isRecommending}
-                  >
-                    {isRecommending ? "Recommending…" : "Recommend next test"}
-                  </button>
-                </div>
-              </div>
-              <p className="panel__muted">
-                Variants are copy candidates tested against the same query battery.
-              </p>
-              <p className="panel__subheading">Step 4 · Create variants</p>
-              <p className="panel__step-helper">
-                {labMode === "lab"
-                  ? "Automation-first: generate candidate copy, then create and run quickly."
-                  : "Choose a source, shape candidate copy, then add the variant."}
-              </p>
-              <div className="variant-flow">
-                <span className="variant-flow__step is-active">1. Define</span>
-                <span className="variant-flow__step is-active">2. Create</span>
-                <span
-                  className={`variant-flow__step ${
-                    variants.length > 0 ? "is-active" : ""
-                  }`}
-                >
-                  3. Run
-                </span>
-              </div>
+            <VariantsIterationPanel
+              ref={variantsSectionRef}
+              labMode={labMode}
+              variantCount={variants.length}
+              selectedExperimentId={selectedExperimentId}
+              isRecommending={isRecommending}
+              onRecommendNextTest={handleRecommendNextTest}
+            >
               {labMode === "lab" && !showManualControls ? (
-                <section className="panel__notice panel__notice--info">
-                  <strong>Lab iteration path:</strong> generate candidates, create the selected
-                  one, then run it.
-                  <div className="panel__actions panel__actions--priority">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--prominent"
-                      onClick={() =>
-                        hasValidationSignals
-                          ? void handleGenerateLoopVariants()
-                          : void handleGenerateColdStartVariants()
-                      }
-                      disabled={
-                        !experimentForm.batteryId ||
-                        queries.length === 0 ||
-                        isGeneratingLoopVariant
-                      }
-                    >
-                      {isGeneratingLoopVariant
-                        ? "Generating candidates…"
-                        : hasValidationSignals
-                          ? "Generate candidate from loop evidence"
-                          : "Generate cold-start candidate"}
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={handleCreateAndRunVariantFromLoopCandidate}
-                      disabled={loopGeneratedVariants.length === 0 || isSubmitting}
-                    >
-                      {isCreatingLoopCandidateVariant
-                        ? "Creating + running candidate…"
-                        : "Create + run selected candidate"}
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(true)}
-                    >
-                      Show manual variant controls
-                    </button>
-                  </div>
-                  {loopGeneratedVariants.length > 0 ? (
-                    <label className="panel__label">
-                      Selected candidate
-                      <select
-                        className="panel__input"
-                        value={String(selectedLoopCandidateIndex)}
-                        onChange={(event) =>
-                          setSelectedLoopCandidateIndex(Number(event.target.value))
-                        }
-                      >
-                        {loopGeneratedVariants.map((candidate, index) => (
-                          <option key={`${candidate.label}-${index}`} value={String(index)}>
-                            {index + 1}. {candidate.label} · conf {candidate.confidence.toFixed(2)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale ? (
-                    <p className="panel__muted">
-                      {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale}
-                    </p>
-                  ) : null}
-                  {loopGenerationStatus ? (
-                    <p className="panel__success">{loopGenerationStatus}</p>
-                  ) : null}
-                </section>
+                <LabVariantAutomationPanel
+                  hasBatteryId={Boolean(experimentForm.batteryId)}
+                  hasQueries={queries.length > 0}
+                  hasValidationSignals={hasValidationSignals}
+                  isGenerating={isGeneratingLoopVariant}
+                  isSubmitting={isSubmitting}
+                  isCreatingAndRunning={isCreatingLoopCandidateVariant}
+                  generatedVariants={loopGeneratedVariants}
+                  selectedCandidateIndex={selectedLoopCandidateIndex}
+                  generationStatus={loopGenerationStatus}
+                  onGenerateFromLoopEvidence={() => void handleGenerateLoopVariants()}
+                  onGenerateColdStart={() => void handleGenerateColdStartVariants()}
+                  onCreateAndRunSelected={handleCreateAndRunVariantFromLoopCandidate}
+                  onShowManualControls={() => setLabShowManualControls(true)}
+                  onSelectedCandidateIndexChange={setSelectedLoopCandidateIndex}
+                />
               ) : (
                 <>
               <VariantCreationPanel
@@ -3043,7 +2963,7 @@ function ExperimentsPageContent() {
                 experimentGapSummary={experimentGapSummary}
                 renderMetricValue={renderMetricValue}
               />
-            </section>
+            </VariantsIterationPanel>
 
             <section className="panel__card panel__card--secondary panel__card--full-row">
               <div className="panel__header">
