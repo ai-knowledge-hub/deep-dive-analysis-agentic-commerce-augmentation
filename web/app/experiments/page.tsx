@@ -86,6 +86,7 @@ import { AgentOperatorModePanel } from "../../components/experiments/AgentOperat
 import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { ExperimentMetricsPanel } from "../../components/experiments/ExperimentMetricsPanel";
+import { ExperimentSchedulingPanel } from "../../components/experiments/ExperimentSchedulingPanel";
 import { ExperimentValidationPanel } from "../../components/experiments/ExperimentValidationPanel";
 import { GeneratedQueryPreviewPanel } from "../../components/experiments/GeneratedQueryPreviewPanel";
 import { LabVariantAutomationPanel } from "../../components/experiments/LabVariantAutomationPanel";
@@ -3013,84 +3014,14 @@ function ExperimentsPageContent() {
             )
           ) : null}
 
-          <section className="panel__card panel__card--secondary panel__card--full-row">
-            <div className="panel__header">
-              <h3>Scheduling</h3>
-            </div>
-            <p className="panel__subheading">Operational scheduling</p>
-            <p className="panel__step-helper">
-              Configure recurring reruns and backfills after the main experiment cycle is set.
-            </p>
-            {selectedExperiment ? (
-              <div className="panel__form">
-                {scheduleStatus ? <p className="panel__success">{scheduleStatus}</p> : null}
-                <label className="panel__label">
-                  Enable schedule
-                  <input
-                    type="checkbox"
-                    checked={scheduleForm.enabled}
-                    onChange={(event) =>
-                      setScheduleForm((prev) => ({
-                        ...prev,
-                        enabled: event.target.checked,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="panel__label">
-                  Interval (minutes)
-                  <input
-                    className="panel__input"
-                    type="number"
-                    min={15}
-                    step={15}
-                    value={scheduleForm.intervalMinutes}
-                    onChange={(event) =>
-                      setScheduleForm((prev) => ({
-                        ...prev,
-                        intervalMinutes: event.target.value,
-                      }))
-                    }
-                    disabled={!scheduleForm.enabled}
-                  />
-                </label>
-                <div className="panel__meta">
-                  <span className="panel__muted">
-                    Last run:{" "}
-                    {selectedExperiment.last_run_at
-                      ? new Date(selectedExperiment.last_run_at).toLocaleString()
-                      : "—"}
-                  </span>
-                  <span className="panel__muted">
-                    Next run:{" "}
-                    {selectedExperiment.next_run_at
-                      ? new Date(selectedExperiment.next_run_at).toLocaleString()
-                      : "—"}
-                  </span>
-                </div>
-                <div className="panel__actions">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--prominent product__tooltip tooltip--below"
-                    data-tooltip="Save interval settings and schedule future due runs."
-                    onClick={handleScheduleSave}
-                  >
-                    Save schedule
-                  </button>
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost product__tooltip tooltip--below"
-                    data-tooltip="Run all variants now and refresh last/next run timestamps."
-                    onClick={handleBackfill}
-                  >
-                    Backfill schedule
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="panel__empty">Select an experiment to schedule reruns.</p>
-            )}
-          </section>
+          <ExperimentSchedulingPanel
+            selectedExperiment={selectedExperiment}
+            scheduleForm={scheduleForm}
+            scheduleStatus={scheduleStatus}
+            onScheduleFormChange={setScheduleForm}
+            onScheduleSave={handleScheduleSave}
+            onBackfill={handleBackfill}
+          />
 
           <div className="detail__note">
             Runs execute the full query battery against the selected variant and
