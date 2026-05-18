@@ -14,7 +14,6 @@ import type {
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
-  AgentRun,
   ValidationSummary,
   QueryBatteryQuery,
   QueryBatteryCandidate,
@@ -57,7 +56,6 @@ import {
   getSimulationRun,
   getExperimentValidationSummary,
   listCopyRevisions,
-  listAgentRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -89,6 +87,7 @@ import { useExperimentContextData } from "../../components/experiments/useExperi
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
+import { useLatestExperimentAgentRun } from "../../components/experiments/useLatestExperimentAgentRun";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -234,7 +233,6 @@ function ExperimentsPageContent() {
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
     null,
   );
-  const [latestAgentRun, setLatestAgentRun] = useState<AgentRun | null>(null);
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
@@ -315,6 +313,7 @@ function ExperimentsPageContent() {
     productId,
     userId,
   });
+  const latestAgentRun = useLatestExperimentAgentRun(selectedExperimentId, userId);
   const showManualControls = labMode === "manual" || labShowManualControls;
   const experimentSnapshots = useExperimentSnapshots(experiments, userId);
   const runExperimentWithSelectedMode = useCallback(
@@ -465,24 +464,6 @@ function ExperimentsPageContent() {
       })
       .catch(() => setValidationSummary(null));
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
-
-  useEffect(() => {
-    if (!userId || !selectedExperimentId) {
-      setLatestAgentRun(null);
-      return;
-    }
-    void listAgentRuns(
-      {
-        experiment_id: selectedExperimentId,
-        limit: 1,
-      },
-      userId,
-    )
-      .then((response) => {
-        setLatestAgentRun((response.runs ?? [])[0] ?? null);
-      })
-      .catch(() => setLatestAgentRun(null));
-  }, [selectedExperimentId, userId]);
 
   useEffect(() => {
     if (selectedExperimentId) return;
