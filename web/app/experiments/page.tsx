@@ -4,10 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
-  AdminProduct,
   BrandBelief,
   CopyRevision,
-  Experiment,
   ExperimentExecutionState,
   ExperimentHypothesis,
   ExperimentMetric,
@@ -16,17 +14,13 @@ import type {
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
-  AgentRun,
   ValidationSummary,
-  QueryBattery,
   QueryBatteryQuery,
   QueryBatteryCandidate,
   AudienceSegment,
   QueryBatteryMetrics,
-  SessionSummary,
   SimulationGapReport,
   SimulationRunDetailResponse,
-  SimulationRunSummary,
 } from "../../lib/types";
 import {
   createBattery,
@@ -41,7 +35,6 @@ import {
   generateBatteryQueries,
   addBatteryQuery,
   getBatteryMetrics,
-  listConversationSessions,
   listBatteries,
   updateBattery,
   updateBatteryQuery,
@@ -60,39 +53,47 @@ import {
   backfillExperiment,
   getNextTestRecommendation,
   listExperimentRecommendations,
-  getLatestBrandBelief,
-  listBrandBeliefs,
   getSimulationRun,
   getExperimentValidationSummary,
-  listAdminProducts,
-  listSimulationRuns,
   listCopyRevisions,
-  listAgentRuns,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
-import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
-import { ExperimentOutcomeReview } from "../../components/experiments/ExperimentOutcomeReview";
-import { ExperimentRunSettings } from "../../components/experiments/ExperimentRunSettings";
 import { ExperimentHistoryPanel } from "../../components/experiments/ExperimentHistoryPanel";
-import { ExperimentVariantRunItem } from "../../components/experiments/ExperimentVariantRunItem";
-import { NextTestNotice } from "../../components/experiments/NextTestNotice";
-import { OutcomeSnapshot } from "../../components/experiments/OutcomeSnapshot";
 import { VariantCreationPanel } from "../../components/experiments/VariantCreationPanel";
 import {
   BatteryGenerationReportNotice,
   type BatteryGenerationReport,
 } from "../../components/experiments/BatteryGenerationReportNotice";
-import { FlowStatusPanel } from "../../components/experiments/FlowStatusPanel";
+import { BatteryCreationPanel } from "../../components/experiments/BatteryCreationPanel";
+import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetailsPanel";
+import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
+import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
+import { ExperimentBeliefUnlockPanel } from "../../components/experiments/ExperimentBeliefUnlockPanel";
+import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
+import { ExperimentMetricsPanel } from "../../components/experiments/ExperimentMetricsPanel";
+import { ExperimentSchedulingPanel } from "../../components/experiments/ExperimentSchedulingPanel";
+import { ExperimentValidationPanel } from "../../components/experiments/ExperimentValidationPanel";
+import { GeneratedQueryPreviewPanel } from "../../components/experiments/GeneratedQueryPreviewPanel";
+import { LabVariantAutomationPanel } from "../../components/experiments/LabVariantAutomationPanel";
+import { LabLoopPanel } from "../../components/experiments/LabLoopPanel";
+import { OrchestratorRecommendationsPanel } from "../../components/experiments/OrchestratorRecommendationsPanel";
+import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
+import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
+import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
+import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
+import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
+import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
+import { useLatestExperimentAgentRun } from "../../components/experiments/useLatestExperimentAgentRun";
 import {
   buildExperimentHref,
   buildRunsHref,
   buildSimulationHref,
   buildValidationHref,
 } from "../../lib/routes";
-import { buildTenantStorageKey } from "../../lib/storage";
 
 function ExperimentsPageContent() {
   const router = useRouter();
@@ -106,14 +107,8 @@ function ExperimentsPageContent() {
       ? window.localStorage.getItem("client_id")
       : null) ??
     undefined;
-  const experimentsDraftStorageKey = useMemo(
-    () => buildTenantStorageKey("experiments_draft", userId, storageClientId),
-    [storageClientId, userId],
-  );
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
@@ -123,7 +118,6 @@ function ExperimentsPageContent() {
     "list" | "timeline" | "trends"
   >("list");
 
-  const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
   const [variants, setVariants] = useState<ExperimentVariant[]>([]);
   const [runs, setRuns] = useState<ExperimentRun[]>([]);
@@ -135,19 +129,10 @@ function ExperimentsPageContent() {
   const [recommendations, setRecommendations] = useState<
     ExperimentRecommendation[]
   >([]);
-  const [experimentSnapshots, setExperimentSnapshots] = useState<
-    Record<
-      string,
-      { winnerLabel?: string; winRate?: number | null; measuredAt?: string | null }
-    >
-  >({});
   const [simulationDetails, setSimulationDetails] = useState<
     Record<string, SimulationRunDetailResponse["run"]>
   >({});
-  const [beliefCount, setBeliefCount] = useState<number>(0);
-  const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
-  const [batteries, setBatteries] = useState<QueryBattery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
     "simulation" | "retrieval_backed"
@@ -182,7 +167,6 @@ function ExperimentsPageContent() {
   const [generatedCandidates, setGeneratedCandidates] = useState<
     (QueryBatteryCandidate & { selected: boolean })[]
   >([]);
-  const [productDetail, setProductDetail] = useState<AdminProduct | null>(null);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
     batteryId: "",
@@ -249,11 +233,10 @@ function ExperimentsPageContent() {
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
     null,
   );
-  const [latestAgentRun, setLatestAgentRun] = useState<AgentRun | null>(null);
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
-  const [restoreDraft, setRestoreDraft] = useState<{
+  type ExperimentDraft = {
     labMode?: "lab" | "manual";
     selectedExperimentId?: string | null;
     experimentForm?: typeof experimentForm;
@@ -266,14 +249,74 @@ function ExperimentsPageContent() {
     batterySeedUseCases?: string;
     batteryUseLlm?: boolean;
     advancedOverridesOpen?: boolean;
-  } | null>(null);
-  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
-  const autosaveEnabled = useRef(false);
+  };
+  const draftPayload = useMemo<ExperimentDraft>(
+    () => ({
+      labMode,
+      selectedExperimentId,
+      experimentForm,
+      variantForm,
+      variantAdvancedOpen,
+      batteryForm,
+      batteryEdit,
+      batterySeedQueries,
+      batterySeedFeatures,
+      batterySeedUseCases,
+      batteryUseLlm,
+      advancedOverridesOpen,
+    }),
+    [
+      advancedOverridesOpen,
+      batteryEdit,
+      batteryForm,
+      batterySeedFeatures,
+      batterySeedQueries,
+      batterySeedUseCases,
+      batteryUseLlm,
+      experimentForm,
+      labMode,
+      selectedExperimentId,
+      variantAdvancedOpen,
+      variantForm,
+    ],
+  );
+  const {
+    restoreDraft,
+    showRestorePrompt,
+    markRestored,
+    dismissDraft,
+  } = useExperimentDraft<ExperimentDraft>({
+    userId,
+    storageClientId,
+    payload: draftPayload,
+  });
   const variantsSectionRef = useRef<HTMLElement | null>(null);
   const runsSectionRef = useRef<HTMLDivElement | null>(null);
   const metricsSectionRef = useRef<HTMLElement | null>(null);
 
+  const {
+    sessions,
+    setSessions,
+    simulationRuns,
+    setSimulationRuns,
+    batteries,
+    setBatteries,
+    experiments,
+    setExperiments,
+  } = useExperimentInitialLists({
+    userId,
+    clientId: storageClientId,
+    productId,
+    selectedExperimentId,
+  });
+  const { productDetail, beliefCount, latestBelief } = useExperimentContextData({
+    brandId,
+    productId,
+    userId,
+  });
+  const latestAgentRun = useLatestExperimentAgentRun(selectedExperimentId, userId);
   const showManualControls = labMode === "manual" || labShowManualControls;
+  const experimentSnapshots = useExperimentSnapshots(experiments, userId);
   const runExperimentWithSelectedMode = useCallback(
     async (experimentId: string, variantId: string) => {
       const parsedRetrievalLimit = Number.parseInt(retrievalMaxResults, 10);
@@ -306,36 +349,6 @@ function ExperimentsPageContent() {
     setExperimentRunMode("retrieval_backed");
   }, [labMode]);
 
-  useEffect(() => {
-    if (!userId) return;
-    void listConversationSessions(userId).then((response) => {
-      setSessions(response.sessions ?? []);
-    });
-    void listSimulationRuns(userId).then((response) => {
-      setSimulationRuns(response.runs ?? []);
-    });
-  }, [userId, clientId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved =
-      window.localStorage.getItem(experimentsDraftStorageKey) ??
-      window.localStorage.getItem("experiments_draft");
-    if (!saved) {
-      autosaveEnabled.current = true;
-      return;
-    }
-    try {
-      const parsed = JSON.parse(saved);
-      setRestoreDraft(parsed);
-      setShowRestorePrompt(true);
-    } catch {
-      window.localStorage.removeItem(experimentsDraftStorageKey);
-      window.localStorage.removeItem("experiments_draft");
-      autosaveEnabled.current = true;
-    }
-  }, [experimentsDraftStorageKey]);
-
   const handleRestoreDraft = useCallback(() => {
     if (!restoreDraft) return;
     setLabMode(restoreDraft.labMode ?? "lab");
@@ -362,146 +375,8 @@ function ExperimentsPageContent() {
     setBatterySeedUseCases(restoreDraft.batterySeedUseCases ?? "");
     setBatteryUseLlm(Boolean(restoreDraft.batteryUseLlm));
     setAdvancedOverridesOpen(Boolean(restoreDraft.advancedOverridesOpen));
-    setShowRestorePrompt(false);
-    autosaveEnabled.current = true;
-  }, [restoreDraft]);
-
-  const handleDismissDraft = useCallback(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(experimentsDraftStorageKey);
-      window.localStorage.removeItem("experiments_draft");
-    }
-    setRestoreDraft(null);
-    setShowRestorePrompt(false);
-    autosaveEnabled.current = true;
-  }, [experimentsDraftStorageKey]);
-
-  useEffect(() => {
-    void listBatteries(userId, productId ?? undefined).then((response) => {
-      setBatteries(response.batteries ?? []);
-    });
-    void listExperiments(userId, productId ?? undefined).then((response) => {
-      const items = response.experiments ?? [];
-      setExperiments(items);
-    });
-  }, [productId, selectedExperimentId, userId]);
-
-  useEffect(() => {
-    if (!userId || experiments.length === 0) {
-      setExperimentSnapshots({});
-      return;
-    }
-    let active = true;
-    void (async () => {
-      const entries = await Promise.all(
-        experiments.map(async (experiment) => {
-          try {
-            const [metricsResponse, variantsResponse] = await Promise.all([
-              listExperimentMetrics(experiment.id, userId),
-              listExperimentVariants(experiment.id, userId),
-            ]);
-            const metricsList = metricsResponse.metrics ?? [];
-            const variantsList = variantsResponse.variants ?? [];
-            const variantLabelById = new Map(
-              variantsList.map((variant) => [variant.id, variant.label]),
-            );
-            let bestVariantId: string | null = null;
-            let bestWinRate = -1;
-            let measuredAt: string | null = null;
-            metricsList.forEach((metric) => {
-              const rawWinRate = Number((metric.metrics ?? {}).win_rate);
-              if (!Number.isFinite(rawWinRate)) return;
-              if (rawWinRate > bestWinRate) {
-                bestWinRate = rawWinRate;
-                bestVariantId = metric.variant_id ?? null;
-                measuredAt = metric.created_at ?? null;
-              } else if (
-                rawWinRate === bestWinRate &&
-                (metric.created_at ?? "") > (measuredAt ?? "")
-              ) {
-                bestVariantId = metric.variant_id ?? null;
-                measuredAt = metric.created_at ?? null;
-              }
-            });
-            return [
-              experiment.id,
-              {
-                winnerLabel: bestVariantId
-                  ? variantLabelById.get(bestVariantId) ?? bestVariantId
-                  : undefined,
-                winRate: bestWinRate >= 0 ? bestWinRate : null,
-                measuredAt,
-              },
-            ] as const;
-          } catch {
-            return [experiment.id, {}] as const;
-          }
-        }),
-      );
-      if (!active) return;
-      setExperimentSnapshots(Object.fromEntries(entries));
-    })();
-    return () => {
-      active = false;
-    };
-  }, [experiments, userId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!autosaveEnabled.current) return;
-    const payload = {
-      labMode,
-      selectedExperimentId,
-      experimentForm,
-      variantForm,
-      variantAdvancedOpen,
-      batteryForm,
-      batteryEdit,
-      batterySeedQueries,
-      batterySeedFeatures,
-      batterySeedUseCases,
-      batteryUseLlm,
-      advancedOverridesOpen,
-    };
-    window.localStorage.setItem(experimentsDraftStorageKey, JSON.stringify(payload));
-  }, [
-    experimentsDraftStorageKey,
-    labMode,
-    selectedExperimentId,
-    experimentForm,
-    variantForm,
-    variantAdvancedOpen,
-    batteryForm,
-    batteryEdit,
-    batterySeedQueries,
-    batterySeedFeatures,
-    batterySeedUseCases,
-    batteryUseLlm,
-    advancedOverridesOpen,
-  ]);
-
-  useEffect(() => {
-    if (!brandId || !productId || !userId) {
-      setProductDetail(null);
-      return;
-    }
-    let active = true;
-    listAdminProducts(brandId, userId)
-      .then((response) => {
-        if (!active) return;
-        const match = (response.products ?? []).find(
-          (product) => product.id === productId,
-        );
-        setProductDetail(match ?? null);
-      })
-      .catch(() => {
-        if (!active) return;
-        setProductDetail(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [brandId, productId, userId]);
+    markRestored();
+  }, [markRestored, restoreDraft]);
 
   useEffect(() => {
     const targetId = searchParams.get("experiment_id");
@@ -592,24 +467,6 @@ function ExperimentsPageContent() {
   }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
 
   useEffect(() => {
-    if (!userId || !selectedExperimentId) {
-      setLatestAgentRun(null);
-      return;
-    }
-    void listAgentRuns(
-      {
-        experiment_id: selectedExperimentId,
-        limit: 1,
-      },
-      userId,
-    )
-      .then((response) => {
-        setLatestAgentRun((response.runs ?? [])[0] ?? null);
-      })
-      .catch(() => setLatestAgentRun(null));
-  }, [selectedExperimentId, userId]);
-
-  useEffect(() => {
     if (selectedExperimentId) return;
     if (!productId || !experimentForm.batteryId) return;
     const existing = [...experiments]
@@ -656,24 +513,6 @@ function ExperimentsPageContent() {
       cancelled = true;
     };
   }, [runs, simulationDetails, userId]);
-
-  useEffect(() => {
-    if (!brandId) {
-      setBeliefCount(0);
-      setLatestBelief(null);
-      return;
-    }
-    void listBrandBeliefs(brandId, userId, 25)
-      .then((response) => {
-        setBeliefCount((response.beliefs ?? []).length);
-      })
-      .catch(() => setBeliefCount(0));
-    void getLatestBrandBelief(brandId, userId)
-      .then((response) => {
-        setLatestBelief(response.belief ?? null);
-      })
-      .catch(() => setLatestBelief(null));
-  }, [brandId, userId]);
 
   useEffect(() => {
     if (!productId) {
@@ -2452,30 +2291,6 @@ function ExperimentsPageContent() {
   }, [metrics, metricsTrendMetric]);
   const recentMetrics = useMemo(() => metricsHistory.slice(0, 5), [metricsHistory]);
 
-  const renderSparkline = (values: number[]) => {
-    if (values.length === 0) return null;
-    const width = 120;
-    const height = 36;
-    const max = Math.max(...values, 1);
-    const min = Math.min(...values, 0);
-    const range = max - min || 1;
-    const points = values.map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${x},${y}`;
-    });
-    return (
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <polyline
-          fill="none"
-          stroke="rgba(28, 200, 134, 0.7)"
-          strokeWidth="2"
-          points={points.join(" ")}
-        />
-      </svg>
-    );
-  };
-
   const formatTimestamp = useCallback((value?: string | null) => {
     if (!value) return "—";
     const date = new Date(value);
@@ -2632,88 +2447,23 @@ function ExperimentsPageContent() {
                   <button
                     type="button"
                     className="panel__action panel__action--ghost"
-                    onClick={handleDismissDraft}
+                    onClick={dismissDraft}
                   >
                     Dismiss
                   </button>
                 </div>
               </section>
             ) : null}
-            <section className="panel__card panel__card--primary lab-loop">
-            <div className="panel__header">
-              <h3>Lab Loop</h3>
-              <div className="lab-loop__badges">
-                <span className="panel__badge">
-                  {labMode === "lab" ? "Lab mode" : "Manual mode"}
-                </span>
-                {selectedExperimentId ? (
-                  <span className="panel__badge panel__badge--secondary">
-                    Experiment active
-                  </span>
-                ) : null}
-                {selectedExperiment?.battery_id ? (
-                  <span className="panel__badge panel__badge--secondary">
-                    Battery linked
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <p className="lab-loop__meta">
-              {variants.length} variants · {runs.length} runs · {metrics.length} metrics ·{" "}
-              {beliefCount} beliefs
-            </p>
-            <p className="lab-loop__hint">
-              The lab loop turns hypotheses into evidence and updates brand
-              beliefs with every run.
-            </p>
-            {labMode === "lab" ? (
-              <section className="panel__notice panel__notice--info lab-contract">
-                <strong>Lab mode contract:</strong> Automation handles the default path
-                (battery, queries, baseline/hypothesis variants, and optional auto-run).
-                <div className="panel__actions">
-                  <label className="panel__toggle">
-                    <input
-                      type="checkbox"
-                      checked={labAutoRunEnabled}
-                      onChange={(event) => setLabAutoRunEnabled(event.target.checked)}
-                    />
-                    <span>Auto-run baseline + hypothesis after experiment creation</span>
-                  </label>
-                  {!showManualControls ? (
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(true)}
-                    >
-                      Show manual controls
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(false)}
-                    >
-                      Hide manual controls
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={() => {
-                      setLabMode("manual");
-                      setLabShowManualControls(true);
-                      setExperimentStatus(
-                        "Switched to Manual mode for explicit control over each step.",
-                      );
-                    }}
-                  >
-                    Switch to Manual for this experiment
-                  </button>
-                </div>
-              </section>
-            ) : null}
-            <FlowStatusPanel
+            <LabLoopPanel
               labMode={labMode}
+              selectedExperimentId={selectedExperimentId}
+              batteryLinked={Boolean(selectedExperiment?.battery_id)}
+              variantCount={variants.length}
+              runCount={runs.length}
+              metricCount={metrics.length}
+              beliefCount={beliefCount}
+              labAutoRunEnabled={labAutoRunEnabled}
+              showManualControls={showManualControls}
               currentFlowStep={currentFlowStep}
               activeFlowSteps={activeFlowSteps}
               labLoopSteps={labLoopSteps}
@@ -2724,98 +2474,36 @@ function ExperimentsPageContent() {
               showValidationCheckpoint={
                 labMode === "lab" && runs.length > 0 && !hasValidationSignals
               }
+              onLabAutoRunEnabledChange={setLabAutoRunEnabled}
+              onShowManualControlsChange={setLabShowManualControls}
+              onSwitchToManual={() => {
+                setLabMode("manual");
+                setLabShowManualControls(true);
+                setExperimentStatus(
+                  "Switched to Manual mode for explicit control over each step.",
+                );
+              }}
               onOpenBeliefsTimeline={handleOpenBeliefsTimeline}
               onUseLatestBelief={handleUseLatestBelief}
               onRunNextFlowAction={handleRunNextFlowAction}
               onOpenValidation={() => router.push(validationHref)}
             />
-          </section>
-          <section className="panel__card panel__card--secondary">
-            <div className="panel__header">
-              <h3>Agent operator mode</h3>
-              <span className="panel__badge panel__badge--secondary">
-                Experimental
-              </span>
-            </div>
-            <p className="panel__subheading">Optional orchestrated path</p>
-            <p className="panel__step-helper">
-              Use governed automation to run approved capabilities on this experiment.
-              The same protocol gates apply (frozen snapshots, baseline-first, approvals).
-            </p>
-            <div className="panel__meta-strip">
-              <div>
-                <strong>Latest agent run</strong>:{" "}
-                {latestAgentRun
-                  ? `${latestAgentRun.status ?? "unknown"} · ${latestAgentRun.state ?? "unknown"}`
-                  : "none yet"}
-              </div>
-              <div>
-                <strong>Run mode</strong>: {latestAgentRun?.run_mode ?? "plan_only"}
-              </div>
-            </div>
-            <div className="panel__actions panel__actions--priority">
-              <button
-                type="button"
-                className="panel__action panel__action--prominent"
-                onClick={() =>
-                  router.push(runsWorkspaceHref)
-                }
-                disabled={!selectedExperimentId}
-              >
-                Start in Runs
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() => router.push(runsWorkspaceHref)}
-              >
-                View Runs
-              </button>
-            </div>
-          </section>
+            <AgentOperatorModePanel
+              latestAgentRun={latestAgentRun}
+              hasSelectedExperiment={Boolean(selectedExperimentId)}
+              onOpenRuns={() => router.push(runsWorkspaceHref)}
+            />
           {formError ? (
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
-          <section className="panel__card panel__card--primary">
-            <div className="panel__header">
-              <h3>
-                {labMode === "lab"
-                  ? "Lab Setup Flow"
-                  : "Experiment Setup Flow"}
-              </h3>
-              <div className="panel__meta">
-                <button
-                  type="button"
-                  className="panel__action panel__action--ghost"
-                  onClick={() => setSetupFlowCollapsed((open) => !open)}
-                >
-                  {setupFlowCollapsed ? "Expand setup" : "Collapse setup"}
-                </button>
-              </div>
-            </div>
-            <div className="panel__meta">
-              <span className="panel__badge panel__badge--secondary">
-                Protocol snapshot:{" "}
-                {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0
-                  ? `v${currentProtocolSnapshotVersion}`
-                  : "pending"}
-              </span>
-              <span className="panel__badge panel__badge--secondary">
-                Hypotheses:{" "}
-                {executionState?.phases?.hypotheses_ready?.done ? "ready" : "pending"}
-              </span>
-            </div>
-            <p className="panel__subheading">Setup phase · Step 1</p>
-            <p className="panel__muted">
-              {labMode === "lab"
-                ? "Prepare battery and queries first. Experiment context is initialized once and then stays in the background."
-                : "Prepare battery and queries first. Experiment context auto-initializes when Step 4 starts."}
-            </p>
-            {setupFlowCollapsed ? (
-              <p className="panel__empty">
-                Setup is collapsed. Expand to edit battery and query controls.
-              </p>
-            ) : productId ? (
+          <ExperimentSetupFlowPanel
+            labMode={labMode}
+            collapsed={setupFlowCollapsed}
+            hasProduct={Boolean(productId)}
+            protocolSnapshotVersion={currentProtocolSnapshotVersion}
+            hypothesesReady={Boolean(executionState?.phases?.hypotheses_ready?.done)}
+            onCollapsedChange={setSetupFlowCollapsed}
+          >
               <div className="panel__form">
                 {labMode === "lab" && !showManualControls ? (
                   <section className="panel__notice panel__notice--info">
@@ -2833,322 +2521,52 @@ function ExperimentsPageContent() {
                 ) : null}
                 {showManualControls ? (
                   <>
-                {batteryStatus ? (
-                  <p className="panel__success">{batteryStatus}</p>
-                ) : null}
-                <p className="panel__subheading">
-                  Step 1 · Create query battery foundation
-                </p>
-                <label className="panel__label">
-                  Battery name
-                  <input
-                    className="panel__input"
-                    value={batteryForm.name}
-                    onChange={(event) =>
-                      setBatteryForm((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                    placeholder="Baseline coverage"
-                  />
-                </label>
-                <label className="panel__label">
-                  Purpose
-                  <input
-                    className="panel__input"
-                    value={batteryForm.purpose}
-                    onChange={(event) =>
-                      setBatteryForm((prev) => ({
-                        ...prev,
-                        purpose: event.target.value,
-                      }))
-                    }
-                    placeholder="Why this battery exists"
-                  />
-                </label>
-                <label className="panel__label">
-                  Generation mode
-                  <select
-                    className="panel__input"
-                    value={batteryForm.generationMode}
-                    onChange={(event) =>
-                      setBatteryForm((prev) => ({
-                        ...prev,
-                        generationMode: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="bottom_up">Bottom-up</option>
-                    <option value="top_down">Top-down</option>
-                    <option value="hybrid">Hybrid</option>
-                  </select>
-                </label>
-                <label className="panel__toggle">
-                  <input
-                    type="checkbox"
-                    checked={batteryUseLlm}
-                    onChange={(event) => setBatteryUseLlm(event.target.checked)}
-                  />
-                  <span>Use LLM-assisted query generation</span>
-                </label>
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={handleCreateBattery}
-                  disabled={isSubmitting || batteryForm.name.trim() === ""}
-                >
-                  {isSubmitting ? (
-                    <>
-                      Creating battery<span className="button__dots" />
-                    </>
-                  ) : (
-                    "Create battery"
-                  )}
-                </button>
-                {batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata ? (
-                  <div className="panel__notice panel__notice--info">
-                    Bottom-up has weak product metadata. Use Advanced overrides below or we
-                    will offer fallback to top-down at generation time.
-                  </div>
-                ) : null}
-                <details
-                  open={advancedOverridesOpen}
-                  onToggle={(event) =>
-                    setAdvancedOverridesOpen(event.currentTarget.open)
+                <BatteryCreationPanel
+                  status={batteryStatus}
+                  form={batteryForm}
+                  useLlm={batteryUseLlm}
+                  isSubmitting={isSubmitting}
+                  hasBottomUpMetadata={hasBottomUpMetadata}
+                  advancedOverridesOpen={advancedOverridesOpen}
+                  seedQueries={batterySeedQueries}
+                  seedFeatures={batterySeedFeatures}
+                  seedUseCases={batterySeedUseCases}
+                  onFormChange={setBatteryForm}
+                  onUseLlmChange={setBatteryUseLlm}
+                  onAdvancedOverridesOpenChange={setAdvancedOverridesOpen}
+                  onSeedQueriesChange={setBatterySeedQueries}
+                  onSeedFeaturesChange={setBatterySeedFeatures}
+                  onSeedUseCasesChange={setBatterySeedUseCases}
+                  onCreateBattery={handleCreateBattery}
+                />
+                <QueryGenerationPanel
+                  batteries={batteries}
+                  selectedBatteryId={experimentForm.batteryId}
+                  isGenerating={isGeneratingQueries}
+                  disabledReason={queryGenerationDisabledReason}
+                  onBatteryIdChange={(batteryId) =>
+                    setExperimentForm((prev) => ({ ...prev, batteryId }))
                   }
-                >
-                  <summary className="panel__label">
-                    Advanced overrides (optional)
-                  </summary>
-                  <div className="panel__form">
-                    <label className="panel__label">
-                      Seed queries (optional, one per line)
-                      <textarea
-                        className="panel__textarea"
-                        value={batterySeedQueries}
-                        onChange={(event) => setBatterySeedQueries(event.target.value)}
-                        rows={3}
-                      />
-                    </label>
-                    <label className="panel__label">
-                      Seed features (recommended for bottom-up)
-                      <textarea
-                        className="panel__textarea"
-                        value={batterySeedFeatures}
-                        onChange={(event) => setBatterySeedFeatures(event.target.value)}
-                        rows={2}
-                        placeholder="lightweight cushioning, breathable upper, stable heel support"
-                      />
-                    </label>
-                    <label className="panel__label">
-                      Seed use-cases (recommended for bottom-up)
-                      <textarea
-                        className="panel__textarea"
-                        value={batterySeedUseCases}
-                        onChange={(event) => setBatterySeedUseCases(event.target.value)}
-                        rows={2}
-                        placeholder="daily training, long-distance running, injury prevention"
-                      />
-                    </label>
-                  </div>
-                </details>
-                <label className="panel__label">
-                  Generate for battery
-                  <select
-                    className="panel__input"
-                    value={experimentForm.batteryId}
-                    onChange={(event) =>
-                      setExperimentForm((prev) => ({
-                        ...prev,
-                        batteryId: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Select battery</option>
-                    {batteries.map((battery) => (
-                      <option key={battery.id} value={battery.id}>
-                        {battery.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="panel__subheading">Step 2 · Generate queries</p>
-                <button
-                  type="button"
-                  className="panel__action panel__action--prominent"
-                  onClick={() => handleGenerateQueries(experimentForm.batteryId)}
-                  disabled={Boolean(queryGenerationDisabledReason)}
-                >
-                  {isGeneratingQueries ? (
-                    <>
-                      Generating queries<span className="button__dots" />
-                    </>
-                  ) : (
-                    "Generate queries"
-                  )}
-                </button>
-                {queryGenerationDisabledReason ? (
-                  <p className="panel__muted">{queryGenerationDisabledReason}</p>
-                ) : null}
+                  onGenerateQueries={handleGenerateQueries}
+                />
                 <p className="panel__subheading">
                   Step 2a · Review and save battery details and queries
                 </p>
-                <details
+                <BatteryDetailsPanel
                   open={batteryDetailsOpen}
-                  onToggle={(event) =>
-                    setBatteryDetailsOpen(event.currentTarget.open)
-                  }
-                >
-                  <summary className="panel__label">
-                    Battery details and query settings
-                  </summary>
-                  {selectedBattery ? (
-                    <div className="panel__form">
-                      <label className="panel__label">
-                        Battery name
-                        <input
-                          className="panel__input"
-                          value={batteryEdit.name}
-                          onChange={(event) =>
-                            setBatteryEdit((prev) => ({
-                              ...prev,
-                              name: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="panel__label">
-                        Purpose
-                        <input
-                          className="panel__input"
-                          value={batteryEdit.purpose}
-                          onChange={(event) =>
-                            setBatteryEdit((prev) => ({
-                              ...prev,
-                              purpose: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="panel__label">
-                        Status
-                        <select
-                          className="panel__input"
-                          value={batteryEdit.status}
-                          onChange={(event) =>
-                            setBatteryEdit((prev) => ({
-                              ...prev,
-                              status: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="draft">Draft</option>
-                          <option value="active">Active</option>
-                          <option value="paused">Paused</option>
-                        </select>
-                      </label>
-                      {queryStatus ? <p className="panel__success">{queryStatus}</p> : null}
-                      {queries.length === 0 ? (
-                        <p className="panel__empty">No queries yet.</p>
-                      ) : (
-                        <ul className="panel__list">
-                          {queries.map((query) => (
-                            <li key={query.id}>
-                              <div className="panel__meta">
-                                <span>{query.query_text}</span>
-                                <label className="panel__toggle">
-                                  <input
-                                    type="checkbox"
-                                    checked={query.enabled}
-                                    onChange={(event) =>
-                                      handleQueryToggle(
-                                        selectedBattery.id,
-                                        query.id,
-                                        event.target.checked,
-                                      )
-                                    }
-                                  />
-                                  <span>Enabled</span>
-                                </label>
-                                <button
-                                  type="button"
-                                  className="panel__action panel__action--ghost"
-                                  onClick={() =>
-                                    handleQueryDelete(selectedBattery.id, query.id)
-                                  }
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                              <div className="panel__meta">
-                                <span className="panel__muted">Weight</span>
-                                <input
-                                  className="panel__input panel__input--inline"
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  defaultValue={query.weight ?? 1}
-                                  onBlur={(event) =>
-                                    handleQueryWeight(
-                                      selectedBattery.id,
-                                      query.id,
-                                      Number(event.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {batteryMetrics ? (
-                        <div className="panel__metrics">
-                          <p className="panel__muted">
-                            Total: {batteryMetrics.total_queries ?? 0} · Enabled:{" "}
-                            {batteryMetrics.enabled_queries ?? 0} · Unique:{" "}
-                            {batteryMetrics.unique_queries ?? 0}
-                          </p>
-                          <p className="panel__muted">
-                            Redundancy:{" "}
-                            {batteryMetrics.redundancy_rate !== undefined
-                              ? `${Number(batteryMetrics.redundancy_rate) * 100}%`
-                              : "—"}
-                          </p>
-                          <p className="panel__muted">
-                            Quality score:{" "}
-                            {batteryMetrics.quality_score !== undefined
-                              ? `${batteryMetrics.quality_score}/100`
-                              : "—"}
-                            {batteryMetrics.avg_words
-                              ? ` · Avg words: ${batteryMetrics.avg_words}`
-                              : ""}
-                          </p>
-                          {Array.isArray(batteryMetrics.quality_issues) &&
-                          batteryMetrics.quality_issues.length > 0 ? (
-                            <ul className="panel__list panel__list--compact">
-                              {batteryMetrics.quality_issues.map((issue, index) => (
-                                <li key={`${issue}-${index}`}>{issue}</li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="panel__action panel__action--prominent"
-                        onClick={handleUpdateBattery}
-                        disabled={isSubmitting}
-                      >
-                        Save battery details
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="panel__empty">
-                      Select a battery to review details and query settings.
-                    </p>
-                  )}
-                </details>
+                  selectedBattery={selectedBattery}
+                  edit={batteryEdit}
+                  queryStatus={queryStatus}
+                  queries={queries}
+                  metrics={batteryMetrics}
+                  isSubmitting={isSubmitting}
+                  onOpenChange={setBatteryDetailsOpen}
+                  onEditChange={setBatteryEdit}
+                  onQueryToggle={handleQueryToggle}
+                  onQueryDelete={handleQueryDelete}
+                  onQueryWeight={handleQueryWeight}
+                  onUpdateBattery={handleUpdateBattery}
+                />
                 {batteryGenerationReport ? (
                   <BatteryGenerationReportNotice
                     report={batteryGenerationReport}
@@ -3156,142 +2574,28 @@ function ExperimentsPageContent() {
                   />
                 ) : null}
                 {selectedBattery ? (
-                  <details
+                  <AudienceSegmentsPanel
                     open={audienceSegmentsOpen}
-                    onToggle={(event) =>
-                      setAudienceSegmentsOpen(event.currentTarget.open)
-                    }
-                    className="panel__card"
-                  >
-                    <summary className="panel__label">
-                      Audience segments for top-down generation
-                    </summary>
-                    <p className="panel__muted">
-                      These are session-derived behavioral segments used to condition
-                      top-down/hybrid query generation. Disable any segment to exclude it.
-                    </p>
-                    {audienceSegmentsStatus ? (
-                      <p className="panel__status">{audienceSegmentsStatus}</p>
-                    ) : null}
-                    {audienceSegments.length === 0 ? (
-                      <div className="panel__notice panel__notice--info">
-                        No session-derived segments yet. Fallback stays active: canonical
-                        intent spec + product metadata + stored archetypes.
-                      </div>
-                    ) : (
-                      <ul className="panel__list">
-                        {audienceSegments.map((segment) => (
-                          <li key={segment.id}>
-                            <div
-                              className="panel__row"
-                              style={{ justifyContent: "space-between" }}
-                            >
-                              <div>
-                                <strong>{segment.label}</strong>
-                                {typeof segment.support === "number" ? (
-                                  <span className="panel__muted">
-                                    {" "}
-                                    · support {segment.support}
-                                  </span>
-                                ) : null}
-                                {typeof segment.confidence === "number" ? (
-                                  <span className="panel__muted">
-                                    {" "}
-                                    · confidence{" "}
-                                    {Math.round(segment.confidence * 100)}%
-                                  </span>
-                                ) : null}
-                                {segment.description ? (
-                                  <p className="panel__muted">{segment.description}</p>
-                                ) : null}
-                              </div>
-                              <button
-                                type="button"
-                                className="button button--ghost"
-                                onClick={() =>
-                                  handleSegmentToggle(segment.id, !segment.active)
-                                }
-                              >
-                                {segment.active ? "Disable" : "Enable"}
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </details>
+                    status={audienceSegmentsStatus}
+                    segments={audienceSegments}
+                    onOpenChange={setAudienceSegmentsOpen}
+                    onSegmentToggle={handleSegmentToggle}
+                  />
                 ) : null}
-                {generatedCandidates.length > 0 ? (
-                  <div className="panel__card">
-                    <div className="panel__header">
-                      <h4>Preview & approve queries</h4>
-                      <button
-                        type="button"
-                        className="button button--ghost"
-                        onClick={() => setGeneratedCandidates([])}
-                      >
-                        Clear preview
-                      </button>
-                    </div>
-                    <div className="panel__form">
-                      {generatedCandidates.map((candidate, index) => (
-                        <div
-                          className="panel__row panel__row--dense"
-                          key={`${candidate.query_text}-${index}`}
-                        >
-                          <label className="panel__toggle">
-                            <input
-                              type="checkbox"
-                              checked={candidate.selected}
-                              onChange={(event) =>
-                                setGeneratedCandidates((current) =>
-                                  current.map((item, idx) =>
-                                    idx === index
-                                      ? { ...item, selected: event.target.checked }
-                                      : item,
-                                  ),
-                                )
-                              }
-                            />
-                            <span>{candidate.query_text}</span>
-                          </label>
-                          <input
-                            className="panel__input panel__input--tiny"
-                            type="number"
-                            min={0}
-                            step={0.1}
-                            value={candidate.weight ?? 1}
-                            onChange={(event) =>
-                              setGeneratedCandidates((current) =>
-                                current.map((item, idx) =>
-                                  idx === index
-                                    ? { ...item, weight: Number(event.target.value) }
-                                    : item,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        className="panel__action panel__action--prominent"
-                        onClick={() =>
-                          handleSaveGeneratedCandidates(experimentForm.batteryId)
-                        }
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            Saving queries<span className="button__dots" />
-                          </>
-                        ) : (
-                          "Save selected queries"
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+                <GeneratedQueryPreviewPanel
+                  candidates={generatedCandidates}
+                  isSubmitting={isSubmitting}
+                  selectedBatteryId={experimentForm.batteryId}
+                  onCandidateChange={(index, patch) =>
+                    setGeneratedCandidates((current) =>
+                      current.map((item, idx) =>
+                        idx === index ? { ...item, ...patch } : item,
+                      ),
+                    )
+                  }
+                  onClear={() => setGeneratedCandidates([])}
+                  onSaveSelected={handleSaveGeneratedCandidates}
+                />
                   </>
                 ) : null}
                 <p className="panel__subheading">Experiment context</p>
@@ -3300,119 +2604,34 @@ function ExperimentsPageContent() {
                 </p>
                 {experimentStatus ? <p className="panel__success">{experimentStatus}</p> : null}
               </div>
-            ) : (
-              <p className="panel__empty">Select a product to create a battery.</p>
-            )}
-          </section>
+          </ExperimentSetupFlowPanel>
 
           <div className="detail__grid">
-            <section className="panel__card panel__card--primary panel__card--full-row" ref={variantsSectionRef}>
-              <div className="panel__header">
-                <h3>{labMode === "lab" ? "Variants and Iteration" : "Variants"}</h3>
-                <div className="panel__meta">
-                  {variants.length > 0 && (
-                    <span className="panel__badge">{variants.length}</span>
-                  )}
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost"
-                    onClick={handleRecommendNextTest}
-                    disabled={!selectedExperimentId || isRecommending}
-                  >
-                    {isRecommending ? "Recommending…" : "Recommend next test"}
-                  </button>
-                </div>
-              </div>
-              <p className="panel__muted">
-                Variants are copy candidates tested against the same query battery.
-              </p>
-              <p className="panel__subheading">Step 4 · Create variants</p>
-              <p className="panel__step-helper">
-                {labMode === "lab"
-                  ? "Automation-first: generate candidate copy, then create and run quickly."
-                  : "Choose a source, shape candidate copy, then add the variant."}
-              </p>
-              <div className="variant-flow">
-                <span className="variant-flow__step is-active">1. Define</span>
-                <span className="variant-flow__step is-active">2. Create</span>
-                <span
-                  className={`variant-flow__step ${
-                    variants.length > 0 ? "is-active" : ""
-                  }`}
-                >
-                  3. Run
-                </span>
-              </div>
+            <VariantsIterationPanel
+              ref={variantsSectionRef}
+              labMode={labMode}
+              variantCount={variants.length}
+              selectedExperimentId={selectedExperimentId}
+              isRecommending={isRecommending}
+              onRecommendNextTest={handleRecommendNextTest}
+            >
               {labMode === "lab" && !showManualControls ? (
-                <section className="panel__notice panel__notice--info">
-                  <strong>Lab iteration path:</strong> generate candidates, create the selected
-                  one, then run it.
-                  <div className="panel__actions panel__actions--priority">
-                    <button
-                      type="button"
-                      className="panel__action panel__action--prominent"
-                      onClick={() =>
-                        hasValidationSignals
-                          ? void handleGenerateLoopVariants()
-                          : void handleGenerateColdStartVariants()
-                      }
-                      disabled={
-                        !experimentForm.batteryId ||
-                        queries.length === 0 ||
-                        isGeneratingLoopVariant
-                      }
-                    >
-                      {isGeneratingLoopVariant
-                        ? "Generating candidates…"
-                        : hasValidationSignals
-                          ? "Generate candidate from loop evidence"
-                          : "Generate cold-start candidate"}
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={handleCreateAndRunVariantFromLoopCandidate}
-                      disabled={loopGeneratedVariants.length === 0 || isSubmitting}
-                    >
-                      {isCreatingLoopCandidateVariant
-                        ? "Creating + running candidate…"
-                        : "Create + run selected candidate"}
-                    </button>
-                    <button
-                      type="button"
-                      className="panel__action panel__action--ghost"
-                      onClick={() => setLabShowManualControls(true)}
-                    >
-                      Show manual variant controls
-                    </button>
-                  </div>
-                  {loopGeneratedVariants.length > 0 ? (
-                    <label className="panel__label">
-                      Selected candidate
-                      <select
-                        className="panel__input"
-                        value={String(selectedLoopCandidateIndex)}
-                        onChange={(event) =>
-                          setSelectedLoopCandidateIndex(Number(event.target.value))
-                        }
-                      >
-                        {loopGeneratedVariants.map((candidate, index) => (
-                          <option key={`${candidate.label}-${index}`} value={String(index)}>
-                            {index + 1}. {candidate.label} · conf {candidate.confidence.toFixed(2)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale ? (
-                    <p className="panel__muted">
-                      {loopGeneratedVariants[selectedLoopCandidateIndex]?.rationale}
-                    </p>
-                  ) : null}
-                  {loopGenerationStatus ? (
-                    <p className="panel__success">{loopGenerationStatus}</p>
-                  ) : null}
-                </section>
+                <LabVariantAutomationPanel
+                  hasBatteryId={Boolean(experimentForm.batteryId)}
+                  hasQueries={queries.length > 0}
+                  hasValidationSignals={hasValidationSignals}
+                  isGenerating={isGeneratingLoopVariant}
+                  isSubmitting={isSubmitting}
+                  isCreatingAndRunning={isCreatingLoopCandidateVariant}
+                  generatedVariants={loopGeneratedVariants}
+                  selectedCandidateIndex={selectedLoopCandidateIndex}
+                  generationStatus={loopGenerationStatus}
+                  onGenerateFromLoopEvidence={() => void handleGenerateLoopVariants()}
+                  onGenerateColdStart={() => void handleGenerateColdStartVariants()}
+                  onCreateAndRunSelected={handleCreateAndRunVariantFromLoopCandidate}
+                  onShowManualControls={() => setLabShowManualControls(true)}
+                  onSelectedCandidateIndexChange={setSelectedLoopCandidateIndex}
+                />
               ) : (
                 <>
               <VariantCreationPanel
@@ -3460,179 +2679,61 @@ function ExperimentsPageContent() {
               />
                 </>
               )}
-              <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
-              <p className="panel__step-helper">
-                Runs in retrieval-backed mode use frozen protocol snapshots to keep variant comparisons fair.
-              </p>
-              <ExperimentRunSettings
+              <VariantRunPanel
+                labMode={labMode}
+                showManualControls={showManualControls}
+                variants={variants}
+                metricsByVariant={metricsByVariant}
+                hypothesisLabelById={hypothesisLabelById}
+                hypothesisStatementById={hypothesisStatementById}
+                expandedHypothesisId={expandedHypothesisId}
+                expandedVariantId={expandedVariantId}
+                runningVariantId={runningVariantId}
+                canRunVariantTests={canRunVariantTests}
                 runMode={experimentRunMode}
                 retrievalMaxResults={retrievalMaxResults}
                 currentProtocolSnapshotVersion={currentProtocolSnapshotVersion}
                 runVariantDisabledReason={runVariantDisabledReason}
-                onRunModeChange={setExperimentRunMode}
-                onRetrievalMaxResultsChange={setRetrievalMaxResults}
-              />
-              {variants.length === 0 ? (
-                <p className="panel__empty">Add variants to run experiments.</p>
-              ) : (
-                <ul className="panel__list">
-                  {variants.map((variant) => {
-                    const resolvedDescription = resolveVariantDescription(variant);
-                    const hypothesisId = variant.hypothesis_id ?? null;
-                    const tested = metricsByVariant.has(variant.id);
-                    const metricValues = tested
-                      ? (((metricsByVariant.get(variant.id)?.metrics ?? {}) as Record<
-                          string,
-                          unknown
-                        >) ?? null)
-                      : null;
-                    return (
-                      <li key={variant.id}>
-                        <ExperimentVariantRunItem
-                          variant={variant}
-                          tested={tested}
-                          hypothesisLabel={
-                            hypothesisId
-                              ? hypothesisLabelById.get(hypothesisId) ?? "Hypothesis-linked"
-                              : "Hypothesis-linked"
-                          }
-                          hypothesisStatement={
-                            hypothesisId
-                              ? (hypothesisStatementById.get(hypothesisId) ?? null)
-                              : null
-                          }
-                          hypothesisExpanded={
-                            Boolean(hypothesisId) && expandedHypothesisId === hypothesisId
-                          }
-                          copyExpanded={expandedVariantId === variant.id}
-                          resolvedDescription={resolvedDescription}
-                          metricValues={metricValues}
-                          runButtonProminent={!(labMode === "lab" && !showManualControls)}
-                          running={runningVariantId === variant.id}
-                          canRun={canRunVariantTests}
-                          renderMetricValue={renderMetricValue}
-                          onToggleHypothesis={() =>
-                            setExpandedHypothesisId((current) =>
-                              current === hypothesisId ? null : hypothesisId,
-                            )
-                          }
-                          onToggleCopy={() =>
-                            setExpandedVariantId((current) =>
-                              current === variant.id ? null : variant.id,
-                            )
-                          }
-                          onRun={() => handleRunVariant(variant.id)}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <NextTestNotice
                 nextTest={nextTest}
-                canRunVariantTests={canRunVariantTests}
-                runningVariantId={runningVariantId}
+                nextTestStatus={nextTestStatus}
                 isSubmitting={isSubmitting}
                 isCreatingSuggestedVariant={isCreatingSuggestedVariant}
-                onRunRecommended={handleRunRecommended}
-                onCreateSuggestedVariant={handleCreateSuggestedVariant}
-              />
-              {nextTestStatus ? (
-                <p className="panel__success">{nextTestStatus}</p>
-              ) : null}
-              <OutcomeSnapshot
-                snapshot={outcomeSnapshot}
+                outcomeSnapshot={outcomeSnapshot}
                 hasValidationSignals={hasValidationSignals}
-                onOpenValidation={() => router.push(validationHref)}
-              />
-              <ExperimentOutcomeReview
                 latestMetric={latestMetric}
                 experimentGapSummary={experimentGapSummary}
                 renderMetricValue={renderMetricValue}
+                resolveVariantDescription={resolveVariantDescription}
+                onRunModeChange={setExperimentRunMode}
+                onRetrievalMaxResultsChange={setRetrievalMaxResults}
+                onToggleHypothesis={(hypothesisId) =>
+                  setExpandedHypothesisId((current) =>
+                    current === hypothesisId ? null : hypothesisId,
+                  )
+                }
+                onToggleCopy={(variantId) =>
+                  setExpandedVariantId((current) =>
+                    current === variantId ? null : variantId,
+                  )
+                }
+                onRunVariant={handleRunVariant}
+                onRunRecommended={handleRunRecommended}
+                onCreateSuggestedVariant={handleCreateSuggestedVariant}
+                onOpenValidation={() => router.push(validationHref)}
               />
-            </section>
+            </VariantsIterationPanel>
 
-            <section className="panel__card panel__card--secondary panel__card--full-row">
-              <div className="panel__header">
-                <h3>Orchestrator Recommendations</h3>
-                <button
-                  type="button"
-                  className="panel__action panel__action--ghost"
-                  onClick={() => setRecommendationsOpen((open) => !open)}
-                >
-                  {recommendationsOpen ? "Hide details" : "Show details"}
-                </button>
-              </div>
-              <p className="panel__subheading">Optional guidance</p>
-              <p className="panel__muted">
-                Suggested next actions based on current variant outcomes and run history.
-              </p>
-              {!recommendationsOpen ? (
-                <p className="panel__muted">
-                  Recommendations are collapsed to keep focus on execution steps.
-                </p>
-              ) : recommendations.length === 0 ? (
-                <p className="panel__empty">No recommendations yet.</p>
-              ) : (
-                <ul className="panel__list panel__list--compact">
-                  {recommendations.map((rec) => (
-                    <li key={rec.id}>
-                      <div className="panel__meta">
-                        <span>{rec.recommendation.reason}</span>
-                        <span className="panel__badge panel__badge--secondary">
-                          {rec.recommendation.action}
-                        </span>
-                      </div>
-                      <span className="panel__muted">
-                        {rec.created_at
-                          ? new Date(rec.created_at).toLocaleDateString()
-                          : ""}
-                      </span>
-                      {rec.recommendation.action === "run_variant" ? (
-                        <div className="panel__actions">
-                          <button
-                            type="button"
-                            className="panel__action panel__action--ghost"
-                            onClick={() =>
-                              handleRunRecommendation(rec.recommendation.variant_id)
-                            }
-                            disabled={
-                              runningVariantId === rec.recommendation.variant_id ||
-                              !canRunVariantTests
-                            }
-                          >
-                            {runningVariantId === rec.recommendation.variant_id
-                              ? "Running…"
-                              : "Run next test"}
-                          </button>
-                        </div>
-                      ) : rec.recommendation.action === "create_variant" ? (
-                        <div className="panel__actions">
-                          <button
-                            type="button"
-                            className="panel__action panel__action--ghost"
-                            onClick={() =>
-                              handleCreateVariantFromRecommendation(
-                                rec.recommendation,
-                              )
-                            }
-                            disabled={isSubmitting}
-                          >
-                            {isCreatingSuggestedVariant ? (
-                              <>
-                                Creating variant<span className="button__dots" />
-                              </>
-                            ) : (
-                              "Create + run variant"
-                            )}
-                          </button>
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+            <OrchestratorRecommendationsPanel
+              open={recommendationsOpen}
+              recommendations={recommendations}
+              runningVariantId={runningVariantId}
+              canRunVariantTests={canRunVariantTests}
+              isSubmitting={isSubmitting}
+              isCreatingSuggestedVariant={isCreatingSuggestedVariant}
+              onOpenChange={setRecommendationsOpen}
+              onRunRecommendation={handleRunRecommendation}
+              onCreateVariantFromRecommendation={handleCreateVariantFromRecommendation}
+            />
 
           </div>
 
@@ -3677,264 +2778,52 @@ function ExperimentsPageContent() {
             }}
           />
 
-          <section className="panel__card panel__card--secondary" ref={metricsSectionRef}>
-            <div className="panel__header">
-              <h3>Metrics</h3>
-              <div className="panel__meta">
-                <span className="panel__muted">Experiment-scoped (compact)</span>
-              </div>
-            </div>
-            <div className="panel__meta panel__meta--stack">
-              <span className="panel__muted">
-                Entries: {metricsHistory.length}
-                {latestMetricEntry?.created_at
-                  ? ` · Last update: ${new Date(latestMetricEntry.created_at).toLocaleString()}`
-                  : ""}
-              </span>
-              {renderSparkline(metricsTrend) ?? (
-                <span className="panel__muted">No trend yet.</span>
-              )}
-            </div>
-            <div className="panel__actions">
-              <button
-                type="button"
-                className={`panel__action panel__action--ghost ${
-                  metricsTrendMetric === "win_rate" ? "is-active" : ""
-                }`}
-                onClick={() => setMetricsTrendMetric("win_rate")}
-              >
-                Win rate
-              </button>
-              <button
-                type="button"
-                className={`panel__action panel__action--ghost ${
-                  metricsTrendMetric === "avg_score" ? "is-active" : ""
-                }`}
-                onClick={() => setMetricsTrendMetric("avg_score")}
-              >
-                Avg score
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() => setMetricsHistoryExpanded((open) => !open)}
-                disabled={metricsHistory.length === 0}
-              >
-                {metricsHistoryExpanded ? "Hide history" : "Show history"}
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() => router.push("/overview")}
-              >
-                Open Overview analytics
-              </button>
-            </div>
-            {metricsHistory.length === 0 ? (
-              <p className="panel__empty">No metrics history yet.</p>
-            ) : !metricsHistoryExpanded ? (
-              <p className="panel__muted">
-                History is collapsed to keep this page focused on execution.
-              </p>
-            ) : (
-              <ul className="panel__list">
-                {recentMetrics.map((metric) => {
-                  const values = (metric.metrics ?? {}) as Record<string, unknown>;
-                  const variantLabel =
-                    variants.find((variant) => variant.id === metric.variant_id)
-                      ?.label ?? metric.variant_id;
-                  return (
-                    <li key={metric.id}>
-                      <div className="panel__meta">
-                        <span>{variantLabel}</span>
-                        <span className="panel__muted">
-                          {metric.created_at
-                            ? new Date(metric.created_at).toLocaleDateString()
-                            : ""}
-                        </span>
-                      </div>
-                      <span className="panel__muted">
-                        Win rate: {renderMetricValue(values.win_rate)} · Avg score:{" "}
-                        {renderMetricValue(values.avg_score)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <ExperimentMetricsPanel
+            ref={metricsSectionRef}
+            metricsHistory={metricsHistory}
+            recentMetrics={recentMetrics}
+            variants={variants}
+            metricsTrend={metricsTrend}
+            metricsTrendMetric={metricsTrendMetric}
+            metricsHistoryExpanded={metricsHistoryExpanded}
+            latestMetricCreatedAt={latestMetricEntry?.created_at}
+            renderMetricValue={renderMetricValue}
+            onTrendMetricChange={setMetricsTrendMetric}
+            onHistoryExpandedChange={setMetricsHistoryExpanded}
+            onOpenOverview={() => router.push("/overview")}
+          />
 
-          <section className="panel__card panel__card--primary panel__card--full-row">
-            <div className="panel__header">
-              <h3>Step 7 · Validate synthetic and observed results</h3>
-              <span
-                className={`panel__badge ${
-                  hasValidationSignals ? "panel__badge--success" : "panel__badge--secondary"
-                }`}
-              >
-                {hasValidationSignals ? "Validation started" : "Validation pending"}
-              </span>
-            </div>
-            <p className="panel__muted">
-              Validation is required to ground lab signals with observed evidence and build
-              decision trust.
-            </p>
-            <div className="panel__meta panel__meta--stack">
-              <span className="panel__muted">
-                Logged: {validationSummary?.total_logged ?? 0} · Verified:{" "}
-                {validationSummary?.verified_runs ?? 0} · Accuracy:{" "}
-                {typeof validationSummary?.accuracy === "number"
-                  ? `${Math.round(validationSummary.accuracy * 100)}%`
-                  : "—"}
-              </span>
-              <span className="panel__muted">
-                Observed logs: {validationSummary?.observed_signals_logged ?? 0} · Observed
-                accuracy:{" "}
-                {typeof validationSummary?.observed_accuracy === "number"
-                  ? `${Math.round(validationSummary.observed_accuracy * 100)}%`
-                  : "—"}
-              </span>
-            </div>
-            <div className="panel__actions">
-              <button
-                type="button"
-                className="panel__action panel__action--prominent"
-                onClick={() => router.push(validationHref)}
-              >
-                Open Validation
-              </button>
-              <button
-                type="button"
-                className="panel__action panel__action--ghost"
-                onClick={() =>
-                  variantsSectionRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  })
-                }
-              >
-                Back to variants (Step 8)
-              </button>
-            </div>
-          </section>
+          <ExperimentValidationPanel
+            hasValidationSignals={hasValidationSignals}
+            validationSummary={validationSummary}
+            onOpenValidation={() => router.push(validationHref)}
+            onBackToVariants={() =>
+              variantsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
+            }
+          />
 
-          {brandId ? (
-            validationSummary?.unlock_ready ? (
-              <div ref={(node) => (beliefsRef.current = node)}>
-                <BrandBeliefs
-                  brandId={brandId}
-                  clientId={clientId ?? undefined}
-                  userId={userId ?? undefined}
-                  limit={50}
-                  onUseBelief={(belief) => handleUseBelief(belief as BrandBelief)}
-                  viewMode={beliefsViewMode}
-                  onViewModeChange={setBeliefsViewMode}
-                />
-              </div>
-            ) : (
-              <section className="panel__card">
-                <div className="panel__header">
-                  <h3>Pattern Insights (Locked)</h3>
-                  <span className="panel__badge panel__badge--secondary">
-                    Locked
-                  </span>
-                </div>
-                <p className="panel__muted">
-                  Insights appear after enough experiment evidence accumulates.
-                </p>
-                <div className="progress-bar">
-                  <div
-                    className="progress-bar__fill"
-                    style={{
-                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
-                    }}
-                  />
-                </div>
-                <p className="panel__muted">
-                  Progress: {Math.round((validationSummary?.progress ?? 0) * 100)}%
-                </p>
-              </section>
-            )
-          ) : null}
+          <ExperimentBeliefUnlockPanel
+            ref={beliefsRef}
+            brandId={brandId}
+            clientId={clientId ?? undefined}
+            userId={userId ?? undefined}
+            validationSummary={validationSummary}
+            viewMode={beliefsViewMode}
+            onViewModeChange={setBeliefsViewMode}
+            onUseBelief={handleUseBelief}
+          />
 
-          <section className="panel__card panel__card--secondary panel__card--full-row">
-            <div className="panel__header">
-              <h3>Scheduling</h3>
-            </div>
-            <p className="panel__subheading">Operational scheduling</p>
-            <p className="panel__step-helper">
-              Configure recurring reruns and backfills after the main experiment cycle is set.
-            </p>
-            {selectedExperiment ? (
-              <div className="panel__form">
-                {scheduleStatus ? <p className="panel__success">{scheduleStatus}</p> : null}
-                <label className="panel__label">
-                  Enable schedule
-                  <input
-                    type="checkbox"
-                    checked={scheduleForm.enabled}
-                    onChange={(event) =>
-                      setScheduleForm((prev) => ({
-                        ...prev,
-                        enabled: event.target.checked,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="panel__label">
-                  Interval (minutes)
-                  <input
-                    className="panel__input"
-                    type="number"
-                    min={15}
-                    step={15}
-                    value={scheduleForm.intervalMinutes}
-                    onChange={(event) =>
-                      setScheduleForm((prev) => ({
-                        ...prev,
-                        intervalMinutes: event.target.value,
-                      }))
-                    }
-                    disabled={!scheduleForm.enabled}
-                  />
-                </label>
-                <div className="panel__meta">
-                  <span className="panel__muted">
-                    Last run:{" "}
-                    {selectedExperiment.last_run_at
-                      ? new Date(selectedExperiment.last_run_at).toLocaleString()
-                      : "—"}
-                  </span>
-                  <span className="panel__muted">
-                    Next run:{" "}
-                    {selectedExperiment.next_run_at
-                      ? new Date(selectedExperiment.next_run_at).toLocaleString()
-                      : "—"}
-                  </span>
-                </div>
-                <div className="panel__actions">
-                  <button
-                    type="button"
-                    className="panel__action panel__action--prominent product__tooltip tooltip--below"
-                    data-tooltip="Save interval settings and schedule future due runs."
-                    onClick={handleScheduleSave}
-                  >
-                    Save schedule
-                  </button>
-                  <button
-                    type="button"
-                    className="panel__action panel__action--ghost product__tooltip tooltip--below"
-                    data-tooltip="Run all variants now and refresh last/next run timestamps."
-                    onClick={handleBackfill}
-                  >
-                    Backfill schedule
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="panel__empty">Select an experiment to schedule reruns.</p>
-            )}
-          </section>
+          <ExperimentSchedulingPanel
+            selectedExperiment={selectedExperiment}
+            scheduleForm={scheduleForm}
+            scheduleStatus={scheduleStatus}
+            onScheduleFormChange={setScheduleForm}
+            onScheduleSave={handleScheduleSave}
+            onBackfill={handleBackfill}
+          />
 
           <div className="detail__note">
             Runs execute the full query battery against the selected variant and
