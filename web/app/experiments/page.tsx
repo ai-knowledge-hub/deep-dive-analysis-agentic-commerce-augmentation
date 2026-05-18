@@ -305,6 +305,7 @@ function ExperimentsPageContent() {
     setExperiments,
   } = useExperimentInitialLists({
     userId,
+    clientId: storageClientId,
     productId,
     selectedExperimentId,
   });

@@ -11,10 +11,12 @@ import type { Experiment, QueryBattery, SessionSummary, SimulationRunSummary } f
 
 export function useExperimentInitialLists({
   userId,
+  clientId,
   productId,
   selectedExperimentId,
 }: {
   userId: string | null;
+  clientId?: string | null;
   productId?: string | null;
   selectedExperimentId: string | null;
 }) {
@@ -31,7 +33,7 @@ export function useExperimentInitialLists({
     void listSimulationRuns(userId).then((response) => {
       setSimulationRuns(response.runs ?? []);
     });
-  }, [userId]);
+  }, [clientId, userId]);
 
   useEffect(() => {
     void listBatteries(userId, productId ?? undefined).then((response) => {
