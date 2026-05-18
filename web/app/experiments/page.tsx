@@ -7,7 +7,6 @@ import type {
   AdminProduct,
   BrandBelief,
   CopyRevision,
-  Experiment,
   ExperimentExecutionState,
   ExperimentHypothesis,
   ExperimentMetric,
@@ -18,15 +17,12 @@ import type {
   NextTestRecommendation,
   AgentRun,
   ValidationSummary,
-  QueryBattery,
   QueryBatteryQuery,
   QueryBatteryCandidate,
   AudienceSegment,
   QueryBatteryMetrics,
-  SessionSummary,
   SimulationGapReport,
   SimulationRunDetailResponse,
-  SimulationRunSummary,
 } from "../../lib/types";
 import {
   createBattery,
@@ -41,7 +37,6 @@ import {
   generateBatteryQueries,
   addBatteryQuery,
   getBatteryMetrics,
-  listConversationSessions,
   listBatteries,
   updateBattery,
   updateBatteryQuery,
@@ -65,7 +60,6 @@ import {
   getSimulationRun,
   getExperimentValidationSummary,
   listAdminProducts,
-  listSimulationRuns,
   listCopyRevisions,
   listAgentRuns,
 } from "../../lib/api";
@@ -96,6 +90,7 @@ import { QueryGenerationPanel } from "../../components/experiments/QueryGenerati
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
+import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
 import {
   buildExperimentHref,
@@ -118,8 +113,6 @@ function ExperimentsPageContent() {
     undefined;
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [simulationRuns, setSimulationRuns] = useState<SimulationRunSummary[]>([]);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
@@ -129,7 +122,6 @@ function ExperimentsPageContent() {
     "list" | "timeline" | "trends"
   >("list");
 
-  const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
   const [variants, setVariants] = useState<ExperimentVariant[]>([]);
   const [runs, setRuns] = useState<ExperimentRun[]>([]);
@@ -147,7 +139,6 @@ function ExperimentsPageContent() {
   const [beliefCount, setBeliefCount] = useState<number>(0);
   const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
-  const [batteries, setBatteries] = useState<QueryBattery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
     "simulation" | "retrieval_backed"
@@ -311,6 +302,20 @@ function ExperimentsPageContent() {
   const runsSectionRef = useRef<HTMLDivElement | null>(null);
   const metricsSectionRef = useRef<HTMLElement | null>(null);
 
+  const {
+    sessions,
+    setSessions,
+    simulationRuns,
+    setSimulationRuns,
+    batteries,
+    setBatteries,
+    experiments,
+    setExperiments,
+  } = useExperimentInitialLists({
+    userId,
+    productId,
+    selectedExperimentId,
+  });
   const showManualControls = labMode === "manual" || labShowManualControls;
   const experimentSnapshots = useExperimentSnapshots(experiments, userId);
   const runExperimentWithSelectedMode = useCallback(
@@ -345,16 +350,6 @@ function ExperimentsPageContent() {
     setExperimentRunMode("retrieval_backed");
   }, [labMode]);
 
-  useEffect(() => {
-    if (!userId) return;
-    void listConversationSessions(userId).then((response) => {
-      setSessions(response.sessions ?? []);
-    });
-    void listSimulationRuns(userId).then((response) => {
-      setSimulationRuns(response.runs ?? []);
-    });
-  }, [userId, clientId]);
-
   const handleRestoreDraft = useCallback(() => {
     if (!restoreDraft) return;
     setLabMode(restoreDraft.labMode ?? "lab");
@@ -383,16 +378,6 @@ function ExperimentsPageContent() {
     setAdvancedOverridesOpen(Boolean(restoreDraft.advancedOverridesOpen));
     markRestored();
   }, [markRestored, restoreDraft]);
-
-  useEffect(() => {
-    void listBatteries(userId, productId ?? undefined).then((response) => {
-      setBatteries(response.batteries ?? []);
-    });
-    void listExperiments(userId, productId ?? undefined).then((response) => {
-      const items = response.experiments ?? [];
-      setExperiments(items);
-    });
-  }, [productId, selectedExperimentId, userId]);
 
   useEffect(() => {
     if (!brandId || !productId || !userId) {
