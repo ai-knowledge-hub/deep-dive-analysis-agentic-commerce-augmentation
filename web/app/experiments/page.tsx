@@ -73,7 +73,6 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
-import { BrandBeliefs } from "../../components/beliefs/BrandBeliefs";
 import { ExperimentHistoryPanel } from "../../components/experiments/ExperimentHistoryPanel";
 import { VariantCreationPanel } from "../../components/experiments/VariantCreationPanel";
 import {
@@ -84,6 +83,7 @@ import { BatteryCreationPanel } from "../../components/experiments/BatteryCreati
 import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetailsPanel";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
 import { AudienceSegmentsPanel } from "../../components/experiments/AudienceSegmentsPanel";
+import { ExperimentBeliefUnlockPanel } from "../../components/experiments/ExperimentBeliefUnlockPanel";
 import { ExperimentSetupFlowPanel } from "../../components/experiments/ExperimentSetupFlowPanel";
 import { ExperimentMetricsPanel } from "../../components/experiments/ExperimentMetricsPanel";
 import { ExperimentSchedulingPanel } from "../../components/experiments/ExperimentSchedulingPanel";
@@ -2975,44 +2975,16 @@ function ExperimentsPageContent() {
             }
           />
 
-          {brandId ? (
-            validationSummary?.unlock_ready ? (
-              <div ref={(node) => (beliefsRef.current = node)}>
-                <BrandBeliefs
-                  brandId={brandId}
-                  clientId={clientId ?? undefined}
-                  userId={userId ?? undefined}
-                  limit={50}
-                  onUseBelief={(belief) => handleUseBelief(belief as BrandBelief)}
-                  viewMode={beliefsViewMode}
-                  onViewModeChange={setBeliefsViewMode}
-                />
-              </div>
-            ) : (
-              <section className="panel__card">
-                <div className="panel__header">
-                  <h3>Pattern Insights (Locked)</h3>
-                  <span className="panel__badge panel__badge--secondary">
-                    Locked
-                  </span>
-                </div>
-                <p className="panel__muted">
-                  Insights appear after enough experiment evidence accumulates.
-                </p>
-                <div className="progress-bar">
-                  <div
-                    className="progress-bar__fill"
-                    style={{
-                      width: `${Math.round((validationSummary?.progress ?? 0) * 100)}%`,
-                    }}
-                  />
-                </div>
-                <p className="panel__muted">
-                  Progress: {Math.round((validationSummary?.progress ?? 0) * 100)}%
-                </p>
-              </section>
-            )
-          ) : null}
+          <ExperimentBeliefUnlockPanel
+            ref={beliefsRef}
+            brandId={brandId}
+            clientId={clientId ?? undefined}
+            userId={userId ?? undefined}
+            validationSummary={validationSummary}
+            viewMode={beliefsViewMode}
+            onViewModeChange={setBeliefsViewMode}
+            onUseBelief={handleUseBelief}
+          />
 
           <ExperimentSchedulingPanel
             selectedExperiment={selectedExperiment}
