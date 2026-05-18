@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
-  AdminProduct,
   BrandBelief,
   CopyRevision,
   ExperimentExecutionState,
@@ -55,11 +54,8 @@ import {
   backfillExperiment,
   getNextTestRecommendation,
   listExperimentRecommendations,
-  getLatestBrandBelief,
-  listBrandBeliefs,
   getSimulationRun,
   getExperimentValidationSummary,
-  listAdminProducts,
   listCopyRevisions,
   listAgentRuns,
 } from "../../lib/api";
@@ -89,6 +85,7 @@ import { OrchestratorRecommendationsPanel } from "../../components/experiments/O
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
@@ -136,8 +133,6 @@ function ExperimentsPageContent() {
   const [simulationDetails, setSimulationDetails] = useState<
     Record<string, SimulationRunDetailResponse["run"]>
   >({});
-  const [beliefCount, setBeliefCount] = useState<number>(0);
-  const [latestBelief, setLatestBelief] = useState<BrandBelief | null>(null);
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
@@ -173,7 +168,6 @@ function ExperimentsPageContent() {
   const [generatedCandidates, setGeneratedCandidates] = useState<
     (QueryBatteryCandidate & { selected: boolean })[]
   >([]);
-  const [productDetail, setProductDetail] = useState<AdminProduct | null>(null);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
     batteryId: "",
@@ -316,6 +310,11 @@ function ExperimentsPageContent() {
     productId,
     selectedExperimentId,
   });
+  const { productDetail, beliefCount, latestBelief } = useExperimentContextData({
+    brandId,
+    productId,
+    userId,
+  });
   const showManualControls = labMode === "manual" || labShowManualControls;
   const experimentSnapshots = useExperimentSnapshots(experiments, userId);
   const runExperimentWithSelectedMode = useCallback(
@@ -378,29 +377,6 @@ function ExperimentsPageContent() {
     setAdvancedOverridesOpen(Boolean(restoreDraft.advancedOverridesOpen));
     markRestored();
   }, [markRestored, restoreDraft]);
-
-  useEffect(() => {
-    if (!brandId || !productId || !userId) {
-      setProductDetail(null);
-      return;
-    }
-    let active = true;
-    listAdminProducts(brandId, userId)
-      .then((response) => {
-        if (!active) return;
-        const match = (response.products ?? []).find(
-          (product) => product.id === productId,
-        );
-        setProductDetail(match ?? null);
-      })
-      .catch(() => {
-        if (!active) return;
-        setProductDetail(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [brandId, productId, userId]);
 
   useEffect(() => {
     const targetId = searchParams.get("experiment_id");
@@ -555,24 +531,6 @@ function ExperimentsPageContent() {
       cancelled = true;
     };
   }, [runs, simulationDetails, userId]);
-
-  useEffect(() => {
-    if (!brandId) {
-      setBeliefCount(0);
-      setLatestBelief(null);
-      return;
-    }
-    void listBrandBeliefs(brandId, userId, 25)
-      .then((response) => {
-        setBeliefCount((response.beliefs ?? []).length);
-      })
-      .catch(() => setBeliefCount(0));
-    void getLatestBrandBelief(brandId, userId)
-      .then((response) => {
-        setLatestBelief(response.belief ?? null);
-      })
-      .catch(() => setLatestBelief(null));
-  }, [brandId, userId]);
 
   useEffect(() => {
     if (!productId) {
