@@ -95,6 +95,7 @@ import { OrchestratorRecommendationsPanel } from "../../components/experiments/O
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -144,12 +145,6 @@ function ExperimentsPageContent() {
   const [recommendations, setRecommendations] = useState<
     ExperimentRecommendation[]
   >([]);
-  const [experimentSnapshots, setExperimentSnapshots] = useState<
-    Record<
-      string,
-      { winnerLabel?: string; winRate?: number | null; measuredAt?: string | null }
-    >
-  >({});
   const [simulationDetails, setSimulationDetails] = useState<
     Record<string, SimulationRunDetailResponse["run"]>
   >({});
@@ -283,6 +278,7 @@ function ExperimentsPageContent() {
   const metricsSectionRef = useRef<HTMLElement | null>(null);
 
   const showManualControls = labMode === "manual" || labShowManualControls;
+  const experimentSnapshots = useExperimentSnapshots(experiments, userId);
   const runExperimentWithSelectedMode = useCallback(
     async (experimentId: string, variantId: string) => {
       const parsedRetrievalLimit = Number.parseInt(retrievalMaxResults, 10);
@@ -394,66 +390,6 @@ function ExperimentsPageContent() {
       setExperiments(items);
     });
   }, [productId, selectedExperimentId, userId]);
-
-  useEffect(() => {
-    if (!userId || experiments.length === 0) {
-      setExperimentSnapshots({});
-      return;
-    }
-    let active = true;
-    void (async () => {
-      const entries = await Promise.all(
-        experiments.map(async (experiment) => {
-          try {
-            const [metricsResponse, variantsResponse] = await Promise.all([
-              listExperimentMetrics(experiment.id, userId),
-              listExperimentVariants(experiment.id, userId),
-            ]);
-            const metricsList = metricsResponse.metrics ?? [];
-            const variantsList = variantsResponse.variants ?? [];
-            const variantLabelById = new Map(
-              variantsList.map((variant) => [variant.id, variant.label]),
-            );
-            let bestVariantId: string | null = null;
-            let bestWinRate = -1;
-            let measuredAt: string | null = null;
-            metricsList.forEach((metric) => {
-              const rawWinRate = Number((metric.metrics ?? {}).win_rate);
-              if (!Number.isFinite(rawWinRate)) return;
-              if (rawWinRate > bestWinRate) {
-                bestWinRate = rawWinRate;
-                bestVariantId = metric.variant_id ?? null;
-                measuredAt = metric.created_at ?? null;
-              } else if (
-                rawWinRate === bestWinRate &&
-                (metric.created_at ?? "") > (measuredAt ?? "")
-              ) {
-                bestVariantId = metric.variant_id ?? null;
-                measuredAt = metric.created_at ?? null;
-              }
-            });
-            return [
-              experiment.id,
-              {
-                winnerLabel: bestVariantId
-                  ? variantLabelById.get(bestVariantId) ?? bestVariantId
-                  : undefined,
-                winRate: bestWinRate >= 0 ? bestWinRate : null,
-                measuredAt,
-              },
-            ] as const;
-          } catch {
-            return [experiment.id, {}] as const;
-          }
-        }),
-      );
-      if (!active) return;
-      setExperimentSnapshots(Object.fromEntries(entries));
-    })();
-    return () => {
-      active = false;
-    };
-  }, [experiments, userId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
