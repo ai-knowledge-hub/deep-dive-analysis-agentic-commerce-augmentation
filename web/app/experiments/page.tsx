@@ -95,6 +95,7 @@ import { OrchestratorRecommendationsPanel } from "../../components/experiments/O
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
 import {
   buildExperimentHref,
@@ -102,7 +103,6 @@ import {
   buildSimulationHref,
   buildValidationHref,
 } from "../../lib/routes";
-import { buildTenantStorageKey } from "../../lib/storage";
 
 function ExperimentsPageContent() {
   const router = useRouter();
@@ -116,10 +116,6 @@ function ExperimentsPageContent() {
       ? window.localStorage.getItem("client_id")
       : null) ??
     undefined;
-  const experimentsDraftStorageKey = useMemo(
-    () => buildTenantStorageKey("experiments_draft", userId, storageClientId),
-    [storageClientId, userId],
-  );
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -257,7 +253,7 @@ function ExperimentsPageContent() {
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
-  const [restoreDraft, setRestoreDraft] = useState<{
+  type ExperimentDraft = {
     labMode?: "lab" | "manual";
     selectedExperimentId?: string | null;
     experimentForm?: typeof experimentForm;
@@ -270,9 +266,47 @@ function ExperimentsPageContent() {
     batterySeedUseCases?: string;
     batteryUseLlm?: boolean;
     advancedOverridesOpen?: boolean;
-  } | null>(null);
-  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
-  const autosaveEnabled = useRef(false);
+  };
+  const draftPayload = useMemo<ExperimentDraft>(
+    () => ({
+      labMode,
+      selectedExperimentId,
+      experimentForm,
+      variantForm,
+      variantAdvancedOpen,
+      batteryForm,
+      batteryEdit,
+      batterySeedQueries,
+      batterySeedFeatures,
+      batterySeedUseCases,
+      batteryUseLlm,
+      advancedOverridesOpen,
+    }),
+    [
+      advancedOverridesOpen,
+      batteryEdit,
+      batteryForm,
+      batterySeedFeatures,
+      batterySeedQueries,
+      batterySeedUseCases,
+      batteryUseLlm,
+      experimentForm,
+      labMode,
+      selectedExperimentId,
+      variantAdvancedOpen,
+      variantForm,
+    ],
+  );
+  const {
+    restoreDraft,
+    showRestorePrompt,
+    markRestored,
+    dismissDraft,
+  } = useExperimentDraft<ExperimentDraft>({
+    userId,
+    storageClientId,
+    payload: draftPayload,
+  });
   const variantsSectionRef = useRef<HTMLElement | null>(null);
   const runsSectionRef = useRef<HTMLDivElement | null>(null);
   const metricsSectionRef = useRef<HTMLElement | null>(null);
@@ -321,26 +355,6 @@ function ExperimentsPageContent() {
     });
   }, [userId, clientId]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved =
-      window.localStorage.getItem(experimentsDraftStorageKey) ??
-      window.localStorage.getItem("experiments_draft");
-    if (!saved) {
-      autosaveEnabled.current = true;
-      return;
-    }
-    try {
-      const parsed = JSON.parse(saved);
-      setRestoreDraft(parsed);
-      setShowRestorePrompt(true);
-    } catch {
-      window.localStorage.removeItem(experimentsDraftStorageKey);
-      window.localStorage.removeItem("experiments_draft");
-      autosaveEnabled.current = true;
-    }
-  }, [experimentsDraftStorageKey]);
-
   const handleRestoreDraft = useCallback(() => {
     if (!restoreDraft) return;
     setLabMode(restoreDraft.labMode ?? "lab");
@@ -367,19 +381,8 @@ function ExperimentsPageContent() {
     setBatterySeedUseCases(restoreDraft.batterySeedUseCases ?? "");
     setBatteryUseLlm(Boolean(restoreDraft.batteryUseLlm));
     setAdvancedOverridesOpen(Boolean(restoreDraft.advancedOverridesOpen));
-    setShowRestorePrompt(false);
-    autosaveEnabled.current = true;
-  }, [restoreDraft]);
-
-  const handleDismissDraft = useCallback(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(experimentsDraftStorageKey);
-      window.localStorage.removeItem("experiments_draft");
-    }
-    setRestoreDraft(null);
-    setShowRestorePrompt(false);
-    autosaveEnabled.current = true;
-  }, [experimentsDraftStorageKey]);
+    markRestored();
+  }, [markRestored, restoreDraft]);
 
   useEffect(() => {
     void listBatteries(userId, productId ?? undefined).then((response) => {
@@ -390,40 +393,6 @@ function ExperimentsPageContent() {
       setExperiments(items);
     });
   }, [productId, selectedExperimentId, userId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!autosaveEnabled.current) return;
-    const payload = {
-      labMode,
-      selectedExperimentId,
-      experimentForm,
-      variantForm,
-      variantAdvancedOpen,
-      batteryForm,
-      batteryEdit,
-      batterySeedQueries,
-      batterySeedFeatures,
-      batterySeedUseCases,
-      batteryUseLlm,
-      advancedOverridesOpen,
-    };
-    window.localStorage.setItem(experimentsDraftStorageKey, JSON.stringify(payload));
-  }, [
-    experimentsDraftStorageKey,
-    labMode,
-    selectedExperimentId,
-    experimentForm,
-    variantForm,
-    variantAdvancedOpen,
-    batteryForm,
-    batteryEdit,
-    batterySeedQueries,
-    batterySeedFeatures,
-    batterySeedUseCases,
-    batteryUseLlm,
-    advancedOverridesOpen,
-  ]);
 
   useEffect(() => {
     if (!brandId || !productId || !userId) {
@@ -2553,7 +2522,7 @@ function ExperimentsPageContent() {
                   <button
                     type="button"
                     className="panel__action panel__action--ghost"
-                    onClick={handleDismissDraft}
+                    onClick={dismissDraft}
                   >
                     Dismiss
                   </button>
