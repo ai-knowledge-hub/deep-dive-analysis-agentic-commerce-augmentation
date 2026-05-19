@@ -43,8 +43,7 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
-import { OnboardingFlowStatus } from "../../components/admin/OnboardingFlowStatus";
-import { ScopeSelectors } from "../../components/admin/ScopeSelectors";
+import { AdminOnboardingWorkspace } from "../../components/admin/AdminOnboardingWorkspace";
 
 const emptyForm = {
   id: "",
@@ -1217,63 +1216,39 @@ export default function AdminPage() {
           )}
           {userId && (
             <>
-            <section className="panel__card admin-onboarding">
-              <div className="panel__header">
-                <h3>Client onboarding workspace</h3>
-                <span className="panel__meta">
-                  {onboardingCompletion.completed}/{onboardingCompletion.total} complete
-                </span>
-              </div>
-              <p className="panel__subheading">Setup flow</p>
-              <p className="panel__step-helper">
-                Complete onboarding in sequence, then move to operational controls.
-              </p>
-              <OnboardingFlowStatus
-                currentStep={onboardingCurrentStep}
-                steps={onboardingFlowSteps}
-                nextAction={onboardingNextAction}
-                onRunNextAction={handleRunOnboardingNextAction}
-              />
-              <ScopeSelectors
-                activeClientId={activeClientId}
-                activeBrandId={activeBrandId}
-                activeProductId={activeProductId}
-                clients={clients}
-                brands={brands}
-                products={products}
-                onClientChange={(nextClientId) => {
-                  setActiveClientId(nextClientId);
-                  setTenantClientId(nextClientId || "");
-                  setActiveBrandId("");
-                  setActiveProductId("");
-                }}
-                onBrandChange={(nextBrandId) => {
-                  setActiveBrandId(nextBrandId);
-                  setTenantBrandId(nextBrandId || null);
-                  setActiveProductId("");
-                }}
-                onProductChange={(nextProductId) => {
-                  setActiveProductId(nextProductId);
-                  setTenantProductId(nextProductId || null);
-                }}
-              />
-              <p className="panel__meta">
-                All onboarding changes are saved against the selected scope above.
-              </p>
-              <div className="panel__actions">
-                <button
-                  type="button"
-                  className="button button--primary-subtle"
-                  onClick={() => {
-                    setCreateClientDrawerOpen(true);
-                    setCreateClientError(null);
-                    setCreateClientSuccess(null);
-                  }}
-                >
-                  Add new client
-                </button>
-              </div>
-              <div className="admin-onboarding__panels">
+            <AdminOnboardingWorkspace
+              completion={onboardingCompletion}
+              currentStep={onboardingCurrentStep}
+              flowSteps={onboardingFlowSteps}
+              nextAction={onboardingNextAction}
+              activeClientId={activeClientId}
+              activeBrandId={activeBrandId}
+              activeProductId={activeProductId}
+              clients={clients}
+              brands={brands}
+              products={products}
+              onRunNextAction={handleRunOnboardingNextAction}
+              onClientChange={(nextClientId) => {
+                setActiveClientId(nextClientId);
+                setTenantClientId(nextClientId || "");
+                setActiveBrandId("");
+                setActiveProductId("");
+              }}
+              onBrandChange={(nextBrandId) => {
+                setActiveBrandId(nextBrandId);
+                setTenantBrandId(nextBrandId || null);
+                setActiveProductId("");
+              }}
+              onProductChange={(nextProductId) => {
+                setActiveProductId(nextProductId);
+                setTenantProductId(nextProductId || null);
+              }}
+              onAddClient={() => {
+                setCreateClientDrawerOpen(true);
+                setCreateClientError(null);
+                setCreateClientSuccess(null);
+              }}
+            >
                 <details>
                   <summary>Client access</summary>
                   {activeClientId ? (
@@ -1626,8 +1601,7 @@ export default function AdminPage() {
                     </li>
                   </ul>
                 </details>
-              </div>
-            </section>
+            </AdminOnboardingWorkspace>
 
             <section className="panel__card admin-ops">
               <div className="panel__header">
