@@ -45,7 +45,11 @@ import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { AdminOnboardingWorkspace } from "../../components/admin/AdminOnboardingWorkspace";
 import { BrandSetupPanel } from "../../components/admin/BrandSetupPanel";
+import { CanonicalIntentSpecPanel } from "../../components/admin/CanonicalIntentSpecPanel";
 import { ClientAccessPanel } from "../../components/admin/ClientAccessPanel";
+import { ModelGatewayPanel } from "../../components/admin/ModelGatewayPanel";
+import { OnboardingReviewPanel } from "../../components/admin/OnboardingReviewPanel";
+import { PlatformProfilePanel } from "../../components/admin/PlatformProfilePanel";
 import { ProductCatalogPanel } from "../../components/admin/ProductCatalogPanel";
 
 const emptyForm = {
@@ -1288,145 +1292,38 @@ export default function AdminPage() {
                   }
                   onCreateProduct={handleCreateProduct}
                 >
-                      <details>
-                        <summary>Platform profile (UCP)</summary>
-                        {!platformProfile ? (
-                          <p className="panel__empty">Platform profile not loaded yet.</p>
-                        ) : (
-                          <div className="admin__form">
-                            <span className="panel__label">Profile JSON</span>
-                            <input
-                              type="text"
-                              placeholder="Profile name"
-                              value={platformProfileName}
-                              onChange={(event) => setPlatformProfileName(event.target.value)}
-                            />
-                            <input
-                              type="text"
-                              placeholder="Version"
-                              value={platformProfileVersion}
-                              onChange={(event) => setPlatformProfileVersion(event.target.value)}
-                            />
-                            <textarea
-                              rows={8}
-                              value={platformProfileText}
-                              onChange={(event) => setPlatformProfileText(event.target.value)}
-                            />
-                            {platformProfileError && (
-                              <p className="panel__error">{platformProfileError}</p>
-                            )}
-                            {platformProfileSaved && (
-                              <p className="panel__success">Saved platform profile.</p>
-                            )}
-                            <button
-                              type="button"
-                              className="button button--primary-subtle"
-                              onClick={handleSavePlatformProfile}
-                            >
-                              Save profile
-                            </button>
-                          </div>
-                        )}
-                      </details>
+                  <PlatformProfilePanel
+                    platformProfile={platformProfile}
+                    profileName={platformProfileName}
+                    profileVersion={platformProfileVersion}
+                    profileText={platformProfileText}
+                    profileError={platformProfileError}
+                    profileSaved={platformProfileSaved}
+                    onProfileNameChange={setPlatformProfileName}
+                    onProfileVersionChange={setPlatformProfileVersion}
+                    onProfileTextChange={setPlatformProfileText}
+                    onSaveProfile={handleSavePlatformProfile}
+                  />
                 </ProductCatalogPanel>
-                <details>
-                  <summary>Canonical intent spec</summary>
-                  <p className="panel__meta">
-                    Capture objective product context used by bottom-up query generation.
-                  </p>
-                  <p className="panel__meta">
-                    Saved under selected product metadata path:
-                    {" "}
-                    <code>canonical_intent_spec</code>.
-                  </p>
-                  <button
-                    type="button"
-                    className="button button--primary-subtle"
-                    onClick={() => setIntentDrawerOpen(true)}
-                    disabled={!selectedProduct}
-                  >
-                    Open intent spec editor
-                  </button>
-                  {intentSpecSaved ? (
-                    <p className="panel__success">Saved canonical intent spec.</p>
-                  ) : null}
-                  {intentSpecAutofillStatus ? (
-                    <p className="panel__meta">{intentSpecAutofillStatus}</p>
-                  ) : null}
-                  {intentSpecError ? (
-                    <p className="panel__error">{intentSpecError}</p>
-                  ) : null}
-                </details>
-                <details>
-                  <summary>Review</summary>
-                  <ul className="admin__list">
-                    <li>
-                      <span>Client</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneClient ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneClient ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => {
-                            setCreateClientDrawerOpen(true);
-                            setCreateClientError(null);
-                            setCreateClientSuccess(null);
-                          }}
-                        >
-                          Add client
-                        </button>
-                      ) : null}
-                    </li>
-                    <li>
-                      <span>Brand</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneBrand ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneBrand ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => setShowCreateBrand(true)}
-                        >
-                          Add brand
-                        </button>
-                      ) : null}
-                    </li>
-                    <li>
-                      <span>Product</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneProduct ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneProduct ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => setShowCreateProduct(true)}
-                        >
-                          Add product
-                        </button>
-                      ) : null}
-                    </li>
-                    <li>
-                      <span>Canonical intent spec</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneIntent ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneIntent ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => setIntentDrawerOpen(true)}
-                          disabled={!selectedProduct}
-                        >
-                          Open intent editor
-                        </button>
-                      ) : null}
-                    </li>
-                  </ul>
-                </details>
+                <CanonicalIntentSpecPanel
+                  canOpenIntentEditor={Boolean(selectedProduct)}
+                  intentSpecSaved={intentSpecSaved}
+                  intentSpecAutofillStatus={intentSpecAutofillStatus}
+                  intentSpecError={intentSpecError}
+                  onOpenIntentEditor={() => setIntentDrawerOpen(true)}
+                />
+                <OnboardingReviewPanel
+                  onboardingCompletion={onboardingCompletion}
+                  canOpenIntentEditor={Boolean(selectedProduct)}
+                  onAddClient={() => {
+                    setCreateClientDrawerOpen(true);
+                    setCreateClientError(null);
+                    setCreateClientSuccess(null);
+                  }}
+                  onAddBrand={() => setShowCreateBrand(true)}
+                  onAddProduct={() => setShowCreateProduct(true)}
+                  onOpenIntentEditor={() => setIntentDrawerOpen(true)}
+                />
             </AdminOnboardingWorkspace>
 
             <section className="panel__card admin-ops">
@@ -1437,165 +1334,17 @@ export default function AdminPage() {
               <p className="panel__step-helper">
                 These controls tune providers, skills, and maintenance after onboarding is complete.
               </p>
-              <details className="admin-ops__details">
-                <summary>Model gateway</summary>
-                {!userId ? (
-                  <p className="panel__empty">Sign in to manage model keys.</p>
-                ) : (
-                  <div className="admin__form">
-                    {llmConfigError ? (
-                      <p className="panel__error">{llmConfigError}</p>
-                    ) : null}
-                    <div className="panel__chips">
-                      {LLM_PROVIDERS.map((provider) => {
-                        const summary = llmConfig?.providers?.[provider.id];
-                        const status = summary?.configured ? "ready" : "missing";
-                        return (
-                          <span
-                            key={provider.id}
-                            className={`panel__chip ${
-                              summary?.is_active ? "is-ready" : summary?.configured ? "is-ready" : "is-missing"
-                            }`}
-                          >
-                            {provider.label}: {summary?.is_active ? "active" : status}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    {LLM_PROVIDERS.map((provider) => {
-                      const summary = llmConfig?.providers?.[provider.id];
-                      const input = llmInputs[provider.id] || {
-                        apiKey: "",
-                        validationApiKey: "",
-                        model: summary?.model || LLM_MODEL_OPTIONS[provider.id]?.[0] || "",
-                        validationModel:
-                          summary?.validation_model ||
-                          LLM_MODEL_OPTIONS[provider.id]?.[0] ||
-                          "",
-                      };
-                      const baseOptions = LLM_MODEL_OPTIONS[provider.id] || [];
-                      const modelOptions = input.model && !baseOptions.includes(input.model)
-                        ? [input.model, ...baseOptions]
-                        : baseOptions;
-                      const validationOptions =
-                        input.validationModel &&
-                        !baseOptions.includes(input.validationModel)
-                          ? [input.validationModel, ...baseOptions]
-                          : baseOptions;
-                      return (
-                        <div key={provider.id} className="panel__card panel__card--compact">
-                          <div className="panel__header">
-                            <h4>{provider.label}</h4>
-                            <span className="panel__meta">
-                              Chat: {summary?.chat_configured ? "set" : "missing"} ·
-                              Validation: {summary?.validation_configured ? "set" : "missing"}
-                            </span>
-                          </div>
-                          <div className="panel__grid">
-                            <label className="panel__label">
-                              <span>Chat model</span>
-                              <input
-                                className="panel__input panel__input--neutral"
-                                type="text"
-                                spellCheck={false}
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                value={input.model}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "model",
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
-                            <label className="panel__label">
-                              <span>Validation model</span>
-                              <input
-                                className="panel__input panel__input--neutral"
-                                type="text"
-                                list={`admin-llm-validation-models-${provider.id}`}
-                                spellCheck={false}
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                value={input.validationModel}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "validationModel",
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                              <datalist
-                                id={`admin-llm-validation-models-${provider.id}`}
-                              >
-                                {validationOptions.map((option) => (
-                                  <option key={option} value={option} />
-                                ))}
-                              </datalist>
-                            </label>
-                            <label className="panel__label">
-                              <span>Chat key (BYOK)</span>
-                              <input
-                                className="panel__input"
-                                type="password"
-                                value={input.apiKey}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "apiKey",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder={
-                                  summary?.configured ? "Saved" : "Paste API key"
-                                }
-                              />
-                            </label>
-                            <label className="panel__label">
-                              <span>Validation key (BYOK)</span>
-                              <input
-                                className="panel__input"
-                                type="password"
-                                value={input.validationApiKey}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "validationApiKey",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder={
-                                  summary?.configured ? "Saved (optional)" : "Paste API key"
-                                }
-                              />
-                            </label>
-                          </div>
-                          <div className="panel__actions">
-                            <button
-                              type="button"
-                              className="button button--primary-subtle"
-                              onClick={() => void handleSaveLlmProvider(provider.id)}
-                            >
-                              Save provider
-                            </button>
-                            <button
-                              type="button"
-                              className="button button--ghost"
-                              onClick={() => void handleActivateLlmProvider(provider.id)}
-                              disabled={!summary?.chat_configured}
-                            >
-                              Use for chat
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </details>
+              <ModelGatewayPanel
+                userId={userId}
+                llmConfig={llmConfig}
+                llmConfigError={llmConfigError}
+                llmInputs={llmInputs}
+                providers={LLM_PROVIDERS}
+                modelOptions={LLM_MODEL_OPTIONS}
+                onInputChange={handleLlmInputChange}
+                onSaveProvider={handleSaveLlmProvider}
+                onActivateProvider={handleActivateLlmProvider}
+              />
               <details className="admin-ops__details">
                 <summary>Agent skills</summary>
                 {!userId ? (
