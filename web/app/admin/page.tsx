@@ -46,6 +46,7 @@ import { useTenant } from "../../components/tenant/TenantProvider";
 import { AdminOnboardingWorkspace } from "../../components/admin/AdminOnboardingWorkspace";
 import { BrandSetupPanel } from "../../components/admin/BrandSetupPanel";
 import { ClientAccessPanel } from "../../components/admin/ClientAccessPanel";
+import { ProductCatalogPanel } from "../../components/admin/ProductCatalogPanel";
 
 const emptyForm = {
   id: "",
@@ -1274,93 +1275,19 @@ export default function AdminPage() {
                   }
                   onCreateBrand={handleCreateBrand}
                 />
-                <details>
-                  <summary>Product catalog</summary>
-                  {activeBrandId ? (
-                    <>
-                      <p className="panel__meta">
-                        Creates and edits products for brand:{" "}
-                        <strong>{selectedBrand?.name ?? activeBrandId}</strong>
-                      </p>
-                      {products.length === 0 ? (
-                        <p className="panel__empty">No products yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {products.map((product) => (
-                            <li key={product.id}>
-                              <span>{product.name}</span>
-                              <span className="admin__meta">{product.id}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div className="panel__actions">
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => setShowCreateProduct((current) => !current)}
-                        >
-                          {showCreateProduct
-                            ? "Hide create product form"
-                            : "Add new product"}
-                        </button>
-                      </div>
-                      {showCreateProduct ? (
-                        <div className="admin__form">
-                          <span className="panel__label">
-                            Create product for {selectedBrand?.name ?? activeBrandId}
-                          </span>
-                          <input
-                            type="text"
-                            placeholder="product-id"
-                            value={productForm.id}
-                            onChange={(event) =>
-                              setProductForm((current) => ({ ...current, id: event.target.value }))
-                            }
-                            required
-                          />
-                          <input
-                            type="text"
-                            placeholder="Product name"
-                            value={productForm.name}
-                            onChange={(event) =>
-                              setProductForm((current) => ({ ...current, name: event.target.value }))
-                            }
-                            required
-                          />
-                          <textarea
-                            rows={2}
-                            placeholder="Short description (required)"
-                            value={productForm.description}
-                            onChange={(event) =>
-                              setProductForm((current) => ({
-                                ...current,
-                                description: event.target.value,
-                              }))
-                            }
-                            required
-                          />
-                          <input
-                            type="url"
-                            placeholder="Product URL (optional)"
-                            value={productForm.productUrl}
-                            onChange={(event) =>
-                              setProductForm((current) => ({
-                                ...current,
-                                productUrl: event.target.value,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="button button--primary-subtle"
-                            onClick={handleCreateProduct}
-                            disabled={!canCreateProduct}
-                          >
-                            Add product
-                          </button>
-                        </div>
-                      ) : null}
+                <ProductCatalogPanel
+                  activeBrandId={activeBrandId}
+                  selectedBrandName={selectedBrand?.name}
+                  products={products}
+                  showCreateProduct={showCreateProduct}
+                  productForm={productForm}
+                  canCreateProduct={canCreateProduct}
+                  onShowCreateProductChange={setShowCreateProduct}
+                  onProductFormChange={(patch) =>
+                    setProductForm((current) => ({ ...current, ...patch }))
+                  }
+                  onCreateProduct={handleCreateProduct}
+                >
                       <details>
                         <summary>Platform profile (UCP)</summary>
                         {!platformProfile ? (
@@ -1401,11 +1328,7 @@ export default function AdminPage() {
                           </div>
                         )}
                       </details>
-                    </>
-                  ) : (
-                    <p className="panel__empty">Select a brand first.</p>
-                  )}
-                </details>
+                </ProductCatalogPanel>
                 <details>
                   <summary>Canonical intent spec</summary>
                   <p className="panel__meta">
