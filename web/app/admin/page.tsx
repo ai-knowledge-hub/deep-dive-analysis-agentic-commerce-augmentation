@@ -44,6 +44,8 @@ import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { AdminOnboardingWorkspace } from "../../components/admin/AdminOnboardingWorkspace";
+import { BrandSetupPanel } from "../../components/admin/BrandSetupPanel";
+import { ClientAccessPanel } from "../../components/admin/ClientAccessPanel";
 
 const emptyForm = {
   id: "",
@@ -1249,128 +1251,29 @@ export default function AdminPage() {
                 setCreateClientSuccess(null);
               }}
             >
-                <details>
-                  <summary>Client access</summary>
-                  {activeClientId ? (
-                    <div className="admin__form">
-                      <p className="panel__meta">
-                        Users added here get access to:{" "}
-                        <strong>{selectedClient?.name ?? activeClientId}</strong>
-                      </p>
-                      <span className="panel__label">Client users</span>
-                      {clientUsers.length === 0 ? (
-                        <p className="panel__empty">No users yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {clientUsers.map((member) => (
-                            <li key={member.id}>
-                              <span>{member.user_id}</span>
-                              <span className="admin__meta">
-                                {member.role ?? "analyst"}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <input
-                        type="text"
-                        placeholder="Clerk user id"
-                        value={userForm.memberUserId}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            memberUserId: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="text"
-                        placeholder="Role (analyst, admin)"
-                        value={userForm.role}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, role: event.target.value }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="button button--primary-subtle"
-                        onClick={handleAddClientUser}
-                        disabled={!userForm.memberUserId.trim()}
-                      >
-                        Add user to selected client
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="panel__empty">Select a client first.</p>
-                  )}
-                </details>
-                <details>
-                  <summary>Brand setup</summary>
-                  {activeClientId ? (
-                    <>
-                      <p className="panel__meta">
-                        Creates and edits brands for client:{" "}
-                        <strong>{selectedClient?.name ?? activeClientId}</strong>
-                      </p>
-                      {brands.length === 0 ? (
-                        <p className="panel__empty">No brands yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {brands.map((brand) => (
-                            <li key={brand.id}>
-                              <span>{brand.name}</span>
-                              <span className="admin__meta">{brand.id}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div className="panel__actions">
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => setShowCreateBrand((current) => !current)}
-                        >
-                          {showCreateBrand ? "Hide create brand form" : "Add new brand"}
-                        </button>
-                      </div>
-                      {showCreateBrand ? (
-                        <div className="admin__form">
-                          <span className="panel__label">
-                            Create brand for {selectedClient?.name ?? activeClientId}
-                          </span>
-                          <input
-                            type="text"
-                            placeholder="brand-id"
-                            value={brandForm.id}
-                            onChange={(event) =>
-                              setBrandForm((current) => ({ ...current, id: event.target.value }))
-                            }
-                            required
-                          />
-                          <input
-                            type="text"
-                            placeholder="Brand name"
-                            value={brandForm.name}
-                            onChange={(event) =>
-                              setBrandForm((current) => ({ ...current, name: event.target.value }))
-                            }
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="button button--primary-subtle"
-                            onClick={handleCreateBrand}
-                            disabled={!canCreateBrand}
-                          >
-                            Add brand
-                          </button>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="panel__empty">Select a client first.</p>
-                  )}
-                </details>
+                <ClientAccessPanel
+                  activeClientId={activeClientId}
+                  selectedClientName={selectedClient?.name}
+                  clientUsers={clientUsers}
+                  userForm={userForm}
+                  onUserFormChange={(patch) =>
+                    setUserForm((current) => ({ ...current, ...patch }))
+                  }
+                  onAddClientUser={handleAddClientUser}
+                />
+                <BrandSetupPanel
+                  activeClientId={activeClientId}
+                  selectedClientName={selectedClient?.name}
+                  brands={brands}
+                  showCreateBrand={showCreateBrand}
+                  brandForm={brandForm}
+                  canCreateBrand={canCreateBrand}
+                  onShowCreateBrandChange={setShowCreateBrand}
+                  onBrandFormChange={(patch) =>
+                    setBrandForm((current) => ({ ...current, ...patch }))
+                  }
+                  onCreateBrand={handleCreateBrand}
+                />
                 <details>
                   <summary>Product catalog</summary>
                   {activeBrandId ? (
