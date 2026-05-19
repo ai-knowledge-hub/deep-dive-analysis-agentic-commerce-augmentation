@@ -39,6 +39,7 @@ import {
   listAdminLoopMaintenanceRuns,
   runAdminLoopMaintenance,
 } from "../../lib/api";
+import { AgentSkillsPanel } from "../../components/admin/AgentSkillsPanel";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
@@ -47,6 +48,7 @@ import { AdminOnboardingWorkspace } from "../../components/admin/AdminOnboarding
 import { BrandSetupPanel } from "../../components/admin/BrandSetupPanel";
 import { CanonicalIntentSpecPanel } from "../../components/admin/CanonicalIntentSpecPanel";
 import { ClientAccessPanel } from "../../components/admin/ClientAccessPanel";
+import { LearningLoopMaintenancePanel } from "../../components/admin/LearningLoopMaintenancePanel";
 import { ModelGatewayPanel } from "../../components/admin/ModelGatewayPanel";
 import { OnboardingReviewPanel } from "../../components/admin/OnboardingReviewPanel";
 import { PlatformProfilePanel } from "../../components/admin/PlatformProfilePanel";
@@ -1345,176 +1347,38 @@ export default function AdminPage() {
                 onSaveProvider={handleSaveLlmProvider}
                 onActivateProvider={handleActivateLlmProvider}
               />
-              <details className="admin-ops__details">
-                <summary>Agent skills</summary>
-                {!userId ? (
-                  <p className="panel__empty">Sign in to edit skills.</p>
-                ) : (
-                  <div className="admin__form">
-                    <span className="panel__label">Skill</span>
-                    <select
-                      value={activeSkillName}
-                      onChange={(event) => setActiveSkillName(event.target.value)}
-                    >
-                      {skillNames.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                    {activeSkill?.updated_at ? (
-                      <p className="panel__meta">Updated: {activeSkill.updated_at}</p>
-                    ) : null}
-                    <input
-                      type="text"
-                      placeholder="Description"
-                      value={skillDescription}
-                      onChange={(event) => setSkillDescription(event.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Version"
-                      value={skillVersion}
-                      onChange={(event) => setSkillVersion(event.target.value)}
-                    />
-                    <label className="panel__label panel__label--inline">
-                      <input
-                        type="checkbox"
-                        checked={skillEnabled}
-                        onChange={(event) => setSkillEnabled(event.target.checked)}
-                      />
-                      Enabled
-                    </label>
-                    <textarea
-                      rows={10}
-                      value={skillContent}
-                      onChange={(event) => setSkillContent(event.target.value)}
-                    />
-                    {skillHistory.length > 0 ? (
-                      <div className="admin__history">
-                        <span className="panel__label">Recent versions</span>
-                        <ul className="admin__list">
-                          {skillHistory.map((item) => (
-                            <li key={item.id}>
-                              <span>{item.version ?? "n/a"}</span>
-                              <span className="admin__meta">{item.changed_at ?? ""}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {skillError ? <p className="panel__error">{skillError}</p> : null}
-                    {skillSaved ? <p className="panel__success">Saved skill.</p> : null}
-                    <button
-                      type="button"
-                      className="button button--primary-subtle"
-                      onClick={handleSaveSkill}
-                    >
-                      Save skill
-                    </button>
-                  </div>
-                )}
-              </details>
-              <details className="admin-ops__details">
-                <summary>Learning loop maintenance</summary>
-                {!userId ? (
-                  <p className="panel__empty">Sign in to run maintenance.</p>
-                ) : (
-                  <div className="admin__form">
-                    <p className="panel__meta">
-                      Refresh calibration profiles and distill high-confidence belief memory.
-                    </p>
-                    <div className="panel__grid">
-                      <label className="panel__label">
-                        <span>Client scope</span>
-                        <input
-                          className="panel__input panel__input--neutral"
-                          type="text"
-                          readOnly
-                          value={activeClientId || "all clients"}
-                        />
-                      </label>
-                      <label className="panel__label">
-                        <span>Lookback days</span>
-                        <input
-                          className="panel__input panel__input--neutral"
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={loopMaintenanceLookbackDays}
-                          onChange={(event) =>
-                            setLoopMaintenanceLookbackDays(event.target.value)
-                          }
-                        />
-                      </label>
-                      <label className="panel__label">
-                        <span>Min confidence</span>
-                        <input
-                          className="panel__input panel__input--neutral"
-                          type="number"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={loopMaintenanceMinConfidence}
-                          onChange={(event) =>
-                            setLoopMaintenanceMinConfidence(event.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="button button--primary-subtle"
-                        onClick={() => void handleRunLoopMaintenance()}
-                        disabled={loopMaintenanceRunning}
-                      >
-                        {loopMaintenanceRunning ? "Running..." : "Run maintenance"}
-                      </button>
-                    </div>
-                    {loopMaintenanceError ? (
-                      <p className="panel__error">{loopMaintenanceError}</p>
-                    ) : null}
-                    {loopMaintenanceResult ? (
-                      <div className="admin__history">
-                        <span className="panel__label">Last run summary</span>
-                        <ul className="admin__list">
-                          {loopMaintenanceResult.results.map((item) => (
-                            <li key={item.client_id}>
-                              <span>{item.client_id}</span>
-                              <span className="admin__meta">
-                                calibration {item.calibration_profiles_updated} · distilled{" "}
-                                {item.memory_artifacts_distilled}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    <div className="admin__history">
-                      <span className="panel__label">Recent runs</span>
-                      {loopMaintenanceHistory.length === 0 ? (
-                        <p className="panel__meta">No maintenance runs logged yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {loopMaintenanceHistory.map((item) => (
-                            <li key={item.id}>
-                              <span>
-                                {item.created_at ?? "n/a"} · lookback {item.lookback_days}d ·
-                                min conf {item.min_confidence}
-                              </span>
-                              <span className="admin__meta">
-                                calibration {item.calibration_profiles_updated} · distilled{" "}
-                                {item.memory_artifacts_distilled}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </details>
+              <AgentSkillsPanel
+                userId={userId}
+                skillNames={skillNames}
+                activeSkillName={activeSkillName}
+                activeSkill={activeSkill}
+                skillDescription={skillDescription}
+                skillVersion={skillVersion}
+                skillContent={skillContent}
+                skillEnabled={skillEnabled}
+                skillHistory={skillHistory}
+                skillError={skillError}
+                skillSaved={skillSaved}
+                onActiveSkillNameChange={setActiveSkillName}
+                onSkillDescriptionChange={setSkillDescription}
+                onSkillVersionChange={setSkillVersion}
+                onSkillContentChange={setSkillContent}
+                onSkillEnabledChange={setSkillEnabled}
+                onSaveSkill={handleSaveSkill}
+              />
+              <LearningLoopMaintenancePanel
+                userId={userId}
+                activeClientId={activeClientId}
+                isRunning={loopMaintenanceRunning}
+                error={loopMaintenanceError}
+                result={loopMaintenanceResult}
+                history={loopMaintenanceHistory}
+                lookbackDays={loopMaintenanceLookbackDays}
+                minConfidence={loopMaintenanceMinConfidence}
+                onLookbackDaysChange={setLoopMaintenanceLookbackDays}
+                onMinConfidenceChange={setLoopMaintenanceMinConfidence}
+                onRunMaintenance={handleRunLoopMaintenance}
+              />
             </section>
             {isCreateClientDrawerOpen && (
               <div
