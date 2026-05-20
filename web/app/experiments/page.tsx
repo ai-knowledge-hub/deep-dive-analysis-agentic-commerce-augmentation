@@ -10,10 +10,7 @@ import type {
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
-  QueryBatteryQuery,
   QueryBatteryCandidate,
-  AudienceSegment,
-  QueryBatteryMetrics,
   SimulationGapReport,
 } from "../../lib/types";
 import {
@@ -28,7 +25,6 @@ import {
   deleteSimulationRun,
   generateBatteryQueries,
   addBatteryQuery,
-  getBatteryMetrics,
   listBatteries,
   updateBattery,
   updateBatteryQuery,
@@ -37,7 +33,6 @@ import {
   listExperimentVariants,
   listExperiments,
   listBatteryQueries,
-  listBatteryAudienceSegments,
   updateBatteryAudienceSegment,
   runExperiment,
   updateExperiment,
@@ -71,6 +66,7 @@ import { OrchestratorRecommendationsPanel } from "../../components/experiments/O
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentBatteryReadModels } from "../../components/experiments/useExperimentBatteryReadModels";
 import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
@@ -109,7 +105,6 @@ function ExperimentsPageContent() {
   >("list");
 
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
-  const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
     "simulation" | "retrieval_backed"
@@ -125,9 +120,6 @@ function ExperimentsPageContent() {
     purpose: "",
     status: "draft",
   });
-  const [batteryMetrics, setBatteryMetrics] = useState<QueryBatteryMetrics | null>(null);
-  const [audienceSegments, setAudienceSegments] = useState<AudienceSegment[]>([]);
-  const [audienceSegmentsStatus, setAudienceSegmentsStatus] = useState<string | null>(null);
   const [audienceSegmentsOpen, setAudienceSegmentsOpen] = useState(false);
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
   const [batteryUseLlm, setBatteryUseLlm] = useState(true);
@@ -356,6 +348,24 @@ function ExperimentsPageContent() {
     () => experiments.find((item) => item.id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
   );
+  const {
+    queries,
+    setQueries,
+    queryMap,
+    selectedBattery,
+    batteryMetrics,
+    audienceSegments,
+    setAudienceSegments,
+    audienceSegmentsStatus,
+    setAudienceSegmentsStatus,
+    hasBottomUpMetadata,
+  } = useExperimentBatteryReadModels({
+    batteries,
+    selectedBatteryId: experimentForm.batteryId,
+    fallbackBatteryId: selectedExperiment?.battery_id,
+    productDetail,
+    userId,
+  });
   const handleClearSelectedExperimentData = useCallback(() => {
     setLoopGeneratedVariants([]);
     setSelectedLoopCandidateIndex(0);
@@ -423,32 +433,6 @@ function ExperimentsPageContent() {
     }
   }, [experimentForm.batteryId, experiments, productId, selectedExperimentId]);
 
-  useEffect(() => {
-    const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
-    if (batteryId) {
-      void listBatteryQueries(batteryId, userId).then((response) => {
-        setQueries(response.queries ?? []);
-      });
-      void getBatteryMetrics(batteryId, userId).then((response) => {
-        setBatteryMetrics(response.metrics ?? null);
-      });
-    } else {
-      setQueries([]);
-      setBatteryMetrics(null);
-    }
-  }, [experimentForm.batteryId, selectedExperiment?.battery_id, userId]);
-
-  const queryMap = useMemo(() => {
-    const map = new Map<string, string>();
-    queries.forEach((query) => map.set(query.id, query.query_text));
-    return map;
-  }, [queries]);
-
-  const selectedBattery = useMemo(
-    () => batteries.find((battery) => battery.id === experimentForm.batteryId) ?? null,
-    [batteries, experimentForm.batteryId],
-  );
-
   const validateJsonField = useCallback((value: string) => {
     if (!value.trim()) return null;
     try {
@@ -475,27 +459,6 @@ function ExperimentsPageContent() {
       });
     }
   }, [selectedBattery]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!selectedBattery) {
-      setAudienceSegments([]);
-      setAudienceSegmentsStatus(null);
-      return;
-    }
-    void listBatteryAudienceSegments(selectedBattery.id, userId)
-      .then((response) => {
-        if (cancelled) return;
-        setAudienceSegments(response.segments ?? []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setAudienceSegments([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBattery, userId]);
 
   useEffect(() => {
     if (selectedExperiment) {
@@ -830,43 +793,6 @@ function ExperimentsPageContent() {
     selectedExperimentId,
     userId,
   ]);
-
-  const hasBottomUpMetadata = useMemo(() => {
-    const metadata = productDetail?.metadata ?? {};
-    const canonicalSpec =
-      (metadata.canonical_intent_spec as Record<string, unknown> | undefined) ?? {};
-    const features = metadata.features;
-    const useCase = metadata.use_case ?? metadata.scenario;
-    const hasFeatures =
-      (Array.isArray(features) && features.length > 0) ||
-      (typeof features === "string" && features.trim() !== "");
-    const hasUseCase =
-      (Array.isArray(useCase) && useCase.length > 0) ||
-      (typeof useCase === "string" && useCase.trim() !== "");
-    const canonicalFeatures = canonicalSpec.feature_concepts;
-    const canonicalUseCases = canonicalSpec.use_cases;
-    const hasCanonicalFeatures =
-      (Array.isArray(canonicalFeatures) && canonicalFeatures.length > 0) ||
-      (typeof canonicalFeatures === "string" && canonicalFeatures.trim() !== "");
-    const hasCanonicalUseCases =
-      (Array.isArray(canonicalUseCases) && canonicalUseCases.length > 0) ||
-      (typeof canonicalUseCases === "string" && canonicalUseCases.trim() !== "");
-    const hasIntentLabels = Boolean(metadata.intent_labels || metadata.intent_archetypes);
-    const hasVertical = Boolean(
-      metadata.vertical ||
-        metadata.domain ||
-        metadata.category ||
-        canonicalSpec.category,
-    );
-    return (
-      hasFeatures ||
-      hasUseCase ||
-      hasCanonicalFeatures ||
-      hasCanonicalUseCases ||
-      hasIntentLabels ||
-      hasVertical
-    );
-  }, [productDetail]);
 
   useEffect(() => {
     if (batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata) {
