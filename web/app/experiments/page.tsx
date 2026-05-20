@@ -9,7 +9,6 @@ import type {
   ExperimentRun,
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
-  NextTestRecommendation,
   SimulationGapReport,
 } from "../../lib/types";
 import {
@@ -27,7 +26,6 @@ import {
   updateExperiment,
   updateExperimentSchedule,
   backfillExperiment,
-  getNextTestRecommendation,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -57,6 +55,7 @@ import { useExperimentBatteryReadModels } from "../../components/experiments/use
 import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
+import { useExperimentRecommendationActions } from "../../components/experiments/useExperimentRecommendationActions";
 import { useExperimentSelectionData } from "../../components/experiments/useExperimentSelectionData";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
 import { useExperimentVariantActions } from "../../components/experiments/useExperimentVariantActions";
@@ -169,11 +168,6 @@ function ExperimentsPageContent() {
     "win_rate" | "avg_score"
   >("win_rate");
   const [metricsHistoryExpanded, setMetricsHistoryExpanded] = useState(false);
-  const [nextTest, setNextTest] = useState<NextTestRecommendation | null>(null);
-  const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
-  const [isRecommending, setIsRecommending] = useState(false);
-  const [isCreatingSuggestedVariant, setIsCreatingSuggestedVariant] =
-    useState(false);
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
@@ -786,6 +780,29 @@ function ExperimentsPageContent() {
     setIsCreatingLoopCandidateVariant,
     setVariantAdvancedOpen,
   });
+  const {
+    nextTest,
+    nextTestStatus,
+    isRecommending,
+    isCreatingSuggestedVariant,
+    handleRecommendNextTest,
+    handleRunRecommended,
+    handleCreateSuggestedVariant,
+    handleCreateVariantFromRecommendation,
+    handleRunRecommendation,
+  } = useExperimentRecommendationActions({
+    labMode,
+    selectedExperimentId,
+    userId,
+    refreshExecutionState,
+    runExperimentWithSelectedMode,
+    setVariants,
+    setRuns,
+    setMetrics,
+    setRunningVariantId,
+    setFormError,
+    setSubmitting,
+  });
 
   useEffect(() => {
     if (batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata) {
@@ -830,160 +847,6 @@ function ExperimentsPageContent() {
       hypothesis: JSON.stringify(hypothesisPayload, null, 2),
     }));
   }, []);
-
-  const handleRecommendNextTest = useCallback(async () => {
-    if (!selectedExperimentId) return;
-    setNextTestStatus(null);
-    setIsRecommending(true);
-    try {
-      const response = await getNextTestRecommendation(
-        selectedExperimentId,
-        userId,
-      );
-      setNextTest(response.recommendation);
-    } catch (error) {
-      setNextTestStatus("Unable to recommend next test.");
-    } finally {
-      setIsRecommending(false);
-    }
-  }, [selectedExperimentId, userId]);
-
-  const handleRunRecommended = useCallback(async () => {
-    if (!selectedExperimentId || !nextTest?.variant_id) return;
-    setRunningVariantId(nextTest.variant_id);
-    try {
-      await runExperimentWithSelectedMode(selectedExperimentId, nextTest.variant_id);
-      const [runsResponse, metricsResponse] = await Promise.all([
-        listExperimentRuns(selectedExperimentId, userId),
-        listExperimentMetrics(selectedExperimentId, userId),
-      ]);
-      setRuns(runsResponse.runs ?? []);
-      setMetrics(metricsResponse.metrics ?? []);
-      await refreshExecutionState(selectedExperimentId);
-      setNextTestStatus("Recommended variant run completed.");
-    } finally {
-      setRunningVariantId(null);
-    }
-  }, [nextTest?.variant_id, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId]);
-
-  const handleCreateSuggestedVariant = useCallback(async () => {
-    if (!selectedExperimentId || !nextTest || nextTest.action !== "create_variant") {
-      return;
-    }
-    setFormError(null);
-    setIsCreatingSuggestedVariant(true);
-    setSubmitting(true);
-    try {
-      const response = await createExperimentVariant(selectedExperimentId, {
-        label: nextTest.suggested_label ?? "Hypothesis (next)",
-        type: nextTest.suggested_type ?? "copy",
-        payload:
-          nextTest.suggested_payload &&
-          typeof nextTest.suggested_payload === "object"
-            ? nextTest.suggested_payload
-            : {},
-        user_id: userId,
-      });
-      const refreshed = await listExperimentVariants(selectedExperimentId, userId);
-      setVariants(refreshed.variants ?? []);
-      await refreshExecutionState(selectedExperimentId);
-      if (labMode === "lab") {
-        await runExperimentWithSelectedMode(selectedExperimentId, response.variant.id);
-        const [runsResponse, metricsResponse] = await Promise.all([
-          listExperimentRuns(selectedExperimentId, userId),
-          listExperimentMetrics(selectedExperimentId, userId),
-        ]);
-        setRuns(runsResponse.runs ?? []);
-        setMetrics(metricsResponse.metrics ?? []);
-        await refreshExecutionState(selectedExperimentId);
-        setNextTestStatus(
-          `Created and ran variant ${response.variant.label}.`,
-        );
-      } else {
-        setNextTestStatus(`Created variant ${response.variant.label}.`);
-      }
-    } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "Unable to create variant.",
-      );
-    } finally {
-      setSubmitting(false);
-      setIsCreatingSuggestedVariant(false);
-    }
-  }, [labMode, nextTest, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId]);
-
-  const handleCreateVariantFromRecommendation = useCallback(
-    async (recommendation: NextTestRecommendation) => {
-      if (!selectedExperimentId || recommendation.action !== "create_variant") {
-        return;
-      }
-      setFormError(null);
-      setIsCreatingSuggestedVariant(true);
-      setSubmitting(true);
-      try {
-        const response = await createExperimentVariant(selectedExperimentId, {
-          label: recommendation.suggested_label ?? "Hypothesis (next)",
-          type: recommendation.suggested_type ?? "copy",
-          payload:
-            recommendation.suggested_payload &&
-            typeof recommendation.suggested_payload === "object"
-              ? recommendation.suggested_payload
-              : {},
-          user_id: userId,
-        });
-        const refreshed = await listExperimentVariants(selectedExperimentId, userId);
-        setVariants(refreshed.variants ?? []);
-        await refreshExecutionState(selectedExperimentId);
-        if (labMode === "lab") {
-          await runExperimentWithSelectedMode(
-            selectedExperimentId,
-            response.variant.id,
-          );
-          const [runsResponse, metricsResponse] = await Promise.all([
-            listExperimentRuns(selectedExperimentId, userId),
-            listExperimentMetrics(selectedExperimentId, userId),
-          ]);
-          setRuns(runsResponse.runs ?? []);
-          setMetrics(metricsResponse.metrics ?? []);
-          await refreshExecutionState(selectedExperimentId);
-          setNextTestStatus(
-            `Created and ran variant ${response.variant.label}.`,
-          );
-        } else {
-          setNextTestStatus(`Created variant ${response.variant.label}.`);
-        }
-      } catch (error) {
-        setFormError(
-          error instanceof Error ? error.message : "Unable to create variant.",
-        );
-      } finally {
-        setSubmitting(false);
-        setIsCreatingSuggestedVariant(false);
-      }
-    },
-    [labMode, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
-  );
-
-  const handleRunRecommendation = useCallback(
-    async (variantId: string | null | undefined) => {
-      if (!selectedExperimentId || !variantId) return;
-      setRunningVariantId(variantId);
-      try {
-        await runExperimentWithSelectedMode(selectedExperimentId, variantId);
-        const [runsResponse, metricsResponse] = await Promise.all([
-          listExperimentRuns(selectedExperimentId, userId),
-          listExperimentMetrics(selectedExperimentId, userId),
-        ]);
-        setRuns(runsResponse.runs ?? []);
-        setMetrics(metricsResponse.metrics ?? []);
-        await refreshExecutionState(selectedExperimentId);
-        setNextTestStatus("Recommended test run completed.");
-      } finally {
-        setRunningVariantId(null);
-      }
-    },
-    [labMode, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
-  );
 
   const latestMetricEntry = metrics[0] ?? null;
   const latestMetric =
