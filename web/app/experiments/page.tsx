@@ -5,22 +5,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
   BrandBelief,
-  CopyRevision,
-  ExperimentExecutionState,
-  ExperimentHypothesis,
   ExperimentMetric,
-  ExperimentRecommendation,
   ExperimentRun,
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
-  ValidationSummary,
   QueryBatteryQuery,
   QueryBatteryCandidate,
   AudienceSegment,
   QueryBatteryMetrics,
   SimulationGapReport,
-  SimulationRunDetailResponse,
 } from "../../lib/types";
 import {
   createBattery,
@@ -39,8 +33,6 @@ import {
   updateBattery,
   updateBatteryQuery,
   listExperimentMetrics,
-  getExperimentExecutionState,
-  listExperimentHypotheses,
   listExperimentRuns,
   listExperimentVariants,
   listExperiments,
@@ -52,10 +44,6 @@ import {
   updateExperimentSchedule,
   backfillExperiment,
   getNextTestRecommendation,
-  listExperimentRecommendations,
-  getSimulationRun,
-  getExperimentValidationSummary,
-  listCopyRevisions,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -86,8 +74,10 @@ import { VariantsIterationPanel } from "../../components/experiments/VariantsIte
 import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
+import { useExperimentSelectionData } from "../../components/experiments/useExperimentSelectionData";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
 import { useLatestExperimentAgentRun } from "../../components/experiments/useLatestExperimentAgentRun";
+import { useSimulationCopyRevisions } from "../../components/experiments/useSimulationCopyRevisions";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -119,19 +109,6 @@ function ExperimentsPageContent() {
   >("list");
 
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
-  const [variants, setVariants] = useState<ExperimentVariant[]>([]);
-  const [runs, setRuns] = useState<ExperimentRun[]>([]);
-  const [metrics, setMetrics] = useState<ExperimentMetric[]>([]);
-  const [executionState, setExecutionState] = useState<ExperimentExecutionState | null>(
-    null,
-  );
-  const [hypotheses, setHypotheses] = useState<ExperimentHypothesis[]>([]);
-  const [recommendations, setRecommendations] = useState<
-    ExperimentRecommendation[]
-  >([]);
-  const [simulationDetails, setSimulationDetails] = useState<
-    Record<string, SimulationRunDetailResponse["run"]>
-  >({});
   const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
@@ -180,11 +157,6 @@ function ExperimentsPageContent() {
     type: "copy",
     payload: "",
   });
-  const [simulationRevisions, setSimulationRevisions] = useState<CopyRevision[]>([]);
-  const [selectedSimulationRevisionId, setSelectedSimulationRevisionId] = useState("");
-  const [simulationRevisionStatus, setSimulationRevisionStatus] = useState<string | null>(
-    null,
-  );
   const [loopGeneratedVariants, setLoopGeneratedVariants] = useState<
     LoopGeneratedVariantCandidate[]
   >([]);
@@ -230,9 +202,6 @@ function ExperimentsPageContent() {
   const [isRecommending, setIsRecommending] = useState(false);
   const [isCreatingSuggestedVariant, setIsCreatingSuggestedVariant] =
     useState(false);
-  const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
-    null,
-  );
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
@@ -314,6 +283,13 @@ function ExperimentsPageContent() {
     productId,
     userId,
   });
+  const {
+    simulationRevisions,
+    selectedSimulationRevisionId,
+    setSelectedSimulationRevisionId,
+    simulationRevisionStatus,
+    setSimulationRevisionStatus,
+  } = useSimulationCopyRevisions({ productId, userId });
   const latestAgentRun = useLatestExperimentAgentRun(selectedExperimentId, userId);
   const showManualControls = labMode === "manual" || labShowManualControls;
   const experimentSnapshots = useExperimentSnapshots(experiments, userId);
@@ -329,18 +305,6 @@ function ExperimentsPageContent() {
       });
     },
     [experimentRunMode, retrievalMaxResults, userId],
-  );
-
-  const refreshExecutionState = useCallback(
-    async (experimentId: string) => {
-      try {
-        const response = await getExperimentExecutionState(experimentId, userId);
-        setExecutionState(response.state ?? null);
-      } catch {
-        setExecutionState(null);
-      }
-    },
-    [userId],
   );
 
   useEffect(() => {
@@ -392,6 +356,30 @@ function ExperimentsPageContent() {
     () => experiments.find((item) => item.id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
   );
+  const handleClearSelectedExperimentData = useCallback(() => {
+    setLoopGeneratedVariants([]);
+    setSelectedLoopCandidateIndex(0);
+    setLoopGenerationStatus(null);
+  }, []);
+  const {
+    variants,
+    setVariants,
+    runs,
+    setRuns,
+    metrics,
+    setMetrics,
+    executionState,
+    hypotheses,
+    recommendations,
+    validationSummary,
+    simulationDetails,
+    refreshExecutionState,
+  } = useExperimentSelectionData({
+    selectedExperimentId,
+    selectedExperimentBatteryId: selectedExperiment?.battery_id,
+    userId,
+    onClearSelection: handleClearSelectedExperimentData,
+  });
 
   const runsWorkspaceHref = useMemo(() => {
     return buildRunsHref({
@@ -422,51 +410,6 @@ function ExperimentsPageContent() {
   );
 
   useEffect(() => {
-    if (!selectedExperimentId) {
-      setVariants([]);
-      setRuns([]);
-      setMetrics([]);
-      setExecutionState(null);
-      setHypotheses([]);
-      setRecommendations([]);
-      setValidationSummary(null);
-      setLoopGeneratedVariants([]);
-      setSelectedLoopCandidateIndex(0);
-      setLoopGenerationStatus(null);
-      return;
-    }
-    void listExperimentVariants(selectedExperimentId, userId).then((response) => {
-      setVariants(response.variants ?? []);
-    });
-    void listExperimentRuns(selectedExperimentId, userId).then((response) => {
-      setRuns(response.runs ?? []);
-    });
-    void listExperimentMetrics(selectedExperimentId, userId).then((response) => {
-      setMetrics(response.metrics ?? []);
-    });
-    void getExperimentExecutionState(selectedExperimentId, userId)
-      .then((response) => {
-        setExecutionState(response.state ?? null);
-      })
-      .catch(() => setExecutionState(null));
-    void listExperimentHypotheses(selectedExperimentId, userId)
-      .then((response) => {
-        setHypotheses(response.hypotheses ?? []);
-      })
-      .catch(() => setHypotheses([]));
-    void listExperimentRecommendations(selectedExperimentId, userId).then(
-      (response) => {
-        setRecommendations(response.recommendations ?? []);
-      },
-    );
-    void getExperimentValidationSummary(selectedExperimentId, userId)
-      .then((response) => {
-        setValidationSummary(response.summary ?? null);
-      })
-      .catch(() => setValidationSummary(null));
-  }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
-
-  useEffect(() => {
     if (selectedExperimentId) return;
     if (!productId || !experimentForm.batteryId) return;
     const existing = [...experiments]
@@ -479,72 +422,6 @@ function ExperimentsPageContent() {
       setSelectedExperimentId(existing.id);
     }
   }, [experimentForm.batteryId, experiments, productId, selectedExperimentId]);
-
-  useEffect(() => {
-    if (!runs.length) return;
-    const runIds = runs
-      .map((run) => run.simulation_run_id)
-      .filter((runId): runId is string => Boolean(runId));
-    const pending = runIds.filter((id) => !simulationDetails[id]);
-    if (!pending.length) return;
-    let cancelled = false;
-    Promise.all(
-      pending.slice(0, 12).map(async (runId) => {
-        try {
-          const response = await getSimulationRun(runId, userId);
-          return [runId, response.run] as const;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      const updates: Record<string, SimulationRunDetailResponse["run"]> = {};
-      entries.forEach((entry) => {
-        if (entry) {
-          updates[entry[0]] = entry[1];
-        }
-      });
-      if (Object.keys(updates).length) {
-        setSimulationDetails((prev) => ({ ...prev, ...updates }));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [runs, simulationDetails, userId]);
-
-  useEffect(() => {
-    if (!productId) {
-      setSimulationRevisions([]);
-      setSelectedSimulationRevisionId("");
-      return;
-    }
-    let cancelled = false;
-    void listCopyRevisions({
-      product_id: productId,
-      source_type: "simulation",
-      user_id: userId,
-      limit: 50,
-    })
-      .then((response) => {
-        if (cancelled) return;
-        const revisions = response.revisions ?? [];
-        setSimulationRevisions(revisions);
-        setSelectedSimulationRevisionId((current) => {
-          if (current && revisions.some((item) => item.id === current)) return current;
-          return revisions[0]?.id ?? "";
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSimulationRevisions([]);
-        setSelectedSimulationRevisionId("");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [productId, userId]);
 
   useEffect(() => {
     const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
