@@ -39,12 +39,22 @@ import {
   listAdminLoopMaintenanceRuns,
   runAdminLoopMaintenance,
 } from "../../lib/api";
+import { AgentSkillsPanel } from "../../components/admin/AgentSkillsPanel";
+import { CanonicalIntentSpecDrawer } from "../../components/admin/CanonicalIntentSpecDrawer";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
-import { OnboardingFlowStatus } from "../../components/admin/OnboardingFlowStatus";
-import { ScopeSelectors } from "../../components/admin/ScopeSelectors";
+import { AdminOnboardingWorkspace } from "../../components/admin/AdminOnboardingWorkspace";
+import { BrandSetupPanel } from "../../components/admin/BrandSetupPanel";
+import { CanonicalIntentSpecPanel } from "../../components/admin/CanonicalIntentSpecPanel";
+import { ClientAccessPanel } from "../../components/admin/ClientAccessPanel";
+import { CreateClientOnboardingDrawer } from "../../components/admin/CreateClientOnboardingDrawer";
+import { LearningLoopMaintenancePanel } from "../../components/admin/LearningLoopMaintenancePanel";
+import { ModelGatewayPanel } from "../../components/admin/ModelGatewayPanel";
+import { OnboardingReviewPanel } from "../../components/admin/OnboardingReviewPanel";
+import { PlatformProfilePanel } from "../../components/admin/PlatformProfilePanel";
+import { ProductCatalogPanel } from "../../components/admin/ProductCatalogPanel";
 
 const emptyForm = {
   id: "",
@@ -1217,417 +1227,108 @@ export default function AdminPage() {
           )}
           {userId && (
             <>
-            <section className="panel__card admin-onboarding">
-              <div className="panel__header">
-                <h3>Client onboarding workspace</h3>
-                <span className="panel__meta">
-                  {onboardingCompletion.completed}/{onboardingCompletion.total} complete
-                </span>
-              </div>
-              <p className="panel__subheading">Setup flow</p>
-              <p className="panel__step-helper">
-                Complete onboarding in sequence, then move to operational controls.
-              </p>
-              <OnboardingFlowStatus
-                currentStep={onboardingCurrentStep}
-                steps={onboardingFlowSteps}
-                nextAction={onboardingNextAction}
-                onRunNextAction={handleRunOnboardingNextAction}
-              />
-              <ScopeSelectors
-                activeClientId={activeClientId}
-                activeBrandId={activeBrandId}
-                activeProductId={activeProductId}
-                clients={clients}
-                brands={brands}
-                products={products}
-                onClientChange={(nextClientId) => {
-                  setActiveClientId(nextClientId);
-                  setTenantClientId(nextClientId || "");
-                  setActiveBrandId("");
-                  setActiveProductId("");
-                }}
-                onBrandChange={(nextBrandId) => {
-                  setActiveBrandId(nextBrandId);
-                  setTenantBrandId(nextBrandId || null);
-                  setActiveProductId("");
-                }}
-                onProductChange={(nextProductId) => {
-                  setActiveProductId(nextProductId);
-                  setTenantProductId(nextProductId || null);
-                }}
-              />
-              <p className="panel__meta">
-                All onboarding changes are saved against the selected scope above.
-              </p>
-              <div className="panel__actions">
-                <button
-                  type="button"
-                  className="button button--primary-subtle"
-                  onClick={() => {
+            <AdminOnboardingWorkspace
+              completion={onboardingCompletion}
+              currentStep={onboardingCurrentStep}
+              flowSteps={onboardingFlowSteps}
+              nextAction={onboardingNextAction}
+              activeClientId={activeClientId}
+              activeBrandId={activeBrandId}
+              activeProductId={activeProductId}
+              clients={clients}
+              brands={brands}
+              products={products}
+              onRunNextAction={handleRunOnboardingNextAction}
+              onClientChange={(nextClientId) => {
+                setActiveClientId(nextClientId);
+                setTenantClientId(nextClientId || "");
+                setActiveBrandId("");
+                setActiveProductId("");
+              }}
+              onBrandChange={(nextBrandId) => {
+                setActiveBrandId(nextBrandId);
+                setTenantBrandId(nextBrandId || null);
+                setActiveProductId("");
+              }}
+              onProductChange={(nextProductId) => {
+                setActiveProductId(nextProductId);
+                setTenantProductId(nextProductId || null);
+              }}
+              onAddClient={() => {
+                setCreateClientDrawerOpen(true);
+                setCreateClientError(null);
+                setCreateClientSuccess(null);
+              }}
+            >
+                <ClientAccessPanel
+                  activeClientId={activeClientId}
+                  selectedClientName={selectedClient?.name}
+                  clientUsers={clientUsers}
+                  userForm={userForm}
+                  onUserFormChange={(patch) =>
+                    setUserForm((current) => ({ ...current, ...patch }))
+                  }
+                  onAddClientUser={handleAddClientUser}
+                />
+                <BrandSetupPanel
+                  activeClientId={activeClientId}
+                  selectedClientName={selectedClient?.name}
+                  brands={brands}
+                  showCreateBrand={showCreateBrand}
+                  brandForm={brandForm}
+                  canCreateBrand={canCreateBrand}
+                  onShowCreateBrandChange={setShowCreateBrand}
+                  onBrandFormChange={(patch) =>
+                    setBrandForm((current) => ({ ...current, ...patch }))
+                  }
+                  onCreateBrand={handleCreateBrand}
+                />
+                <ProductCatalogPanel
+                  activeBrandId={activeBrandId}
+                  selectedBrandName={selectedBrand?.name}
+                  products={products}
+                  showCreateProduct={showCreateProduct}
+                  productForm={productForm}
+                  canCreateProduct={canCreateProduct}
+                  onShowCreateProductChange={setShowCreateProduct}
+                  onProductFormChange={(patch) =>
+                    setProductForm((current) => ({ ...current, ...patch }))
+                  }
+                  onCreateProduct={handleCreateProduct}
+                >
+                  <PlatformProfilePanel
+                    platformProfile={platformProfile}
+                    profileName={platformProfileName}
+                    profileVersion={platformProfileVersion}
+                    profileText={platformProfileText}
+                    profileError={platformProfileError}
+                    profileSaved={platformProfileSaved}
+                    onProfileNameChange={setPlatformProfileName}
+                    onProfileVersionChange={setPlatformProfileVersion}
+                    onProfileTextChange={setPlatformProfileText}
+                    onSaveProfile={handleSavePlatformProfile}
+                  />
+                </ProductCatalogPanel>
+                <CanonicalIntentSpecPanel
+                  canOpenIntentEditor={Boolean(selectedProduct)}
+                  intentSpecSaved={intentSpecSaved}
+                  intentSpecAutofillStatus={intentSpecAutofillStatus}
+                  intentSpecError={intentSpecError}
+                  onOpenIntentEditor={() => setIntentDrawerOpen(true)}
+                />
+                <OnboardingReviewPanel
+                  onboardingCompletion={onboardingCompletion}
+                  canOpenIntentEditor={Boolean(selectedProduct)}
+                  onAddClient={() => {
                     setCreateClientDrawerOpen(true);
                     setCreateClientError(null);
                     setCreateClientSuccess(null);
                   }}
-                >
-                  Add new client
-                </button>
-              </div>
-              <div className="admin-onboarding__panels">
-                <details>
-                  <summary>Client access</summary>
-                  {activeClientId ? (
-                    <div className="admin__form">
-                      <p className="panel__meta">
-                        Users added here get access to:{" "}
-                        <strong>{selectedClient?.name ?? activeClientId}</strong>
-                      </p>
-                      <span className="panel__label">Client users</span>
-                      {clientUsers.length === 0 ? (
-                        <p className="panel__empty">No users yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {clientUsers.map((member) => (
-                            <li key={member.id}>
-                              <span>{member.user_id}</span>
-                              <span className="admin__meta">
-                                {member.role ?? "analyst"}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <input
-                        type="text"
-                        placeholder="Clerk user id"
-                        value={userForm.memberUserId}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            memberUserId: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="text"
-                        placeholder="Role (analyst, admin)"
-                        value={userForm.role}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, role: event.target.value }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="button button--primary-subtle"
-                        onClick={handleAddClientUser}
-                        disabled={!userForm.memberUserId.trim()}
-                      >
-                        Add user to selected client
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="panel__empty">Select a client first.</p>
-                  )}
-                </details>
-                <details>
-                  <summary>Brand setup</summary>
-                  {activeClientId ? (
-                    <>
-                      <p className="panel__meta">
-                        Creates and edits brands for client:{" "}
-                        <strong>{selectedClient?.name ?? activeClientId}</strong>
-                      </p>
-                      {brands.length === 0 ? (
-                        <p className="panel__empty">No brands yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {brands.map((brand) => (
-                            <li key={brand.id}>
-                              <span>{brand.name}</span>
-                              <span className="admin__meta">{brand.id}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div className="panel__actions">
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => setShowCreateBrand((current) => !current)}
-                        >
-                          {showCreateBrand ? "Hide create brand form" : "Add new brand"}
-                        </button>
-                      </div>
-                      {showCreateBrand ? (
-                        <div className="admin__form">
-                          <span className="panel__label">
-                            Create brand for {selectedClient?.name ?? activeClientId}
-                          </span>
-                          <input
-                            type="text"
-                            placeholder="brand-id"
-                            value={brandForm.id}
-                            onChange={(event) =>
-                              setBrandForm((current) => ({ ...current, id: event.target.value }))
-                            }
-                            required
-                          />
-                          <input
-                            type="text"
-                            placeholder="Brand name"
-                            value={brandForm.name}
-                            onChange={(event) =>
-                              setBrandForm((current) => ({ ...current, name: event.target.value }))
-                            }
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="button button--primary-subtle"
-                            onClick={handleCreateBrand}
-                            disabled={!canCreateBrand}
-                          >
-                            Add brand
-                          </button>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="panel__empty">Select a client first.</p>
-                  )}
-                </details>
-                <details>
-                  <summary>Product catalog</summary>
-                  {activeBrandId ? (
-                    <>
-                      <p className="panel__meta">
-                        Creates and edits products for brand:{" "}
-                        <strong>{selectedBrand?.name ?? activeBrandId}</strong>
-                      </p>
-                      {products.length === 0 ? (
-                        <p className="panel__empty">No products yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {products.map((product) => (
-                            <li key={product.id}>
-                              <span>{product.name}</span>
-                              <span className="admin__meta">{product.id}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div className="panel__actions">
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => setShowCreateProduct((current) => !current)}
-                        >
-                          {showCreateProduct
-                            ? "Hide create product form"
-                            : "Add new product"}
-                        </button>
-                      </div>
-                      {showCreateProduct ? (
-                        <div className="admin__form">
-                          <span className="panel__label">
-                            Create product for {selectedBrand?.name ?? activeBrandId}
-                          </span>
-                          <input
-                            type="text"
-                            placeholder="product-id"
-                            value={productForm.id}
-                            onChange={(event) =>
-                              setProductForm((current) => ({ ...current, id: event.target.value }))
-                            }
-                            required
-                          />
-                          <input
-                            type="text"
-                            placeholder="Product name"
-                            value={productForm.name}
-                            onChange={(event) =>
-                              setProductForm((current) => ({ ...current, name: event.target.value }))
-                            }
-                            required
-                          />
-                          <textarea
-                            rows={2}
-                            placeholder="Short description (required)"
-                            value={productForm.description}
-                            onChange={(event) =>
-                              setProductForm((current) => ({
-                                ...current,
-                                description: event.target.value,
-                              }))
-                            }
-                            required
-                          />
-                          <input
-                            type="url"
-                            placeholder="Product URL (optional)"
-                            value={productForm.productUrl}
-                            onChange={(event) =>
-                              setProductForm((current) => ({
-                                ...current,
-                                productUrl: event.target.value,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="button button--primary-subtle"
-                            onClick={handleCreateProduct}
-                            disabled={!canCreateProduct}
-                          >
-                            Add product
-                          </button>
-                        </div>
-                      ) : null}
-                      <details>
-                        <summary>Platform profile (UCP)</summary>
-                        {!platformProfile ? (
-                          <p className="panel__empty">Platform profile not loaded yet.</p>
-                        ) : (
-                          <div className="admin__form">
-                            <span className="panel__label">Profile JSON</span>
-                            <input
-                              type="text"
-                              placeholder="Profile name"
-                              value={platformProfileName}
-                              onChange={(event) => setPlatformProfileName(event.target.value)}
-                            />
-                            <input
-                              type="text"
-                              placeholder="Version"
-                              value={platformProfileVersion}
-                              onChange={(event) => setPlatformProfileVersion(event.target.value)}
-                            />
-                            <textarea
-                              rows={8}
-                              value={platformProfileText}
-                              onChange={(event) => setPlatformProfileText(event.target.value)}
-                            />
-                            {platformProfileError && (
-                              <p className="panel__error">{platformProfileError}</p>
-                            )}
-                            {platformProfileSaved && (
-                              <p className="panel__success">Saved platform profile.</p>
-                            )}
-                            <button
-                              type="button"
-                              className="button button--primary-subtle"
-                              onClick={handleSavePlatformProfile}
-                            >
-                              Save profile
-                            </button>
-                          </div>
-                        )}
-                      </details>
-                    </>
-                  ) : (
-                    <p className="panel__empty">Select a brand first.</p>
-                  )}
-                </details>
-                <details>
-                  <summary>Canonical intent spec</summary>
-                  <p className="panel__meta">
-                    Capture objective product context used by bottom-up query generation.
-                  </p>
-                  <p className="panel__meta">
-                    Saved under selected product metadata path:
-                    {" "}
-                    <code>canonical_intent_spec</code>.
-                  </p>
-                  <button
-                    type="button"
-                    className="button button--primary-subtle"
-                    onClick={() => setIntentDrawerOpen(true)}
-                    disabled={!selectedProduct}
-                  >
-                    Open intent spec editor
-                  </button>
-                  {intentSpecSaved ? (
-                    <p className="panel__success">Saved canonical intent spec.</p>
-                  ) : null}
-                  {intentSpecAutofillStatus ? (
-                    <p className="panel__meta">{intentSpecAutofillStatus}</p>
-                  ) : null}
-                  {intentSpecError ? (
-                    <p className="panel__error">{intentSpecError}</p>
-                  ) : null}
-                </details>
-                <details>
-                  <summary>Review</summary>
-                  <ul className="admin__list">
-                    <li>
-                      <span>Client</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneClient ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneClient ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => {
-                            setCreateClientDrawerOpen(true);
-                            setCreateClientError(null);
-                            setCreateClientSuccess(null);
-                          }}
-                        >
-                          Add client
-                        </button>
-                      ) : null}
-                    </li>
-                    <li>
-                      <span>Brand</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneBrand ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneBrand ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => setShowCreateBrand(true)}
-                        >
-                          Add brand
-                        </button>
-                      ) : null}
-                    </li>
-                    <li>
-                      <span>Product</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneProduct ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneProduct ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => setShowCreateProduct(true)}
-                        >
-                          Add product
-                        </button>
-                      ) : null}
-                    </li>
-                    <li>
-                      <span>Canonical intent spec</span>
-                      <span className="admin__meta">
-                        {onboardingCompletion.doneIntent ? "Done" : "Missing"}
-                      </span>
-                      {!onboardingCompletion.doneIntent ? (
-                        <button
-                          type="button"
-                          className="panel__action panel__action--ghost"
-                          onClick={() => setIntentDrawerOpen(true)}
-                          disabled={!selectedProduct}
-                        >
-                          Open intent editor
-                        </button>
-                      ) : null}
-                    </li>
-                  </ul>
-                </details>
-              </div>
-            </section>
+                  onAddBrand={() => setShowCreateBrand(true)}
+                  onAddProduct={() => setShowCreateProduct(true)}
+                  onOpenIntentEditor={() => setIntentDrawerOpen(true)}
+                />
+            </AdminOnboardingWorkspace>
 
             <section className="panel__card admin-ops">
               <div className="panel__header">
@@ -1637,997 +1338,95 @@ export default function AdminPage() {
               <p className="panel__step-helper">
                 These controls tune providers, skills, and maintenance after onboarding is complete.
               </p>
-              <details className="admin-ops__details">
-                <summary>Model gateway</summary>
-                {!userId ? (
-                  <p className="panel__empty">Sign in to manage model keys.</p>
-                ) : (
-                  <div className="admin__form">
-                    {llmConfigError ? (
-                      <p className="panel__error">{llmConfigError}</p>
-                    ) : null}
-                    <div className="panel__chips">
-                      {LLM_PROVIDERS.map((provider) => {
-                        const summary = llmConfig?.providers?.[provider.id];
-                        const status = summary?.configured ? "ready" : "missing";
-                        return (
-                          <span
-                            key={provider.id}
-                            className={`panel__chip ${
-                              summary?.is_active ? "is-ready" : summary?.configured ? "is-ready" : "is-missing"
-                            }`}
-                          >
-                            {provider.label}: {summary?.is_active ? "active" : status}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    {LLM_PROVIDERS.map((provider) => {
-                      const summary = llmConfig?.providers?.[provider.id];
-                      const input = llmInputs[provider.id] || {
-                        apiKey: "",
-                        validationApiKey: "",
-                        model: summary?.model || LLM_MODEL_OPTIONS[provider.id]?.[0] || "",
-                        validationModel:
-                          summary?.validation_model ||
-                          LLM_MODEL_OPTIONS[provider.id]?.[0] ||
-                          "",
-                      };
-                      const baseOptions = LLM_MODEL_OPTIONS[provider.id] || [];
-                      const modelOptions = input.model && !baseOptions.includes(input.model)
-                        ? [input.model, ...baseOptions]
-                        : baseOptions;
-                      const validationOptions =
-                        input.validationModel &&
-                        !baseOptions.includes(input.validationModel)
-                          ? [input.validationModel, ...baseOptions]
-                          : baseOptions;
-                      return (
-                        <div key={provider.id} className="panel__card panel__card--compact">
-                          <div className="panel__header">
-                            <h4>{provider.label}</h4>
-                            <span className="panel__meta">
-                              Chat: {summary?.chat_configured ? "set" : "missing"} ·
-                              Validation: {summary?.validation_configured ? "set" : "missing"}
-                            </span>
-                          </div>
-                          <div className="panel__grid">
-                            <label className="panel__label">
-                              <span>Chat model</span>
-                              <input
-                                className="panel__input panel__input--neutral"
-                                type="text"
-                                spellCheck={false}
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                value={input.model}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "model",
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
-                            <label className="panel__label">
-                              <span>Validation model</span>
-                              <input
-                                className="panel__input panel__input--neutral"
-                                type="text"
-                                list={`admin-llm-validation-models-${provider.id}`}
-                                spellCheck={false}
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                value={input.validationModel}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "validationModel",
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                              <datalist
-                                id={`admin-llm-validation-models-${provider.id}`}
-                              >
-                                {validationOptions.map((option) => (
-                                  <option key={option} value={option} />
-                                ))}
-                              </datalist>
-                            </label>
-                            <label className="panel__label">
-                              <span>Chat key (BYOK)</span>
-                              <input
-                                className="panel__input"
-                                type="password"
-                                value={input.apiKey}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "apiKey",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder={
-                                  summary?.configured ? "Saved" : "Paste API key"
-                                }
-                              />
-                            </label>
-                            <label className="panel__label">
-                              <span>Validation key (BYOK)</span>
-                              <input
-                                className="panel__input"
-                                type="password"
-                                value={input.validationApiKey}
-                                onChange={(event) =>
-                                  handleLlmInputChange(
-                                    provider.id,
-                                    "validationApiKey",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder={
-                                  summary?.configured ? "Saved (optional)" : "Paste API key"
-                                }
-                              />
-                            </label>
-                          </div>
-                          <div className="panel__actions">
-                            <button
-                              type="button"
-                              className="button button--primary-subtle"
-                              onClick={() => void handleSaveLlmProvider(provider.id)}
-                            >
-                              Save provider
-                            </button>
-                            <button
-                              type="button"
-                              className="button button--ghost"
-                              onClick={() => void handleActivateLlmProvider(provider.id)}
-                              disabled={!summary?.chat_configured}
-                            >
-                              Use for chat
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </details>
-              <details className="admin-ops__details">
-                <summary>Agent skills</summary>
-                {!userId ? (
-                  <p className="panel__empty">Sign in to edit skills.</p>
-                ) : (
-                  <div className="admin__form">
-                    <span className="panel__label">Skill</span>
-                    <select
-                      value={activeSkillName}
-                      onChange={(event) => setActiveSkillName(event.target.value)}
-                    >
-                      {skillNames.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                    {activeSkill?.updated_at ? (
-                      <p className="panel__meta">Updated: {activeSkill.updated_at}</p>
-                    ) : null}
-                    <input
-                      type="text"
-                      placeholder="Description"
-                      value={skillDescription}
-                      onChange={(event) => setSkillDescription(event.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Version"
-                      value={skillVersion}
-                      onChange={(event) => setSkillVersion(event.target.value)}
-                    />
-                    <label className="panel__label panel__label--inline">
-                      <input
-                        type="checkbox"
-                        checked={skillEnabled}
-                        onChange={(event) => setSkillEnabled(event.target.checked)}
-                      />
-                      Enabled
-                    </label>
-                    <textarea
-                      rows={10}
-                      value={skillContent}
-                      onChange={(event) => setSkillContent(event.target.value)}
-                    />
-                    {skillHistory.length > 0 ? (
-                      <div className="admin__history">
-                        <span className="panel__label">Recent versions</span>
-                        <ul className="admin__list">
-                          {skillHistory.map((item) => (
-                            <li key={item.id}>
-                              <span>{item.version ?? "n/a"}</span>
-                              <span className="admin__meta">{item.changed_at ?? ""}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {skillError ? <p className="panel__error">{skillError}</p> : null}
-                    {skillSaved ? <p className="panel__success">Saved skill.</p> : null}
-                    <button
-                      type="button"
-                      className="button button--primary-subtle"
-                      onClick={handleSaveSkill}
-                    >
-                      Save skill
-                    </button>
-                  </div>
-                )}
-              </details>
-              <details className="admin-ops__details">
-                <summary>Learning loop maintenance</summary>
-                {!userId ? (
-                  <p className="panel__empty">Sign in to run maintenance.</p>
-                ) : (
-                  <div className="admin__form">
-                    <p className="panel__meta">
-                      Refresh calibration profiles and distill high-confidence belief memory.
-                    </p>
-                    <div className="panel__grid">
-                      <label className="panel__label">
-                        <span>Client scope</span>
-                        <input
-                          className="panel__input panel__input--neutral"
-                          type="text"
-                          readOnly
-                          value={activeClientId || "all clients"}
-                        />
-                      </label>
-                      <label className="panel__label">
-                        <span>Lookback days</span>
-                        <input
-                          className="panel__input panel__input--neutral"
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={loopMaintenanceLookbackDays}
-                          onChange={(event) =>
-                            setLoopMaintenanceLookbackDays(event.target.value)
-                          }
-                        />
-                      </label>
-                      <label className="panel__label">
-                        <span>Min confidence</span>
-                        <input
-                          className="panel__input panel__input--neutral"
-                          type="number"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={loopMaintenanceMinConfidence}
-                          onChange={(event) =>
-                            setLoopMaintenanceMinConfidence(event.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-                    <div className="panel__actions">
-                      <button
-                        type="button"
-                        className="button button--primary-subtle"
-                        onClick={() => void handleRunLoopMaintenance()}
-                        disabled={loopMaintenanceRunning}
-                      >
-                        {loopMaintenanceRunning ? "Running..." : "Run maintenance"}
-                      </button>
-                    </div>
-                    {loopMaintenanceError ? (
-                      <p className="panel__error">{loopMaintenanceError}</p>
-                    ) : null}
-                    {loopMaintenanceResult ? (
-                      <div className="admin__history">
-                        <span className="panel__label">Last run summary</span>
-                        <ul className="admin__list">
-                          {loopMaintenanceResult.results.map((item) => (
-                            <li key={item.client_id}>
-                              <span>{item.client_id}</span>
-                              <span className="admin__meta">
-                                calibration {item.calibration_profiles_updated} · distilled{" "}
-                                {item.memory_artifacts_distilled}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    <div className="admin__history">
-                      <span className="panel__label">Recent runs</span>
-                      {loopMaintenanceHistory.length === 0 ? (
-                        <p className="panel__meta">No maintenance runs logged yet.</p>
-                      ) : (
-                        <ul className="admin__list">
-                          {loopMaintenanceHistory.map((item) => (
-                            <li key={item.id}>
-                              <span>
-                                {item.created_at ?? "n/a"} · lookback {item.lookback_days}d ·
-                                min conf {item.min_confidence}
-                              </span>
-                              <span className="admin__meta">
-                                calibration {item.calibration_profiles_updated} · distilled{" "}
-                                {item.memory_artifacts_distilled}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </details>
+              <ModelGatewayPanel
+                userId={userId}
+                llmConfig={llmConfig}
+                llmConfigError={llmConfigError}
+                llmInputs={llmInputs}
+                providers={LLM_PROVIDERS}
+                modelOptions={LLM_MODEL_OPTIONS}
+                onInputChange={handleLlmInputChange}
+                onSaveProvider={handleSaveLlmProvider}
+                onActivateProvider={handleActivateLlmProvider}
+              />
+              <AgentSkillsPanel
+                userId={userId}
+                skillNames={skillNames}
+                activeSkillName={activeSkillName}
+                activeSkill={activeSkill}
+                skillDescription={skillDescription}
+                skillVersion={skillVersion}
+                skillContent={skillContent}
+                skillEnabled={skillEnabled}
+                skillHistory={skillHistory}
+                skillError={skillError}
+                skillSaved={skillSaved}
+                onActiveSkillNameChange={setActiveSkillName}
+                onSkillDescriptionChange={setSkillDescription}
+                onSkillVersionChange={setSkillVersion}
+                onSkillContentChange={setSkillContent}
+                onSkillEnabledChange={setSkillEnabled}
+                onSaveSkill={handleSaveSkill}
+              />
+              <LearningLoopMaintenancePanel
+                userId={userId}
+                activeClientId={activeClientId}
+                isRunning={loopMaintenanceRunning}
+                error={loopMaintenanceError}
+                result={loopMaintenanceResult}
+                history={loopMaintenanceHistory}
+                lookbackDays={loopMaintenanceLookbackDays}
+                minConfidence={loopMaintenanceMinConfidence}
+                onLookbackDaysChange={setLoopMaintenanceLookbackDays}
+                onMinConfidenceChange={setLoopMaintenanceMinConfidence}
+                onRunMaintenance={handleRunLoopMaintenance}
+              />
             </section>
-            {isCreateClientDrawerOpen && (
-              <div
-                className="admin-onboarding__drawer-overlay"
-                onClick={() => {
-                  if (createClientBusy) return;
-                  setCreateClientDrawerOpen(false);
-                }}
-              >
-                <aside
-                  className="admin-onboarding__drawer"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="panel__header">
-                    <h3>Add new client</h3>
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => setCreateClientDrawerOpen(false)}
-                      disabled={createClientBusy}
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <p className="panel__meta">
-                    Creates one client, one initial brand, a product list, and canonical/UCP/ACP metadata in one flow.
-                  </p>
-                  <div className="admin-scope-strip">
-                    <span className="panel__muted">
-                      Current scope: {selectedClient?.name ?? "No client"} /{" "}
-                      {selectedBrand?.name ?? "No brand"} /{" "}
-                      {selectedProduct?.name ?? "No product"}
-                    </span>
-                  </div>
-                  <div className="admin__form">
-                    <section className="admin-drawer-step">
-                      <p className="panel__subheading">Step 1 · Client</p>
-                      <p className="panel__step-helper">
-                        Define the tenant workspace that will own brands and products.
-                      </p>
-                    <span className="panel__label">Client</span>
-                    <input
-                      type="text"
-                      placeholder="client-id"
-                      value={newClientForm.clientId}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          clientId: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      placeholder="Client name"
-                      value={newClientForm.clientName}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          clientName: event.target.value,
-                        }))
-                      }
-                    />
-                    </section>
-
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 2 · Initial brand</p>
-                    <p className="panel__step-helper">
-                      Create the first brand under the new client.
-                    </p>
-                    <span className="panel__label">Initial brand</span>
-                    <input
-                      type="text"
-                      placeholder="brand-id"
-                      value={newClientForm.brandId}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          brandId: event.target.value,
-                        }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      placeholder="Brand name"
-                      value={newClientForm.brandName}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          brandName: event.target.value,
-                        }))
-                      }
-                    />
-                    </section>
-
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 3 · Products</p>
-                    <p className="panel__step-helper">
-                      Add one or more products. Each line should include id, name, and description.
-                    </p>
-                    <span className="panel__label">Products list</span>
-                    <textarea
-                      rows={5}
-                      placeholder={"product-id|Product name|Short description\nproduct-id-2|Product 2|Short description"}
-                      value={newClientForm.productsText}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          productsText: event.target.value,
-                        }))
-                      }
-                    />
-                    </section>
-
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 4 · Canonical intent spec</p>
-                    <p className="panel__step-helper">
-                      Category and use cases are required to enable bottom-up query generation.
-                    </p>
-                    <span className="panel__label">Canonical intent spec</span>
-                    <p className="panel__meta">
-                      Choose a category first to load ontology options.
-                    </p>
-                    <label className="panel__label">Category</label>
-                    <select
-                      value={newClientForm.category}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          category: event.target.value,
-                          subCategory: "",
-                        }))
-                      }
-                    >
-                      <option value="">Select category</option>
-                      {Object.entries(canonicalOntology).map(([key, value]) => (
-                        <option key={key} value={key}>
-                          {value.label}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="panel__label">Sub category</label>
-                    <select
-                      value={newClientForm.subCategory}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          subCategory: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select sub category</option>
-                      {(onboardingOntology?.subCategories ?? []).map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="panel__label">Use cases</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, onboardingUseCases.length || 3))}
-                      value={parseCsv(newClientForm.useCases)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setNewClientForm((current) => ({
-                          ...current,
-                          useCases: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {onboardingUseCases.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: daily_training, long_distance, speed_work
-                    </p>
-                    <label className="panel__label">Audience archetypes</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, onboardingArchetypes.length || 3))}
-                      value={parseCsv(newClientForm.archetypes)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setNewClientForm((current) => ({
-                          ...current,
-                          archetypes: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {onboardingArchetypes.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: beginner_runner, performance_runner
-                    </p>
-                    <label className="panel__label">Feature concepts</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, onboardingFeatures.length || 3))}
-                      value={parseCsv(newClientForm.featureConcepts)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setNewClientForm((current) => ({
-                          ...current,
-                          featureConcepts: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {onboardingFeatures.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: cushioning, stability, breathability
-                    </p>
-                    <label className="panel__label">Core constraints</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, onboardingConstraints.length || 3))}
-                      value={parseCsv(newClientForm.constraints)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setNewClientForm((current) => ({
-                          ...current,
-                          constraints: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {onboardingConstraints.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: budget_sensitive, availability_required
-                    </p>
-                    <label className="panel__label">Must-not-target segments</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, onboardingExclusions.length || 3))}
-                      value={parseCsv(newClientForm.exclusions)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setNewClientForm((current) => ({
-                          ...current,
-                          exclusions: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {onboardingExclusions.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: elite_racer_only, non_sport_use
-                    </p>
-                    <textarea
-                      rows={2}
-                      placeholder="Objective keywords (optional, comma separated)"
-                      value={newClientForm.objectiveKeywords}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          objectiveKeywords: event.target.value,
-                        }))
-                      }
-                    />
-                    <textarea
-                      rows={2}
-                      placeholder="Banned keywords (optional, comma separated)"
-                      value={newClientForm.bannedKeywords}
-                      onChange={(event) =>
-                        setNewClientForm((current) => ({
-                          ...current,
-                          bannedKeywords: event.target.value,
-                        }))
-                      }
-                    />
-                    </section>
-
-                    <div className="panel__separator" />
-                    <details className="admin-advanced-defaults">
-                      <summary>Advanced defaults (optional)</summary>
-                      <span className="panel__label">UCP defaults</span>
-                      <input
-                        type="url"
-                        placeholder="Offer URL"
-                        value={newClientForm.ucpOfferUrl}
-                        onChange={(event) =>
-                          setNewClientForm((current) => ({
-                            ...current,
-                            ucpOfferUrl: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="text"
-                        placeholder="Merchant name"
-                        value={newClientForm.ucpMerchantName}
-                        onChange={(event) =>
-                          setNewClientForm((current) => ({
-                            ...current,
-                            ucpMerchantName: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        type="text"
-                        placeholder="Currency"
-                        value={newClientForm.ucpCurrency}
-                        onChange={(event) =>
-                          setNewClientForm((current) => ({
-                            ...current,
-                            ucpCurrency: event.target.value,
-                          }))
-                        }
-                      />
-
-                      <span className="panel__label">ACP defaults</span>
-                      <label className="panel__label panel__label--inline">
-                        <input
-                          type="checkbox"
-                          checked={newClientForm.acpEnableSearch}
-                          onChange={(event) =>
-                            setNewClientForm((current) => ({
-                              ...current,
-                              acpEnableSearch: event.target.checked,
-                            }))
-                          }
-                        />
-                        Enable search
-                      </label>
-                      <label className="panel__label panel__label--inline">
-                        <input
-                          type="checkbox"
-                          checked={newClientForm.acpEnableCheckout}
-                          onChange={(event) =>
-                            setNewClientForm((current) => ({
-                              ...current,
-                              acpEnableCheckout: event.target.checked,
-                            }))
-                          }
-                        />
-                        Enable checkout
-                      </label>
-                    </details>
-
-                    <div className="panel__separator" />
-                    {createClientError ? <p className="panel__error">{createClientError}</p> : null}
-                    {createClientSuccess ? <p className="panel__success">{createClientSuccess}</p> : null}
-                    <button
-                      type="button"
-                      className="button button--primary-subtle"
-                      onClick={() => void handleCreateClientOnboarding()}
-                      disabled={!canSubmitNewClient || createClientBusy}
-                    >
-                      {createClientBusy ? "Creating..." : "Create client onboarding"}
-                    </button>
-                  </div>
-                </aside>
-              </div>
-            )}
-            {isIntentDrawerOpen && (
-              <div
-                className="admin-onboarding__drawer-overlay"
-                onClick={() => setIntentDrawerOpen(false)}
-              >
-                <aside
-                  className="admin-onboarding__drawer"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="panel__header">
-                    <h3>Canonical intent spec</h3>
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => setIntentDrawerOpen(false)}
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <p className="panel__meta">
-                    Scope: {selectedClient?.name ?? "No client"} /{" "}
-                    {selectedBrand?.name ?? "No brand"} /{" "}
-                    {selectedProduct?.name ?? "No product"}
-                  </p>
-                  <div className="admin-scope-strip">
-                    <span className="panel__muted">
-                      Changes will be saved to the selected product metadata.
-                    </span>
-                  </div>
-                  <div className="admin__form">
-                    <section className="admin-drawer-step">
-                      <p className="panel__subheading">Step 1 · Autofill source (optional)</p>
-                      <p className="panel__step-helper">
-                        Load a draft from UCP/ACP/feed signals before editing manually.
-                      </p>
-                    <div className="panel__row panel__row--compact">
-                      <button
-                        type="button"
-                        className="button button--ghost"
-                        onClick={() => void handleAutofillIntentSpec("preview")}
-                        disabled={!selectedProduct}
-                      >
-                        Preview UCP/ACP autofill
-                      </button>
-                      <button
-                        type="button"
-                        className="button button--primary-subtle"
-                        onClick={() => void handleAutofillIntentSpec("apply")}
-                        disabled={!selectedProduct}
-                      >
-                        Apply autofill
-                      </button>
-                    </div>
-                    </section>
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 2 · Category and taxonomy</p>
-                    <p className="panel__step-helper">
-                      Set category first, then sub-category and ontology-aligned dimensions.
-                    </p>
-                    <label className="panel__label">Category (required)</label>
-                    <p className="panel__meta">
-                      Choose category first. Use cases are required for bottom-up query generation.
-                    </p>
-                    <select
-                      value={intentSpecForm.category}
-                      onChange={(event) =>
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          category: event.target.value,
-                          subCategory: "",
-                        }))
-                      }
-                    >
-                      <option value="">Select category</option>
-                      {Object.entries(canonicalOntology).map(([key, value]) => (
-                        <option key={key} value={key}>
-                          {value.label}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="panel__label">Sub category</label>
-                    <select
-                      value={intentSpecForm.subCategory}
-                      onChange={(event) =>
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          subCategory: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select sub category</option>
-                      {(selectedOntology?.subCategories ?? []).map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    </section>
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 3 · Use cases and audience</p>
-                    <p className="panel__step-helper">
-                      Choose concrete use cases and target audience archetypes.
-                    </p>
-                    <label className="panel__label">Use cases (ontology)</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, ontologyUseCases.length || 3))}
-                      value={parseCsv(intentSpecForm.useCases)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          useCases: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {ontologyUseCases.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: daily_training, long_distance, speed_work
-                    </p>
-                    <label className="panel__label">Audience archetypes (ontology)</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, ontologyArchetypes.length || 3))}
-                      value={parseCsv(intentSpecForm.archetypes)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          archetypes: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {ontologyArchetypes.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: beginner_runner, performance_runner
-                    </p>
-                    </section>
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 4 · Features and constraints</p>
-                    <p className="panel__step-helper">
-                      Capture feature concepts, core constraints, and exclusions.
-                    </p>
-                    <label className="panel__label">Feature concepts (ontology)</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, ontologyFeatureConcepts.length || 3))}
-                      value={parseCsv(intentSpecForm.featureConcepts)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          featureConcepts: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {ontologyFeatureConcepts.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: cushioning, stability, breathability
-                    </p>
-                    <label className="panel__label">Core constraints</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, ontologyConstraints.length || 3))}
-                      value={parseCsv(intentSpecForm.constraints)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          constraints: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {ontologyConstraints.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: budget_sensitive, availability_required
-                    </p>
-                    <label className="panel__label">Must-not-target segments</label>
-                    <select
-                      multiple
-                      size={Math.min(6, Math.max(3, ontologyExclusions.length || 3))}
-                      value={parseCsv(intentSpecForm.exclusions)}
-                      onChange={(event) => {
-                        const selected = Array.from(event.target.selectedOptions).map(
-                          (option) => option.value,
-                        );
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          exclusions: selected.join(", "),
-                        }));
-                      }}
-                    >
-                      {ontologyExclusions.map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="panel__meta">
-                      Example: elite_racer_only, non_sport_use
-                    </p>
-                    </section>
-                    <div className="panel__separator" />
-                    <section className="admin-drawer-step">
-                    <p className="panel__subheading">Step 5 · Keyword controls (optional)</p>
-                    <p className="panel__step-helper">
-                      Add objective and banned keyword lists to tighten generation behavior.
-                    </p>
-                    <textarea
-                      rows={2}
-                      placeholder="Objective keywords (optional, comma separated)"
-                      value={intentSpecForm.objectiveKeywords}
-                      onChange={(event) =>
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          objectiveKeywords: event.target.value,
-                        }))
-                      }
-                    />
-                    <textarea
-                      rows={2}
-                      placeholder="Banned keywords (optional, comma separated)"
-                      value={intentSpecForm.bannedKeywords}
-                      onChange={(event) =>
-                        setIntentSpecForm((current) => ({
-                          ...current,
-                          bannedKeywords: event.target.value,
-                        }))
-                      }
-                    />
-                    </section>
-                    <div className="panel__separator" />
-                    <button
-                      type="button"
-                      className="button button--primary-subtle"
-                      onClick={handleSaveIntentSpec}
-                      disabled={!canSaveIntentSpec}
-                    >
-                      Save intent spec
-                    </button>
-                  </div>
-                </aside>
-              </div>
-            )}
+            <CreateClientOnboardingDrawer
+              isOpen={isCreateClientDrawerOpen}
+              isBusy={createClientBusy}
+              canSubmit={canSubmitNewClient}
+              error={createClientError}
+              success={createClientSuccess}
+              form={newClientForm}
+              currentClientName={selectedClient?.name}
+              currentBrandName={selectedBrand?.name}
+              currentProductName={selectedProduct?.name}
+              canonicalOntology={canonicalOntology}
+              selectedOntology={onboardingOntology}
+              useCases={onboardingUseCases}
+              archetypes={onboardingArchetypes}
+              featureConcepts={onboardingFeatures}
+              constraints={onboardingConstraints}
+              exclusions={onboardingExclusions}
+              onClose={() => setCreateClientDrawerOpen(false)}
+              onFormChange={(patch) =>
+                setNewClientForm((current) => ({ ...current, ...patch }))
+              }
+              onSubmit={handleCreateClientOnboarding}
+            />
+            <CanonicalIntentSpecDrawer
+              isOpen={isIntentDrawerOpen}
+              canAutofill={Boolean(selectedProduct)}
+              canSave={canSaveIntentSpec}
+              form={intentSpecForm}
+              currentClientName={selectedClient?.name}
+              currentBrandName={selectedBrand?.name}
+              currentProductName={selectedProduct?.name}
+              canonicalOntology={canonicalOntology}
+              selectedOntology={selectedOntology}
+              useCases={ontologyUseCases}
+              archetypes={ontologyArchetypes}
+              featureConcepts={ontologyFeatureConcepts}
+              constraints={ontologyConstraints}
+              exclusions={ontologyExclusions}
+              onClose={() => setIntentDrawerOpen(false)}
+              onFormChange={(patch) =>
+                setIntentSpecForm((current) => ({ ...current, ...patch }))
+              }
+              onAutofill={handleAutofillIntentSpec}
+              onSave={handleSaveIntentSpec}
+            />
             </>
           )}
         </div>

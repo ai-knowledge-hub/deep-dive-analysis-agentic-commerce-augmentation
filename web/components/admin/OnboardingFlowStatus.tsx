@@ -1,10 +1,10 @@
-type OnboardingStep = {
+export type OnboardingStep = {
   id: number;
   label: string;
   done: boolean;
 };
 
-type OnboardingNextAction = {
+export type OnboardingNextAction = {
   label: string;
   helper: string;
   action: "client" | "brand" | "product" | "intent" | "complete";

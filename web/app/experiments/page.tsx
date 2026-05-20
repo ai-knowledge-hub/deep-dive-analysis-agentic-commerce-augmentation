@@ -5,57 +5,27 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
   BrandBelief,
-  CopyRevision,
-  ExperimentExecutionState,
-  ExperimentHypothesis,
   ExperimentMetric,
-  ExperimentRecommendation,
   ExperimentRun,
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
-  NextTestRecommendation,
-  ValidationSummary,
-  QueryBatteryQuery,
-  QueryBatteryCandidate,
-  AudienceSegment,
-  QueryBatteryMetrics,
   SimulationGapReport,
-  SimulationRunDetailResponse,
 } from "../../lib/types";
 import {
-  createBattery,
   createExperiment,
   createExperimentVariant,
-  generateExperimentVariants,
-  deleteBatteryQuery,
   deleteConversationSession,
   deleteExperiment,
   deleteExperimentRun,
   deleteSimulationRun,
-  generateBatteryQueries,
-  addBatteryQuery,
-  getBatteryMetrics,
-  listBatteries,
-  updateBattery,
-  updateBatteryQuery,
   listExperimentMetrics,
-  getExperimentExecutionState,
-  listExperimentHypotheses,
   listExperimentRuns,
   listExperimentVariants,
   listExperiments,
-  listBatteryQueries,
-  listBatteryAudienceSegments,
-  updateBatteryAudienceSegment,
   runExperiment,
   updateExperiment,
   updateExperimentSchedule,
   backfillExperiment,
-  getNextTestRecommendation,
-  listExperimentRecommendations,
-  getSimulationRun,
-  getExperimentValidationSummary,
-  listCopyRevisions,
 } from "../../lib/api";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -63,10 +33,7 @@ import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { ExperimentHistoryPanel } from "../../components/experiments/ExperimentHistoryPanel";
 import { VariantCreationPanel } from "../../components/experiments/VariantCreationPanel";
-import {
-  BatteryGenerationReportNotice,
-  type BatteryGenerationReport,
-} from "../../components/experiments/BatteryGenerationReportNotice";
+import { BatteryGenerationReportNotice } from "../../components/experiments/BatteryGenerationReportNotice";
 import { BatteryCreationPanel } from "../../components/experiments/BatteryCreationPanel";
 import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetailsPanel";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
@@ -83,11 +50,17 @@ import { OrchestratorRecommendationsPanel } from "../../components/experiments/O
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentBatteryActions } from "../../components/experiments/useExperimentBatteryActions";
+import { useExperimentBatteryReadModels } from "../../components/experiments/useExperimentBatteryReadModels";
 import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
 import { useExperimentInitialLists } from "../../components/experiments/useExperimentInitialLists";
+import { useExperimentRecommendationActions } from "../../components/experiments/useExperimentRecommendationActions";
+import { useExperimentSelectionData } from "../../components/experiments/useExperimentSelectionData";
 import { useExperimentSnapshots } from "../../components/experiments/useExperimentSnapshots";
+import { useExperimentVariantActions } from "../../components/experiments/useExperimentVariantActions";
 import { useLatestExperimentAgentRun } from "../../components/experiments/useLatestExperimentAgentRun";
+import { useSimulationCopyRevisions } from "../../components/experiments/useSimulationCopyRevisions";
 import {
   buildExperimentHref,
   buildRunsHref,
@@ -119,20 +92,6 @@ function ExperimentsPageContent() {
   >("list");
 
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
-  const [variants, setVariants] = useState<ExperimentVariant[]>([]);
-  const [runs, setRuns] = useState<ExperimentRun[]>([]);
-  const [metrics, setMetrics] = useState<ExperimentMetric[]>([]);
-  const [executionState, setExecutionState] = useState<ExperimentExecutionState | null>(
-    null,
-  );
-  const [hypotheses, setHypotheses] = useState<ExperimentHypothesis[]>([]);
-  const [recommendations, setRecommendations] = useState<
-    ExperimentRecommendation[]
-  >([]);
-  const [simulationDetails, setSimulationDetails] = useState<
-    Record<string, SimulationRunDetailResponse["run"]>
-  >({});
-  const [queries, setQueries] = useState<QueryBatteryQuery[]>([]);
   const [runningVariantId, setRunningVariantId] = useState<string | null>(null);
   const [experimentRunMode, setExperimentRunMode] = useState<
     "simulation" | "retrieval_backed"
@@ -148,9 +107,6 @@ function ExperimentsPageContent() {
     purpose: "",
     status: "draft",
   });
-  const [batteryMetrics, setBatteryMetrics] = useState<QueryBatteryMetrics | null>(null);
-  const [audienceSegments, setAudienceSegments] = useState<AudienceSegment[]>([]);
-  const [audienceSegmentsStatus, setAudienceSegmentsStatus] = useState<string | null>(null);
   const [audienceSegmentsOpen, setAudienceSegmentsOpen] = useState(false);
   const [batterySeedQueries, setBatterySeedQueries] = useState("");
   const [batteryUseLlm, setBatteryUseLlm] = useState(true);
@@ -164,9 +120,6 @@ function ExperimentsPageContent() {
   const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [labShowManualControls, setLabShowManualControls] = useState(false);
   const [labAutoRunEnabled, setLabAutoRunEnabled] = useState(true);
-  const [generatedCandidates, setGeneratedCandidates] = useState<
-    (QueryBatteryCandidate & { selected: boolean })[]
-  >([]);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
     batteryId: "",
@@ -180,11 +133,6 @@ function ExperimentsPageContent() {
     type: "copy",
     payload: "",
   });
-  const [simulationRevisions, setSimulationRevisions] = useState<CopyRevision[]>([]);
-  const [selectedSimulationRevisionId, setSelectedSimulationRevisionId] = useState("");
-  const [simulationRevisionStatus, setSimulationRevisionStatus] = useState<string | null>(
-    null,
-  );
   const [loopGeneratedVariants, setLoopGeneratedVariants] = useState<
     LoopGeneratedVariantCandidate[]
   >([]);
@@ -194,7 +142,6 @@ function ExperimentsPageContent() {
   const [variantGenerationRequestType, setVariantGenerationRequestType] = useState<
     "loop" | "cold_start" | null
   >(null);
-  const [isGeneratingQueries, setIsGeneratingQueries] = useState(false);
   const [isCreatingVariant, setIsCreatingVariant] = useState(false);
   const [isCreatingLoopCandidateVariant, setIsCreatingLoopCandidateVariant] =
     useState(false);
@@ -211,11 +158,7 @@ function ExperimentsPageContent() {
   const [isSubmitting, setSubmitting] = useState(false);
   const [savingExperimentId, setSavingExperimentId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
-  const [batteryGenerationReport, setBatteryGenerationReport] =
-    useState<BatteryGenerationReport | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
-  const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [scheduleForm, setScheduleForm] = useState({
     enabled: false,
     intervalMinutes: "1440",
@@ -225,14 +168,6 @@ function ExperimentsPageContent() {
     "win_rate" | "avg_score"
   >("win_rate");
   const [metricsHistoryExpanded, setMetricsHistoryExpanded] = useState(false);
-  const [nextTest, setNextTest] = useState<NextTestRecommendation | null>(null);
-  const [nextTestStatus, setNextTestStatus] = useState<string | null>(null);
-  const [isRecommending, setIsRecommending] = useState(false);
-  const [isCreatingSuggestedVariant, setIsCreatingSuggestedVariant] =
-    useState(false);
-  const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(
-    null,
-  );
   const [jsonErrors, setJsonErrors] = useState({
     variantPayload: null as string | null,
   });
@@ -314,6 +249,13 @@ function ExperimentsPageContent() {
     productId,
     userId,
   });
+  const {
+    simulationRevisions,
+    selectedSimulationRevisionId,
+    setSelectedSimulationRevisionId,
+    simulationRevisionStatus,
+    setSimulationRevisionStatus,
+  } = useSimulationCopyRevisions({ productId, userId });
   const latestAgentRun = useLatestExperimentAgentRun(selectedExperimentId, userId);
   const showManualControls = labMode === "manual" || labShowManualControls;
   const experimentSnapshots = useExperimentSnapshots(experiments, userId);
@@ -329,18 +271,6 @@ function ExperimentsPageContent() {
       });
     },
     [experimentRunMode, retrievalMaxResults, userId],
-  );
-
-  const refreshExecutionState = useCallback(
-    async (experimentId: string) => {
-      try {
-        const response = await getExperimentExecutionState(experimentId, userId);
-        setExecutionState(response.state ?? null);
-      } catch {
-        setExecutionState(null);
-      }
-    },
-    [userId],
   );
 
   useEffect(() => {
@@ -392,6 +322,83 @@ function ExperimentsPageContent() {
     () => experiments.find((item) => item.id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
   );
+  const {
+    queries,
+    setQueries,
+    queryMap,
+    selectedBattery,
+    batteryMetrics,
+    audienceSegments,
+    setAudienceSegments,
+    audienceSegmentsStatus,
+    setAudienceSegmentsStatus,
+    hasBottomUpMetadata,
+  } = useExperimentBatteryReadModels({
+    batteries,
+    selectedBatteryId: experimentForm.batteryId,
+    fallbackBatteryId: selectedExperiment?.battery_id,
+    productDetail,
+    userId,
+  });
+  const {
+    generatedCandidates,
+    setGeneratedCandidates,
+    isGeneratingQueries,
+    batteryStatus,
+    batteryGenerationReport,
+    queryStatus,
+    handleCreateBattery,
+    handleUpdateBattery,
+    handleGenerateQueries,
+    handleSaveGeneratedCandidates,
+    handleQueryToggle,
+    handleSegmentToggle,
+    handleQueryWeight,
+    handleQueryDelete,
+  } = useExperimentBatteryActions({
+    userId,
+    productId,
+    batteryForm,
+    batteryEdit,
+    selectedBattery,
+    batterySeedQueries,
+    batterySeedFeatures,
+    batterySeedUseCases,
+    batteryUseLlm,
+    hasBottomUpMetadata,
+    setBatteries,
+    setBatteryForm,
+    setExperimentForm,
+    setQueries,
+    setAudienceSegments,
+    setAudienceSegmentsStatus,
+    setFormError,
+    setSubmitting,
+  });
+  const handleClearSelectedExperimentData = useCallback(() => {
+    setLoopGeneratedVariants([]);
+    setSelectedLoopCandidateIndex(0);
+    setLoopGenerationStatus(null);
+  }, []);
+  const {
+    variants,
+    setVariants,
+    runs,
+    setRuns,
+    metrics,
+    setMetrics,
+    executionState,
+    hypotheses,
+    recommendations,
+    validationSummary,
+    simulationDetails,
+    refreshExecutionState,
+  } = useExperimentSelectionData({
+    selectedExperimentId,
+    selectedExperimentBatteryId: selectedExperiment?.battery_id,
+    userId,
+    onClearSelection: handleClearSelectedExperimentData,
+  });
 
   const runsWorkspaceHref = useMemo(() => {
     return buildRunsHref({
@@ -422,51 +429,6 @@ function ExperimentsPageContent() {
   );
 
   useEffect(() => {
-    if (!selectedExperimentId) {
-      setVariants([]);
-      setRuns([]);
-      setMetrics([]);
-      setExecutionState(null);
-      setHypotheses([]);
-      setRecommendations([]);
-      setValidationSummary(null);
-      setLoopGeneratedVariants([]);
-      setSelectedLoopCandidateIndex(0);
-      setLoopGenerationStatus(null);
-      return;
-    }
-    void listExperimentVariants(selectedExperimentId, userId).then((response) => {
-      setVariants(response.variants ?? []);
-    });
-    void listExperimentRuns(selectedExperimentId, userId).then((response) => {
-      setRuns(response.runs ?? []);
-    });
-    void listExperimentMetrics(selectedExperimentId, userId).then((response) => {
-      setMetrics(response.metrics ?? []);
-    });
-    void getExperimentExecutionState(selectedExperimentId, userId)
-      .then((response) => {
-        setExecutionState(response.state ?? null);
-      })
-      .catch(() => setExecutionState(null));
-    void listExperimentHypotheses(selectedExperimentId, userId)
-      .then((response) => {
-        setHypotheses(response.hypotheses ?? []);
-      })
-      .catch(() => setHypotheses([]));
-    void listExperimentRecommendations(selectedExperimentId, userId).then(
-      (response) => {
-        setRecommendations(response.recommendations ?? []);
-      },
-    );
-    void getExperimentValidationSummary(selectedExperimentId, userId)
-      .then((response) => {
-        setValidationSummary(response.summary ?? null);
-      })
-      .catch(() => setValidationSummary(null));
-  }, [selectedExperimentId, selectedExperiment?.battery_id, userId]);
-
-  useEffect(() => {
     if (selectedExperimentId) return;
     if (!productId || !experimentForm.batteryId) return;
     const existing = [...experiments]
@@ -479,98 +441,6 @@ function ExperimentsPageContent() {
       setSelectedExperimentId(existing.id);
     }
   }, [experimentForm.batteryId, experiments, productId, selectedExperimentId]);
-
-  useEffect(() => {
-    if (!runs.length) return;
-    const runIds = runs
-      .map((run) => run.simulation_run_id)
-      .filter((runId): runId is string => Boolean(runId));
-    const pending = runIds.filter((id) => !simulationDetails[id]);
-    if (!pending.length) return;
-    let cancelled = false;
-    Promise.all(
-      pending.slice(0, 12).map(async (runId) => {
-        try {
-          const response = await getSimulationRun(runId, userId);
-          return [runId, response.run] as const;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      const updates: Record<string, SimulationRunDetailResponse["run"]> = {};
-      entries.forEach((entry) => {
-        if (entry) {
-          updates[entry[0]] = entry[1];
-        }
-      });
-      if (Object.keys(updates).length) {
-        setSimulationDetails((prev) => ({ ...prev, ...updates }));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [runs, simulationDetails, userId]);
-
-  useEffect(() => {
-    if (!productId) {
-      setSimulationRevisions([]);
-      setSelectedSimulationRevisionId("");
-      return;
-    }
-    let cancelled = false;
-    void listCopyRevisions({
-      product_id: productId,
-      source_type: "simulation",
-      user_id: userId,
-      limit: 50,
-    })
-      .then((response) => {
-        if (cancelled) return;
-        const revisions = response.revisions ?? [];
-        setSimulationRevisions(revisions);
-        setSelectedSimulationRevisionId((current) => {
-          if (current && revisions.some((item) => item.id === current)) return current;
-          return revisions[0]?.id ?? "";
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSimulationRevisions([]);
-        setSelectedSimulationRevisionId("");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [productId, userId]);
-
-  useEffect(() => {
-    const batteryId = experimentForm.batteryId || selectedExperiment?.battery_id;
-    if (batteryId) {
-      void listBatteryQueries(batteryId, userId).then((response) => {
-        setQueries(response.queries ?? []);
-      });
-      void getBatteryMetrics(batteryId, userId).then((response) => {
-        setBatteryMetrics(response.metrics ?? null);
-      });
-    } else {
-      setQueries([]);
-      setBatteryMetrics(null);
-    }
-  }, [experimentForm.batteryId, selectedExperiment?.battery_id, userId]);
-
-  const queryMap = useMemo(() => {
-    const map = new Map<string, string>();
-    queries.forEach((query) => map.set(query.id, query.query_text));
-    return map;
-  }, [queries]);
-
-  const selectedBattery = useMemo(
-    () => batteries.find((battery) => battery.id === experimentForm.batteryId) ?? null,
-    [batteries, experimentForm.batteryId],
-  );
 
   const validateJsonField = useCallback((value: string) => {
     if (!value.trim()) return null;
@@ -598,27 +468,6 @@ function ExperimentsPageContent() {
       });
     }
   }, [selectedBattery]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!selectedBattery) {
-      setAudienceSegments([]);
-      setAudienceSegmentsStatus(null);
-      return;
-    }
-    void listBatteryAudienceSegments(selectedBattery.id, userId)
-      .then((response) => {
-        if (cancelled) return;
-        setAudienceSegments(response.segments ?? []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setAudienceSegments([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBattery, userId]);
 
   useEffect(() => {
     if (selectedExperiment) {
@@ -840,65 +689,6 @@ function ExperimentsPageContent() {
     }
   }, [productId, refreshExecutionState, selectedExperimentId, userId]);
 
-  const handleCreateBattery = useCallback(async () => {
-    if (!productId || !batteryForm.name.trim()) return;
-    setFormError(null);
-    setBatteryStatus(null);
-    setSubmitting(true);
-    try {
-      const response = await createBattery({
-        name: batteryForm.name.trim(),
-        product_id: productId,
-        purpose: batteryForm.purpose || undefined,
-        generation_mode: batteryForm.generationMode,
-        user_id: userId,
-      });
-      const updated = await listBatteries(userId, productId);
-      setBatteries(updated.batteries ?? []);
-      setExperimentForm((prev) => ({
-        ...prev,
-        batteryId: response.battery.id,
-      }));
-      setBatteryForm({ name: "", purpose: "", generationMode: "bottom_up" });
-      setBatteryStatus("Battery created.");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [batteryForm, productId, userId]);
-
-  const handleUpdateBattery = useCallback(async () => {
-    if (!selectedBattery) return;
-    setSubmitting(true);
-    setFormError(null);
-    try {
-      const response = await updateBattery(selectedBattery.id, {
-        name: batteryEdit.name,
-        purpose: batteryEdit.purpose,
-        status: batteryEdit.status,
-        user_id: userId,
-      });
-      setBatteries((current) =>
-        current.map((battery) =>
-          battery.id === selectedBattery.id ? response.battery : battery,
-        ),
-      );
-      setBatteryStatus("Battery updated.");
-    } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "Unable to update battery.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [batteryEdit, selectedBattery, userId]);
-
-  const parseSeedList = useCallback((value: string) => {
-    return value
-      .split(/[\n,]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }, []);
-
   const ensureExperimentContext = useCallback(async (): Promise<string | null> => {
     const batteryId = experimentForm.batteryId;
     if (!productId || !batteryId) {
@@ -954,586 +744,71 @@ function ExperimentsPageContent() {
     userId,
   ]);
 
-  const hasBottomUpMetadata = useMemo(() => {
-    const metadata = productDetail?.metadata ?? {};
-    const canonicalSpec =
-      (metadata.canonical_intent_spec as Record<string, unknown> | undefined) ?? {};
-    const features = metadata.features;
-    const useCase = metadata.use_case ?? metadata.scenario;
-    const hasFeatures =
-      (Array.isArray(features) && features.length > 0) ||
-      (typeof features === "string" && features.trim() !== "");
-    const hasUseCase =
-      (Array.isArray(useCase) && useCase.length > 0) ||
-      (typeof useCase === "string" && useCase.trim() !== "");
-    const canonicalFeatures = canonicalSpec.feature_concepts;
-    const canonicalUseCases = canonicalSpec.use_cases;
-    const hasCanonicalFeatures =
-      (Array.isArray(canonicalFeatures) && canonicalFeatures.length > 0) ||
-      (typeof canonicalFeatures === "string" && canonicalFeatures.trim() !== "");
-    const hasCanonicalUseCases =
-      (Array.isArray(canonicalUseCases) && canonicalUseCases.length > 0) ||
-      (typeof canonicalUseCases === "string" && canonicalUseCases.trim() !== "");
-    const hasIntentLabels = Boolean(metadata.intent_labels || metadata.intent_archetypes);
-    const hasVertical = Boolean(
-      metadata.vertical ||
-        metadata.domain ||
-        metadata.category ||
-        canonicalSpec.category,
-    );
-    return (
-      hasFeatures ||
-      hasUseCase ||
-      hasCanonicalFeatures ||
-      hasCanonicalUseCases ||
-      hasIntentLabels ||
-      hasVertical
-    );
-  }, [productDetail]);
+  const {
+    handleCreateVariant,
+    handleUseSimulationRevision,
+    handleGenerateLoopVariants,
+    handleGenerateColdStartVariants,
+    handleUseGeneratedLoopVariant,
+    handleCreateVariantFromLoopCandidate,
+    handleCreateAndRunVariantFromLoopCandidate,
+  } = useExperimentVariantActions({
+    userId,
+    variantForm,
+    jsonErrorVariantPayload: jsonErrors.variantPayload,
+    simulationRevisions,
+    selectedSimulationRevisionId,
+    loopGeneratedVariants,
+    selectedLoopCandidateIndex,
+    coldStartGenerationStrategy,
+    ensureExperimentContext,
+    refreshExecutionState,
+    runExperimentWithSelectedMode,
+    setVariantForm,
+    setVariants,
+    setRuns,
+    setMetrics,
+    setFormError,
+    setSubmitting,
+    setSimulationRevisionStatus,
+    setLoopGeneratedVariants,
+    setSelectedLoopCandidateIndex,
+    setLoopGenerationStatus,
+    setIsCreatingVariant,
+    setIsGeneratingLoopVariant,
+    setVariantGenerationRequestType,
+    setIsCreatingLoopCandidateVariant,
+    setVariantAdvancedOpen,
+  });
+  const {
+    nextTest,
+    nextTestStatus,
+    isRecommending,
+    isCreatingSuggestedVariant,
+    handleRecommendNextTest,
+    handleRunRecommended,
+    handleCreateSuggestedVariant,
+    handleCreateVariantFromRecommendation,
+    handleRunRecommendation,
+  } = useExperimentRecommendationActions({
+    labMode,
+    selectedExperimentId,
+    userId,
+    refreshExecutionState,
+    runExperimentWithSelectedMode,
+    setVariants,
+    setRuns,
+    setMetrics,
+    setRunningVariantId,
+    setFormError,
+    setSubmitting,
+  });
 
   useEffect(() => {
     if (batteryForm.generationMode === "bottom_up" && !hasBottomUpMetadata) {
       setAdvancedOverridesOpen(true);
     }
   }, [batteryForm.generationMode, hasBottomUpMetadata]);
-
-  const handleGenerateQueries = useCallback(
-    async (batteryId: string) => {
-      if (!batteryId) return;
-      setFormError(null);
-      setSubmitting(true);
-      setIsGeneratingQueries(true);
-      try {
-        const seedList = parseSeedList(batterySeedQueries);
-        const featureSeeds = parseSeedList(batterySeedFeatures);
-        const useCaseSeeds = parseSeedList(batterySeedUseCases);
-        let source = batteryForm.generationMode;
-        if (
-          source === "bottom_up" &&
-          !hasBottomUpMetadata &&
-          seedList.length === 0 &&
-          featureSeeds.length === 0 &&
-          useCaseSeeds.length === 0
-        ) {
-          const confirmSwitch = window.confirm(
-            "Bottom-up needs features/use-cases. Switch to top-down for this generation?",
-          );
-          if (!confirmSwitch) {
-            setFormError("Add features/use-cases or seed queries for bottom-up.");
-            setSubmitting(false);
-            setIsGeneratingQueries(false);
-            return;
-          }
-          source = "top_down";
-          setBatteryForm((prev) => ({ ...prev, generationMode: "top_down" }));
-          setBatteryStatus("Bottom-up metadata missing. Generated with top-down.");
-        }
-        const response = await generateBatteryQueries(batteryId, {
-          source,
-          seed_queries: seedList.length ? seedList : undefined,
-          seed_features: featureSeeds.length ? featureSeeds : undefined,
-          seed_use_cases: useCaseSeeds.length ? useCaseSeeds : undefined,
-          user_id: userId,
-          use_llm: batteryUseLlm,
-          persist: false,
-        });
-        setBatteryGenerationReport(response.report ?? null);
-        const candidates = (response.candidates ?? []).map((candidate) => ({
-          ...candidate,
-          selected: true,
-          weight: typeof candidate.weight === "number" ? candidate.weight : 1,
-        }));
-        setGeneratedCandidates(candidates);
-        if (response.report) {
-          setBatteryStatus(
-            `Accepted ${response.report.accepted_count}, rejected ${response.report.rejected_count}.`,
-          );
-        }
-      } finally {
-        setIsGeneratingQueries(false);
-        setSubmitting(false);
-      }
-    },
-    [
-      batterySeedFeatures,
-      batterySeedQueries,
-      batterySeedUseCases,
-      batteryForm.generationMode,
-      batteryUseLlm,
-      hasBottomUpMetadata,
-      parseSeedList,
-      userId,
-    ],
-  );
-
-  const handleSaveGeneratedCandidates = useCallback(
-    async (batteryId: string) => {
-      if (!batteryId || generatedCandidates.length === 0) return;
-      setSubmitting(true);
-      try {
-        const selected = generatedCandidates.filter((item) => item.selected);
-        for (const item of selected) {
-          await addBatteryQuery(batteryId, {
-            query_text: item.query_text,
-            query_type: item.query_type ?? undefined,
-            intent_archetype: item.intent_archetype ?? undefined,
-            constraints: item.constraints ?? undefined,
-            weight: typeof item.weight === "number" ? item.weight : 1,
-            enabled: true,
-            user_id: userId,
-          });
-        }
-        setBatteryStatus(`Saved ${selected.length} queries to battery.`);
-        const refreshed = await listBatteryQueries(batteryId, userId);
-        setQueries(refreshed.queries ?? []);
-        setGeneratedCandidates([]);
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [generatedCandidates, userId],
-  );
-
-  const handleQueryToggle = useCallback(
-    async (batteryId: string, queryId: string, enabled: boolean) => {
-      setQueryStatus(null);
-      try {
-        const response = await updateBatteryQuery(batteryId, queryId, {
-          enabled,
-          user_id: userId,
-        });
-        setQueries((current) =>
-          current.map((query) =>
-            query.id === queryId ? response.query : query,
-          ),
-        );
-        setQueryStatus("Query updated.");
-      } catch (error) {
-        setQueryStatus(
-          error instanceof Error ? error.message : "Unable to update query.",
-        );
-      }
-    },
-    [userId],
-  );
-
-  const handleSegmentToggle = useCallback(
-    async (segmentId: string, active: boolean) => {
-      if (!selectedBattery) return;
-      setAudienceSegmentsStatus(null);
-      try {
-        const response = await updateBatteryAudienceSegment(
-          selectedBattery.id,
-          segmentId,
-          {
-            active,
-            user_id: userId,
-          },
-        );
-        setAudienceSegments((current) =>
-          current.map((segment) =>
-            segment.id === segmentId ? response.segment : segment,
-          ),
-        );
-        setAudienceSegmentsStatus(
-          active
-            ? "Segment enabled for query generation."
-            : "Segment disabled for query generation.",
-        );
-      } catch (error) {
-        setAudienceSegmentsStatus(
-          error instanceof Error ? error.message : "Unable to update segment.",
-        );
-      }
-    },
-    [selectedBattery, userId],
-  );
-
-  const handleQueryWeight = useCallback(
-    async (batteryId: string, queryId: string, weight: number) => {
-      setQueryStatus(null);
-      try {
-        const response = await updateBatteryQuery(batteryId, queryId, {
-          weight,
-          user_id: userId,
-        });
-        setQueries((current) =>
-          current.map((query) =>
-            query.id === queryId ? response.query : query,
-          ),
-        );
-        setQueryStatus("Query updated.");
-      } catch (error) {
-        setQueryStatus(
-          error instanceof Error ? error.message : "Unable to update query.",
-        );
-      }
-    },
-    [userId],
-  );
-
-  const handleQueryDelete = useCallback(
-    async (batteryId: string, queryId: string) => {
-      setQueryStatus(null);
-      try {
-        await deleteBatteryQuery(batteryId, queryId, userId);
-        setQueries((current) => current.filter((query) => query.id !== queryId));
-        setQueryStatus("Query deleted.");
-      } catch (error) {
-        setQueryStatus(
-          error instanceof Error ? error.message : "Unable to delete query.",
-        );
-      }
-    },
-    [userId],
-  );
-
-  const handleCreateVariant = useCallback(async () => {
-    if (jsonErrors.variantPayload) return;
-    setFormError(null);
-    setSubmitting(true);
-    setIsCreatingVariant(true);
-    try {
-      const experimentId = await ensureExperimentContext();
-      if (!experimentId) return;
-      const basePayload =
-        variantForm.payload.trim() !== ""
-          ? JSON.parse(variantForm.payload)
-          : {};
-      const payload: Record<string, unknown> =
-        basePayload && typeof basePayload === "object"
-          ? { ...(basePayload as Record<string, unknown>) }
-          : {};
-      const description = variantForm.description.trim();
-      if (description) {
-        payload.description = description;
-      }
-      payload.role = variantForm.role;
-      const normalizedLabel = variantForm.label.trim()
-        ? variantForm.label.trim()
-        : variantForm.role === "control"
-          ? "Control (current copy)"
-          : "Hypothesis (variant)";
-      await createExperimentVariant(experimentId, {
-        label: normalizedLabel,
-        type: variantForm.type.trim() || "copy",
-        payload,
-        user_id: userId,
-      });
-      const refreshed = await listExperimentVariants(experimentId, userId);
-      setVariants(refreshed.variants ?? []);
-      await refreshExecutionState(experimentId);
-      setVariantForm({
-        label: "Hypothesis (variant)",
-        role: "candidate",
-        description: "",
-        type: "copy",
-        payload: "",
-      });
-      setVariantAdvancedOpen(false);
-    } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "Invalid JSON payload.",
-      );
-    } finally {
-      setIsCreatingVariant(false);
-      setSubmitting(false);
-    }
-  }, [
-    ensureExperimentContext,
-    jsonErrors.variantPayload,
-    refreshExecutionState,
-    userId,
-    variantForm,
-  ]);
-
-  const handleUseSimulationRevision = useCallback(() => {
-    setSimulationRevisionStatus(null);
-    if (!selectedSimulationRevisionId) {
-      setSimulationRevisionStatus("Select a simulation revision first.");
-      return;
-    }
-    const revision = simulationRevisions.find(
-      (item) => item.id === selectedSimulationRevisionId,
-    );
-    if (!revision) {
-      setSimulationRevisionStatus("Selected simulation revision not found.");
-      return;
-    }
-    const nextDescription = String(revision.candidate_description || "").trim();
-    if (!nextDescription) {
-      setSimulationRevisionStatus("Selected revision has no candidate description.");
-      return;
-    }
-
-    setVariantForm((prev) => {
-      let parsedPayload: Record<string, unknown> = {};
-      if (prev.payload.trim()) {
-        try {
-          const parsed = JSON.parse(prev.payload);
-          if (parsed && typeof parsed === "object") {
-            parsedPayload = parsed as Record<string, unknown>;
-          }
-        } catch {
-          // Keep existing payload string untouched if invalid JSON; validation already surfaces this.
-          return { ...prev, description: nextDescription };
-        }
-      }
-      const nextPayload = {
-        ...parsedPayload,
-        source_type: "simulation_revision",
-        source_revision_id: revision.id,
-      };
-      return {
-        ...prev,
-        description: nextDescription,
-        payload: JSON.stringify(nextPayload, null, 2),
-      };
-    });
-    setSimulationRevisionStatus(
-      `Loaded optimized copy from simulation revision ${selectedSimulationRevisionId.slice(
-        0,
-        8,
-      )}.`,
-    );
-  }, [selectedSimulationRevisionId, simulationRevisions]);
-
-  const handleGenerateLoopVariants = useCallback(async () => {
-    setLoopGenerationStatus(null);
-    setVariantGenerationRequestType("loop");
-    setIsGeneratingLoopVariant(true);
-    try {
-      const experimentId = await ensureExperimentContext();
-      if (!experimentId) return;
-      const response = await generateExperimentVariants(experimentId, {
-        user_id: userId,
-        max_candidates: 3,
-        mode: "loop_evidence",
-        strategy: "both",
-      });
-      const candidates = response.candidates ?? [];
-      setLoopGeneratedVariants(candidates);
-      setSelectedLoopCandidateIndex(0);
-      if (candidates.length === 0) {
-        setLoopGenerationStatus("No loop-generated candidates available yet.");
-      } else {
-        setLoopGenerationStatus(
-          `Generated ${candidates.length} candidate variant${candidates.length === 1 ? "" : "s"} from experiment, simulation, and validation evidence.`,
-        );
-      }
-    } catch (error) {
-      setLoopGenerationStatus(
-        error instanceof Error ? error.message : "Unable to generate loop candidates.",
-      );
-    } finally {
-      setIsGeneratingLoopVariant(false);
-      setVariantGenerationRequestType(null);
-    }
-  }, [ensureExperimentContext, userId]);
-
-  const handleGenerateColdStartVariants = useCallback(async () => {
-    setLoopGenerationStatus(null);
-    setVariantGenerationRequestType("cold_start");
-    setIsGeneratingLoopVariant(true);
-    try {
-      const experimentId = await ensureExperimentContext();
-      if (!experimentId) return;
-      const response = await generateExperimentVariants(experimentId, {
-        user_id: userId,
-        max_candidates: 3,
-        mode: "cold_start",
-        strategy: coldStartGenerationStrategy,
-      });
-      const candidates = response.candidates ?? [];
-      setLoopGeneratedVariants(candidates);
-      setSelectedLoopCandidateIndex(0);
-      if (candidates.length === 0) {
-        setLoopGenerationStatus("No cold-start candidates available yet.");
-      } else {
-        setLoopGenerationStatus(
-          `Generated ${candidates.length} cold-start candidate variant${candidates.length === 1 ? "" : "s"} using ${coldStartGenerationStrategy.replace("_", "-")} strategy.`,
-        );
-      }
-    } catch (error) {
-      setLoopGenerationStatus(
-        error instanceof Error ? error.message : "Unable to generate cold-start candidates.",
-      );
-    } finally {
-      setIsGeneratingLoopVariant(false);
-      setVariantGenerationRequestType(null);
-    }
-  }, [coldStartGenerationStrategy, ensureExperimentContext, userId]);
-
-  const buildLoopCandidatePayload = useCallback(
-    (
-      candidate: LoopGeneratedVariantCandidate,
-      basePayload: Record<string, unknown> = {},
-    ) => {
-      const candidatePayload =
-        candidate.payload && typeof candidate.payload === "object"
-          ? candidate.payload
-          : {};
-      return {
-        ...basePayload,
-        ...candidatePayload,
-        source_type: "loop_evidence",
-        loop_confidence: candidate.confidence,
-      };
-    },
-    [],
-  );
-
-  const handleUseGeneratedLoopVariant = useCallback(() => {
-    const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
-    if (!candidate) {
-      setLoopGenerationStatus("Generate and select a loop candidate first.");
-      return;
-    }
-    setVariantForm((prev) => {
-      let parsedPayload: Record<string, unknown> = {};
-      if (prev.payload.trim()) {
-        try {
-          const parsed = JSON.parse(prev.payload);
-          if (parsed && typeof parsed === "object") {
-            parsedPayload = parsed as Record<string, unknown>;
-          }
-        } catch {
-          return {
-            ...prev,
-            label: candidate.label || prev.label,
-            description: candidate.description || prev.description,
-          };
-        }
-      }
-      const nextPayload = buildLoopCandidatePayload(candidate, parsedPayload);
-      return {
-        ...prev,
-        role: "candidate",
-        label: candidate.label || prev.label,
-        description: candidate.description || prev.description,
-        payload: JSON.stringify(nextPayload, null, 2),
-      };
-    });
-    setLoopGenerationStatus(
-      `Applied loop candidate ${selectedLoopCandidateIndex + 1} to the variant form.`,
-    );
-  }, [
-    buildLoopCandidatePayload,
-    loopGeneratedVariants,
-    selectedLoopCandidateIndex,
-  ]);
-
-  const handleCreateVariantFromLoopCandidate = useCallback(async () => {
-    const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
-    if (!candidate) {
-      setLoopGenerationStatus("Generate and select a loop candidate first.");
-      return;
-    }
-
-    setFormError(null);
-    setLoopGenerationStatus(null);
-    setSubmitting(true);
-    setIsCreatingLoopCandidateVariant(true);
-    try {
-      const experimentId = await ensureExperimentContext();
-      if (!experimentId) return;
-      const payload: Record<string, unknown> = buildLoopCandidatePayload(candidate, {
-        role: "candidate",
-      });
-      const description = String(candidate.description || "").trim();
-      if (description) {
-        payload.description = description;
-      }
-      await createExperimentVariant(experimentId, {
-        label: candidate.label?.trim() || "Hypothesis (variant)",
-        type: "copy",
-        payload,
-        user_id: userId,
-      });
-      const refreshed = await listExperimentVariants(experimentId, userId);
-      setVariants(refreshed.variants ?? []);
-      await refreshExecutionState(experimentId);
-      setLoopGenerationStatus(
-        `Created variant from loop candidate ${selectedLoopCandidateIndex + 1}.`,
-      );
-    } catch (error) {
-      setFormError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create variant from selected loop candidate.",
-      );
-    } finally {
-      setIsCreatingLoopCandidateVariant(false);
-      setSubmitting(false);
-    }
-  }, [
-    buildLoopCandidatePayload,
-    ensureExperimentContext,
-    loopGeneratedVariants,
-    refreshExecutionState,
-    selectedLoopCandidateIndex,
-    userId,
-  ]);
-
-  const handleCreateAndRunVariantFromLoopCandidate = useCallback(async () => {
-    const candidate = loopGeneratedVariants[selectedLoopCandidateIndex];
-    if (!candidate) {
-      setLoopGenerationStatus("Generate and select a loop candidate first.");
-      return;
-    }
-
-    setFormError(null);
-    setLoopGenerationStatus(null);
-    setSubmitting(true);
-    setIsCreatingLoopCandidateVariant(true);
-    try {
-      const experimentId = await ensureExperimentContext();
-      if (!experimentId) return;
-      const payload: Record<string, unknown> = buildLoopCandidatePayload(candidate, {
-        role: "candidate",
-      });
-      const description = String(candidate.description || "").trim();
-      if (description) {
-        payload.description = description;
-      }
-      const created = await createExperimentVariant(experimentId, {
-        label: candidate.label?.trim() || "Hypothesis (variant)",
-        type: "copy",
-        payload,
-        user_id: userId,
-      });
-      await runExperimentWithSelectedMode(experimentId, created.variant.id);
-      const [variantsResponse, runsResponse, metricsResponse] = await Promise.all([
-        listExperimentVariants(experimentId, userId),
-        listExperimentRuns(experimentId, userId),
-        listExperimentMetrics(experimentId, userId),
-      ]);
-      setVariants(variantsResponse.variants ?? []);
-      setRuns(runsResponse.runs ?? []);
-      setMetrics(metricsResponse.metrics ?? []);
-      await refreshExecutionState(experimentId);
-      setLoopGenerationStatus(
-        `Created and ran candidate ${selectedLoopCandidateIndex + 1}.`,
-      );
-    } catch (error) {
-      setFormError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create and run variant from selected loop candidate.",
-      );
-    } finally {
-      setIsCreatingLoopCandidateVariant(false);
-      setSubmitting(false);
-    }
-  }, [
-    buildLoopCandidatePayload,
-    ensureExperimentContext,
-    loopGeneratedVariants,
-    refreshExecutionState,
-    selectedLoopCandidateIndex,
-    runExperimentWithSelectedMode,
-    userId,
-  ]);
 
   const handleSaveExperimentDraft = useCallback(
     async (experimentId: string) => {
@@ -1572,160 +847,6 @@ function ExperimentsPageContent() {
       hypothesis: JSON.stringify(hypothesisPayload, null, 2),
     }));
   }, []);
-
-  const handleRecommendNextTest = useCallback(async () => {
-    if (!selectedExperimentId) return;
-    setNextTestStatus(null);
-    setIsRecommending(true);
-    try {
-      const response = await getNextTestRecommendation(
-        selectedExperimentId,
-        userId,
-      );
-      setNextTest(response.recommendation);
-    } catch (error) {
-      setNextTestStatus("Unable to recommend next test.");
-    } finally {
-      setIsRecommending(false);
-    }
-  }, [selectedExperimentId, userId]);
-
-  const handleRunRecommended = useCallback(async () => {
-    if (!selectedExperimentId || !nextTest?.variant_id) return;
-    setRunningVariantId(nextTest.variant_id);
-    try {
-      await runExperimentWithSelectedMode(selectedExperimentId, nextTest.variant_id);
-      const [runsResponse, metricsResponse] = await Promise.all([
-        listExperimentRuns(selectedExperimentId, userId),
-        listExperimentMetrics(selectedExperimentId, userId),
-      ]);
-      setRuns(runsResponse.runs ?? []);
-      setMetrics(metricsResponse.metrics ?? []);
-      await refreshExecutionState(selectedExperimentId);
-      setNextTestStatus("Recommended variant run completed.");
-    } finally {
-      setRunningVariantId(null);
-    }
-  }, [nextTest?.variant_id, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId]);
-
-  const handleCreateSuggestedVariant = useCallback(async () => {
-    if (!selectedExperimentId || !nextTest || nextTest.action !== "create_variant") {
-      return;
-    }
-    setFormError(null);
-    setIsCreatingSuggestedVariant(true);
-    setSubmitting(true);
-    try {
-      const response = await createExperimentVariant(selectedExperimentId, {
-        label: nextTest.suggested_label ?? "Hypothesis (next)",
-        type: nextTest.suggested_type ?? "copy",
-        payload:
-          nextTest.suggested_payload &&
-          typeof nextTest.suggested_payload === "object"
-            ? nextTest.suggested_payload
-            : {},
-        user_id: userId,
-      });
-      const refreshed = await listExperimentVariants(selectedExperimentId, userId);
-      setVariants(refreshed.variants ?? []);
-      await refreshExecutionState(selectedExperimentId);
-      if (labMode === "lab") {
-        await runExperimentWithSelectedMode(selectedExperimentId, response.variant.id);
-        const [runsResponse, metricsResponse] = await Promise.all([
-          listExperimentRuns(selectedExperimentId, userId),
-          listExperimentMetrics(selectedExperimentId, userId),
-        ]);
-        setRuns(runsResponse.runs ?? []);
-        setMetrics(metricsResponse.metrics ?? []);
-        await refreshExecutionState(selectedExperimentId);
-        setNextTestStatus(
-          `Created and ran variant ${response.variant.label}.`,
-        );
-      } else {
-        setNextTestStatus(`Created variant ${response.variant.label}.`);
-      }
-    } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "Unable to create variant.",
-      );
-    } finally {
-      setSubmitting(false);
-      setIsCreatingSuggestedVariant(false);
-    }
-  }, [labMode, nextTest, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId]);
-
-  const handleCreateVariantFromRecommendation = useCallback(
-    async (recommendation: NextTestRecommendation) => {
-      if (!selectedExperimentId || recommendation.action !== "create_variant") {
-        return;
-      }
-      setFormError(null);
-      setIsCreatingSuggestedVariant(true);
-      setSubmitting(true);
-      try {
-        const response = await createExperimentVariant(selectedExperimentId, {
-          label: recommendation.suggested_label ?? "Hypothesis (next)",
-          type: recommendation.suggested_type ?? "copy",
-          payload:
-            recommendation.suggested_payload &&
-            typeof recommendation.suggested_payload === "object"
-              ? recommendation.suggested_payload
-              : {},
-          user_id: userId,
-        });
-        const refreshed = await listExperimentVariants(selectedExperimentId, userId);
-        setVariants(refreshed.variants ?? []);
-        await refreshExecutionState(selectedExperimentId);
-        if (labMode === "lab") {
-          await runExperimentWithSelectedMode(
-            selectedExperimentId,
-            response.variant.id,
-          );
-          const [runsResponse, metricsResponse] = await Promise.all([
-            listExperimentRuns(selectedExperimentId, userId),
-            listExperimentMetrics(selectedExperimentId, userId),
-          ]);
-          setRuns(runsResponse.runs ?? []);
-          setMetrics(metricsResponse.metrics ?? []);
-          await refreshExecutionState(selectedExperimentId);
-          setNextTestStatus(
-            `Created and ran variant ${response.variant.label}.`,
-          );
-        } else {
-          setNextTestStatus(`Created variant ${response.variant.label}.`);
-        }
-      } catch (error) {
-        setFormError(
-          error instanceof Error ? error.message : "Unable to create variant.",
-        );
-      } finally {
-        setSubmitting(false);
-        setIsCreatingSuggestedVariant(false);
-      }
-    },
-    [labMode, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
-  );
-
-  const handleRunRecommendation = useCallback(
-    async (variantId: string | null | undefined) => {
-      if (!selectedExperimentId || !variantId) return;
-      setRunningVariantId(variantId);
-      try {
-        await runExperimentWithSelectedMode(selectedExperimentId, variantId);
-        const [runsResponse, metricsResponse] = await Promise.all([
-          listExperimentRuns(selectedExperimentId, userId),
-          listExperimentMetrics(selectedExperimentId, userId),
-        ]);
-        setRuns(runsResponse.runs ?? []);
-        setMetrics(metricsResponse.metrics ?? []);
-        await refreshExecutionState(selectedExperimentId);
-        setNextTestStatus("Recommended test run completed.");
-      } finally {
-        setRunningVariantId(null);
-      }
-    },
-    [labMode, refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
-  );
 
   const latestMetricEntry = metrics[0] ?? null;
   const latestMetric =
