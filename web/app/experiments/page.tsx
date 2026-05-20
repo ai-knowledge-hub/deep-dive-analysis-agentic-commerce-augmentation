@@ -10,30 +10,20 @@ import type {
   LoopGeneratedVariantCandidate,
   ExperimentVariant,
   NextTestRecommendation,
-  QueryBatteryCandidate,
   SimulationGapReport,
 } from "../../lib/types";
 import {
-  createBattery,
   createExperiment,
   createExperimentVariant,
   generateExperimentVariants,
-  deleteBatteryQuery,
   deleteConversationSession,
   deleteExperiment,
   deleteExperimentRun,
   deleteSimulationRun,
-  generateBatteryQueries,
-  addBatteryQuery,
-  listBatteries,
-  updateBattery,
-  updateBatteryQuery,
   listExperimentMetrics,
   listExperimentRuns,
   listExperimentVariants,
   listExperiments,
-  listBatteryQueries,
-  updateBatteryAudienceSegment,
   runExperiment,
   updateExperiment,
   updateExperimentSchedule,
@@ -46,10 +36,7 @@ import { HistoryDrawer } from "../../components/layout/HistoryDrawer";
 import { useTenant } from "../../components/tenant/TenantProvider";
 import { ExperimentHistoryPanel } from "../../components/experiments/ExperimentHistoryPanel";
 import { VariantCreationPanel } from "../../components/experiments/VariantCreationPanel";
-import {
-  BatteryGenerationReportNotice,
-  type BatteryGenerationReport,
-} from "../../components/experiments/BatteryGenerationReportNotice";
+import { BatteryGenerationReportNotice } from "../../components/experiments/BatteryGenerationReportNotice";
 import { BatteryCreationPanel } from "../../components/experiments/BatteryCreationPanel";
 import { BatteryDetailsPanel } from "../../components/experiments/BatteryDetailsPanel";
 import { AgentOperatorModePanel } from "../../components/experiments/AgentOperatorModePanel";
@@ -66,6 +53,7 @@ import { OrchestratorRecommendationsPanel } from "../../components/experiments/O
 import { QueryGenerationPanel } from "../../components/experiments/QueryGenerationPanel";
 import { VariantRunPanel } from "../../components/experiments/VariantRunPanel";
 import { VariantsIterationPanel } from "../../components/experiments/VariantsIterationPanel";
+import { useExperimentBatteryActions } from "../../components/experiments/useExperimentBatteryActions";
 import { useExperimentBatteryReadModels } from "../../components/experiments/useExperimentBatteryReadModels";
 import { useExperimentContextData } from "../../components/experiments/useExperimentContextData";
 import { useExperimentDraft } from "../../components/experiments/useExperimentDraft";
@@ -133,9 +121,6 @@ function ExperimentsPageContent() {
   const [recommendationsOpen, setRecommendationsOpen] = useState(false);
   const [labShowManualControls, setLabShowManualControls] = useState(false);
   const [labAutoRunEnabled, setLabAutoRunEnabled] = useState(true);
-  const [generatedCandidates, setGeneratedCandidates] = useState<
-    (QueryBatteryCandidate & { selected: boolean })[]
-  >([]);
   const [experimentForm, setExperimentForm] = useState({
     name: "",
     batteryId: "",
@@ -158,7 +143,6 @@ function ExperimentsPageContent() {
   const [variantGenerationRequestType, setVariantGenerationRequestType] = useState<
     "loop" | "cold_start" | null
   >(null);
-  const [isGeneratingQueries, setIsGeneratingQueries] = useState(false);
   const [isCreatingVariant, setIsCreatingVariant] = useState(false);
   const [isCreatingLoopCandidateVariant, setIsCreatingLoopCandidateVariant] =
     useState(false);
@@ -175,11 +159,7 @@ function ExperimentsPageContent() {
   const [isSubmitting, setSubmitting] = useState(false);
   const [savingExperimentId, setSavingExperimentId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
-  const [batteryGenerationReport, setBatteryGenerationReport] =
-    useState<BatteryGenerationReport | null>(null);
   const [experimentStatus, setExperimentStatus] = useState<string | null>(null);
-  const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [scheduleForm, setScheduleForm] = useState({
     enabled: false,
     intervalMinutes: "1440",
@@ -365,6 +345,41 @@ function ExperimentsPageContent() {
     fallbackBatteryId: selectedExperiment?.battery_id,
     productDetail,
     userId,
+  });
+  const {
+    generatedCandidates,
+    setGeneratedCandidates,
+    isGeneratingQueries,
+    batteryStatus,
+    batteryGenerationReport,
+    queryStatus,
+    handleCreateBattery,
+    handleUpdateBattery,
+    handleGenerateQueries,
+    handleSaveGeneratedCandidates,
+    handleQueryToggle,
+    handleSegmentToggle,
+    handleQueryWeight,
+    handleQueryDelete,
+  } = useExperimentBatteryActions({
+    userId,
+    productId,
+    batteryForm,
+    batteryEdit,
+    selectedBattery,
+    batterySeedQueries,
+    batterySeedFeatures,
+    batterySeedUseCases,
+    batteryUseLlm,
+    hasBottomUpMetadata,
+    setBatteries,
+    setBatteryForm,
+    setExperimentForm,
+    setQueries,
+    setAudienceSegments,
+    setAudienceSegmentsStatus,
+    setFormError,
+    setSubmitting,
   });
   const handleClearSelectedExperimentData = useCallback(() => {
     setLoopGeneratedVariants([]);
@@ -680,65 +695,6 @@ function ExperimentsPageContent() {
     }
   }, [productId, refreshExecutionState, selectedExperimentId, userId]);
 
-  const handleCreateBattery = useCallback(async () => {
-    if (!productId || !batteryForm.name.trim()) return;
-    setFormError(null);
-    setBatteryStatus(null);
-    setSubmitting(true);
-    try {
-      const response = await createBattery({
-        name: batteryForm.name.trim(),
-        product_id: productId,
-        purpose: batteryForm.purpose || undefined,
-        generation_mode: batteryForm.generationMode,
-        user_id: userId,
-      });
-      const updated = await listBatteries(userId, productId);
-      setBatteries(updated.batteries ?? []);
-      setExperimentForm((prev) => ({
-        ...prev,
-        batteryId: response.battery.id,
-      }));
-      setBatteryForm({ name: "", purpose: "", generationMode: "bottom_up" });
-      setBatteryStatus("Battery created.");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [batteryForm, productId, userId]);
-
-  const handleUpdateBattery = useCallback(async () => {
-    if (!selectedBattery) return;
-    setSubmitting(true);
-    setFormError(null);
-    try {
-      const response = await updateBattery(selectedBattery.id, {
-        name: batteryEdit.name,
-        purpose: batteryEdit.purpose,
-        status: batteryEdit.status,
-        user_id: userId,
-      });
-      setBatteries((current) =>
-        current.map((battery) =>
-          battery.id === selectedBattery.id ? response.battery : battery,
-        ),
-      );
-      setBatteryStatus("Battery updated.");
-    } catch (error) {
-      setFormError(
-        error instanceof Error ? error.message : "Unable to update battery.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [batteryEdit, selectedBattery, userId]);
-
-  const parseSeedList = useCallback((value: string) => {
-    return value
-      .split(/[\n,]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }, []);
-
   const ensureExperimentContext = useCallback(async (): Promise<string | null> => {
     const batteryId = experimentForm.batteryId;
     if (!productId || !batteryId) {
@@ -799,197 +755,6 @@ function ExperimentsPageContent() {
       setAdvancedOverridesOpen(true);
     }
   }, [batteryForm.generationMode, hasBottomUpMetadata]);
-
-  const handleGenerateQueries = useCallback(
-    async (batteryId: string) => {
-      if (!batteryId) return;
-      setFormError(null);
-      setSubmitting(true);
-      setIsGeneratingQueries(true);
-      try {
-        const seedList = parseSeedList(batterySeedQueries);
-        const featureSeeds = parseSeedList(batterySeedFeatures);
-        const useCaseSeeds = parseSeedList(batterySeedUseCases);
-        let source = batteryForm.generationMode;
-        if (
-          source === "bottom_up" &&
-          !hasBottomUpMetadata &&
-          seedList.length === 0 &&
-          featureSeeds.length === 0 &&
-          useCaseSeeds.length === 0
-        ) {
-          const confirmSwitch = window.confirm(
-            "Bottom-up needs features/use-cases. Switch to top-down for this generation?",
-          );
-          if (!confirmSwitch) {
-            setFormError("Add features/use-cases or seed queries for bottom-up.");
-            setSubmitting(false);
-            setIsGeneratingQueries(false);
-            return;
-          }
-          source = "top_down";
-          setBatteryForm((prev) => ({ ...prev, generationMode: "top_down" }));
-          setBatteryStatus("Bottom-up metadata missing. Generated with top-down.");
-        }
-        const response = await generateBatteryQueries(batteryId, {
-          source,
-          seed_queries: seedList.length ? seedList : undefined,
-          seed_features: featureSeeds.length ? featureSeeds : undefined,
-          seed_use_cases: useCaseSeeds.length ? useCaseSeeds : undefined,
-          user_id: userId,
-          use_llm: batteryUseLlm,
-          persist: false,
-        });
-        setBatteryGenerationReport(response.report ?? null);
-        const candidates = (response.candidates ?? []).map((candidate) => ({
-          ...candidate,
-          selected: true,
-          weight: typeof candidate.weight === "number" ? candidate.weight : 1,
-        }));
-        setGeneratedCandidates(candidates);
-        if (response.report) {
-          setBatteryStatus(
-            `Accepted ${response.report.accepted_count}, rejected ${response.report.rejected_count}.`,
-          );
-        }
-      } finally {
-        setIsGeneratingQueries(false);
-        setSubmitting(false);
-      }
-    },
-    [
-      batterySeedFeatures,
-      batterySeedQueries,
-      batterySeedUseCases,
-      batteryForm.generationMode,
-      batteryUseLlm,
-      hasBottomUpMetadata,
-      parseSeedList,
-      userId,
-    ],
-  );
-
-  const handleSaveGeneratedCandidates = useCallback(
-    async (batteryId: string) => {
-      if (!batteryId || generatedCandidates.length === 0) return;
-      setSubmitting(true);
-      try {
-        const selected = generatedCandidates.filter((item) => item.selected);
-        for (const item of selected) {
-          await addBatteryQuery(batteryId, {
-            query_text: item.query_text,
-            query_type: item.query_type ?? undefined,
-            intent_archetype: item.intent_archetype ?? undefined,
-            constraints: item.constraints ?? undefined,
-            weight: typeof item.weight === "number" ? item.weight : 1,
-            enabled: true,
-            user_id: userId,
-          });
-        }
-        setBatteryStatus(`Saved ${selected.length} queries to battery.`);
-        const refreshed = await listBatteryQueries(batteryId, userId);
-        setQueries(refreshed.queries ?? []);
-        setGeneratedCandidates([]);
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [generatedCandidates, userId],
-  );
-
-  const handleQueryToggle = useCallback(
-    async (batteryId: string, queryId: string, enabled: boolean) => {
-      setQueryStatus(null);
-      try {
-        const response = await updateBatteryQuery(batteryId, queryId, {
-          enabled,
-          user_id: userId,
-        });
-        setQueries((current) =>
-          current.map((query) =>
-            query.id === queryId ? response.query : query,
-          ),
-        );
-        setQueryStatus("Query updated.");
-      } catch (error) {
-        setQueryStatus(
-          error instanceof Error ? error.message : "Unable to update query.",
-        );
-      }
-    },
-    [userId],
-  );
-
-  const handleSegmentToggle = useCallback(
-    async (segmentId: string, active: boolean) => {
-      if (!selectedBattery) return;
-      setAudienceSegmentsStatus(null);
-      try {
-        const response = await updateBatteryAudienceSegment(
-          selectedBattery.id,
-          segmentId,
-          {
-            active,
-            user_id: userId,
-          },
-        );
-        setAudienceSegments((current) =>
-          current.map((segment) =>
-            segment.id === segmentId ? response.segment : segment,
-          ),
-        );
-        setAudienceSegmentsStatus(
-          active
-            ? "Segment enabled for query generation."
-            : "Segment disabled for query generation.",
-        );
-      } catch (error) {
-        setAudienceSegmentsStatus(
-          error instanceof Error ? error.message : "Unable to update segment.",
-        );
-      }
-    },
-    [selectedBattery, userId],
-  );
-
-  const handleQueryWeight = useCallback(
-    async (batteryId: string, queryId: string, weight: number) => {
-      setQueryStatus(null);
-      try {
-        const response = await updateBatteryQuery(batteryId, queryId, {
-          weight,
-          user_id: userId,
-        });
-        setQueries((current) =>
-          current.map((query) =>
-            query.id === queryId ? response.query : query,
-          ),
-        );
-        setQueryStatus("Query updated.");
-      } catch (error) {
-        setQueryStatus(
-          error instanceof Error ? error.message : "Unable to update query.",
-        );
-      }
-    },
-    [userId],
-  );
-
-  const handleQueryDelete = useCallback(
-    async (batteryId: string, queryId: string) => {
-      setQueryStatus(null);
-      try {
-        await deleteBatteryQuery(batteryId, queryId, userId);
-        setQueries((current) => current.filter((query) => query.id !== queryId));
-        setQueryStatus("Query deleted.");
-      } catch (error) {
-        setQueryStatus(
-          error instanceof Error ? error.message : "Unable to delete query.",
-        );
-      }
-    },
-    [userId],
-  );
 
   const handleCreateVariant = useCallback(async () => {
     if (jsonErrors.variantPayload) return;
