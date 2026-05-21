@@ -135,11 +135,15 @@ Next steps:
 
 ### 5. Protocol And Fallback Execution
 
-Current state: ACP/UCP surfaces are still discovery/mock-heavy.
+Current state: ACP/UCP surfaces are still discovery/mock-heavy, but the first
+read-only execution-adapter spine now exists. `check_protocol_readiness` runs
+through `protocol.readiness.v1`, emits a structured adapter receipt, and pins
+that receipt into run-event anchors for audit/replay.
 
 Next steps:
 
-- Replace protocol placeholders with concrete retrieval/execution adapters.
+- Expand the protocol adapter spine from readiness checks to concrete retrieval
+  and execution adapters where real ACP/UCP surfaces are available.
 - Define browser/CLI fallback tools with narrow permissions.
 - Require policy review for any external side effect.
 
@@ -263,7 +267,8 @@ Goal: let agents act through real commerce/protocol/tool surfaces, not only mock
 
 Build:
 
-- Concrete ACP/UCP retrieval and execution adapters where available.
+- Expand the read-only protocol adapter spine into concrete ACP/UCP retrieval
+  and execution adapters where available.
 - Narrow browser/CLI fallback adapters with explicit permission scopes.
 - Policy review gates for all external side effects.
 - Execution receipts that link provider/job/browser/CLI evidence back to run events.

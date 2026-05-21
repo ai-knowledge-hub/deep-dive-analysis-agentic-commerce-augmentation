@@ -49,6 +49,7 @@ def record_action_event(
 ) -> None:
     run = deps.agent_runs.get_agent_run(run_id=run_id) or {}
     outputs = action.get("outputs") or {}
+    receipt = outputs.get("receipt") if isinstance(outputs, dict) else None
     metric_id = None
     if isinstance(outputs, dict):
         metric_id = (
@@ -94,6 +95,9 @@ def record_action_event(
             "registry_fingerprint": action.get("registry_fingerprint"),
             "tool_version": action.get("tool_version"),
             "skill_version": action.get("skill_version"),
-            "receipt_id": action.get("receipt_id"),
+            "receipt_id": action.get("receipt_id")
+            or (outputs.get("receipt_id") if isinstance(outputs, dict) else None),
+            "adapter": outputs.get("adapter") if isinstance(outputs, dict) else None,
+            "receipt": receipt if isinstance(receipt, dict) else None,
         },
     )

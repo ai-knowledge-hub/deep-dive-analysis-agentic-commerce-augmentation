@@ -76,6 +76,7 @@ def test_registry_contains_core_capability_and_defaults():
 
 def test_registry_support_and_next_state():
     assert capability_supported("seed_hypotheses") is True
+    assert capability_supported("check_protocol_readiness") is True
     assert capability_supported("not_real") is False
     assert next_state_for_capability("seed_hypotheses") == "hypotheses_ready"
     assert next_state_for_capability("recommend_next_action") is None
@@ -91,6 +92,11 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert normalized["variant_selection"] == "top_1"
     assert normalized["retrieval_max_results"] == 5
     assert tool_supported("experiment.run_variant") is True
+    protocol_tool = get_tool_spec("protocol.readiness_check")
+    assert protocol_tool is not None
+    assert protocol_tool.capability_name == "check_protocol_readiness"
+    assert protocol_tool.effect_class == "read"
+    assert protocol_tool.output_schema["properties"]["receipt_id"]["type"] == "string"
     assert tool_supported("not.real") is False
 
 
@@ -152,6 +158,9 @@ def test_registry_payload_can_use_persistent_tool_ownership():
 
 
 def test_runtime_tools_resolve_to_skill_lineage():
+    assert skill_id_for_tool_id("protocol.readiness_check") == (
+        "discover-protocol-candidates"
+    )
     assert skill_id_for_tool_id("experiment.run_variant") == "optimize-product-representation"
     assert (
         skill_id_for_capability("request_synthetic_validation")
