@@ -3,18 +3,19 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 from application.ports.deps import AppDeps
+from application.services.agent_runtime.adapters.registry import (
+    validate_adapter_request,
+)
 from application.services.agent_runtime.adapters.types import (
+    AdapterExecutionError,
     AdapterReceipt,
     AdapterRequest,
     stable_receipt_id,
 )
-from application.services.agent_runtime.capabilities.types import CapabilityExecutionError
 from domain.protocol.types import ProtocolCandidate
 
 ADAPTER_ID = "protocol.readiness.v1"
 CHANNEL_TYPE = "protocol"
-PERMISSION_SCOPE = "protocol.readiness:read"
-EFFECT_CLASS = "read"
 
 
 def execute_protocol_readiness_check(
@@ -22,17 +23,18 @@ def execute_protocol_readiness_check(
     deps: AppDeps,
     request: AdapterRequest,
 ) -> Dict[str, Any]:
+    adapter_spec = validate_adapter_request(request=request)
     product_id = str(request.inputs.get("product_id") or "").strip()
     protocols = _normalize_protocols(request.inputs.get("protocols"))
     if not product_id:
-        raise CapabilityExecutionError("check_protocol_readiness missing product_id")
+        raise AdapterExecutionError("check_protocol_readiness missing product_id")
 
     product = deps.clients.get_product_for_client(
         client_id=request.client_id,
         product_id=product_id,
     )
     if not product:
-        raise CapabilityExecutionError("product not found")
+        raise AdapterExecutionError("product not found")
 
     readiness = []
     for protocol in protocols:
@@ -64,33 +66,34 @@ def execute_protocol_readiness_check(
     }
     receipt = AdapterReceipt(
         receipt_id=stable_receipt_id(
-            adapter_id=ADAPTER_ID,
+            adapter_id=adapter_spec.id,
             capability_name=request.capability_name,
             client_id=request.client_id,
             subject=subject,
             evidence=evidence,
         ),
-        adapter_id=ADAPTER_ID,
-        channel_type=CHANNEL_TYPE,
+        adapter_id=adapter_spec.id,
+        channel_type=adapter_spec.channel_type,
         capability_name=request.capability_name,
-        permission_scope=PERMISSION_SCOPE,
-        effect_class=EFFECT_CLASS,
+        permission_scope=adapter_spec.permission_scope,
+        effect_class=adapter_spec.effect_class,
         status="completed",
         subject=subject,
         evidence=evidence,
         risk={
-            "external_side_effects": False,
-            "writes_external_system": False,
-            "requires_operator_review": False,
+            "external_side_effects": adapter_spec.external_side_effects,
+            "writes_external_system": adapter_spec.writes_external_system,
+            "requires_operator_review": adapter_spec.requires_operator_review,
         },
     )
     return {
         "product_id": product_id,
         "protocol_readiness": readiness,
         "adapter": {
-            "adapter_id": ADAPTER_ID,
-            "channel_type": CHANNEL_TYPE,
-            "permission_scope": PERMISSION_SCOPE,
+            "adapter_id": adapter_spec.id,
+            "channel_type": adapter_spec.channel_type,
+            "permission_scope": adapter_spec.permission_scope,
+            "effect_class": adapter_spec.effect_class,
         },
         "receipt": receipt.to_dict(),
         "receipt_id": receipt.receipt_id,

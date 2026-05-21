@@ -5,10 +5,10 @@ from typing import Any, Dict
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
-from application.services.agent_runtime.adapters import (
-    AdapterRequest,
+from application.services.agent_runtime.adapters.protocol import (
     execute_protocol_readiness_check,
 )
+from application.services.agent_runtime.adapters.types import AdapterRequest
 from application.services.experiment.orchestrator import ExperimentOrchestrator
 from application.services.experiment.runner import ExperimentRunner
 from application.services.experiment.variant_generator import ExperimentVariantGenerator

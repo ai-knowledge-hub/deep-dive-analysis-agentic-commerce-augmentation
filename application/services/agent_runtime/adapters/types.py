@@ -6,6 +6,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
 
+class AdapterExecutionError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class AdapterRequest:
     adapter_id: str

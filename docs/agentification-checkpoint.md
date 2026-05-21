@@ -138,7 +138,9 @@ Next steps:
 Current state: ACP/UCP surfaces are still discovery/mock-heavy, but the first
 read-only execution-adapter spine now exists. `check_protocol_readiness` runs
 through `protocol.readiness.v1`, emits a structured adapter receipt, and pins
-that receipt into run-event anchors for audit/replay.
+that receipt into run-event anchors for audit/replay. Execution adapters are
+now registry-declared with channel type, permission scope, effect class,
+side-effect posture, and allowed capabilities.
 
 Next steps:
 

@@ -1,5 +1,19 @@
 from __future__ import annotations
 
+import pytest
+
+from application.services.agent_runtime.adapters import (
+    AdapterExecutionError,
+    AdapterRequest,
+    get_adapter_spec,
+    validate_adapter_request,
+)
+from application.services.agent_runtime.agent_first import (
+    select_skill_for_tool_id,
+    skill_id_for_capability,
+    skill_id_for_tool_id,
+    skill_specs_for_tool_id,
+)
 from application.services.agent_runtime.registry import (
     capability_supported,
     default_tool_ownership_records,
@@ -12,12 +26,6 @@ from application.services.agent_runtime.registry import (
     validate_inputs,
     validate_outputs,
     version_context_for_capability,
-)
-from application.services.agent_runtime.agent_first import (
-    select_skill_for_tool_id,
-    skill_id_for_capability,
-    skill_id_for_tool_id,
-    skill_specs_for_tool_id,
 )
 
 
@@ -118,6 +126,14 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         item for item in payload["capabilities"] if item["name"] == "run_variant"
     )
     assert payload["registry_ownership_source"] == "persistent"
+    adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.readiness.v1"
+    )
+    assert adapter["permission_scope"] == "protocol.readiness:read"
+    assert adapter["effect_class"] == "read"
+    assert adapter["external_side_effects"] is False
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"
@@ -155,6 +171,34 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         item["tool_id"] == "experiment.run_variant"
         for item in default_tool_ownership_records()
     )
+
+
+def test_adapter_registry_rejects_capability_mismatch():
+    spec = get_adapter_spec("protocol.readiness.v1")
+    assert spec is not None
+    valid = validate_adapter_request(
+        request=AdapterRequest(
+            adapter_id="protocol.readiness.v1",
+            channel_type="protocol",
+            capability_name="check_protocol_readiness",
+            client_id="client-a",
+            user_id=None,
+            inputs={"product_id": "product-a"},
+        )
+    )
+    assert valid.permission_scope == "protocol.readiness:read"
+
+    with pytest.raises(AdapterExecutionError, match="cannot execute capability"):
+        validate_adapter_request(
+            request=AdapterRequest(
+                adapter_id="protocol.readiness.v1",
+                channel_type="protocol",
+                capability_name="request_synthetic_validation",
+                client_id="client-a",
+                user_id=None,
+                inputs={},
+            )
+        )
 
 
 def test_runtime_tools_resolve_to_skill_lineage():

@@ -59,7 +59,7 @@ Some skills and tool families are already represented in the platform language b
 | Area | Current meaning | Next build need |
 | --- | --- | --- |
 | `run-safe-browser-fallback-check` | Declared skill for governed browser fallback verification. | Build narrow browser adapters, permission scopes, receipts, and policy review gates. |
-| ACP/UCP execution tools | Protocol discovery/readiness exists, and `check_protocol_readiness` now runs through a read-only protocol adapter with structured receipts. | Expand from readiness receipts to concrete ACP/UCP retrieval and execution adapters. |
+| ACP/UCP execution tools | Protocol discovery/readiness exists, and `check_protocol_readiness` now runs through a registry-declared read-only protocol adapter with structured receipts. | Expand from readiness receipts to concrete ACP/UCP retrieval and execution adapters. |
 | External-agent job contracts | Idempotent job create/status facade exists, links jobs to agent runs, signs latest-status receipts, stores receipt history, exposes scoped linked-run events, and projects normalized activity. | Add richer scoped credentials, domain-specific activity summaries, and retry-safe contracts for more endpoints. |
 | Harness profiles | `harness_id` is stored on runs. | Make harnesses behavior-defining for planner mode, retries, fallback order, approval strategy, memory policy, and stopping conditions. |
 
