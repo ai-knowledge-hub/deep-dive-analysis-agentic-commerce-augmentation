@@ -266,6 +266,77 @@ def test_step_once_executes_read_only_protocol_adapter_and_records_receipt(tmp_p
     assert anchors["receipt"]["channel_type"] == "protocol"
 
 
+def test_step_once_executes_protocol_discovery_adapter_and_records_receipt(tmp_path):
+    db_path = tmp_path / "agent-runtime-protocol-discovery-adapter.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    deps.clients.create_client(client_id="client-a", name="Client A")
+    deps.clients.create_brand(brand_id="brand-a", client_id="client-a", name="Brand A")
+    deps.clients.create_product(
+        product_id="product-a",
+        brand_id="brand-a",
+        name="Runner Pro",
+        description="Daily running shoe for road training.",
+        metadata={
+            "ucp": {
+                "offer_url": "https://example.test/p/runner-pro",
+                "price": 129.0,
+                "availability": "in_stock",
+            }
+        },
+    )
+    run = deps.agent_runs.create_agent_run(
+        client_id="client-a",
+        brand_id="brand-a",
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["discover_protocol_candidates"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="protocol_discovery_ready",
+        status="planned",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="discover_protocol_candidates",
+        inputs={"query": "running shoe", "protocol": "ucp", "limit": 5},
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    assert result.action is not None
+    assert result.action["id"] == action["id"]
+    outputs = result.action["outputs"]
+    assert outputs["status"] == "protocol_candidates_discovered"
+    assert outputs["adapter"]["adapter_id"] == "protocol.discovery.v1"
+    assert outputs["adapter"]["permission_scope"] == "protocol.discovery:read"
+    assert outputs["receipt"]["risk"]["external_side_effects"] is False
+    assert outputs["summary"]["count"] == 1
+    assert outputs["candidates"][0]["id"] == "product-a"
+
+    events = [
+        event
+        for event in deps.agent_events.list_agent_events(
+            agent_run_id=run["id"],
+            limit=10,
+        )
+        if event["event_type"] == "action_executed"
+    ]
+    assert len(events) == 1
+    anchors = events[0]["anchors"]
+    assert anchors["receipt_id"] == outputs["receipt_id"]
+    assert anchors["adapter"]["adapter_id"] == "protocol.discovery.v1"
+    assert anchors["receipt"]["evidence"]["candidate_ids"] == ["product-a"]
+
+
 def test_step_once_marks_action_and_run_failed_on_capability_error(
     tmp_path, monkeypatch
 ):

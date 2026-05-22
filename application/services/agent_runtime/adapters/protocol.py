@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 from application.ports.deps import AppDeps
+from application.services.admin.protocol_discovery_service import (
+    ProtocolDiscoveryService,
+)
 from application.services.agent_runtime.adapters.registry import (
     validate_adapter_request,
 )
@@ -16,6 +19,7 @@ from domain.protocol.types import ProtocolCandidate
 
 ADAPTER_ID = "protocol.readiness.v1"
 CHANNEL_TYPE = "protocol"
+DISCOVERY_ADAPTER_ID = "protocol.discovery.v1"
 
 
 def execute_protocol_readiness_check(
@@ -101,6 +105,86 @@ def execute_protocol_readiness_check(
     }
 
 
+def execute_protocol_candidate_discovery(
+    *,
+    deps: AppDeps,
+    request: AdapterRequest,
+) -> Dict[str, Any]:
+    adapter_spec = validate_adapter_request(request=request)
+    query = str(request.inputs.get("query") or "").strip()
+    if not query:
+        raise AdapterExecutionError("discover_protocol_candidates missing query")
+    brand_id = str(request.inputs.get("brand_id") or "").strip() or None
+    protocol = str(request.inputs.get("protocol") or "").strip().lower() or None
+    if protocol not in {"ucp", "acp", None}:
+        raise AdapterExecutionError("protocol must be one of: ucp, acp")
+    limit = _safe_limit(request.inputs.get("limit"))
+    inferred_intent = request.inputs.get("inferred_intent")
+    service = ProtocolDiscoveryService(
+        discover_acp_fn=deps.protocol_discover_acp,
+        discover_ucp_fn=deps.protocol_discover_ucp,
+        validate_acp_fn=deps.protocol_validate_acp,
+        validate_ucp_fn=deps.protocol_validate_ucp,
+    )
+    result = service.discover(
+        client_id=request.client_id,
+        query=query,
+        protocol=protocol,  # type: ignore[arg-type]
+        brand_id=brand_id,
+        limit=limit,
+        inferred_intent=inferred_intent if isinstance(inferred_intent, dict) else None,
+    )
+    candidates = result.get("candidates") or []
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    evidence = {
+        "query": query,
+        "protocol": protocol or "all",
+        "candidate_count": len(candidates) if isinstance(candidates, list) else 0,
+        "candidate_ids": [
+            str(item.get("id") or "")
+            for item in candidates
+            if isinstance(item, dict) and item.get("id")
+        ],
+        "errors": int(summary.get("errors") or 0),
+        "warnings": int(summary.get("warnings") or 0),
+    }
+    subject = {"brand_id": brand_id, "query": query}
+    receipt = AdapterReceipt(
+        receipt_id=stable_receipt_id(
+            adapter_id=adapter_spec.id,
+            capability_name=request.capability_name,
+            client_id=request.client_id,
+            subject=subject,
+            evidence=evidence,
+        ),
+        adapter_id=adapter_spec.id,
+        channel_type=adapter_spec.channel_type,
+        capability_name=request.capability_name,
+        permission_scope=adapter_spec.permission_scope,
+        effect_class=adapter_spec.effect_class,
+        status="completed",
+        subject=subject,
+        evidence=evidence,
+        risk={
+            "external_side_effects": adapter_spec.external_side_effects,
+            "writes_external_system": adapter_spec.writes_external_system,
+            "requires_operator_review": adapter_spec.requires_operator_review,
+        },
+    )
+    return {
+        **result,
+        "adapter": {
+            "adapter_id": adapter_spec.id,
+            "channel_type": adapter_spec.channel_type,
+            "permission_scope": adapter_spec.permission_scope,
+            "effect_class": adapter_spec.effect_class,
+        },
+        "receipt": receipt.to_dict(),
+        "receipt_id": receipt.receipt_id,
+        "status": "protocol_candidates_discovered",
+    }
+
+
 def _normalize_protocols(value: Any) -> list[str]:
     if isinstance(value, str):
         raw: Iterable[Any] = [item.strip() for item in value.split(",")]
@@ -114,6 +198,14 @@ def _normalize_protocols(value: Any) -> list[str]:
         if protocol in {"ucp", "acp"} and protocol not in protocols:
             protocols.append(protocol)
     return protocols or ["ucp", "acp"]
+
+
+def _safe_limit(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 10
+    return max(1, min(parsed, 50))
 
 
 def _to_protocol_candidate(product: Dict[str, Any], *, protocol: str) -> ProtocolCandidate:

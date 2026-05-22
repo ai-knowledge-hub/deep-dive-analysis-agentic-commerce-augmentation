@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.adapters.protocol import (
+    execute_protocol_candidate_discovery,
     execute_protocol_readiness_check,
 )
 from application.services.agent_runtime.adapters.types import AdapterRequest
@@ -330,6 +331,18 @@ def execute_capability(
             deps=deps,
             request=AdapterRequest(
                 adapter_id="protocol.readiness.v1",
+                channel_type="protocol",
+                capability_name=name,
+                client_id=context.client_id,
+                user_id=context.user_id,
+                inputs=inputs,
+            ),
+        )
+    if name == "discover_protocol_candidates":
+        return execute_protocol_candidate_discovery(
+            deps=deps,
+            request=AdapterRequest(
+                adapter_id="protocol.discovery.v1",
                 channel_type="protocol",
                 capability_name=name,
                 client_id=context.client_id,

@@ -105,6 +105,11 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert protocol_tool.capability_name == "check_protocol_readiness"
     assert protocol_tool.effect_class == "read"
     assert protocol_tool.output_schema["properties"]["receipt_id"]["type"] == "string"
+    discovery_tool = get_tool_spec("protocol.discover_candidates")
+    assert discovery_tool is not None
+    assert discovery_tool.capability_name == "discover_protocol_candidates"
+    assert discovery_tool.effect_class == "read"
+    assert discovery_tool.output_schema["properties"]["candidates"]["type"] == "array"
     assert tool_supported("not.real") is False
 
 
@@ -134,6 +139,15 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     assert adapter["permission_scope"] == "protocol.readiness:read"
     assert adapter["effect_class"] == "read"
     assert adapter["external_side_effects"] is False
+    discovery_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.discovery.v1"
+    )
+    assert discovery_adapter["permission_scope"] == "protocol.discovery:read"
+    assert discovery_adapter["allowed_capabilities"] == [
+        "discover_protocol_candidates"
+    ]
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"
@@ -203,6 +217,9 @@ def test_adapter_registry_rejects_capability_mismatch():
 
 def test_runtime_tools_resolve_to_skill_lineage():
     assert skill_id_for_tool_id("protocol.readiness_check") == (
+        "discover-protocol-candidates"
+    )
+    assert skill_id_for_tool_id("protocol.discover_candidates") == (
         "discover-protocol-candidates"
     )
     assert skill_id_for_tool_id("experiment.run_variant") == "optimize-product-representation"

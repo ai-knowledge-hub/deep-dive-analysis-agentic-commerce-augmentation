@@ -38,7 +38,18 @@ _ADAPTERS: dict[str, AdapterSpec] = {
         writes_external_system=False,
         requires_operator_review=False,
         description="Read-only ACP/UCP readiness inspection for product metadata.",
-    )
+    ),
+    "protocol.discovery.v1": AdapterSpec(
+        id="protocol.discovery.v1",
+        channel_type="protocol",
+        permission_scope="protocol.discovery:read",
+        effect_class="read",
+        allowed_capabilities=("discover_protocol_candidates",),
+        external_side_effects=False,
+        writes_external_system=False,
+        requires_operator_review=False,
+        description="Read-only ACP/UCP candidate discovery for product search.",
+    ),
 }
 
 

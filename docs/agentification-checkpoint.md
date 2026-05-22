@@ -140,12 +140,16 @@ read-only execution-adapter spine now exists. `check_protocol_readiness` runs
 through `protocol.readiness.v1`, emits a structured adapter receipt, and pins
 that receipt into run-event anchors for audit/replay. Execution adapters are
 now registry-declared with channel type, permission scope, effect class,
-side-effect posture, and allowed capabilities.
+side-effect posture, and allowed capabilities. `discover_protocol_candidates`
+now runs through `protocol.discovery.v1`, returning read-only ACP/UCP candidate
+discovery results with the same receipt/audit posture.
 
 Next steps:
 
-- Expand the protocol adapter spine from readiness checks to concrete retrieval
-  and execution adapters where real ACP/UCP surfaces are available.
+- Replace mock-first protocol discovery behind `protocol.discovery.v1` with
+  concrete retrieval adapters where real ACP/UCP surfaces are available.
+- Add side-effecting protocol execution adapters only after governed approval
+  and external-write receipts are in place.
 - Define browser/CLI fallback tools with narrow permissions.
 - Require policy review for any external side effect.
 
@@ -269,8 +273,10 @@ Goal: let agents act through real commerce/protocol/tool surfaces, not only mock
 
 Build:
 
-- Expand the read-only protocol adapter spine into concrete ACP/UCP retrieval
-  and execution adapters where available.
+- Replace mock-first discovery behind the read-only protocol adapter spine with
+  concrete ACP/UCP retrieval where available.
+- Add side-effecting protocol execution adapters only after governed approval
+  and external-write receipts are in place.
 - Narrow browser/CLI fallback adapters with explicit permission scopes.
 - Policy review gates for all external side effects.
 - Execution receipts that link provider/job/browser/CLI evidence back to run events.
