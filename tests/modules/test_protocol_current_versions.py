@@ -3,7 +3,9 @@ from __future__ import annotations
 from domain.protocol.types import ProtocolCandidate, StructuredQuery
 from application.services.admin.protocol_discovery_service import ProtocolDiscoveryService
 from infrastructure.protocol.acp import discover_acp_candidates, validate_acp_candidate
+import infrastructure.protocol.acp_live as acp_live
 from infrastructure.protocol.ucp import discover_ucp_candidates
+import infrastructure.protocol.ucp_live as ucp_live
 from infrastructure.protocol.ucp_profile import validate_ucp_profile
 from shared.db.connection import init_db, set_database_path
 
@@ -257,6 +259,59 @@ def test_ucp_live_catalog_search_normalizes_read_only_candidates(
     assert candidates[0].raw["source"] == "ucp_catalog_search"
 
 
+def test_live_ucp_discovery_requires_brand_opt_in(monkeypatch):
+    monkeypatch.setenv("PROTOCOL_ENABLE_LIVE_UCP_DISCOVERY", "true")
+
+    assert (
+        ucp_live._ucp_live_discovery_config(
+            {"ucp_profile_url": "https://merchant.example/.well-known/ucp"}
+        )
+        is None
+    )
+
+    config = ucp_live._ucp_live_discovery_config(
+        {
+            "ucp": {"live_discovery": {"enabled": True}},
+            "ucp_profile_url": "https://merchant.example/.well-known/ucp",
+        }
+    )
+    assert config and config["profile_url"] == "https://merchant.example/.well-known/ucp"
+
+
+def test_ucp_live_fetch_rejects_cross_host_redirect_before_reading(monkeypatch):
+    monkeypatch.setenv("PROTOCOL_FETCH_ALLOWLIST", "merchant.example")
+
+    class RedirectResponse:
+        headers = {"content-type": "application/json"}
+        read_called = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def geturl(self):
+            return "https://internal.example/ucp/catalog/search"
+
+        def read(self, _limit):
+            self.read_called = True
+            return b'{"products":[]}'
+
+    response = RedirectResponse()
+
+    def fake_urlopen(request, timeout):
+        return response
+
+    monkeypatch.setattr(
+        "infrastructure.protocol.ucp_live.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    assert ucp_live._fetch_json("https://merchant.example/ucp/catalog/search") == {}
+    assert response.read_called is False
+
+
 def test_acp_live_product_feed_normalizes_searchable_candidates(
     tmp_path,
     monkeypatch,
@@ -347,6 +402,61 @@ def test_acp_live_product_feed_normalizes_searchable_candidates(
     assert candidates[0].available_for_sale is True
     assert candidates[0].attributes["color"] == "blue"
     assert candidates[0].raw["source"] == "acp_product_feed"
+
+
+def test_live_acp_discovery_requires_brand_opt_in(monkeypatch):
+    monkeypatch.setenv("PROTOCOL_ENABLE_LIVE_ACP_DISCOVERY", "true")
+
+    assert (
+        acp_live._acp_live_discovery_config(
+            {"acp_feed_url": "https://merchant.example/acp/products.json"}
+        )
+        is None
+    )
+
+    config = acp_live._acp_live_discovery_config(
+        {
+            "acp": {"live_discovery": {"enabled": True}},
+            "acp_feed_url": "https://merchant.example/acp/products.json",
+        }
+    )
+    assert config and config["feed_url"] == "https://merchant.example/acp/products.json"
+
+
+def test_acp_live_fetch_rejects_cross_host_redirect_before_reading(monkeypatch):
+    monkeypatch.setenv("PROTOCOL_FETCH_ALLOWLIST", "merchant.example")
+
+    class RedirectResponse:
+        read_called = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def geturl(self):
+            return "https://internal.example/acp/products.json"
+
+        def read(self, _limit):
+            self.read_called = True
+            return b'{"products":[]}'
+
+    response = RedirectResponse()
+
+    def fake_urlopen(request, timeout):
+        return response
+
+    monkeypatch.setattr(
+        "infrastructure.protocol.acp_live.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    assert acp_live._fetch_text(
+        "https://merchant.example/acp/products.json",
+        timeout_seconds=8,
+    ) == ""
+    assert response.read_called is False
 
 
 def test_protocol_discovery_result_exposes_candidate_source_counts():

@@ -204,10 +204,13 @@ Required env:
 - `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
 
 Optional env:
-- `PROTOCOL_ENABLE_LIVE_UCP_DISCOVERY=true` enables live discovery for brands
-  with profile metadata that do not set `live_discovery.enabled`.
 - `PROTOCOL_ALLOW_ALL_HOSTS=true` is development-only and should not be used for
   production.
+
+Live UCP discovery always requires explicit brand-level opt-in through
+`ucp.live_discovery.enabled`, `ucp.live_discovery_enabled`, or
+`ucp_live_discovery_enabled`. Redirects are rejected if the final response URL
+crosses to a different host than the originally allowlisted merchant host.
 
 ACP live discovery config:
 
@@ -244,9 +247,10 @@ Discovery provenance:
 Required env:
 - `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
 
-Optional env:
-- `PROTOCOL_ENABLE_LIVE_ACP_DISCOVERY=true` enables live discovery for brands
-  with feed URL metadata that do not set `live_discovery.enabled`.
+Live ACP discovery always requires explicit brand-level opt-in through
+`acp.live_discovery.enabled`, `acp.live_discovery_enabled`, or
+`acp_live_discovery_enabled`. Redirects are rejected if the final response URL
+crosses to a different host than the originally allowlisted merchant host.
 
 ---
 

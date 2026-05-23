@@ -75,7 +75,6 @@ def _acp_live_discovery_config(metadata: Dict[str, Any]) -> Dict[str, Any] | Non
         config.get("enabled")
         or acp.get("live_discovery_enabled")
         or metadata.get("acp_live_discovery_enabled")
-        or os.getenv("PROTOCOL_ENABLE_LIVE_ACP_DISCOVERY")
     )
     if not enabled:
         return None
@@ -104,6 +103,8 @@ def _fetch_text(url: str, *, timeout_seconds: int) -> str:
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            if not _response_url_allowed(url, response):
+                return ""
             raw = response.read(5_000_000)
     except (urllib.error.URLError, TimeoutError, ValueError):
         return ""
@@ -111,6 +112,20 @@ def _fetch_text(url: str, *, timeout_seconds: int) -> str:
         return raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         return ""
+
+
+def _response_url_allowed(requested_url: str, response: Any) -> bool:
+    final_url = requested_url
+    geturl = getattr(response, "geturl", None)
+    if callable(geturl):
+        final_url = str(geturl() or requested_url)
+    requested = urllib.parse.urlparse(requested_url)
+    final = urllib.parse.urlparse(final_url)
+    if final.scheme != "https" or not final.hostname:
+        return False
+    if final.hostname.lower() != str(requested.hostname or "").lower():
+        return False
+    return _host_allowed(final.hostname)
 
 
 def _parse_feed_records(text: str, *, feed_url: str) -> list[Dict[str, Any]]:

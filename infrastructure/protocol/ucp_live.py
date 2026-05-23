@@ -78,7 +78,6 @@ def _ucp_live_discovery_config(metadata: Dict[str, Any]) -> Dict[str, Any] | Non
         config.get("enabled")
         or ucp.get("live_discovery_enabled")
         or metadata.get("ucp_live_discovery_enabled")
-        or os.getenv("PROTOCOL_ENABLE_LIVE_UCP_DISCOVERY")
     )
     if not enabled:
         return None
@@ -200,6 +199,8 @@ def _fetch_json(
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            if not _response_url_allowed(url, response):
+                return {}
             content_type = response.headers.get("content-type", "")
             if "json" not in content_type.lower():
                 return {}
@@ -211,6 +212,20 @@ def _fetch_json(
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _response_url_allowed(requested_url: str, response: Any) -> bool:
+    final_url = requested_url
+    geturl = getattr(response, "geturl", None)
+    if callable(geturl):
+        final_url = str(geturl() or requested_url)
+    requested = urllib.parse.urlparse(requested_url)
+    final = urllib.parse.urlparse(final_url)
+    if final.scheme != "https" or not final.hostname:
+        return False
+    if final.hostname.lower() != str(requested.hostname or "").lower():
+        return False
+    return _host_allowed(final.hostname)
 
 
 def _host_allowed(hostname: str) -> bool:
