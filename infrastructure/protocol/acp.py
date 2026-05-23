@@ -10,6 +10,7 @@ from domain.protocol.types import (
     StructuredQuery,
 )
 import infrastructure.db.catalog.clients as clients_repo
+from infrastructure.protocol.acp_live import discover_live_acp_feed_candidates
 from shared.config.env import settings
 
 CURRENT_ACP_VERSION = "2026-04-17"
@@ -28,11 +29,16 @@ def discover_acp_candidates(
     brand_id: Optional[str] = None,
     limit: int = 10,
 ) -> List[ProtocolCandidate]:
-    """Mock-first ACP discovery.
+    """Discover ACP candidates from an opted-in feed, then local metadata."""
 
-    Today: use DB products as the “ACP feed”.
-    Later: replace with real ACP feed/search endpoint calls.
-    """
+    live_candidates = discover_live_acp_feed_candidates(
+        client_id=client_id,
+        structured_query=structured_query,
+        brand_id=brand_id,
+        limit=limit,
+    )
+    if live_candidates:
+        return live_candidates[:limit]
 
     products: List[Dict[str, Any]] = []
     if brand_id:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from domain.protocol.types import ProtocolCandidate, StructuredQuery
-from infrastructure.protocol.acp import validate_acp_candidate
+from infrastructure.protocol.acp import discover_acp_candidates, validate_acp_candidate
 from infrastructure.protocol.ucp import discover_ucp_candidates
 from infrastructure.protocol.ucp_profile import validate_ucp_profile
 from shared.db.connection import init_db, set_database_path
@@ -254,3 +254,95 @@ def test_ucp_live_catalog_search_normalizes_read_only_candidates(
     assert candidates[0].currency == "USD"
     assert candidates[0].available_for_sale is True
     assert candidates[0].raw["source"] == "ucp_catalog_search"
+
+
+def test_acp_live_product_feed_normalizes_searchable_candidates(
+    tmp_path,
+    monkeypatch,
+):
+    db_path = tmp_path / "acp-live-feed.db"
+    set_database_path(db_path)
+    init_db()
+
+    from infrastructure.db.catalog import clients as clients_repo
+
+    clients_repo.create_client(client_id="client-a", name="Client A")
+    clients_repo.create_brand(
+        brand_id="brand-a",
+        client_id="client-a",
+        name="Merchant",
+        metadata={
+            "acp": {
+                "live_discovery": {
+                    "enabled": True,
+                    "feed_url": "https://merchant.example/acp/products.json",
+                }
+            }
+        },
+    )
+    monkeypatch.setenv("PROTOCOL_FETCH_ALLOWLIST", "merchant.example")
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def read(self, _limit):
+            return b"""
+            {
+              "products": [
+                {
+                  "id": "sku-runner-blue",
+                  "title": "Blue Runner Pro",
+                  "description": "Responsive road running shoe.",
+                  "link": "https://merchant.example/products/runner",
+                  "price": "129.00 USD",
+                  "availability": "in_stock",
+                  "is_eligible_search": true,
+                  "is_eligible_checkout": true,
+                  "brand": "Merchant",
+                  "color": "blue",
+                  "size": "10"
+                },
+                {
+                  "id": "sku-hidden",
+                  "title": "Hidden Runner",
+                  "description": "Not searchable.",
+                  "link": "https://merchant.example/products/hidden",
+                  "price": "99.00 USD",
+                  "availability": "in_stock",
+                  "is_eligible_search": false
+                }
+              ]
+            }
+            """
+
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "infrastructure.protocol.acp_live.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    candidates = discover_acp_candidates(
+        client_id="client-a",
+        brand_id="brand-a",
+        structured_query=StructuredQuery(query_text="blue road running shoe"),
+        limit=10,
+    )
+
+    assert captured["url"] == "https://merchant.example/acp/products.json"
+    assert [candidate.id for candidate in candidates] == ["sku-runner-blue"]
+    assert candidates[0].protocol == "acp"
+    assert candidates[0].price == 129
+    assert candidates[0].currency == "USD"
+    assert candidates[0].available_for_sale is True
+    assert candidates[0].attributes["color"] == "blue"
+    assert candidates[0].raw["source"] == "acp_product_feed"

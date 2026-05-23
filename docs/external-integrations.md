@@ -129,16 +129,21 @@ Current status:
   supported-version metadata.
 - ACP readiness tracks the current `2026-04-17` beta posture for checkout
   capability negotiation and delegate-payment readiness.
-- Candidate discovery remains DB/metadata-backed until real merchant protocol
-  endpoints are configured.
+- Candidate discovery falls back to DB/metadata-backed records when live
+  protocol surfaces are not configured or fail validation.
 - UCP live catalog discovery is available for read-only `/catalog/search` when
   a brand explicitly opts in through metadata and the merchant host is
   allowlisted.
+- ACP live feed discovery is available for read-only product feed URLs when a
+  brand explicitly opts in through metadata and the merchant host is allowlisted.
 
 Current external reference points:
 - UCP business profiles are discovered at `/.well-known/ucp`.
 - ACP is treated as a beta checkout/delegate-payment surface with
   date-versioned snapshots.
+- Product discovery for ACP/OpenAI commerce flows uses a structured product
+  feed with eligibility flags such as `is_eligible_search` and
+  `is_eligible_checkout`.
 
 Still planned:
 - Broader ACP/UCP retrieval adapters for additional live merchant surfaces.
@@ -200,6 +205,35 @@ Optional env:
   with profile metadata that do not set `live_discovery.enabled`.
 - `PROTOCOL_ALLOW_ALL_HOSTS=true` is development-only and should not be used for
   production.
+
+ACP live discovery config:
+
+```json
+{
+  "acp": {
+    "live_discovery": {
+      "enabled": true,
+      "feed_url": "https://merchant.example/acp/products.json"
+    }
+  }
+}
+```
+
+Supported feed response shapes:
+- JSON object with `products`, `items`, or `data` array.
+- JSON array of product objects.
+- JSONL, one product object per line.
+- CSV with product fields as headers.
+
+Feed records are treated as read-only evidence. The adapter only returns records
+with `is_eligible_search=true` or `enable_search=true`.
+
+Required env:
+- `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
+
+Optional env:
+- `PROTOCOL_ENABLE_LIVE_ACP_DISCOVERY=true` enables live discovery for brands
+  with feed URL metadata that do not set `live_discovery.enabled`.
 
 ---
 

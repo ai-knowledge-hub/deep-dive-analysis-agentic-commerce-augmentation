@@ -151,13 +151,16 @@ the current `2026-04-17` beta surface for checkout capability negotiation,
 payment handlers, and delegate-payment posture. UCP candidate discovery can now
 use a guarded live `2026-04-08` REST Catalog Search path when a brand opts in
 with `ucp.live_discovery` metadata and the merchant host is allowlisted; it
-falls back to local metadata-backed discovery otherwise.
+falls back to local metadata-backed discovery otherwise. ACP candidate discovery
+can now use a guarded live product-feed path for opted-in brands, parsing
+JSON/JSONL/CSV feed records, honoring search eligibility flags, and normalizing
+records into read-only protocol candidates before falling back to local metadata.
 
 Next steps:
 
 - Extend concrete retrieval behind `protocol.discovery.v1` beyond the guarded
-  UCP REST Catalog Search path to ACP and additional UCP surfaces where real
-  merchant endpoints are available.
+  UCP REST Catalog Search and ACP product-feed paths to additional protocol
+  surfaces where real merchant endpoints are available.
 - Add bundled current-version UCP schema snapshots if strict offline validation
   is needed beyond the structural checks.
 - Add side-effecting protocol execution adapters only after governed approval

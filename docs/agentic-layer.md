@@ -25,6 +25,9 @@ Implemented now:
   checkout/delegate-payment posture checks
 - Guarded UCP REST Catalog Search discovery for opted-in brands, with host
   allowlisting and local metadata fallback
+- Guarded ACP product-feed discovery for opted-in brands, with JSON/JSONL/CSV
+  parsing, search-eligibility filtering, host allowlisting, and local metadata
+  fallback
 
 ---
 
