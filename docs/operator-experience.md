@@ -66,6 +66,10 @@ Primary questions:
 - What is the next recommended action?
 - Is the run safe to continue?
 
+For protocol discovery actions, selected action detail shows provenance counts
+so operators can distinguish live UCP Catalog Search, live ACP product-feed
+retrieval, and local metadata fallback evidence.
+
 ### `/interventions`
 
 Role: explicit human control.

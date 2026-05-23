@@ -99,6 +99,30 @@ function metricIdForAction(action: AgentAction): string | null {
   return typeof outputs.metric_id === "string" ? outputs.metric_id : null;
 }
 
+function discoverySourceCountsForAction(action: AgentAction): Array<[string, number]> {
+  const outputs = (action.outputs ?? {}) as Record<string, unknown>;
+  const summary = outputs.summary;
+  const sourceCounts =
+    summary && typeof summary === "object"
+      ? (summary as Record<string, unknown>).source_counts
+      : null;
+  if (!sourceCounts || typeof sourceCounts !== "object") return [];
+  return Object.entries(sourceCounts as Record<string, unknown>)
+    .map(([source, count]) => [source, Number(count)] as [string, number])
+    .filter(([, count]) => Number.isFinite(count) && count > 0)
+    .sort(([left], [right]) => left.localeCompare(right));
+}
+
+function discoverySourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    acp_local_metadata: "ACP local metadata",
+    acp_product_feed: "ACP product feed",
+    ucp_catalog_search: "UCP Catalog Search",
+    ucp_local_metadata: "UCP local metadata",
+  };
+  return labels[source] ?? source.replaceAll("_", " ");
+}
+
 export function SelectedActionDetailPanel({
   selectedAction,
   selectedCapabilitySpec,
@@ -125,6 +149,7 @@ export function SelectedActionDetailPanel({
           "No side-effect metadata yet.",
         ];
   const metricId = metricIdForAction(selectedAction);
+  const discoverySourceCounts = discoverySourceCountsForAction(selectedAction);
 
   return (
     <section className="agent-action-detail control-section">
@@ -175,6 +200,19 @@ export function SelectedActionDetailPanel({
           <li key={`${effect}-${index}`}>{effect}</li>
         ))}
       </ul>
+
+      {discoverySourceCounts.length ? (
+        <>
+          <p className="panel__subheading">Discovery provenance</p>
+          <div className="control-chip-row">
+            {discoverySourceCounts.map(([source, count]) => (
+              <span className="control-chip" key={source}>
+                {discoverySourceLabel(source)}: {count}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <p className="panel__subheading">Registry review checklist</p>
       {selectedCapabilitySpec?.review_checklist?.length ? (
