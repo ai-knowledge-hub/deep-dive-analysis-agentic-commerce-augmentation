@@ -23,6 +23,8 @@ Implemented now:
 - Read-only protocol adapters for ACP/UCP readiness and candidate discovery,
   with current UCP `2026-04-08` structural profile checks and ACP `2026-04-17`
   checkout/delegate-payment posture checks
+- Guarded UCP REST Catalog Search discovery for opted-in brands, with host
+  allowlisting and local metadata fallback
 
 ---
 

@@ -8,6 +8,7 @@ from domain.protocol.types import (
     StructuredQuery,
 )
 import infrastructure.db.catalog.clients as clients_repo
+from infrastructure.protocol.ucp_live import discover_live_ucp_catalog_candidates
 from infrastructure.protocol.ucp_profile import validate_ucp_profile
 
 
@@ -18,14 +19,37 @@ def discover_ucp_candidates(
     brand_id: Optional[str] = None,
     limit: int = 10,
 ) -> List[ProtocolCandidate]:
-    """Mock-first UCP discovery.
+    """Discover UCP candidates.
 
-    Today: use DB products as the “UCP discovery service”.
-    Later: replace with:
-    - capability manifest discovery (brand metadata contains endpoints)
-    - real discovery endpoint queries
+    When a brand opts in with a UCP profile URL, use the current read-only
+    Catalog Search REST binding. Otherwise keep the local DB-backed fallback so
+    dev/test flows remain deterministic.
     """
 
+    live_candidates = discover_live_ucp_catalog_candidates(
+        client_id=client_id,
+        structured_query=structured_query,
+        brand_id=brand_id,
+        limit=limit,
+    )
+    if live_candidates:
+        return live_candidates[:limit]
+
+    return _discover_local_ucp_candidates(
+        client_id=client_id,
+        structured_query=structured_query,
+        brand_id=brand_id,
+        limit=limit,
+    )
+
+
+def _discover_local_ucp_candidates(
+    *,
+    client_id: str,
+    structured_query: StructuredQuery,
+    brand_id: Optional[str] = None,
+    limit: int = 10,
+) -> List[ProtocolCandidate]:
     products: List[Dict[str, Any]] = []
     if brand_id:
         products = clients_repo.list_products(brand_id=brand_id)
@@ -98,7 +122,13 @@ def _validate_brand_ucp_profile(
     candidate: ProtocolCandidate,
 ) -> List[ProtocolReadinessIssue]:
     product = candidate.raw.get("product") if isinstance(candidate.raw, dict) else None
-    brand_id = product.get("brand_id") if isinstance(product, dict) else None
+    brand_id = (
+        product.get("brand_id")
+        if isinstance(product, dict) and product.get("brand_id")
+        else candidate.raw.get("brand_id")
+        if isinstance(candidate.raw, dict)
+        else None
+    )
     if not brand_id:
         return [
             ProtocolReadinessIssue(

@@ -131,6 +131,9 @@ Current status:
   capability negotiation and delegate-payment readiness.
 - Candidate discovery remains DB/metadata-backed until real merchant protocol
   endpoints are configured.
+- UCP live catalog discovery is available for read-only `/catalog/search` when
+  a brand explicitly opts in through metadata and the merchant host is
+  allowlisted.
 
 Current external reference points:
 - UCP business profiles are discovered at `/.well-known/ucp`.
@@ -138,11 +141,65 @@ Current external reference points:
   date-versioned snapshots.
 
 Still planned:
-- Concrete ACP/UCP retrieval adapters for live merchant surfaces.
+- Broader ACP/UCP retrieval adapters for additional live merchant surfaces.
 - Strict local UCP `2026-04-08` schema bundle if offline schema validation is
   required.
 - Side-effecting checkout/payment/browser/CLI adapters only after governed
   approvals and external-write receipts exist.
+
+UCP live discovery config:
+
+```json
+{
+  "ucp": {
+    "live_discovery": {
+      "enabled": true,
+      "profile_url": "https://merchant.example/.well-known/ucp",
+      "agent_profile_url": "https://platform.example/ucp/profile"
+    }
+  }
+}
+```
+
+Equivalent inline profile support:
+
+```json
+{
+  "ucp": {
+    "live_discovery": { "enabled": true }
+  },
+  "ucp_profile": {
+    "ucp": {
+      "version": "2026-04-08",
+      "services": {
+        "dev.ucp.shopping": [
+          {
+            "version": "2026-04-08",
+            "transport": "rest",
+            "endpoint": "https://merchant.example/ucp",
+            "schema": "https://ucp.dev/2026-04-08/services/shopping/rest.openapi.json"
+          }
+        ]
+      },
+      "capabilities": {
+        "dev.ucp.shopping.checkout": [{ "version": "2026-04-08" }],
+        "dev.ucp.shopping.catalog.search": [{ "version": "2026-04-08" }]
+      },
+      "payment_handlers": {}
+    },
+    "signing_keys": []
+  }
+}
+```
+
+Required env:
+- `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
+
+Optional env:
+- `PROTOCOL_ENABLE_LIVE_UCP_DISCOVERY=true` enables live discovery for brands
+  with profile metadata that do not set `live_discovery.enabled`.
+- `PROTOCOL_ALLOW_ALL_HOSTS=true` is development-only and should not be used for
+  production.
 
 ---
 

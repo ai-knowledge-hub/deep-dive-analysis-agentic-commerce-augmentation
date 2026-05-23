@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from domain.protocol.types import ProtocolCandidate
+from domain.protocol.types import ProtocolCandidate, StructuredQuery
 from infrastructure.protocol.acp import validate_acp_candidate
+from infrastructure.protocol.ucp import discover_ucp_candidates
 from infrastructure.protocol.ucp_profile import validate_ucp_profile
+from shared.db.connection import init_db, set_database_path
 
 
 def test_ucp_profile_accepts_current_profile_shape_without_pinned_schema():
@@ -132,3 +134,123 @@ def test_acp_current_checkout_profile_requires_capabilities_and_delegate_payment
     assert "api_version" not in fields
     assert "checkout_capabilities" in fields
     assert "delegated_payment" not in fields
+
+
+def test_ucp_live_catalog_search_normalizes_read_only_candidates(
+    tmp_path,
+    monkeypatch,
+):
+    db_path = tmp_path / "ucp-live-catalog.db"
+    set_database_path(db_path)
+    init_db()
+
+    from infrastructure.db.catalog import clients as clients_repo
+
+    profile = {
+        "ucp": {
+            "version": "2026-04-08",
+            "services": {
+                "dev.ucp.shopping": [
+                    {
+                        "version": "2026-04-08",
+                        "spec": "https://ucp.dev/2026-04-08/specification/overview",
+                        "transport": "rest",
+                        "endpoint": "https://merchant.example/ucp",
+                        "schema": "https://ucp.dev/2026-04-08/services/shopping/rest.openapi.json",
+                    }
+                ]
+            },
+            "capabilities": {
+                "dev.ucp.shopping.checkout": [{"version": "2026-04-08"}],
+                "dev.ucp.shopping.catalog.search": [{"version": "2026-04-08"}],
+            },
+            "payment_handlers": {},
+        },
+        "signing_keys": [],
+    }
+    clients_repo.create_client(client_id="client-a", name="Client A")
+    clients_repo.create_brand(
+        brand_id="brand-a",
+        client_id="client-a",
+        name="Merchant",
+        metadata={
+            "ucp": {
+                "live_discovery": {
+                    "enabled": True,
+                    "agent_profile_url": "https://agent.example/profile",
+                }
+            },
+            "ucp_profile": profile,
+        },
+    )
+    monkeypatch.setenv("PROTOCOL_FETCH_ALLOWLIST", "merchant.example")
+
+    class FakeResponse:
+        headers = {"content-type": "application/json"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def read(self, _limit):
+            return b"""
+            {
+              "ucp": {"version": "2026-04-08"},
+              "products": [
+                {
+                  "id": "prod_runner",
+                  "title": "Blue Runner Pro",
+                  "description": {"plain": "Responsive daily running shoe."},
+                  "url": "https://merchant.example/products/runner",
+                  "price_range": {
+                    "min": {"amount": 12000, "currency": "USD"},
+                    "max": {"amount": 12000, "currency": "USD"}
+                  },
+                  "tags": ["running", "road"],
+                  "variants": [
+                    {
+                      "id": "var_runner_10",
+                      "title": "Size 10",
+                      "price": {"amount": 12000, "currency": "USD"},
+                      "availability": {"available": true}
+                    }
+                  ]
+                }
+              ]
+            }
+            """
+
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["body"] = request.data
+        captured["ucp_agent"] = request.headers.get("Ucp-agent")
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "infrastructure.protocol.ucp_live.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    candidates = discover_ucp_candidates(
+        client_id="client-a",
+        brand_id="brand-a",
+        structured_query=StructuredQuery(
+            query_text="blue running shoes",
+            price_max=150,
+        ),
+        limit=5,
+    )
+
+    assert captured["url"] == "https://merchant.example/ucp/catalog/search"
+    assert b"blue running shoes" in captured["body"]
+    assert candidates[0].id == "prod_runner"
+    assert candidates[0].name == "Blue Runner Pro"
+    assert candidates[0].price == 120
+    assert candidates[0].currency == "USD"
+    assert candidates[0].available_for_sale is True
+    assert candidates[0].raw["source"] == "ucp_catalog_search"
