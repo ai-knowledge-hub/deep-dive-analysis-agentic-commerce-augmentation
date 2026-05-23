@@ -1244,6 +1244,25 @@ export type AgentRuntimeRecoveryTemplate = {
   side_effects?: string[];
 };
 
+export type AgentRuntimeExecutionAdapter = {
+  id: string;
+  channel_type?: string;
+  permission_scope?: string;
+  effect_class?: string;
+  allowed_capabilities?: string[];
+  status?: string;
+  external_side_effects?: boolean;
+  writes_external_system?: boolean;
+  requires_operator_review?: boolean;
+  description?: string;
+};
+
+export type AgentRuntimeSkillToolMapping = {
+  tool_id: string;
+  skill_ids: string[];
+  executable: boolean;
+};
+
 export type AgentRuntimeRegistryResponse = {
   registry_version?: string;
   registry_fingerprint?: string;
@@ -1253,10 +1272,13 @@ export type AgentRuntimeRegistryResponse = {
   registry_source?: string | null;
   registry_status?: string | null;
   registry_ownership_source?: string | null;
+  execution_adapters?: AgentRuntimeExecutionAdapter[];
   skills: AgentRuntimeSkillSpec[];
   tools: AgentRuntimeToolSpec[];
   capabilities: AgentRuntimeCapabilitySpec[];
   skill_ids_by_tool: Record<string, string[]>;
+  declared_non_executable_skill_tools?: string[];
+  skill_tool_mappings?: AgentRuntimeSkillToolMapping[];
   skill_selection_by_tool?: Record<
     string,
     {

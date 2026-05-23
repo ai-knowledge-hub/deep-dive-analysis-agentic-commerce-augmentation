@@ -5,6 +5,11 @@ from typing import Any, Dict
 from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
+from application.services.agent_runtime.adapters.protocol import (
+    execute_protocol_candidate_discovery,
+    execute_protocol_readiness_check,
+)
+from application.services.agent_runtime.adapters.types import AdapterRequest
 from application.services.experiment.orchestrator import ExperimentOrchestrator
 from application.services.experiment.runner import ExperimentRunner
 from application.services.experiment.variant_generator import ExperimentVariantGenerator
@@ -321,6 +326,30 @@ def execute_capability(
             "latest_decision": readiness.get("latest_decision"),
             "status": "validation_readiness_reviewed",
         }
+    if name == "check_protocol_readiness":
+        return execute_protocol_readiness_check(
+            deps=deps,
+            request=AdapterRequest(
+                adapter_id="protocol.readiness.v1",
+                channel_type="protocol",
+                capability_name=name,
+                client_id=context.client_id,
+                user_id=context.user_id,
+                inputs=inputs,
+            ),
+        )
+    if name == "discover_protocol_candidates":
+        return execute_protocol_candidate_discovery(
+            deps=deps,
+            request=AdapterRequest(
+                adapter_id="protocol.discovery.v1",
+                channel_type="protocol",
+                capability_name=name,
+                client_id=context.client_id,
+                user_id=context.user_id,
+                inputs=inputs,
+            ),
+        )
     if name == "update_posterior_and_decisions":
         experiment_id = str(inputs.get("experiment_id") or "").strip()
         variant_id = str(inputs.get("variant_id") or "").strip() or None

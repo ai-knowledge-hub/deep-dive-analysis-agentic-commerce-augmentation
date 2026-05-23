@@ -135,12 +135,45 @@ Next steps:
 
 ### 5. Protocol And Fallback Execution
 
-Current state: ACP/UCP surfaces are still discovery/mock-heavy.
+Current state: ACP/UCP surfaces are still discovery/mock-heavy, but the first
+read-only execution-adapter spine now exists. `check_protocol_readiness` runs
+through `protocol.readiness.v1`, emits a structured adapter receipt, and pins
+that receipt into run-event anchors for audit/replay. Execution adapters are
+now registry-declared with channel type, permission scope, effect class,
+side-effect posture, and allowed capabilities. `discover_protocol_candidates`
+now runs through `protocol.discovery.v1`, returning read-only ACP/UCP candidate
+discovery results with the same receipt/audit posture. UCP readiness now accepts
+the current `2026-04-08` discovery profile shape alongside the older bundled
+`2026-01-11` schema fixture, including service transports, capability registry,
+payment handlers, signing keys, HTTPS endpoint checks, and structural validation
+when no local current-version schema bundle is present. ACP readiness now tracks
+the current `2026-04-17` beta surface for checkout capability negotiation,
+payment handlers, and delegate-payment posture. UCP candidate discovery can now
+use a guarded live `2026-04-08` REST Catalog Search path when a brand opts in
+with `ucp.live_discovery` metadata and the merchant host is allowlisted; it
+falls back to local metadata-backed discovery otherwise. ACP candidate discovery
+can now use a guarded live product-feed path for opted-in brands, parsing
+JSON/JSONL/CSV feed records, honoring search eligibility flags, and normalizing
+records into read-only protocol candidates before falling back to local metadata.
+Discovery candidates now expose `discovery_source`, and adapter receipts include
+`source_counts` so live retrieval versus local fallback is auditable. The runtime
+registry now also declares planned side-effecting protocol/fallback adapters for
+checkout, delegated payment, and browser checkout fallback as `status=planned`
+with no allowed executable capabilities; related skill tool IDs are visible as
+non-executable external-side-effect tools until governed approval and
+external-write receipts are implemented.
 
 Next steps:
 
-- Replace protocol placeholders with concrete retrieval/execution adapters.
-- Define browser/CLI fallback tools with narrow permissions.
+- Extend concrete retrieval behind `protocol.discovery.v1` beyond the guarded
+  UCP REST Catalog Search and ACP product-feed paths to additional protocol
+  surfaces where real merchant endpoints are available.
+- Add side-effecting protocol execution adapters only after governed approval
+  and external-write receipts are in place.
+- Add bundled current-version UCP schema snapshots if strict offline validation
+  is needed beyond the structural checks.
+- Add executable browser/CLI fallback implementations only behind narrow
+  permission policies.
 - Require policy review for any external side effect.
 
 ### 6. Control-Plane UX Cleanup
@@ -263,7 +296,12 @@ Goal: let agents act through real commerce/protocol/tool surfaces, not only mock
 
 Build:
 
-- Concrete ACP/UCP retrieval and execution adapters where available.
+- Replace mock-first discovery behind the read-only protocol adapter spine with
+  concrete ACP/UCP retrieval where available.
+- Add strict schema snapshots for active UCP versions once the upstream schema
+  set stabilizes enough for local offline validation.
+- Add side-effecting protocol execution adapters only after governed approval
+  and external-write receipts are in place.
 - Narrow browser/CLI fallback adapters with explicit permission scopes.
 - Policy review gates for all external side effects.
 - Execution receipts that link provider/job/browser/CLI evidence back to run events.

@@ -241,6 +241,19 @@ describe("AgentRunsPage timeline presets", () => {
       registry_source: "static_code",
       registry_status: "active",
       registry_ownership_source: "persistent",
+      execution_adapters: [
+        {
+          id: "protocol.checkout.v1",
+          channel_type: "protocol",
+          permission_scope: "protocol.checkout:write",
+          effect_class: "external_side_effect",
+          allowed_capabilities: [],
+          status: "planned",
+          external_side_effects: true,
+          writes_external_system: true,
+          requires_operator_review: true,
+        },
+      ],
       skills: [
         {
           id: "optimize-product-representation",
@@ -299,7 +312,21 @@ describe("AgentRunsPage timeline presets", () => {
       ],
       skill_ids_by_tool: {
         "experiment.run_variant": ["optimize-product-representation"],
+        "protocol.ucp.checkout": ["execute-governed-protocol-commerce"],
       },
+      declared_non_executable_skill_tools: ["protocol.ucp.checkout"],
+      skill_tool_mappings: [
+        {
+          tool_id: "experiment.run_variant",
+          skill_ids: ["optimize-product-representation"],
+          executable: true,
+        },
+        {
+          tool_id: "protocol.ucp.checkout",
+          skill_ids: ["execute-governed-protocol-commerce"],
+          executable: false,
+        },
+      ],
       skill_selection_by_tool: {
         "experiment.run_variant": {
           default_skill_id: "optimize-product-representation",
@@ -888,6 +915,10 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
+    expect(screen.getByText(/Non-executable protocol contracts/i)).toBeInTheDocument();
+    expect(screen.getByText(/protocol.checkout.v1 · external_side_effect · planned/i)).toBeInTheDocument();
+    expect(screen.getByText(/protocol.ucp.checkout/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^non-executable$/i).length).toBeGreaterThan(0);
     updateAgentRuntimeRegistryOwnershipMock
       .mockResolvedValueOnce({
         dry_run: true,
@@ -1115,6 +1146,55 @@ describe("AgentRunsPage timeline presets", () => {
       },
       "user-a",
     );
+  });
+
+  it("shows protocol discovery provenance for selected actions", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "completed",
+        state: "protocol_discovery_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "auto_execute_safe",
+        allowed_capabilities: ["discover_protocol_candidates"],
+      },
+      actions: [
+        {
+          id: "action-discovery",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "executed",
+          capability_name: "discover_protocol_candidates",
+          capability_version: "v1",
+          rationale: "Find protocol candidates.",
+          inputs: { query: "blue running shoe" },
+          outputs: {
+            summary: {
+              count: 3,
+              source_counts: {
+                acp_product_feed: 2,
+                ucp_local_metadata: 1,
+              },
+            },
+          },
+          tool_id: "protocol.discover_candidates",
+          skill_id: "discover-protocol-candidates",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
+          tool_version: "v1",
+          skill_version: "v1",
+          effect_class: "read",
+        },
+      ],
+    });
+
+    render(<AgentRunsPage />);
+
+    expect(await screen.findByText(/Discovery provenance/i)).toBeInTheDocument();
+    expect(screen.getByText(/ACP product feed: 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/UCP local metadata: 1/i)).toBeInTheDocument();
   });
 
   it("surfaces external-agent job context and verifies the latest receipt", async () => {

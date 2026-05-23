@@ -12,6 +12,8 @@ _CAPABILITY_TO_TOOL: dict[str, str] = {
     "run_variant": "experiment.run_variant",
     "request_synthetic_validation": "validation.request_synthetic",
     "review_validation_readiness": "validation.review_readiness",
+    "check_protocol_readiness": "protocol.readiness_check",
+    "discover_protocol_candidates": "protocol.discover_candidates",
     "update_posterior_and_decisions": "learning.update_posterior_and_decisions",
     "recommend_next_action": "policy.recommend_next_action",
     "promote_variant_lab": "promotion.promote_lab",
@@ -27,6 +29,8 @@ _TOOL_EFFECT_CLASS: dict[str, str] = {
     "experiment.run_variant": "write_low_risk",
     "validation.request_synthetic": "external_side_effect",
     "validation.review_readiness": "read",
+    "protocol.readiness_check": "read",
+    "protocol.discover_candidates": "read",
     "learning.update_posterior_and_decisions": "write_low_risk",
     "policy.recommend_next_action": "recommend",
     "promotion.promote_lab": "write_high_risk",
@@ -85,6 +89,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
             "catalog.search",
             "protocol.acp.search",
             "protocol.ucp.search",
+            "protocol.readiness_check",
+            "protocol.discover_candidates",
             "product.read",
         ),
         risk_class="read",
@@ -163,6 +169,24 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         risk_class="external_side_effect",
         selection_priority=90,
         intent_tags=("browser_fallback",),
+    ),
+    SkillSpec(
+        id="execute-governed-protocol-commerce",
+        name="Execute Governed Protocol Commerce",
+        description=(
+            "Planned governed ACP/UCP checkout, delegated payment, and browser "
+            "fallback execution once external-write receipts are available."
+        ),
+        version="v1",
+        tool_ids=(
+            "protocol.acp.checkout",
+            "protocol.ucp.checkout",
+            "protocol.payment.delegate",
+            "browser.checkout_fallback",
+        ),
+        risk_class="external_side_effect",
+        selection_priority=95,
+        intent_tags=("checkout", "payment", "protocol_execution"),
     ),
 )
 

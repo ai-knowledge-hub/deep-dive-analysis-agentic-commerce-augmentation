@@ -1,5 +1,19 @@
 from __future__ import annotations
 
+import pytest
+
+from application.services.agent_runtime.adapters import (
+    AdapterExecutionError,
+    AdapterRequest,
+    get_adapter_spec,
+    validate_adapter_request,
+)
+from application.services.agent_runtime.agent_first import (
+    select_skill_for_tool_id,
+    skill_id_for_capability,
+    skill_id_for_tool_id,
+    skill_specs_for_tool_id,
+)
 from application.services.agent_runtime.registry import (
     capability_supported,
     default_tool_ownership_records,
@@ -12,12 +26,6 @@ from application.services.agent_runtime.registry import (
     validate_inputs,
     validate_outputs,
     version_context_for_capability,
-)
-from application.services.agent_runtime.agent_first import (
-    select_skill_for_tool_id,
-    skill_id_for_capability,
-    skill_id_for_tool_id,
-    skill_specs_for_tool_id,
 )
 
 
@@ -76,6 +84,7 @@ def test_registry_contains_core_capability_and_defaults():
 
 def test_registry_support_and_next_state():
     assert capability_supported("seed_hypotheses") is True
+    assert capability_supported("check_protocol_readiness") is True
     assert capability_supported("not_real") is False
     assert next_state_for_capability("seed_hypotheses") == "hypotheses_ready"
     assert next_state_for_capability("recommend_next_action") is None
@@ -91,6 +100,16 @@ def test_tool_registry_shim_contains_machine_facing_ids():
     assert normalized["variant_selection"] == "top_1"
     assert normalized["retrieval_max_results"] == 5
     assert tool_supported("experiment.run_variant") is True
+    protocol_tool = get_tool_spec("protocol.readiness_check")
+    assert protocol_tool is not None
+    assert protocol_tool.capability_name == "check_protocol_readiness"
+    assert protocol_tool.effect_class == "read"
+    assert protocol_tool.output_schema["properties"]["receipt_id"]["type"] == "string"
+    discovery_tool = get_tool_spec("protocol.discover_candidates")
+    assert discovery_tool is not None
+    assert discovery_tool.capability_name == "discover_protocol_candidates"
+    assert discovery_tool.effect_class == "read"
+    assert discovery_tool.output_schema["properties"]["candidates"]["type"] == "array"
     assert tool_supported("not.real") is False
 
 
@@ -112,6 +131,33 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         item for item in payload["capabilities"] if item["name"] == "run_variant"
     )
     assert payload["registry_ownership_source"] == "persistent"
+    adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.readiness.v1"
+    )
+    assert adapter["permission_scope"] == "protocol.readiness:read"
+    assert adapter["effect_class"] == "read"
+    assert adapter["external_side_effects"] is False
+    discovery_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.discovery.v1"
+    )
+    planned_checkout_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.checkout.v1"
+    )
+    assert discovery_adapter["permission_scope"] == "protocol.discovery:read"
+    assert discovery_adapter["allowed_capabilities"] == [
+        "discover_protocol_candidates"
+    ]
+    assert planned_checkout_adapter["status"] == "planned"
+    assert planned_checkout_adapter["effect_class"] == "external_side_effect"
+    assert planned_checkout_adapter["allowed_capabilities"] == []
+    assert planned_checkout_adapter["writes_external_system"] is True
+    assert planned_checkout_adapter["requires_operator_review"] is True
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"
@@ -121,8 +167,17 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         "optimize-product-representation"
     ]
     assert "run.read" in payload["declared_non_executable_skill_tools"]
+    assert "protocol.ucp.checkout" in payload["declared_non_executable_skill_tools"]
+    assert "protocol.acp.checkout" in payload["declared_non_executable_skill_tools"]
+    assert "protocol.payment.delegate" in payload["declared_non_executable_skill_tools"]
+    assert "browser.checkout_fallback" in payload["declared_non_executable_skill_tools"]
     assert next(
         item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
+    )["executable"] is False
+    assert next(
+        item
+        for item in payload["skill_tool_mappings"]
+        if item["tool_id"] == "protocol.ucp.checkout"
     )["executable"] is False
     assert tool["executable"] is True
     assert tool["external_agent_contract"]["minimal_request"] == {
@@ -151,7 +206,41 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     )
 
 
+def test_adapter_registry_rejects_capability_mismatch():
+    spec = get_adapter_spec("protocol.readiness.v1")
+    assert spec is not None
+    valid = validate_adapter_request(
+        request=AdapterRequest(
+            adapter_id="protocol.readiness.v1",
+            channel_type="protocol",
+            capability_name="check_protocol_readiness",
+            client_id="client-a",
+            user_id=None,
+            inputs={"product_id": "product-a"},
+        )
+    )
+    assert valid.permission_scope == "protocol.readiness:read"
+
+    with pytest.raises(AdapterExecutionError, match="cannot execute capability"):
+        validate_adapter_request(
+            request=AdapterRequest(
+                adapter_id="protocol.readiness.v1",
+                channel_type="protocol",
+                capability_name="request_synthetic_validation",
+                client_id="client-a",
+                user_id=None,
+                inputs={},
+            )
+        )
+
+
 def test_runtime_tools_resolve_to_skill_lineage():
+    assert skill_id_for_tool_id("protocol.readiness_check") == (
+        "discover-protocol-candidates"
+    )
+    assert skill_id_for_tool_id("protocol.discover_candidates") == (
+        "discover-protocol-candidates"
+    )
     assert skill_id_for_tool_id("experiment.run_variant") == "optimize-product-representation"
     assert (
         skill_id_for_capability("request_synthetic_validation")

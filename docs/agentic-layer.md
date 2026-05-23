@@ -20,6 +20,19 @@ Implemented now:
 - Runs and Interventions UI visibility into selected-run skills, tools, policy profile, principal, and trace id
 - Operator chat steering endpoint with audited `operator_command_*` receipts
 - Command preflight endpoint with risk level, blockers, warnings, side effects, and rollback guidance
+- Read-only protocol adapters for ACP/UCP readiness and candidate discovery,
+  with current UCP `2026-04-08` structural profile checks and ACP `2026-04-17`
+  checkout/delegate-payment posture checks
+- Guarded UCP REST Catalog Search discovery for opted-in brands, with host
+  allowlisting and local metadata fallback
+- Guarded ACP product-feed discovery for opted-in brands, with JSON/JSONL/CSV
+  parsing, search-eligibility filtering, host allowlisting, and local metadata
+  fallback
+- Protocol discovery provenance in candidate output and adapter receipt
+  `source_counts`, so live retrieval and fallback metadata remain auditable
+- Planned checkout/payment/browser fallback adapters are registry-visible as
+  non-executable external-side-effect contracts until approval and receipt
+  controls are implemented
 
 ---
 

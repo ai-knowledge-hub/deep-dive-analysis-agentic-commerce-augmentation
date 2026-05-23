@@ -57,7 +57,11 @@ def _create_base_run(
 
 
 def _add_approved_action(
-    *, deps, run_id: str, capability_name: str = "freeze_retrieval_protocol"
+    *,
+    deps,
+    run_id: str,
+    capability_name: str = "freeze_retrieval_protocol",
+    inputs: dict | None = None,
 ):
     return deps.agent_actions.create_agent_action(
         agent_run_id=run_id,
@@ -65,7 +69,7 @@ def _add_approved_action(
         status="approved",
         capability_name=capability_name,
         capability_version="v1",
-        inputs={"experiment_id": "exp-1"},
+        inputs=inputs or {"experiment_id": "exp-1"},
         outputs={},
         inputs_hash="in",
         outputs_hash=None,
@@ -193,6 +197,149 @@ def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch)
     failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
     assert failed_action is not None
     assert failed_action["status"] == "failed"
+
+
+def test_step_once_executes_read_only_protocol_adapter_and_records_receipt(tmp_path):
+    db_path = tmp_path / "agent-runtime-protocol-adapter.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    deps.clients.create_client(client_id="client-a", name="Client A")
+    deps.clients.create_brand(brand_id="brand-a", client_id="client-a", name="Brand A")
+    deps.clients.create_product(
+        product_id="product-a",
+        brand_id="brand-a",
+        name="Runner Pro",
+        description="Daily running shoe.",
+        metadata={
+            "ucp": {"offer_url": "https://example.test/p/runner-pro"},
+            "acp": {"offer_url": "https://example.test/p/runner-pro"},
+        },
+    )
+    run = deps.agent_runs.create_agent_run(
+        client_id="client-a",
+        brand_id="brand-a",
+        product_id="product-a",
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["check_protocol_readiness"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="protocol_ready",
+        status="planned",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="check_protocol_readiness",
+        inputs={"product_id": "product-a", "protocols": ["ucp", "acp"]},
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    assert result.action is not None
+    assert result.action["id"] == action["id"]
+    outputs = result.action["outputs"]
+    assert outputs["status"] == "protocol_readiness_checked"
+    assert outputs["adapter"]["channel_type"] == "protocol"
+    assert outputs["receipt_id"].startswith("receipt_")
+    assert outputs["receipt"]["permission_scope"] == "protocol.readiness:read"
+    assert outputs["receipt"]["risk"]["external_side_effects"] is False
+
+    events = [
+        event
+        for event in deps.agent_events.list_agent_events(
+            agent_run_id=run["id"],
+            limit=10,
+        )
+        if event["event_type"] == "action_executed"
+    ]
+    assert len(events) == 1
+    anchors = events[0]["anchors"]
+    assert anchors["receipt_id"] == outputs["receipt_id"]
+    assert anchors["adapter"]["adapter_id"] == "protocol.readiness.v1"
+    assert anchors["receipt"]["channel_type"] == "protocol"
+
+
+def test_step_once_executes_protocol_discovery_adapter_and_records_receipt(tmp_path):
+    db_path = tmp_path / "agent-runtime-protocol-discovery-adapter.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    deps.clients.create_client(client_id="client-a", name="Client A")
+    deps.clients.create_brand(brand_id="brand-a", client_id="client-a", name="Brand A")
+    deps.clients.create_product(
+        product_id="product-a",
+        brand_id="brand-a",
+        name="Runner Pro",
+        description="Daily running shoe for road training.",
+        metadata={
+            "ucp": {
+                "offer_url": "https://example.test/p/runner-pro",
+                "price": 129.0,
+                "availability": "in_stock",
+            }
+        },
+    )
+    run = deps.agent_runs.create_agent_run(
+        client_id="client-a",
+        brand_id="brand-a",
+        product_id=None,
+        experiment_id=None,
+        objective={},
+        allowed_capabilities=["discover_protocol_candidates"],
+        capability_versions={},
+        budgets={},
+        approval_policy={},
+        requires_approval=True,
+        run_mode="auto_execute_safe",
+        state="protocol_discovery_ready",
+        status="planned",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="discover_protocol_candidates",
+        inputs={"query": "running shoe", "protocol": "ucp", "limit": 5},
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    assert result.action is not None
+    assert result.action["id"] == action["id"]
+    outputs = result.action["outputs"]
+    assert outputs["status"] == "protocol_candidates_discovered"
+    assert outputs["adapter"]["adapter_id"] == "protocol.discovery.v1"
+    assert outputs["adapter"]["permission_scope"] == "protocol.discovery:read"
+    assert outputs["receipt"]["risk"]["external_side_effects"] is False
+    assert outputs["summary"]["count"] == 1
+    assert outputs["candidates"][0]["id"] == "product-a"
+    assert outputs["candidates"][0]["discovery_source"] == "ucp_local_metadata"
+    assert outputs["summary"]["source_counts"] == {"ucp_local_metadata": 1}
+
+    events = [
+        event
+        for event in deps.agent_events.list_agent_events(
+            agent_run_id=run["id"],
+            limit=10,
+        )
+        if event["event_type"] == "action_executed"
+    ]
+    assert len(events) == 1
+    anchors = events[0]["anchors"]
+    assert anchors["receipt_id"] == outputs["receipt_id"]
+    assert anchors["adapter"]["adapter_id"] == "protocol.discovery.v1"
+    assert anchors["receipt"]["evidence"]["candidate_ids"] == ["product-a"]
+    assert anchors["receipt"]["evidence"]["source_counts"] == {
+        "ucp_local_metadata": 1
+    }
 
 
 def test_step_once_marks_action_and_run_failed_on_capability_error(

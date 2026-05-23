@@ -114,7 +114,147 @@ Key env vars:
 
 ---
 
-## 6) External Analytics Validation Ingestion
+## 6) Protocol Discovery And Readiness
+
+Purpose:
+- Let agent runs inspect ACP/UCP readiness through read-only adapter receipts
+  before any external side-effecting execution is introduced.
+
+Current status:
+- `protocol.readiness.v1` and `protocol.discovery.v1` are implemented as
+  read-only execution adapters.
+- UCP readiness supports the older bundled `2026-01-11` schema fixture and the
+  current public `2026-04-08` profile shape using structural validation for
+  services, capabilities, payment handlers, signing keys, HTTPS endpoints, and
+  supported-version metadata.
+- ACP readiness tracks the current `2026-04-17` beta posture for checkout
+  capability negotiation and delegate-payment readiness.
+- Candidate discovery falls back to DB/metadata-backed records when live
+  protocol surfaces are not configured or fail validation.
+- UCP live catalog discovery is available for read-only `/catalog/search` when
+  a brand explicitly opts in through metadata and the merchant host is
+  allowlisted.
+- ACP live feed discovery is available for read-only product feed URLs when a
+  brand explicitly opts in through metadata and the merchant host is allowlisted.
+- Planned checkout, delegated-payment, and browser checkout fallback adapters
+  are visible in the runtime registry as `status=planned` external-side-effect
+  adapters, but they have no allowed executable capabilities yet.
+
+Current external reference points:
+- UCP business profiles are discovered at `/.well-known/ucp`.
+- ACP is treated as a beta checkout/delegate-payment surface with
+  date-versioned snapshots.
+- Product discovery for ACP/OpenAI commerce flows uses a structured product
+  feed with eligibility flags such as `is_eligible_search` and
+  `is_eligible_checkout`.
+
+Still planned:
+- Broader ACP/UCP retrieval adapters for additional live merchant surfaces.
+- Strict local UCP `2026-04-08` schema bundle if offline schema validation is
+  required.
+- Side-effecting checkout/payment/browser/CLI adapters only after governed
+  approvals and external-write receipts exist.
+
+UCP live discovery config:
+
+```json
+{
+  "ucp": {
+    "live_discovery": {
+      "enabled": true,
+      "profile_url": "https://merchant.example/.well-known/ucp",
+      "agent_profile_url": "https://platform.example/ucp/profile"
+    }
+  }
+}
+```
+
+Equivalent inline profile support:
+
+```json
+{
+  "ucp": {
+    "live_discovery": { "enabled": true }
+  },
+  "ucp_profile": {
+    "ucp": {
+      "version": "2026-04-08",
+      "services": {
+        "dev.ucp.shopping": [
+          {
+            "version": "2026-04-08",
+            "transport": "rest",
+            "endpoint": "https://merchant.example/ucp",
+            "schema": "https://ucp.dev/2026-04-08/services/shopping/rest.openapi.json"
+          }
+        ]
+      },
+      "capabilities": {
+        "dev.ucp.shopping.checkout": [{ "version": "2026-04-08" }],
+        "dev.ucp.shopping.catalog.search": [{ "version": "2026-04-08" }]
+      },
+      "payment_handlers": {}
+    },
+    "signing_keys": []
+  }
+}
+```
+
+Required env:
+- `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
+
+Optional env:
+- `PROTOCOL_ALLOW_ALL_HOSTS=true` is development-only and should not be used for
+  production.
+
+Live UCP discovery always requires explicit brand-level opt-in through
+`ucp.live_discovery.enabled`, `ucp.live_discovery_enabled`, or
+`ucp_live_discovery_enabled`. Redirects are rejected if the final response URL
+crosses to a different host than the originally allowlisted merchant host.
+
+ACP live discovery config:
+
+```json
+{
+  "acp": {
+    "live_discovery": {
+      "enabled": true,
+      "feed_url": "https://merchant.example/acp/products.json"
+    }
+  }
+}
+```
+
+Supported feed response shapes:
+- JSON object with `products`, `items`, or `data` array.
+- JSON array of product objects.
+- JSONL, one product object per line.
+- CSV with product fields as headers.
+
+Feed records are treated as read-only evidence. The adapter only returns records
+with `is_eligible_search=true` or `enable_search=true`.
+
+Discovery provenance:
+- Each returned candidate includes `discovery_source`, currently one of:
+  - `ucp_catalog_search`
+  - `acp_product_feed`
+  - `ucp_local_metadata`
+  - `acp_local_metadata`
+- The adapter receipt evidence includes `source_counts` so operators and
+  external callers can audit whether a result set came from live protocol
+  retrieval or local fallback metadata.
+
+Required env:
+- `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
+
+Live ACP discovery always requires explicit brand-level opt-in through
+`acp.live_discovery.enabled`, `acp.live_discovery_enabled`, or
+`acp_live_discovery_enabled`. Redirects are rejected if the final response URL
+crosses to a different host than the originally allowlisted merchant host.
+
+---
+
+## 7) External Analytics Validation Ingestion
 
 Purpose:
 - Ingest externally collected validation/analytics events into the app's validation system.
@@ -125,7 +265,7 @@ Current status:
 
 ---
 
-## 7) Integration Selection Guidance
+## 8) Integration Selection Guidance
 
 Use this rule of thumb:
 - Need fastest local loop: `in_app_byok` synthetic validation.
@@ -135,7 +275,7 @@ Use this rule of thumb:
 
 ---
 
-## 8) Agent Operator Mode (Planned)
+## 9) Agent Operator Mode (Planned)
 
 Planned: agents can request validations and use the same provider integrations, but they will do so through a capability registry and policy enforcer (not raw route calls).
 

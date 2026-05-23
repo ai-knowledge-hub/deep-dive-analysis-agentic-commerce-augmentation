@@ -22,14 +22,21 @@ except Exception:  # pragma: no cover - optional dependency for local validation
     Resource = None
 
 PINNED_UCP_VERSION = "2026-01-11"
+CURRENT_UCP_VERSION = "2026-04-08"
+SUPPORTED_UCP_VERSIONS = {PINNED_UCP_VERSION, CURRENT_UCP_VERSION}
+REQUIRED_CAPABILITY_NAMES: Set[str] = {"dev.ucp.shopping.checkout"}
+RECOMMENDED_CAPABILITY_NAMES: Set[str] = {
+    "dev.ucp.shopping.cart",
+    "dev.ucp.shopping.order",
+}
 REQUIRED_CAPABILITIES: Set[Tuple[str, str]] = {
     ("dev.ucp.shopping.checkout", PINNED_UCP_VERSION),
-    ("dev.ucp.shopping.order", PINNED_UCP_VERSION),
 }
 
 SCHEMA_DIR = Path("data/protocol_schemas/ucp") / PINNED_UCP_VERSION
 PROFILE_SCHEMA_ID = "https://ucp.dev/schemas/discovery/profile.json"
 PLATFORM_PROFILE_PATH = Path("data/platform_profiles/ucp_platform_2026-01-11.json")
+CURRENT_PLATFORM_PROFILE_PATH = Path("data/platform_profiles/ucp_platform_2026-04-08.json")
 
 
 @dataclass(frozen=True)
@@ -62,7 +69,8 @@ def load_schema_store() -> Dict[str, Dict[str, Any]]:
 def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
     issues: List[ProtocolReadinessIssue] = []
     relax_oneof = os.getenv("UCP_RELAX_ONEOF", "false").lower() in {"1", "true", "yes"}
-    store = load_schema_store()
+    profile_version = _extract_profile_version(profile)
+    store = load_schema_store() if profile_version == PINNED_UCP_VERSION else {}
     platform_caps = load_platform_capabilities()
     if not platform_caps:
         issues.append(
@@ -74,7 +82,23 @@ def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
             )
         )
 
-    if Draft202012Validator is None or Registry is None or Resource is None:
+    if profile_version != PINNED_UCP_VERSION:
+        issues.append(
+            ProtocolReadinessIssue(
+                field="ucp_profile",
+                severity="info",
+                message=(
+                    "Using structural UCP validation for current profile version "
+                    f"{profile_version or 'unknown'}; bundled JSON Schema validation "
+                    f"remains pinned to {PINNED_UCP_VERSION}."
+                ),
+                fix=(
+                    f"Add bundled {profile_version} schemas when strict offline "
+                    "validation is required."
+                ),
+            )
+        )
+    elif Draft202012Validator is None or Registry is None or Resource is None:
         issues.append(
             ProtocolReadinessIssue(
                 field="ucp_profile",
@@ -143,16 +167,36 @@ def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
     rest_endpoint = _extract_rest_endpoint(ucp) if isinstance(ucp, dict) else None
 
     if isinstance(ucp, dict):
-        version = ucp.get("version")
-        if version != PINNED_UCP_VERSION:
+        version = str(ucp.get("version") or "")
+        if version not in SUPPORTED_UCP_VERSIONS:
             issues.append(
                 ProtocolReadinessIssue(
                     field="ucp.version",
                     severity="error",
-                    message=f"UCP version must be {PINNED_UCP_VERSION}; got {version!r}.",
-                    fix="Pin UCP version to 2026-01-11.",
+                    message=(
+                        "Unsupported UCP version "
+                        f"{version!r}; supported versions are "
+                        f"{', '.join(sorted(SUPPORTED_UCP_VERSIONS))}."
+                    ),
+                    fix=(
+                        f"Publish a {CURRENT_UCP_VERSION} profile or include a "
+                        "supported_versions entry for a compatible profile."
+                    ),
                 )
             )
+        supported_versions = ucp.get("supported_versions")
+        if supported_versions is not None and not isinstance(supported_versions, dict):
+            issues.append(
+                ProtocolReadinessIssue(
+                    field="ucp.supported_versions",
+                    severity="error",
+                    message="supported_versions must be an object mapping version to profile URI.",
+                    fix="Use {\"2026-01-11\": \"https://.../.well-known/ucp/2026-01-11\"}.",
+                )
+            )
+        issues.extend(_validate_services(ucp))
+        issues.extend(_validate_payment_handlers(ucp))
+        issues.extend(_validate_signing_keys(profile))
     else:
         issues.append(
             ProtocolReadinessIssue(
@@ -173,29 +217,46 @@ def validate_ucp_profile(profile: Dict[str, Any]) -> UcpProfileReport:
             )
         )
 
-    required_caps = platform_caps or REQUIRED_CAPABILITIES
-    missing_required = required_caps.difference(capabilities)
-    for name, version in sorted(missing_required):
+    capability_names = {name for name, _version in capabilities}
+    missing_required_names = REQUIRED_CAPABILITY_NAMES.difference(capability_names)
+    for name in sorted(missing_required_names):
         issues.append(
             ProtocolReadinessIssue(
                 field="ucp.capabilities",
                 severity="error",
-                message=f"Missing required capability {name}@{version}.",
+                message=f"Missing required capability {name}.",
                 fix="Add required capability entries to ucp.capabilities.",
             )
         )
-    missing_on_platform = capabilities.difference(required_caps)
-    for name, version in sorted(missing_on_platform):
+    missing_recommended_names = RECOMMENDED_CAPABILITY_NAMES.difference(capability_names)
+    for name in sorted(missing_recommended_names):
         issues.append(
             ProtocolReadinessIssue(
                 field="ucp.capabilities",
                 severity="warning",
-                message=f"Capability {name}@{version} not supported by platform profile.",
+                message=f"Recommended capability {name} is not advertised.",
+                fix="Advertise cart/order capabilities when the business supports them.",
+            )
+        )
+    platform_cap_names = {name for name, _version in platform_caps}
+    missing_on_platform = (
+        capability_names.difference(platform_cap_names) if platform_cap_names else set()
+    )
+    for name in sorted(missing_on_platform):
+        issues.append(
+            ProtocolReadinessIssue(
+                field="ucp.capabilities",
+                severity="warning",
+                message=f"Capability {name} not supported by platform profile.",
                 fix="Add capability to platform profile or remove from business profile.",
             )
         )
 
-    readiness_score = _compute_readiness_score(issues, rest_endpoint, missing_required)
+    readiness_score = _compute_readiness_score(
+        issues,
+        rest_endpoint,
+        {(name, profile_version or "") for name in missing_required_names},
+    )
     issues.append(
         ProtocolReadinessIssue(
             field="ucp_readiness_score",
@@ -230,6 +291,12 @@ def _extract_capabilities(ucp: Dict[str, Any]) -> Set[Tuple[str, str]]:
     return caps
 
 
+def _extract_profile_version(profile: Dict[str, Any]) -> Optional[str]:
+    ucp = profile.get("ucp") if isinstance(profile, dict) else None
+    version = ucp.get("version") if isinstance(ucp, dict) else None
+    return str(version) if isinstance(version, str) and version.strip() else None
+
+
 def _extract_rest_endpoint(ucp: Dict[str, Any]) -> Optional[str]:
     services = ucp.get("services")
     if isinstance(services, dict):
@@ -251,6 +318,185 @@ def _extract_rest_endpoint(ucp: Dict[str, Any]) -> Optional[str]:
                     ):
                         return config["endpoint"]
     return None
+
+
+def _validate_services(ucp: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
+    issues: List[ProtocolReadinessIssue] = []
+    services = ucp.get("services")
+    if not isinstance(services, dict):
+        return [
+            ProtocolReadinessIssue(
+                field="ucp.services",
+                severity="error",
+                message="UCP services must be an object keyed by service name.",
+                fix="Publish services such as dev.ucp.shopping with transport entries.",
+            )
+        ]
+    seen_rest = False
+    for service_name, entries in services.items():
+        if not isinstance(entries, list):
+            issues.append(
+                ProtocolReadinessIssue(
+                    field=f"ucp.services.{service_name}",
+                    severity="error",
+                    message="Service entries must be arrays of transport bindings.",
+                    fix="Use an array of REST/MCP/A2A/embedded service declarations.",
+                )
+            )
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            path = f"ucp.services.{service_name}[{index}]"
+            transport = entry.get("transport")
+            endpoint = entry.get("endpoint")
+            schema = entry.get("schema")
+            if transport not in {"rest", "mcp", "a2a", "embedded"}:
+                issues.append(
+                    ProtocolReadinessIssue(
+                        field=f"{path}.transport",
+                        severity="error",
+                        message="Service transport must be one of rest, mcp, a2a, embedded.",
+                        fix="Set transport to a supported UCP transport.",
+                    )
+                )
+            if transport in {"rest", "mcp", "embedded"} and not schema:
+                issues.append(
+                    ProtocolReadinessIssue(
+                        field=f"{path}.schema",
+                        severity="error",
+                        message=f"{transport} service binding must include schema URL.",
+                        fix="Reference the OpenAPI/OpenRPC schema for this transport.",
+                    )
+                )
+            if transport in {"rest", "mcp", "a2a"}:
+                if not isinstance(endpoint, str) or not endpoint:
+                    issues.append(
+                        ProtocolReadinessIssue(
+                            field=f"{path}.endpoint",
+                            severity="error",
+                            message=f"{transport} service binding must include endpoint URL.",
+                            fix="Publish an HTTPS endpoint for this transport.",
+                        )
+                    )
+                elif not endpoint.startswith("https://"):
+                    issues.append(
+                        ProtocolReadinessIssue(
+                            field=f"{path}.endpoint",
+                            severity="error",
+                            message="UCP endpoint must use HTTPS.",
+                            fix="Serve UCP transport endpoints over HTTPS.",
+                        )
+                    )
+            if transport == "rest":
+                seen_rest = True
+    if not seen_rest:
+        issues.append(
+            ProtocolReadinessIssue(
+                field="ucp.services",
+                severity="warning",
+                message="No REST service binding advertised.",
+                fix="Advertise REST if checkout/cart/order APIs are available over HTTP.",
+            )
+        )
+    return issues
+
+
+def _validate_payment_handlers(ucp: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
+    raw = ucp.get("payment_handlers")
+    if raw is None:
+        return [
+            ProtocolReadinessIssue(
+                field="ucp.payment_handlers",
+                severity="warning",
+                message="No payment_handlers registry advertised.",
+                fix="Declare supported payment handlers when checkout is supported.",
+            )
+        ]
+    if not isinstance(raw, dict):
+        return [
+            ProtocolReadinessIssue(
+                field="ucp.payment_handlers",
+                severity="error",
+                message="payment_handlers must be an object keyed by handler name.",
+                fix="Publish payment handler entries as arrays keyed by reverse-domain name.",
+            )
+        ]
+    issues: List[ProtocolReadinessIssue] = []
+    for handler_name, entries in raw.items():
+        if not isinstance(entries, list):
+            issues.append(
+                ProtocolReadinessIssue(
+                    field=f"ucp.payment_handlers.{handler_name}",
+                    severity="error",
+                    message="Payment handler entries must be arrays.",
+                    fix="Use an array of payment handler declarations.",
+                )
+            )
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            if not entry.get("id"):
+                issues.append(
+                    ProtocolReadinessIssue(
+                        field=f"ucp.payment_handlers.{handler_name}[{index}].id",
+                        severity="error",
+                        message="Payment handler entries require an id.",
+                        fix="Set a stable id to disambiguate handler configurations.",
+                    )
+                )
+            instruments = entry.get("available_instruments")
+            if instruments is not None and not isinstance(instruments, list):
+                issues.append(
+                    ProtocolReadinessIssue(
+                        field=(
+                            f"ucp.payment_handlers.{handler_name}[{index}]"
+                            ".available_instruments"
+                        ),
+                        severity="error",
+                        message="available_instruments must be an array when present.",
+                        fix="List instrument descriptors with type and optional constraints.",
+                    )
+                )
+    return issues
+
+
+def _validate_signing_keys(profile: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
+    raw = profile.get("signing_keys")
+    if raw is None:
+        return [
+            ProtocolReadinessIssue(
+                field="signing_keys",
+                severity="warning",
+                message="No signing_keys advertised for UCP profile identity.",
+                fix="Publish JWK signing keys when message signatures or webhooks are used.",
+            )
+        ]
+    if not isinstance(raw, list):
+        return [
+            ProtocolReadinessIssue(
+                field="signing_keys",
+                severity="error",
+                message="signing_keys must be an array of JWK public keys.",
+                fix="Publish signing_keys as a JWK array with kid, kty, use, and alg.",
+            )
+        ]
+    issues: List[ProtocolReadinessIssue] = []
+    for index, key in enumerate(raw):
+        if not isinstance(key, dict):
+            continue
+        for field in ("kid", "kty", "use", "alg"):
+            if not key.get(field):
+                issues.append(
+                    ProtocolReadinessIssue(
+                        field=f"signing_keys[{index}].{field}",
+                        severity="warning",
+                        message=f"Signing key is missing {field}.",
+                        fix="Publish complete JWK metadata for message verification.",
+                    )
+                )
+    return issues
 
 
 def _compute_readiness_score(
@@ -286,7 +532,7 @@ def load_platform_capabilities() -> Set[Tuple[str, str]]:
     data = stored.get("profile") if stored else None
     if not isinstance(data, dict):
         data = _load_platform_profile_from_file()
-    if not isinstance(data, dict) or data.get("version") != PINNED_UCP_VERSION:
+    if not isinstance(data, dict) or data.get("version") not in SUPPORTED_UCP_VERSIONS:
         return set()
     caps: Set[Tuple[str, str]] = set()
     for entry in data.get("capabilities", []) or []:
@@ -300,16 +546,20 @@ def load_platform_capabilities() -> Set[Tuple[str, str]]:
 
 
 def _load_platform_profile_from_file() -> Optional[Dict[str, Any]]:
-    if not PLATFORM_PROFILE_PATH.exists():
-        return None
-    try:
-        return json.loads(PLATFORM_PROFILE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    for path in (CURRENT_PLATFORM_PROFILE_PATH, PLATFORM_PROFILE_PATH):
+        if not path.exists():
+            continue
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+    return None
 
 
 __all__ = [
     "PINNED_UCP_VERSION",
+    "CURRENT_UCP_VERSION",
+    "SUPPORTED_UCP_VERSIONS",
     "REQUIRED_CAPABILITIES",
     "UcpProfileReport",
     "load_schema_store",

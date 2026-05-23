@@ -271,6 +271,55 @@ _TOOLS: Dict[str, ToolSpec] = {
             "Inspect validation coverage and observed/synthetic agreement.",
         ),
     ),
+    "protocol.readiness_check": _tool(
+        capability_name="check_protocol_readiness",
+        summary="Run a read-only ACP/UCP readiness check through the adapter spine.",
+        required_inputs=("product_id",),
+        input_properties={
+            "product_id": {"type": "string"},
+            "protocols": {
+                "type": "array",
+                "items": {"type": "string", "enum": ["ucp", "acp"]},
+            },
+        },
+        output_properties={
+            "product_id": {"type": "string"},
+            "protocol_readiness": {"type": "array"},
+            "receipt": {"type": "object"},
+            "receipt_id": {"type": "string"},
+        },
+        output_required=("product_id", "protocol_readiness", "receipt_id"),
+        default_inputs={"protocols": ["ucp", "acp"]},
+        side_effects=("read_product_protocol_metadata",),
+        review_checklist=(
+            "Confirm readiness is read-only before using protocol fallback evidence.",
+        ),
+    ),
+    "protocol.discover_candidates": _tool(
+        capability_name="discover_protocol_candidates",
+        summary="Discover ACP/UCP candidate products through the adapter spine.",
+        required_inputs=("query",),
+        input_properties={
+            "query": {"type": "string"},
+            "brand_id": {"type": "string"},
+            "protocol": {"type": "string", "enum": ["ucp", "acp"]},
+            "limit": {"type": "integer"},
+            "inferred_intent": {"type": "object"},
+        },
+        output_properties={
+            "structured_query": {"type": "object"},
+            "candidates": {"type": "array"},
+            "summary": {"type": "object"},
+            "receipt": {"type": "object"},
+            "receipt_id": {"type": "string"},
+        },
+        output_required=("structured_query", "candidates", "summary", "receipt_id"),
+        default_inputs={"limit": 10},
+        side_effects=("read_protocol_candidates",),
+        review_checklist=(
+            "Confirm protocol discovery is read-only before using candidate evidence.",
+        ),
+    ),
     "learning.update_posterior_and_decisions": _tool(
         capability_name="update_posterior_and_decisions",
         summary="Refresh posterior and decision outputs from latest evidence.",

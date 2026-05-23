@@ -11,6 +11,7 @@ from application.services.agent_runtime.agent_first import (
     select_skill_for_tool_id,
     skill_specs_for_tool_id,
 )
+from application.services.agent_runtime.adapters.registry import list_adapter_specs
 from application.services.agent_runtime.registry.catalog import (
     REGISTRY_VERSION,
     CapabilitySpec,
@@ -74,6 +75,7 @@ def registry_contract_payload(
     return {
         "registry_version": REGISTRY_VERSION,
         "registry_ownership_source": "persistent" if ownership else "static_code",
+        "execution_adapters": [adapter.to_dict() for adapter in list_adapter_specs()],
         "skills": skills,
         "tools": tools,
         "capabilities": capabilities,
