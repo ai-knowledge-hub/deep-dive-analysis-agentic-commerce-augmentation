@@ -30,6 +30,9 @@ Implemented now:
   fallback
 - Protocol discovery provenance in candidate output and adapter receipt
   `source_counts`, so live retrieval and fallback metadata remain auditable
+- Planned checkout/payment/browser fallback adapters are registry-visible as
+  non-executable external-side-effect contracts until approval and receipt
+  controls are implemented
 
 ---
 

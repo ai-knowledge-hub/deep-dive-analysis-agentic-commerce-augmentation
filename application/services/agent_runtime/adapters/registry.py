@@ -16,6 +16,7 @@ class AdapterSpec:
     permission_scope: str
     effect_class: str
     allowed_capabilities: tuple[str, ...]
+    status: str = "active"
     external_side_effects: bool = False
     writes_external_system: bool = False
     requires_operator_review: bool = False
@@ -49,6 +50,51 @@ _ADAPTERS: dict[str, AdapterSpec] = {
         writes_external_system=False,
         requires_operator_review=False,
         description="Read-only ACP/UCP candidate discovery for product search.",
+    ),
+    "protocol.checkout.v1": AdapterSpec(
+        id="protocol.checkout.v1",
+        channel_type="protocol",
+        permission_scope="protocol.checkout:write",
+        effect_class="external_side_effect",
+        allowed_capabilities=(),
+        status="planned",
+        external_side_effects=True,
+        writes_external_system=True,
+        requires_operator_review=True,
+        description=(
+            "Planned governed ACP/UCP checkout execution adapter. Not executable "
+            "until external-write receipts and policy gates are implemented."
+        ),
+    ),
+    "protocol.payment_delegation.v1": AdapterSpec(
+        id="protocol.payment_delegation.v1",
+        channel_type="protocol",
+        permission_scope="protocol.payment:write",
+        effect_class="external_side_effect",
+        allowed_capabilities=(),
+        status="planned",
+        external_side_effects=True,
+        writes_external_system=True,
+        requires_operator_review=True,
+        description=(
+            "Planned delegated-payment adapter. Not executable until scoped "
+            "credentials, approval receipts, and rollback evidence are implemented."
+        ),
+    ),
+    "fallback.browser_checkout.v1": AdapterSpec(
+        id="fallback.browser_checkout.v1",
+        channel_type="browser",
+        permission_scope="browser.checkout:write",
+        effect_class="external_side_effect",
+        allowed_capabilities=(),
+        status="planned",
+        external_side_effects=True,
+        writes_external_system=True,
+        requires_operator_review=True,
+        description=(
+            "Planned narrow browser fallback for checkout verification/execution. "
+            "Not executable until browser permissions and evidence capture exist."
+        ),
     ),
 }
 
@@ -114,6 +160,7 @@ def _coerce_adapter_spec(value: AdapterSpec | Mapping[str, Any] | None) -> Adapt
             for item in value.get("allowed_capabilities", [])
             if str(item).strip()
         ),
+        status=str(value.get("status") or "active"),
         external_side_effects=bool(value.get("external_side_effects")),
         writes_external_system=bool(value.get("writes_external_system")),
         requires_operator_review=bool(value.get("requires_operator_review")),

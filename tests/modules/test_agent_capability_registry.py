@@ -144,10 +144,20 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         for item in payload["execution_adapters"]
         if item["id"] == "protocol.discovery.v1"
     )
+    planned_checkout_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.checkout.v1"
+    )
     assert discovery_adapter["permission_scope"] == "protocol.discovery:read"
     assert discovery_adapter["allowed_capabilities"] == [
         "discover_protocol_candidates"
     ]
+    assert planned_checkout_adapter["status"] == "planned"
+    assert planned_checkout_adapter["effect_class"] == "external_side_effect"
+    assert planned_checkout_adapter["allowed_capabilities"] == []
+    assert planned_checkout_adapter["writes_external_system"] is True
+    assert planned_checkout_adapter["requires_operator_review"] is True
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"
@@ -157,8 +167,17 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         "optimize-product-representation"
     ]
     assert "run.read" in payload["declared_non_executable_skill_tools"]
+    assert "protocol.ucp.checkout" in payload["declared_non_executable_skill_tools"]
+    assert "protocol.acp.checkout" in payload["declared_non_executable_skill_tools"]
+    assert "protocol.payment.delegate" in payload["declared_non_executable_skill_tools"]
+    assert "browser.checkout_fallback" in payload["declared_non_executable_skill_tools"]
     assert next(
         item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
+    )["executable"] is False
+    assert next(
+        item
+        for item in payload["skill_tool_mappings"]
+        if item["tool_id"] == "protocol.ucp.checkout"
     )["executable"] is False
     assert tool["executable"] is True
     assert tool["external_agent_contract"]["minimal_request"] == {

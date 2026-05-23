@@ -136,6 +136,9 @@ Current status:
   allowlisted.
 - ACP live feed discovery is available for read-only product feed URLs when a
   brand explicitly opts in through metadata and the merchant host is allowlisted.
+- Planned checkout, delegated-payment, and browser checkout fallback adapters
+  are visible in the runtime registry as `status=planned` external-side-effect
+  adapters, but they have no allowed executable capabilities yet.
 
 Current external reference points:
 - UCP business profiles are discovered at `/.well-known/ucp`.
