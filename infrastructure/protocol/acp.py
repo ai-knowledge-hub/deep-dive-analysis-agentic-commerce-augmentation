@@ -12,6 +12,9 @@ from domain.protocol.types import (
 import infrastructure.db.catalog.clients as clients_repo
 from shared.config.env import settings
 
+CURRENT_ACP_VERSION = "2026-04-17"
+SUPPORTED_ACP_VERSIONS = {"2026-01-30", CURRENT_ACP_VERSION}
+
 
 def _is_demo_mode() -> bool:
     mode = (os.getenv("PROTOCOL_MODE") or settings.app_env or "").lower()
@@ -75,6 +78,7 @@ def validate_acp_candidate(
     metadata = product.get("metadata") if isinstance(product, dict) else {}
     feed = _normalize_feed_record(metadata or {})
 
+    issues.extend(_validate_acp_version(feed))
     issues.extend(_validate_feed_record(feed))
     issues.extend(_validate_feed_freshness(feed))
     issues.extend(_validate_brand_checkout_readiness(candidate, feed))
@@ -137,6 +141,8 @@ def _normalize_feed_record(metadata: Dict[str, Any]) -> Dict[str, Any]:
         record["url"] = record.get("offer_url") or record.get("product_url")
     if not record.get("seller_url"):
         record["seller_url"] = record.get("offer_url") or record.get("url")
+    if not record.get("api_version"):
+        record["api_version"] = record.get("version") or record.get("acp_version")
     if not record.get("image_url") and _is_demo_mode():
         record["image_url"] = (
             record.get("image")
@@ -145,6 +151,32 @@ def _normalize_feed_record(metadata: Dict[str, Any]) -> Dict[str, Any]:
             or record.get("url")
         )
     return record
+
+
+def _validate_acp_version(feed: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
+    version = str(feed.get("api_version") or "").strip()
+    if not version:
+        return [
+            ProtocolReadinessIssue(
+                field="api_version",
+                severity="warning",
+                message="ACP API version is not declared.",
+                fix=f"Declare API-Version metadata, preferably {CURRENT_ACP_VERSION}.",
+            )
+        ]
+    if version not in SUPPORTED_ACP_VERSIONS:
+        return [
+            ProtocolReadinessIssue(
+                field="api_version",
+                severity="warning",
+                message=(
+                    f"ACP API version {version!r} is not in the supported set "
+                    f"{', '.join(sorted(SUPPORTED_ACP_VERSIONS))}."
+                ),
+                fix=f"Update ACP metadata to {CURRENT_ACP_VERSION} or add compatibility handling.",
+            )
+        ]
+    return []
 
 
 def _validate_feed_record(feed: Dict[str, Any]) -> List[ProtocolReadinessIssue]:
@@ -326,7 +358,7 @@ def _validate_brand_checkout_readiness(
             )
         ]
     issues: List[ProtocolReadinessIssue] = []
-    for key in ("create_session", "update_session"):
+    for key in ("create_session", "retrieve_session", "update_session", "complete_session"):
         if not endpoints.get(key):
             issues.append(
                 ProtocolReadinessIssue(
@@ -334,6 +366,41 @@ def _validate_brand_checkout_readiness(
                     severity="error",
                     message=f"Missing ACP checkout endpoint `{key}`.",
                     fix="Expose required checkout endpoints for ACP.",
+                )
+            )
+    capabilities = checkout.get("capabilities") if isinstance(checkout, dict) else None
+    if not isinstance(capabilities, dict):
+        issues.append(
+            ProtocolReadinessIssue(
+                field="checkout_capabilities",
+                severity="error",
+                message="ACP checkout capabilities negotiation metadata is missing.",
+                fix=(
+                    "Declare seller response capabilities, including interventions "
+                    "and payment handlers."
+                ),
+            )
+        )
+    else:
+        interventions = capabilities.get("interventions")
+        if not isinstance(interventions, dict):
+            issues.append(
+                ProtocolReadinessIssue(
+                    field="checkout_capabilities.interventions",
+                    severity="warning",
+                    message="ACP interventions capability is not declared.",
+                    fix="Declare supported/required intervention behavior for checkout sessions.",
+                )
+            )
+        payment = capabilities.get("payment")
+        handlers = payment.get("handlers") if isinstance(payment, dict) else None
+        if not isinstance(handlers, list) or not handlers:
+            issues.append(
+                ProtocolReadinessIssue(
+                    field="checkout_capabilities.payment.handlers",
+                    severity="error",
+                    message="ACP payment handler negotiation metadata is missing.",
+                    fix="Declare capabilities.payment.handlers for seller checkout responses.",
                 )
             )
     webhooks = checkout.get("webhooks") if isinstance(checkout, dict) else None
@@ -366,6 +433,9 @@ def _validate_brand_payment_readiness(
         meta.get("acp_profile") if isinstance(meta.get("acp_profile"), dict) else {}
     )
     payment = profile.get("payment") if isinstance(profile, dict) else None
+    delegate_payment = (
+        profile.get("delegate_payment") if isinstance(profile, dict) else None
+    )
     if not isinstance(payment, dict):
         return [
             ProtocolReadinessIssue(
@@ -375,7 +445,8 @@ def _validate_brand_payment_readiness(
                 fix="Define delegated payment constraints in brand ACP profile.",
             )
         ]
-    if not payment.get("delegated"):
+    delegated_enabled = bool(payment.get("delegated") or delegate_payment)
+    if not delegated_enabled:
         return [
             ProtocolReadinessIssue(
                 field="delegated_payment",
@@ -385,21 +456,41 @@ def _validate_brand_payment_readiness(
             )
         ]
     issues: List[ProtocolReadinessIssue] = []
+    delegate_endpoint = (
+        delegate_payment.get("endpoint")
+        if isinstance(delegate_payment, dict)
+        else payment.get("delegate_payment_endpoint")
+    )
+    if delegate_endpoint and not str(delegate_endpoint).startswith("https://"):
+        issues.append(
+            ProtocolReadinessIssue(
+                field="delegate_payment.endpoint",
+                severity="error",
+                message="ACP Delegate Payment endpoint must use HTTPS.",
+                fix="Expose delegate payment tokenization over HTTPS.",
+            )
+        )
     constraints = (
         payment.get("token_constraints")
         if isinstance(payment.get("token_constraints"), dict)
         else {}
     )
-    if not constraints.get("expires_in_minutes"):
+    allowance = (
+        delegate_payment.get("allowance")
+        if isinstance(delegate_payment, dict)
+        and isinstance(delegate_payment.get("allowance"), dict)
+        else {}
+    )
+    if not constraints.get("expires_in_minutes") and not allowance.get("expires_at"):
         issues.append(
             ProtocolReadinessIssue(
                 field="token_constraints.expires_in_minutes",
                 severity="warning",
                 message="Delegated payment token expiry not specified.",
-                fix="Set token expiry for delegated payment tokens.",
+                fix="Set expires_in_minutes or allowance.expires_at for delegated payment tokens.",
             )
         )
-    if not constraints.get("max_amount"):
+    if not constraints.get("max_amount") and not allowance.get("max_amount"):
         issues.append(
             ProtocolReadinessIssue(
                 field="token_constraints.max_amount",

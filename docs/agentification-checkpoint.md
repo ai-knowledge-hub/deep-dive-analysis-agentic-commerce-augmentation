@@ -142,12 +142,20 @@ that receipt into run-event anchors for audit/replay. Execution adapters are
 now registry-declared with channel type, permission scope, effect class,
 side-effect posture, and allowed capabilities. `discover_protocol_candidates`
 now runs through `protocol.discovery.v1`, returning read-only ACP/UCP candidate
-discovery results with the same receipt/audit posture.
+discovery results with the same receipt/audit posture. UCP readiness now accepts
+the current `2026-04-08` discovery profile shape alongside the older bundled
+`2026-01-11` schema fixture, including service transports, capability registry,
+payment handlers, signing keys, HTTPS endpoint checks, and structural validation
+when no local current-version schema bundle is present. ACP readiness now tracks
+the current `2026-04-17` beta surface for checkout capability negotiation,
+payment handlers, and delegate-payment posture.
 
 Next steps:
 
 - Replace mock-first protocol discovery behind `protocol.discovery.v1` with
   concrete retrieval adapters where real ACP/UCP surfaces are available.
+- Add bundled current-version UCP schema snapshots if strict offline validation
+  is needed beyond the structural checks.
 - Add side-effecting protocol execution adapters only after governed approval
   and external-write receipts are in place.
 - Define browser/CLI fallback tools with narrow permissions.
@@ -275,6 +283,8 @@ Build:
 
 - Replace mock-first discovery behind the read-only protocol adapter spine with
   concrete ACP/UCP retrieval where available.
+- Add strict schema snapshots for active UCP versions once the upstream schema
+  set stabilizes enough for local offline validation.
 - Add side-effecting protocol execution adapters only after governed approval
   and external-write receipts are in place.
 - Narrow browser/CLI fallback adapters with explicit permission scopes.

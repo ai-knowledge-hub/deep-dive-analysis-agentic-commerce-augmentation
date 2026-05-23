@@ -20,6 +20,9 @@ Implemented now:
 - Runs and Interventions UI visibility into selected-run skills, tools, policy profile, principal, and trace id
 - Operator chat steering endpoint with audited `operator_command_*` receipts
 - Command preflight endpoint with risk level, blockers, warnings, side effects, and rollback guidance
+- Read-only protocol adapters for ACP/UCP readiness and candidate discovery,
+  with current UCP `2026-04-08` structural profile checks and ACP `2026-04-17`
+  checkout/delegate-payment posture checks
 
 ---
 

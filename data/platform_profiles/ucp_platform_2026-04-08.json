@@ -1,0 +1,21 @@
+{
+  "version": "2026-04-08",
+  "capabilities": [
+    {
+      "name": "dev.ucp.shopping.cart",
+      "version": "2026-04-08"
+    },
+    {
+      "name": "dev.ucp.shopping.checkout",
+      "version": "2026-04-08"
+    },
+    {
+      "name": "dev.ucp.shopping.order",
+      "version": "2026-04-08"
+    },
+    {
+      "name": "dev.ucp.common.identity_linking",
+      "version": "2026-04-08"
+    }
+  ]
+}

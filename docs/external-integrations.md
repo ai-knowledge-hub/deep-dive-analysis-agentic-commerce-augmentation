@@ -114,7 +114,39 @@ Key env vars:
 
 ---
 
-## 6) External Analytics Validation Ingestion
+## 6) Protocol Discovery And Readiness
+
+Purpose:
+- Let agent runs inspect ACP/UCP readiness through read-only adapter receipts
+  before any external side-effecting execution is introduced.
+
+Current status:
+- `protocol.readiness.v1` and `protocol.discovery.v1` are implemented as
+  read-only execution adapters.
+- UCP readiness supports the older bundled `2026-01-11` schema fixture and the
+  current public `2026-04-08` profile shape using structural validation for
+  services, capabilities, payment handlers, signing keys, HTTPS endpoints, and
+  supported-version metadata.
+- ACP readiness tracks the current `2026-04-17` beta posture for checkout
+  capability negotiation and delegate-payment readiness.
+- Candidate discovery remains DB/metadata-backed until real merchant protocol
+  endpoints are configured.
+
+Current external reference points:
+- UCP business profiles are discovered at `/.well-known/ucp`.
+- ACP is treated as a beta checkout/delegate-payment surface with
+  date-versioned snapshots.
+
+Still planned:
+- Concrete ACP/UCP retrieval adapters for live merchant surfaces.
+- Strict local UCP `2026-04-08` schema bundle if offline schema validation is
+  required.
+- Side-effecting checkout/payment/browser/CLI adapters only after governed
+  approvals and external-write receipts exist.
+
+---
+
+## 7) External Analytics Validation Ingestion
 
 Purpose:
 - Ingest externally collected validation/analytics events into the app's validation system.
@@ -125,7 +157,7 @@ Current status:
 
 ---
 
-## 7) Integration Selection Guidance
+## 8) Integration Selection Guidance
 
 Use this rule of thumb:
 - Need fastest local loop: `in_app_byok` synthetic validation.
@@ -135,7 +167,7 @@ Use this rule of thumb:
 
 ---
 
-## 8) Agent Operator Mode (Planned)
+## 9) Agent Operator Mode (Planned)
 
 Planned: agents can request validations and use the same provider integrations, but they will do so through a capability registry and policy enforcer (not raw route calls).
 
