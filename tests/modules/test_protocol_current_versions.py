@@ -145,7 +145,7 @@ def test_ucp_live_catalog_search_normalizes_read_only_candidates(
     set_database_path(db_path)
     init_db()
 
-    from infrastructure.db.catalog import clients as clients_repo
+    import infrastructure.db.catalog.clients as clients_repo
 
     profile = {
         "ucp": {
@@ -265,7 +265,7 @@ def test_acp_live_product_feed_normalizes_searchable_candidates(
     set_database_path(db_path)
     init_db()
 
-    from infrastructure.db.catalog import clients as clients_repo
+    import infrastructure.db.catalog.clients as clients_repo
 
     clients_repo.create_client(client_id="client-a", name="Client A")
     clients_repo.create_brand(
