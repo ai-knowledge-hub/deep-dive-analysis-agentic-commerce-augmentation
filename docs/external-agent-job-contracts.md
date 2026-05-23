@@ -182,7 +182,9 @@ Structured error shape:
 }
 ```
 
-External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
+External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
+
+`declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it yet. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed this way so external agents can discover the future integration shape without being allowed to trigger side effects.
 
 ## Get Job Status
 

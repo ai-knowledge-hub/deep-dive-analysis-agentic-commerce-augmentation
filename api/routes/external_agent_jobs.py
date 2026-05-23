@@ -566,6 +566,16 @@ def _resolve_requested_runtime_contract(
         tool_id = capability_to_tool_id(capability_name)
     tool = get_tool_spec(tool_id) if tool_id else None
     if tool_id and not tool:
+        if _is_declared_non_executable_tool(tool_id):
+            raise external_agent_error(
+                status_code=400,
+                code="declared_non_executable_tool",
+                message=(
+                    f"Tool '{tool_id}' is declared in the registry as a "
+                    "non-executable contract and cannot create jobs yet"
+                ),
+                context={"tool_id": tool_id, "executable": False},
+            )
         raise external_agent_error(
             status_code=400,
             code="unsupported_tool",
@@ -657,6 +667,16 @@ def _require_requested_skill_tool_scopes(
                 message=f"Missing scope for skill '{skill_id}'",
                 context={"required": [f"skill:{skill_id}", "skills:*"]},
             )
+
+
+def _is_declared_non_executable_tool(tool_id: str) -> bool:
+    requested_tool_id = str(tool_id or "").strip()
+    if not requested_tool_id or get_tool_spec(requested_tool_id):
+        return False
+    return any(
+        requested_tool_id in skill.tool_ids
+        for skill in list_skill_specs()
+    )
 
 
 def _tool_ids_for_capabilities(capability_names: List[str]) -> List[str]:

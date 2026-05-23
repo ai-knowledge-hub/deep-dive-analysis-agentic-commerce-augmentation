@@ -675,6 +675,37 @@ def test_external_agent_job_validates_requested_skill_tool_pair(client: TestClie
     assert "cannot use tool" in response.json()["detail"]["message"]
 
 
+def test_external_agent_job_rejects_declared_non_executable_tool(client: TestClient):
+    token = _token(scopes=["external_agent_jobs:write", "tools:*", "skills:*"])
+    response = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={
+            "idempotency_key": "job-non-executable-tool",
+            "tool_id": "protocol.ucp.checkout",
+        },
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "declared_non_executable_tool"
+    assert detail["retryable"] is False
+    assert detail["context"] == {
+        "tool_id": "protocol.ucp.checkout",
+        "executable": False,
+    }
+
+
+def test_external_agent_job_rejects_unknown_tool_as_unsupported(client: TestClient):
+    token = _token(scopes=["external_agent_jobs:write", "tools:*", "skills:*"])
+    response = client.post(
+        "/external-agent/jobs",
+        headers=_headers(token),
+        json={"idempotency_key": "job-unknown-tool", "tool_id": "not.real"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "unsupported_tool"
+
+
 def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     client: TestClient,
 ):
