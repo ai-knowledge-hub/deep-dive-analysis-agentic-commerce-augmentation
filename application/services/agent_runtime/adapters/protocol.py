@@ -147,6 +147,9 @@ def execute_protocol_candidate_discovery(
         ],
         "errors": int(summary.get("errors") or 0),
         "warnings": int(summary.get("warnings") or 0),
+        "source_counts": summary.get("source_counts")
+        if isinstance(summary.get("source_counts"), dict)
+        else {},
     }
     subject = {"brand_id": brand_id, "query": query}
     receipt = AdapterReceipt(

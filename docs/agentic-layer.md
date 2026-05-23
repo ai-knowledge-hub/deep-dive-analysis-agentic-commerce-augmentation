@@ -28,6 +28,8 @@ Implemented now:
 - Guarded ACP product-feed discovery for opted-in brands, with JSON/JSONL/CSV
   parsing, search-eligibility filtering, host allowlisting, and local metadata
   fallback
+- Protocol discovery provenance in candidate output and adapter receipt
+  `source_counts`, so live retrieval and fallback metadata remain auditable
 
 ---
 

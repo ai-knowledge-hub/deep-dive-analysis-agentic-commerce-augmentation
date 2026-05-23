@@ -228,6 +228,16 @@ Supported feed response shapes:
 Feed records are treated as read-only evidence. The adapter only returns records
 with `is_eligible_search=true` or `enable_search=true`.
 
+Discovery provenance:
+- Each returned candidate includes `discovery_source`, currently one of:
+  - `ucp_catalog_search`
+  - `acp_product_feed`
+  - `ucp_local_metadata`
+  - `acp_local_metadata`
+- The adapter receipt evidence includes `source_counts` so operators and
+  external callers can audit whether a result set came from live protocol
+  retrieval or local fallback metadata.
+
 Required env:
 - `PROTOCOL_FETCH_ALLOWLIST=merchant.example`
 

@@ -155,6 +155,8 @@ falls back to local metadata-backed discovery otherwise. ACP candidate discovery
 can now use a guarded live product-feed path for opted-in brands, parsing
 JSON/JSONL/CSV feed records, honoring search eligibility flags, and normalizing
 records into read-only protocol candidates before falling back to local metadata.
+Discovery candidates now expose `discovery_source`, and adapter receipts include
+`source_counts` so live retrieval versus local fallback is auditable.
 
 Next steps:
 

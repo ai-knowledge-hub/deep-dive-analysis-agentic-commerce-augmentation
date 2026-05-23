@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from domain.protocol.types import ProtocolCandidate, StructuredQuery
+from application.services.admin.protocol_discovery_service import ProtocolDiscoveryService
 from infrastructure.protocol.acp import discover_acp_candidates, validate_acp_candidate
 from infrastructure.protocol.ucp import discover_ucp_candidates
 from infrastructure.protocol.ucp_profile import validate_ucp_profile
@@ -346,3 +347,26 @@ def test_acp_live_product_feed_normalizes_searchable_candidates(
     assert candidates[0].available_for_sale is True
     assert candidates[0].attributes["color"] == "blue"
     assert candidates[0].raw["source"] == "acp_product_feed"
+
+
+def test_protocol_discovery_result_exposes_candidate_source_counts():
+    candidate = ProtocolCandidate(
+        id="sku-1",
+        name="Blue Runner",
+        description="Road running shoe.",
+        protocol="acp",
+        price=129,
+        availability="in_stock",
+        raw={"source": "acp_product_feed"},
+    )
+    service = ProtocolDiscoveryService(
+        discover_acp_fn=lambda **kwargs: [candidate],
+        discover_ucp_fn=lambda **kwargs: [],
+        validate_acp_fn=lambda candidate: [],
+        validate_ucp_fn=lambda candidate: [],
+    )
+
+    result = service.discover(client_id="client-a", query="blue running shoe")
+
+    assert result["candidates"][0]["discovery_source"] == "acp_product_feed"
+    assert result["summary"]["source_counts"] == {"acp_product_feed": 1}

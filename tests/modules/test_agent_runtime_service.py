@@ -321,6 +321,8 @@ def test_step_once_executes_protocol_discovery_adapter_and_records_receipt(tmp_p
     assert outputs["receipt"]["risk"]["external_side_effects"] is False
     assert outputs["summary"]["count"] == 1
     assert outputs["candidates"][0]["id"] == "product-a"
+    assert outputs["candidates"][0]["discovery_source"] == "ucp_local_metadata"
+    assert outputs["summary"]["source_counts"] == {"ucp_local_metadata": 1}
 
     events = [
         event
@@ -335,6 +337,9 @@ def test_step_once_executes_protocol_discovery_adapter_and_records_receipt(tmp_p
     assert anchors["receipt_id"] == outputs["receipt_id"]
     assert anchors["adapter"]["adapter_id"] == "protocol.discovery.v1"
     assert anchors["receipt"]["evidence"]["candidate_ids"] == ["product-a"]
+    assert anchors["receipt"]["evidence"]["source_counts"] == {
+        "ucp_local_metadata": 1
+    }
 
 
 def test_step_once_marks_action_and_run_failed_on_capability_error(

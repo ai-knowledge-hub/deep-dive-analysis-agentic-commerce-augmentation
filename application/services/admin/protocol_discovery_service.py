@@ -77,6 +77,7 @@ class ProtocolDiscoveryService:
         errors = 0
         warnings = 0
         for candidate in candidates[:limit]:
+            discovery_source = _candidate_discovery_source(candidate)
             issues = (
                 self._validate_acp(candidate)
                 if candidate.protocol == "acp"
@@ -102,6 +103,7 @@ class ProtocolDiscoveryService:
                     "available_for_sale": candidate.available_for_sale,
                     "inventory_quantity": candidate.inventory_quantity,
                     "attributes": candidate.attributes,
+                    "discovery_source": discovery_source,
                     "structured_match": {
                         "score": match.score,
                         "matched": match.matched,
@@ -127,6 +129,7 @@ class ProtocolDiscoveryService:
                 "count": len(out[:limit]),
                 "errors": errors,
                 "warnings": warnings,
+                "source_counts": _source_counts(out[:limit]),
             },
         }
 
@@ -203,6 +206,21 @@ def _extract_attributes(text: str) -> List[str]:
         if token in lower:
             attrs.append(attr)
     return attrs
+
+
+def _candidate_discovery_source(candidate: ProtocolCandidate) -> str:
+    raw_source = candidate.raw.get("source") if isinstance(candidate.raw, dict) else None
+    if isinstance(raw_source, str) and raw_source.strip():
+        return raw_source.strip()
+    return f"{candidate.protocol}_local_metadata"
+
+
+def _source_counts(candidates: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for candidate in candidates:
+        source = str(candidate.get("discovery_source") or "unknown")
+        counts[source] = counts.get(source, 0) + 1
+    return counts
 
 
 __all__ = ["ProtocolDiscoveryService", "build_structured_query"]
