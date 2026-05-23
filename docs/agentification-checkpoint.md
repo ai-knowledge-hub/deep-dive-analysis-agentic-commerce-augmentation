@@ -172,7 +172,8 @@ Next steps:
   and external-write receipts are in place.
 - Add bundled current-version UCP schema snapshots if strict offline validation
   is needed beyond the structural checks.
-- Define browser/CLI fallback tools with narrow permissions.
+- Add executable browser/CLI fallback implementations only behind narrow
+  permission policies.
 - Require policy review for any external side effect.
 
 ### 6. Control-Plane UX Cleanup
