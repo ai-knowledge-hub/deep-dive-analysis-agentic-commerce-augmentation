@@ -158,6 +158,48 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     assert planned_checkout_adapter["allowed_capabilities"] == []
     assert planned_checkout_adapter["writes_external_system"] is True
     assert planned_checkout_adapter["requires_operator_review"] is True
+    assert planned_checkout_adapter["contract_intent"] == "readiness_boundary"
+    assert "Real transaction execution is not supported" in planned_checkout_adapter[
+        "description"
+    ]
+    assert planned_checkout_adapter["receipt_contract"]["required"] is True
+    assert (
+        planned_checkout_adapter["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
+    assert "approval_receipt_id" in planned_checkout_adapter["receipt_contract"][
+        "required_fields"
+    ]
+    assert "checkout_session_id" in planned_checkout_adapter["receipt_contract"][
+        "evidence_fields"
+    ]
+    assert planned_checkout_adapter["receipt_contract"]["must_link_run_event"] is True
+    planned_payment_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.payment_delegation.v1"
+    )
+    planned_browser_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "fallback.browser_checkout.v1"
+    )
+    assert (
+        planned_payment_adapter["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
+    assert planned_payment_adapter["contract_intent"] == "readiness_boundary"
+    assert "payment_handler" in planned_payment_adapter["receipt_contract"][
+        "evidence_fields"
+    ]
+    assert (
+        planned_browser_adapter["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
+    assert planned_browser_adapter["contract_intent"] == "readiness_boundary"
+    assert "browser_session_id" in planned_browser_adapter["receipt_contract"][
+        "evidence_fields"
+    ]
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"

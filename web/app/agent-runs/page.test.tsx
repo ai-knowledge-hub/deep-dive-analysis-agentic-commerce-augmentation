@@ -252,6 +252,14 @@ describe("AgentRunsPage timeline presets", () => {
           external_side_effects: true,
           writes_external_system: true,
           requires_operator_review: true,
+          contract_intent: "readiness_boundary",
+          receipt_contract: {
+            required: true,
+            receipt_type: "external_write_execution",
+            required_fields: ["approval_receipt_id"],
+            evidence_fields: ["checkout_session_id"],
+            must_link_run_event: true,
+          },
         },
       ],
       skills: [
@@ -915,8 +923,15 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
-    expect(screen.getByText(/Non-executable protocol contracts/i)).toBeInTheDocument();
-    expect(screen.getByText(/protocol.checkout.v1 · external_side_effect · planned/i)).toBeInTheDocument();
+    expect(screen.getByText(/Non-executable protocol intelligence/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /protocol.checkout.v1 · external_side_effect · planned · readiness_boundary · receipt: external_write_execution/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/cannot create checkout, payment, cart, account, or browser transaction actions/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/protocol.ucp.checkout/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^non-executable$/i).length).toBeGreaterThan(0);
     updateAgentRuntimeRegistryOwnershipMock

@@ -157,23 +157,26 @@ JSON/JSONL/CSV feed records, honoring search eligibility flags, and normalizing
 records into read-only protocol candidates before falling back to local metadata.
 Discovery candidates now expose `discovery_source`, and adapter receipts include
 `source_counts` so live retrieval versus local fallback is auditable. The runtime
-registry now also declares planned side-effecting protocol/fallback adapters for
-checkout, delegated payment, and browser checkout fallback as `status=planned`
-with no allowed executable capabilities; related skill tool IDs are visible as
-non-executable external-side-effect tools until governed approval and
-external-write receipts are implemented.
+registry now also declares non-executable checkout, delegated-payment, and browser
+fallback readiness boundaries as `status=planned`, `contract_intent=readiness_boundary`,
+and no allowed executable capabilities. These contracts exist to support
+merchant/protocol readiness intelligence, not real transactions. They publish the
+required `external_write_execution` receipt contract as a guardrail for any
+future implementation review, including approval linkage, idempotency, external
+operation identifiers, request/response fingerprints, verification status,
+adapter-specific evidence, and run-event linkage requirements.
 
 Next steps:
 
 - Extend concrete retrieval behind `protocol.discovery.v1` beyond the guarded
   UCP REST Catalog Search and ACP product-feed paths to additional protocol
   surfaces where real merchant endpoints are available.
-- Add side-effecting protocol execution adapters only after governed approval
-  and external-write receipts are in place.
+- Keep checkout, payment, and browser fallback work in readiness-intelligence
+  mode unless the product direction explicitly changes.
 - Add bundled current-version UCP schema snapshots if strict offline validation
   is needed beyond the structural checks.
-- Add executable browser/CLI fallback implementations only behind narrow
-  permission policies.
+- Add browser/CLI fallback readiness probes only behind narrow permission
+  policies.
 - Require policy review for any external side effect.
 
 ### 6. Control-Plane UX Cleanup

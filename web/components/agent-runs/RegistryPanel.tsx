@@ -1208,23 +1208,26 @@ export function RegistryPanel({
         <section className="control-section">
           <div className="control-section__header">
             <div>
-              <span className="control-section__eyebrow">Planned execution</span>
-              <h4 className="control-section__title">Non-executable protocol contracts</h4>
+              <span className="control-section__eyebrow">Readiness boundaries</span>
+              <h4 className="control-section__title">Non-executable protocol intelligence</h4>
             </div>
             <span className="control-chip control-chip--attention">
               visible, blocked
             </span>
           </div>
           <p className="panel__muted">
-            These contracts are visible for planning and review, but they cannot create agent
-            actions until governed approvals, scoped credentials, and external-write receipts are
-            implemented.
+            These contracts are visible for market research and merchant-readiness review. They
+            cannot create checkout, payment, cart, account, or browser transaction actions.
           </p>
           {plannedAdapters.length ? (
             <div className="agent-ops-summary">
               {plannedAdapters.map((adapter) => (
                 <span key={adapter.id} className="panel__badge panel__badge--secondary">
                   {adapter.id} · {adapter.effect_class ?? "unknown"} · planned
+                  {adapter.contract_intent ? ` · ${adapter.contract_intent}` : ""}
+                  {adapter.receipt_contract?.receipt_type
+                    ? ` · receipt: ${adapter.receipt_contract.receipt_type}`
+                    : ""}
                 </span>
               ))}
             </div>

@@ -1255,6 +1255,14 @@ export type AgentRuntimeExecutionAdapter = {
   writes_external_system?: boolean;
   requires_operator_review?: boolean;
   description?: string;
+  contract_intent?: string;
+  receipt_contract?: {
+    required?: boolean;
+    receipt_type?: string;
+    required_fields?: string[];
+    evidence_fields?: string[];
+    must_link_run_event?: boolean;
+  };
 };
 
 export type AgentRuntimeSkillToolMapping = {
