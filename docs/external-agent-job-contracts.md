@@ -67,7 +67,7 @@ GET /agent-runs/registry
 Authorization: Bearer <agent-principal-token>
 ```
 
-Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`. Protocol checkout, payment, and browser fallback readiness boundaries also expose `skill_tool_mappings[].contract_intent=readiness_boundary`, the associated `adapter_id`, a `blocked_reason`, and the planned receipt contract so callers can distinguish market-research readiness signals from executable transaction tools.
+Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`. Protocol checkout, payment, and browser fallback readiness boundaries are also exposed directly in `readiness_boundaries[]` with `tool_id`, `skill_ids`, `adapter_id`, `contract_intent=readiness_boundary`, `blocked_reason`, and the planned receipt contract so callers can distinguish market-research readiness signals from executable transaction tools without reverse-engineering lower-level mappings. The same metadata is mirrored on matching `skill_tool_mappings[]` rows for compatibility.
 
 ## Create Job
 

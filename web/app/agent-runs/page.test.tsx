@@ -323,6 +323,16 @@ describe("AgentRunsPage timeline presets", () => {
         "protocol.ucp.checkout": ["execute-governed-protocol-commerce"],
       },
       declared_non_executable_skill_tools: ["protocol.ucp.checkout"],
+      readiness_boundaries: [
+        {
+          tool_id: "protocol.ucp.checkout",
+          skill_ids: ["execute-governed-protocol-commerce"],
+          executable: false,
+          adapter_id: "protocol.checkout.v1",
+          contract_intent: "readiness_boundary",
+          blocked_reason: "readiness_boundary_only_no_transaction_execution",
+        },
+      ],
       skill_tool_mappings: [
         {
           tool_id: "experiment.run_variant",

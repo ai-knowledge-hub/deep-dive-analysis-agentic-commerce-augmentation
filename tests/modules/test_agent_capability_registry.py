@@ -213,6 +213,28 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     assert "protocol.acp.checkout" in payload["declared_non_executable_skill_tools"]
     assert "protocol.payment.delegate" in payload["declared_non_executable_skill_tools"]
     assert "browser.checkout_fallback" in payload["declared_non_executable_skill_tools"]
+    readiness_boundaries = {
+        item["tool_id"]: item for item in payload["readiness_boundaries"]
+    }
+    assert set(readiness_boundaries) == {
+        "browser.checkout_fallback",
+        "protocol.acp.checkout",
+        "protocol.payment.delegate",
+        "protocol.ucp.checkout",
+    }
+    assert readiness_boundaries["protocol.ucp.checkout"]["adapter_id"] == (
+        "protocol.checkout.v1"
+    )
+    assert readiness_boundaries["protocol.ucp.checkout"]["contract_intent"] == (
+        "readiness_boundary"
+    )
+    assert readiness_boundaries["protocol.ucp.checkout"]["executable"] is False
+    assert readiness_boundaries["protocol.ucp.checkout"]["skill_ids"] == [
+        "execute-governed-protocol-commerce"
+    ]
+    assert readiness_boundaries["protocol.ucp.checkout"]["blocked_reason"] == (
+        "readiness_boundary_only_no_transaction_execution"
+    )
     assert next(
         item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
     )["executable"] is False

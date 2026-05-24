@@ -33,6 +33,7 @@ from application.services.agent_runtime.registry.contracts import (
 )
 from application.services.agent_runtime.registry.non_executable import (
     non_executable_tool_contract,
+    non_executable_tool_contracts,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "list_recovery_templates",
     "next_state_for_capability",
     "non_executable_tool_contract",
+    "non_executable_tool_contracts",
     "registry_contract_payload",
     "registry_fingerprint",
     "validate_inputs",

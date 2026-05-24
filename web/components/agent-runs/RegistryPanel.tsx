@@ -76,6 +76,9 @@ function plannedExecutionAdapters(registry: AgentRuntimeRegistryResponse | null)
 }
 
 function plannedSkillToolContracts(registry: AgentRuntimeRegistryResponse | null) {
+  if (registry?.readiness_boundaries?.length) {
+    return registry.readiness_boundaries.slice(0, 6);
+  }
   const declared = new Set(registry?.declared_non_executable_skill_tools ?? []);
   return (registry?.skill_tool_mappings ?? [])
     .filter((mapping) => mapping.executable === false || declared.has(mapping.tool_id))

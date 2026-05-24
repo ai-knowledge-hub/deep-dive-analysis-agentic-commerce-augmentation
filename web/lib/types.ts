@@ -1275,6 +1275,12 @@ export type AgentRuntimeSkillToolMapping = {
   receipt_contract?: AgentRuntimeExecutionAdapter["receipt_contract"];
 };
 
+export type AgentRuntimeReadinessBoundary = AgentRuntimeSkillToolMapping & {
+  adapter_id: string;
+  contract_intent: string;
+  blocked_reason: string;
+};
+
 export type AgentRuntimeRegistryResponse = {
   registry_version?: string;
   registry_fingerprint?: string;
@@ -1290,6 +1296,7 @@ export type AgentRuntimeRegistryResponse = {
   capabilities: AgentRuntimeCapabilitySpec[];
   skill_ids_by_tool: Record<string, string[]>;
   declared_non_executable_skill_tools?: string[];
+  readiness_boundaries?: AgentRuntimeReadinessBoundary[];
   skill_tool_mappings?: AgentRuntimeSkillToolMapping[];
   skill_selection_by_tool?: Record<
     string,
