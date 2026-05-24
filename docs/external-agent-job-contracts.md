@@ -67,7 +67,7 @@ GET /agent-runs/registry
 Authorization: Bearer <agent-principal-token>
 ```
 
-Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`.
+Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`. Protocol checkout, payment, and browser fallback readiness boundaries also expose `skill_tool_mappings[].contract_intent=readiness_boundary`, the associated `adapter_id`, a `blocked_reason`, and the planned receipt contract so callers can distinguish market-research readiness signals from executable transaction tools.
 
 ## Create Job
 
@@ -184,7 +184,7 @@ Structured error shape:
 
 External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
 
-`declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects.
+`declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects. For readiness-boundary tools, the error `context` includes `contract_intent`, `adapter_id`, `blocked_reason`, and the planned `receipt_contract`.
 
 ## Get Job Status
 

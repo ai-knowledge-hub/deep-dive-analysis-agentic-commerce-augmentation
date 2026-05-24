@@ -31,6 +31,9 @@ from application.services.agent_runtime.registry.contracts import (
     validate_outputs,
     version_context_for_capability,
 )
+from application.services.agent_runtime.registry.non_executable import (
+    non_executable_tool_contract,
+)
 
 __all__ = [
     "CapabilitySpec",
@@ -54,6 +57,7 @@ __all__ = [
     "run_mode_supported",
     "list_recovery_templates",
     "next_state_for_capability",
+    "non_executable_tool_contract",
     "registry_contract_payload",
     "registry_fingerprint",
     "validate_inputs",

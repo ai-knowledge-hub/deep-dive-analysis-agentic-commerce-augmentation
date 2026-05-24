@@ -41,7 +41,10 @@ from application.services.agent_runtime.agent_first import (
     list_skill_specs,
     select_skill_for_tool_id,
 )
-from application.services.agent_runtime.registry import get_tool_spec
+from application.services.agent_runtime.registry import (
+    get_tool_spec,
+    non_executable_tool_contract,
+)
 from application.services.agent_runtime.runs import (
     AgentRunPlanError,
     create_agent_run_with_initial_plan,
@@ -567,14 +570,19 @@ def _resolve_requested_runtime_contract(
     tool = get_tool_spec(tool_id) if tool_id else None
     if tool_id and not tool:
         if _is_declared_non_executable_tool(tool_id):
+            contract_context = non_executable_tool_contract(tool_id)
             raise external_agent_error(
                 status_code=400,
                 code="declared_non_executable_tool",
                 message=(
                     f"Tool '{tool_id}' is declared in the registry as a "
-                    "non-executable contract and cannot create jobs yet"
+                    "non-executable readiness boundary and cannot create jobs"
                 ),
-                context={"tool_id": tool_id, "executable": False},
+                context={
+                    "tool_id": tool_id,
+                    "executable": False,
+                    **contract_context,
+                },
             )
         raise external_agent_error(
             status_code=400,

@@ -1269,6 +1269,10 @@ export type AgentRuntimeSkillToolMapping = {
   tool_id: string;
   skill_ids: string[];
   executable: boolean;
+  adapter_id?: string;
+  contract_intent?: string;
+  blocked_reason?: string;
+  receipt_contract?: AgentRuntimeExecutionAdapter["receipt_contract"];
 };
 
 export type AgentRuntimeRegistryResponse = {

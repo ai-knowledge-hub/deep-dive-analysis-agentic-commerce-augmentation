@@ -221,6 +221,21 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         for item in payload["skill_tool_mappings"]
         if item["tool_id"] == "protocol.ucp.checkout"
     )["executable"] is False
+    ucp_checkout_mapping = next(
+        item
+        for item in payload["skill_tool_mappings"]
+        if item["tool_id"] == "protocol.ucp.checkout"
+    )
+    assert ucp_checkout_mapping["adapter_id"] == "protocol.checkout.v1"
+    assert ucp_checkout_mapping["contract_intent"] == "readiness_boundary"
+    assert (
+        ucp_checkout_mapping["blocked_reason"]
+        == "readiness_boundary_only_no_transaction_execution"
+    )
+    assert (
+        ucp_checkout_mapping["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
     assert tool["executable"] is True
     assert tool["external_agent_contract"]["minimal_request"] == {
         "tool_id": "experiment.run_variant",

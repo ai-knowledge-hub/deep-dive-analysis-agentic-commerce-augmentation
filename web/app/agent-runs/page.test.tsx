@@ -333,6 +333,9 @@ describe("AgentRunsPage timeline presets", () => {
           tool_id: "protocol.ucp.checkout",
           skill_ids: ["execute-governed-protocol-commerce"],
           executable: false,
+          adapter_id: "protocol.checkout.v1",
+          contract_intent: "readiness_boundary",
+          blocked_reason: "readiness_boundary_only_no_transaction_execution",
         },
       ],
       skill_selection_by_tool: {
@@ -933,6 +936,7 @@ describe("AgentRunsPage timeline presets", () => {
       screen.getByText(/cannot create checkout, payment, cart, account, or browser transaction actions/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/protocol.ucp.checkout/i)).toBeInTheDocument();
+    expect(screen.getByText(/readiness_boundary · protocol.checkout.v1/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^non-executable$/i).length).toBeGreaterThan(0);
     updateAgentRuntimeRegistryOwnershipMock
       .mockResolvedValueOnce({

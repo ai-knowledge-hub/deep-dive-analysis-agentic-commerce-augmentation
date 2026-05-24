@@ -1243,6 +1243,10 @@ export function RegistryPanel({
                 <div className="table__row" key={mapping.tool_id}>
                   <div className="table__cell" data-label="Tool contract">
                     <div className="table__strong">{mapping.tool_id}</div>
+                    <div className="table__muted">
+                      {mapping.contract_intent ?? "non-executable"}
+                      {mapping.adapter_id ? ` · ${mapping.adapter_id}` : ""}
+                    </div>
                   </div>
                   <div className="table__cell table__muted" data-label="Skills">
                     {mapping.skill_ids.join(", ") || "unmapped"}
