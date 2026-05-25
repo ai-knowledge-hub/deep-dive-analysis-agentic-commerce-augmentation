@@ -411,8 +411,10 @@ Behavior:
   live/local evidence counts where available, issue counts, and receipt id
   without parsing raw receipt anchors.
   - `protocol_discovery` summaries include `candidate_count`, `source_counts`,
-    `live_source_count`, and `local_source_count`.
-  - `protocol_readiness` summaries include `protocol_count` and `issue_count`.
+    `live_source_count`, `local_source_count`, `top_blockers`, and
+    `top_warnings`.
+  - `protocol_readiness` summaries include `protocol_count`, `issue_count`,
+    and `top_issues`.
 
 Use this endpoint for machine-friendly progress narration and polling.
 

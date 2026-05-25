@@ -536,4 +536,14 @@ def test_protocol_discovery_result_exposes_readiness_summary():
         "source_counts": {"acp_product_feed": 1, "ucp_local_metadata": 1},
         "live_source_count": 1,
         "local_source_count": 1,
+        "top_blockers": [],
+        "top_warnings": [
+            {
+                "candidate_id": "sku-warning",
+                "protocol": "ucp",
+                "field": "metadata.updated_at",
+                "message": "missing feed freshness timestamp",
+                "fix": None,
+            }
+        ],
     }

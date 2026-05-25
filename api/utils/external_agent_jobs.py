@@ -312,6 +312,8 @@ def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
         "source_counts": source_counts,
         "live_source_count": readiness.get("live_source_count"),
         "local_source_count": readiness.get("local_source_count"),
+        "top_blockers": readiness.get("top_blockers") or [],
+        "top_warnings": readiness.get("top_warnings") or [],
         "receipt_id": anchors.get("receipt_id") or receipt.get("receipt_id"),
     }
 
@@ -334,6 +336,7 @@ def _protocol_readiness_domain_summary(
         "readiness_score": score,
         "protocol_count": len(checked),
         "issue_count": issue_count,
+        "top_issues": evidence.get("top_issues") or [],
         "receipt_id": receipt_id or receipt.get("receipt_id"),
     }
 
