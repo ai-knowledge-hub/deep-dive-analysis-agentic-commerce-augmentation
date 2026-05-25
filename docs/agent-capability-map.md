@@ -14,7 +14,7 @@ This document maps the platform narrative verbs to the agents, skills, tools, an
 | Simulations drift | Experiment/runtime agent loop | `retrieval.freeze_protocol`, `experiment.run_control_baseline`, `experiment.run_variant` | Implemented mitigation: frozen retrieval snapshots |
 | Validation jobs fail | `Request Validation And Ingest Result` skill plus `Triage Failed Run` skill | `validation.request_synthetic`, `validation.review_readiness`, `run.read`, `event.read`, `policy.inspect`, `run.retry_safe` | Validation implemented; recovery flow partly implemented |
 | Policy risks appear | Runtime policy plus operator preflight system | `policy.recommend_next_action`, command preflight, approval/reject commands, Interventions UI | Implemented core guardrails |
-| External agents may call the platform | External-agent principal plus job/run API | `POST /external-agent/jobs`, `GET /external-agent/jobs/{job_id}`, `GET /external-agent/jobs/{job_id}/receipt`, `GET /external-agent/jobs/{job_id}/receipts`, `GET /external-agent/jobs/{job_id}/activity`, `GET /external-agent/jobs/{job_id}/events`, `GET /agent-runs/registry`, scoped principal resolution, registry-pinned skills/tools | First idempotent job facade, signed receipt history, scoped event feed, and normalized activity projection implemented |
+| External agents may call the platform | External-agent principal plus job/run API | `POST /external-agent/jobs`, `GET /external-agent/jobs/{job_id}`, `GET /external-agent/jobs/{job_id}/receipt`, `GET /external-agent/jobs/{job_id}/receipts`, `GET /external-agent/jobs/{job_id}/activity`, `GET /external-agent/jobs/{job_id}/events`, `GET /agent-runs/registry`, scoped principal resolution, registry-pinned skills/tools | Idempotent job facade, signed receipt history, scoped event feed, normalized activity projection, and protocol discovery/readiness domain summaries implemented |
 
 ## Application Agents
 
@@ -58,9 +58,9 @@ Some skills and tool families are already represented in the platform language b
 
 | Area | Current meaning | Next build need |
 | --- | --- | --- |
-| `run-safe-browser-fallback-check` | Declared skill for governed browser fallback verification. | Build narrow browser adapters, permission scopes, receipts, and policy review gates. |
-| ACP/UCP execution tools | Protocol discovery/readiness exists; `check_protocol_readiness` and `discover_protocol_candidates` now run through registry-declared read-only protocol adapters with structured receipts. | Replace mock-first discovery with concrete ACP/UCP retrieval, then add governed side-effecting execution adapters. |
-| External-agent job contracts | Idempotent job create/status facade exists, links jobs to agent runs, signs latest-status receipts, stores receipt history, exposes scoped linked-run events, and projects normalized activity. | Add richer scoped credentials, domain-specific activity summaries, and retry-safe contracts for more endpoints. |
+| `run-safe-browser-fallback-check` | Declared non-executable readiness boundary for governed browser fallback verification. | Keep market-research-only until narrow browser adapters, permission scopes, receipts, and policy review gates are approved. |
+| ACP/UCP execution tools | Protocol discovery/readiness exists; `check_protocol_readiness` and `discover_protocol_candidates` run through registry-declared read-only protocol adapters with structured receipts and activity summaries. Checkout, delegated-payment, and browser fallback remain non-executable readiness boundaries. | Expand read-only retrieval surfaces where merchant endpoints are available; require separate policy review before any side-effecting execution adapter. |
+| External-agent job contracts | Idempotent job create/status facade exists, links jobs to agent runs, signs latest-status receipts, stores receipt history, exposes scoped linked-run events, projects normalized activity, and summarizes protocol discovery/readiness evidence. | Add richer scoped credentials, additional domain summaries beyond protocol intelligence, and retry-safe contracts for more endpoints. |
 | Harness profiles | `harness_id` is stored on runs. | Make harnesses behavior-defining for planner mode, retries, fallback order, approval strategy, memory policy, and stopping conditions. |
 
 ## How To Use This Map
