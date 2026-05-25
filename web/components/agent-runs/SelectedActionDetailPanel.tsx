@@ -77,6 +77,17 @@ type OwnershipForm = {
   steward_team: string;
 };
 
+type DiscoveryReadinessSummary = {
+  status: string;
+  score: number | null;
+  candidateCount: number | null;
+  readyCandidates: number | null;
+  warningCandidates: number | null;
+  blockedCandidates: number | null;
+  liveSourceCount: number | null;
+  localSourceCount: number | null;
+};
+
 type Props = {
   selectedAction: AgentAction | null;
   selectedCapabilitySpec: AgentRuntimeCapabilitySpec | null;
@@ -113,6 +124,36 @@ function discoverySourceCountsForAction(action: AgentAction): Array<[string, num
     .sort(([left], [right]) => left.localeCompare(right));
 }
 
+function discoveryReadinessForAction(
+  action: AgentAction,
+): DiscoveryReadinessSummary | null {
+  const outputs = (action.outputs ?? {}) as Record<string, unknown>;
+  const summary = outputs.summary;
+  const readiness =
+    summary && typeof summary === "object"
+      ? (summary as Record<string, unknown>).readiness_summary
+      : null;
+  if (!readiness || typeof readiness !== "object") return null;
+  const data = readiness as Record<string, unknown>;
+  const status = typeof data.status === "string" ? data.status : "";
+  if (!status) return null;
+  return {
+    status,
+    score: numberOrNull(data.score),
+    candidateCount: numberOrNull(data.candidate_count),
+    readyCandidates: numberOrNull(data.ready_candidates),
+    warningCandidates: numberOrNull(data.warning_candidates),
+    blockedCandidates: numberOrNull(data.blocked_candidates),
+    liveSourceCount: numberOrNull(data.live_source_count),
+    localSourceCount: numberOrNull(data.local_source_count),
+  };
+}
+
+function numberOrNull(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function discoverySourceLabel(source: string): string {
   const labels: Record<string, string> = {
     acp_local_metadata: "ACP local metadata",
@@ -121,6 +162,16 @@ function discoverySourceLabel(source: string): string {
     ucp_local_metadata: "UCP local metadata",
   };
   return labels[source] ?? source.replaceAll("_", " ");
+}
+
+function readinessStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    blocked: "Blocked",
+    needs_review: "Needs review",
+    no_candidates: "No candidates",
+    ready: "Ready",
+  };
+  return labels[status] ?? status.replaceAll("_", " ");
 }
 
 export function SelectedActionDetailPanel({
@@ -150,6 +201,7 @@ export function SelectedActionDetailPanel({
         ];
   const metricId = metricIdForAction(selectedAction);
   const discoverySourceCounts = discoverySourceCountsForAction(selectedAction);
+  const discoveryReadiness = discoveryReadinessForAction(selectedAction);
 
   return (
     <section className="agent-action-detail control-section">
@@ -210,6 +262,40 @@ export function SelectedActionDetailPanel({
                 {discoverySourceLabel(source)}: {count}
               </span>
             ))}
+          </div>
+        </>
+      ) : null}
+
+      {discoveryReadiness ? (
+        <>
+          <p className="panel__subheading">Protocol readiness</p>
+          <div className="control-chip-row">
+            <span className="control-chip">
+              Status: {readinessStatusLabel(discoveryReadiness.status)}
+            </span>
+            {discoveryReadiness.score !== null ? (
+              <span className="control-chip">
+                Score: {discoveryReadiness.score}/100
+              </span>
+            ) : null}
+            {discoveryReadiness.candidateCount !== null ? (
+              <span className="control-chip">
+                Candidates: {discoveryReadiness.candidateCount}
+              </span>
+            ) : null}
+            <span className="control-chip">
+              Ready: {discoveryReadiness.readyCandidates ?? 0}
+            </span>
+            <span className="control-chip">
+              Review: {discoveryReadiness.warningCandidates ?? 0}
+            </span>
+            <span className="control-chip">
+              Blocked: {discoveryReadiness.blockedCandidates ?? 0}
+            </span>
+            <span className="control-chip">
+              Evidence: {discoveryReadiness.liveSourceCount ?? 0} live /{" "}
+              {discoveryReadiness.localSourceCount ?? 0} local
+            </span>
           </div>
         </>
       ) : null}

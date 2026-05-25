@@ -1210,6 +1210,16 @@ describe("AgentRunsPage timeline presets", () => {
                 acp_product_feed: 2,
                 ucp_local_metadata: 1,
               },
+              readiness_summary: {
+                status: "needs_review",
+                score: 67,
+                candidate_count: 3,
+                ready_candidates: 1,
+                warning_candidates: 1,
+                blocked_candidates: 1,
+                live_source_count: 2,
+                local_source_count: 1,
+              },
             },
           },
           tool_id: "protocol.discover_candidates",
@@ -1228,6 +1238,14 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Discovery provenance/i)).toBeInTheDocument();
     expect(screen.getByText(/ACP product feed: 2/i)).toBeInTheDocument();
     expect(screen.getByText(/UCP local metadata: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocol readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score: 67\/100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Candidates: 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ready: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Blocked: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence: 2 live \/ 1 local/i)).toBeInTheDocument();
   });
 
   it("surfaces external-agent job context and verifies the latest receipt", async () => {
