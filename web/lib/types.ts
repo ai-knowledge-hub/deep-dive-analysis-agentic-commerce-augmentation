@@ -1055,6 +1055,14 @@ export type ExternalAgentJobReceiptVerification = {
   blockers: string[];
 };
 
+export type ExternalAgentProtocolDomainSummary = {
+  domain: "protocol_discovery" | string; readiness_status?: string | null;
+  readiness_score?: number | null; candidate_count?: number | null; receipt_id?: string | null;
+  source_counts?: Record<string, number>; live_source_count?: number | null; local_source_count?: number | null;
+};
+
+export type ExternalAgentActivityItem = { type: "job" | "receipt" | "run_event" | string; subtype?: string | null; capability_name?: string | null; domain_summary?: ExternalAgentProtocolDomainSummary; [key: string]: unknown; };
+
 export type ExternalAgentJobOperatorDetail = {
   job: {
     id: string;
@@ -1079,6 +1087,7 @@ export type ExternalAgentJobOperatorDetail = {
   receipts: Record<string, unknown>[];
   latest_receipt?: Record<string, unknown> | null;
   verification?: ExternalAgentJobReceiptVerification | null;
+  activity_items?: ExternalAgentActivityItem[];
 };
 
 export type AgentRunControlResponse = {

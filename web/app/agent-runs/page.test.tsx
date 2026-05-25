@@ -1295,6 +1295,22 @@ describe("AgentRunsPage timeline presets", () => {
         valid_scope: false,
         blockers: ["Receipt signature is invalid."],
       },
+      activity_items: [
+        {
+          type: "run_event",
+          subtype: "action_executed",
+          capability_name: "discover_protocol_candidates",
+          domain_summary: {
+            domain: "protocol_discovery",
+            readiness_status: "blocked",
+            readiness_score: 0,
+            candidate_count: 1,
+            live_source_count: 0,
+            local_source_count: 1,
+            receipt_id: "receipt-protocol-discovery",
+          },
+        },
+      ],
     });
 
     render(<AgentRunsPage />);
@@ -1302,6 +1318,10 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
     expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
     expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: Blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence: 0 live \/ 1 local/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",

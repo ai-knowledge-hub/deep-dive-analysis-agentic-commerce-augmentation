@@ -35,6 +35,10 @@ def client(tmp_path, monkeypatch):
     init_db()
     deps = default_deps()
     deps.clients.create_client(client_id=CLIENT_ID, name="Client A")
+    deps.users.ensure_user("operator-a")
+    deps.clients.add_client_user(
+        client_id=CLIENT_ID, user_id="operator-a", role="operator"
+    )
     return TestClient(app)
 
 
@@ -195,3 +199,16 @@ def test_external_agent_activity_summarizes_protocol_discovery(
         "local_source_count": 1,
         "receipt_id": protocol_event["domain_summary"]["receipt_id"],
     }
+
+    operator_detail = client.get(
+        f"/external-agent/jobs/operator/by-run/{payload['run']['id']}",
+        params={"client_id": CLIENT_ID, "user_id": "operator-a"},
+    )
+    assert operator_detail.status_code == 200
+    operator_event = next(
+        item
+        for item in operator_detail.json()["activity_items"]
+        if item.get("subtype") == "action_executed"
+        and item.get("capability_name") == "discover_protocol_candidates"
+    )
+    assert operator_event["domain_summary"] == protocol_event["domain_summary"]
