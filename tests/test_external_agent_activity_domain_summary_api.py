@@ -20,6 +20,7 @@ if "google" not in sys.modules:
 from api.composition import default_deps
 from api.main import app
 from api.utils.principals import build_agent_principal_token
+from application.services.agent_runtime.runtime.service import AgentRuntimeService
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
 
@@ -123,52 +124,53 @@ def test_external_agent_protocol_discovery_requires_query(client: TestClient):
 def test_external_agent_activity_summarizes_protocol_discovery(
     client: TestClient,
 ):
-    token = _token()
+    deps = default_deps()
+    deps.clients.create_brand(brand_id="brand-a", client_id=CLIENT_ID, name="Brand A")
+    deps.clients.create_product(
+        product_id="product-a",
+        brand_id="brand-a",
+        name="Blue Runner",
+        description="Daily blue running shoe.",
+        metadata={
+            "ucp": {
+                "offer_url": "https://example.test/p/blue-runner",
+                "price": 129.0,
+                "availability": "in_stock",
+            }
+        },
+    )
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:protocol.discover_candidates",
+            "skill:discover-protocol-candidates",
+        ]
+    )
     created = client.post(
         "/external-agent/jobs",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "idempotency_key": "job-activity-protocol-discovery",
-            "tool_id": "experiment.run_variant",
-            "objective": {"query": "blue running shoe"},
+            "tool_id": "protocol.discover_candidates",
+            "objective": {"query": "blue running shoe", "protocol": "ucp"},
         },
     )
     assert created.status_code == 200
     payload = created.json()
-
-    default_deps().agent_events.create_agent_event(
-        agent_run_id=payload["run"]["id"],
-        action_id=None,
-        sequence=2,
-        event_type="action_executed",
-        status="completed",
-        capability_name="discover_protocol_candidates",
-        capability_version="v1",
-        tool_id="protocol.discover_candidates",
-        skill_id="discover-protocol-candidates",
-        effect_class="read",
-        trace_id=payload["job"]["trace_id"],
-        anchors={
-            "receipt_id": "receipt-protocol-discovery",
-            "receipt": {
-                "receipt_id": "receipt-protocol-discovery",
-                "evidence": {
-                    "candidate_count": 3,
-                    "source_counts": {
-                        "acp_product_feed": 2,
-                        "ucp_local_metadata": 1,
-                    },
-                    "readiness_summary": {
-                        "status": "needs_review",
-                        "score": 67,
-                        "candidate_count": 3,
-                        "live_source_count": 2,
-                        "local_source_count": 1,
-                    },
-                },
-            },
-        },
+    action = deps.agent_actions.list_agent_actions(
+        agent_run_id=payload["run"]["id"], limit=10
+    )[0]
+    deps.agent_actions.transition_agent_action_status(
+        action_id=action["id"],
+        from_status="proposed",
+        to_status="approved",
     )
+    result = AgentRuntimeService(deps=deps).step_once(
+        run_id=payload["run"]["id"], user_id="agent-ext-1"
+    )
+    assert result.action is not None
+    assert result.action["status"] == "executed"
 
     activity = client.get(
         f"/external-agent/jobs/{payload['job']['id']}/activity",
@@ -179,18 +181,17 @@ def test_external_agent_activity_summarizes_protocol_discovery(
     protocol_event = next(
         item
         for item in activity.json()["items"]
-        if item.get("capability_name") == "discover_protocol_candidates"
+        if item.get("subtype") == "action_executed"
+        and item.get("capability_name") == "discover_protocol_candidates"
     )
+    assert protocol_event["domain_summary"]["receipt_id"]
     assert protocol_event["domain_summary"] == {
         "domain": "protocol_discovery",
-        "readiness_status": "needs_review",
-        "readiness_score": 67,
-        "candidate_count": 3,
-        "source_counts": {
-            "acp_product_feed": 2,
-            "ucp_local_metadata": 1,
-        },
-        "live_source_count": 2,
+        "readiness_status": "blocked",
+        "readiness_score": 0,
+        "candidate_count": 1,
+        "source_counts": {"ucp_local_metadata": 1},
+        "live_source_count": 0,
         "local_source_count": 1,
-        "receipt_id": "receipt-protocol-discovery",
+        "receipt_id": protocol_event["domain_summary"]["receipt_id"],
     }
