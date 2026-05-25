@@ -126,12 +126,12 @@ Next steps:
 
 ### 4. Harness Profiles
 
-Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded.
+Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded. Harnesses also declare `allowed_effect_classes`; run creation rejects requested capabilities whose planned effect class is outside the harness boundary. This makes `observe_only` genuinely read/recommend-only while policy profiles still govern auto-execution and approval behavior. Operators can update harness profiles through the guarded registry admin flow with dry-run preflight, confirmation, registry fingerprinting, and audit events.
 
 Next steps:
 
-- Add a guarded admin edit flow for harness profiles once tenant-specific overrides are ready for operators.
 - Persist agent-profile-to-harness default mappings after the profile model grows beyond the built-in defaults.
+- Continue making planner mode, memory policy, and stopping conditions affect runtime behavior beyond registry visibility.
 
 ### 5. Protocol And Fallback Execution
 

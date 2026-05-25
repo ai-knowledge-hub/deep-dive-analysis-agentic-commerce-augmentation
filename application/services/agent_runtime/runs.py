@@ -17,6 +17,11 @@ from application.services.agent_runtime.commands.recovery import (
     _compensating_actions_for_capability,
     _hash_payload,
 )
+from application.services.agent_runtime.harness_posture import (
+    HarnessPostureError,
+    validate_harness_capability_effects,
+    validate_harness_runtime_posture,
+)
 from application.services.agent_runtime.registry import (
     default_harness_id_for_agent_profile,
     get_capability_spec,
@@ -89,11 +94,18 @@ def create_agent_run_with_initial_plan(
         raise AgentRunPlanError(
             f"Unsupported policy_profile_id: {resolved_policy_profile_id}"
         )
-    _validate_harness_runtime_posture(
-        harness_profile=harness_profile,
-        run_mode=normalized_run_mode,
-        policy_profile_id=resolved_policy_profile_id,
-    )
+    try:
+        validate_harness_runtime_posture(
+            harness_profile=harness_profile,
+            run_mode=normalized_run_mode,
+            policy_profile_id=resolved_policy_profile_id,
+        )
+        validate_harness_capability_effects(
+            harness_profile=harness_profile,
+            allowed_capabilities=allowed_capabilities or [],
+        )
+    except HarnessPostureError as exc:
+        raise AgentRunPlanError(str(exc)) from exc
     trace_id = new_trace_id()
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,
@@ -162,26 +174,6 @@ def _harness_profile_from_registry_payload(
         if str(profile.get("id") or "").strip() == normalized:
             return dict(profile)
     return get_harness_profile(normalized) if harness_profile_supported(normalized) else None
-
-
-def _validate_harness_runtime_posture(
-    *, harness_profile: Dict[str, Any], run_mode: str, policy_profile_id: str
-) -> None:
-    harness_id = str(harness_profile.get("id") or "").strip()
-    allowed_run_modes = {
-        str(item).strip()
-        for item in list(harness_profile.get("allowed_run_modes") or [])
-        if str(item).strip()
-    }
-    if allowed_run_modes and run_mode not in allowed_run_modes:
-        raise AgentRunPlanError(f"Harness '{harness_id}' does not allow run_mode: {run_mode}")
-    allowed_policy_profiles = {
-        str(item).strip()
-        for item in list(harness_profile.get("allowed_policy_profile_ids") or [])
-        if str(item).strip()
-    }
-    if allowed_policy_profiles and policy_profile_id not in allowed_policy_profiles:
-        raise AgentRunPlanError(f"Harness '{harness_id}' does not allow policy_profile_id: {policy_profile_id}")
 
 
 def _seed_initial_plan(

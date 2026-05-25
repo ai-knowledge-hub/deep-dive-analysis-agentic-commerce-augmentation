@@ -279,6 +279,7 @@ def ensure_agent_registry_harness_profiles(
                 default_policy_profile_id,
                 allowed_run_modes_json,
                 allowed_policy_profile_ids_json,
+                allowed_effect_classes_json,
                 planner_mode,
                 retry_strategy,
                 fallback_order_json,
@@ -288,7 +289,7 @@ def ensure_agent_registry_harness_profiles(
                 source,
                 status
             )
-            VALUES (?, ?, ?, ?, ?, json(?), json(?), ?, ?, json(?), ?, ?, json(?), ?, ?)
+            VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), ?, ?, json(?), ?, ?, json(?), ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = agent_registry_harness_profiles.name,
                 description = agent_registry_harness_profiles.description,
@@ -296,6 +297,7 @@ def ensure_agent_registry_harness_profiles(
                 default_policy_profile_id = agent_registry_harness_profiles.default_policy_profile_id,
                 allowed_run_modes_json = agent_registry_harness_profiles.allowed_run_modes_json,
                 allowed_policy_profile_ids_json = agent_registry_harness_profiles.allowed_policy_profile_ids_json,
+                allowed_effect_classes_json = agent_registry_harness_profiles.allowed_effect_classes_json,
                 planner_mode = agent_registry_harness_profiles.planner_mode,
                 retry_strategy = agent_registry_harness_profiles.retry_strategy,
                 fallback_order_json = agent_registry_harness_profiles.fallback_order_json,
@@ -314,6 +316,7 @@ def ensure_agent_registry_harness_profiles(
                 default_policy_profile_id,
                 to_json(profile.get("allowed_run_modes") or []) or "[]",
                 to_json(profile.get("allowed_policy_profile_ids") or []) or "[]",
+                to_json(profile.get("allowed_effect_classes") or []) or "[]",
                 profile.get("planner_mode"),
                 profile.get("retry_strategy"),
                 to_json(profile.get("fallback_order") or []) or "[]",
@@ -370,6 +373,7 @@ def update_agent_registry_harness_profile(
             default_policy_profile_id,
             allowed_run_modes_json,
             allowed_policy_profile_ids_json,
+            allowed_effect_classes_json,
             planner_mode,
             retry_strategy,
             fallback_order_json,
@@ -379,7 +383,7 @@ def update_agent_registry_harness_profile(
             source,
             status
         )
-        VALUES (?, ?, ?, ?, ?, json(?), json(?), ?, ?, json(?), ?, ?, json(?), ?, ?)
+        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), ?, ?, json(?), ?, ?, json(?), ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             description = excluded.description,
@@ -387,6 +391,7 @@ def update_agent_registry_harness_profile(
             default_policy_profile_id = excluded.default_policy_profile_id,
             allowed_run_modes_json = excluded.allowed_run_modes_json,
             allowed_policy_profile_ids_json = excluded.allowed_policy_profile_ids_json,
+            allowed_effect_classes_json = excluded.allowed_effect_classes_json,
             planner_mode = excluded.planner_mode,
             retry_strategy = excluded.retry_strategy,
             fallback_order_json = excluded.fallback_order_json,
@@ -405,6 +410,7 @@ def update_agent_registry_harness_profile(
             str(profile.get("default_policy_profile_id") or "human_approval_required"),
             to_json(profile.get("allowed_run_modes") or []) or "[]",
             to_json(profile.get("allowed_policy_profile_ids") or []) or "[]",
+            to_json(profile.get("allowed_effect_classes") or []) or "[]",
             profile.get("planner_mode"),
             profile.get("retry_strategy"),
             to_json(profile.get("fallback_order") or []) or "[]",
@@ -664,6 +670,7 @@ def _harness_profile_row(row) -> Dict[str, Any]:
         "allowed_policy_profile_ids": from_json(
             row["allowed_policy_profile_ids_json"], []
         ),
+        "allowed_effect_classes": from_json(row["allowed_effect_classes_json"], []),
         "planner_mode": row["planner_mode"],
         "retry_strategy": row["retry_strategy"],
         "fallback_order": from_json(row["fallback_order_json"], []),

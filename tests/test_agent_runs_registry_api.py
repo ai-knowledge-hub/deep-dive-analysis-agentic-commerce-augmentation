@@ -119,6 +119,10 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     )
     assert safe_harness["default_run_mode"] == "auto_execute_safe"
     assert safe_harness["retry_strategy"] == "last_safe_checkpoint"
+    observe_harness = next(
+        profile for profile in payload["harness_profiles"] if profile["id"] == "observe_only"
+    )
+    assert observe_harness["allowed_effect_classes"] == ["read", "recommend"]
     run_variant = next(
         capability
         for capability in payload["capabilities"]
@@ -295,6 +299,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
             "user_id": USER_ID,
             "description": "Operator-governed safe autonomy.",
             "retry_strategy": "operator_confirmed",
+            "allowed_effect_classes": ["read", "recommend"],
             "fallback_order": ["operator_chat"],
         },
     )
@@ -305,6 +310,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
     assert preflight_payload["preflight"]["allowed"] is True
     assert preflight_payload["preflight"]["changed_fields"] == [
         "description",
+        "allowed_effect_classes",
         "retry_strategy",
         "fallback_order",
     ]
@@ -364,6 +370,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
             "user_id": USER_ID,
             "description": "Operator-governed safe autonomy.",
             "retry_strategy": "operator_confirmed",
+            "allowed_effect_classes": ["read", "recommend"],
             "fallback_order": ["operator_chat"],
             "dry_run": False,
             "preflight_confirmed": True,
@@ -375,9 +382,11 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
     assert payload["registry_fingerprint"] != first["registry_fingerprint"]
     assert payload["harness_profile"]["source"] == "operator_override"
     assert payload["harness_profile"]["retry_strategy"] == "operator_confirmed"
+    assert payload["harness_profile"]["allowed_effect_classes"] == ["read", "recommend"]
     assert payload["audit_event"]["event_type"] == "registry_harness_profile_updated"
     assert payload["audit_event"]["diff"]["changed_fields"] == [
         "description",
+        "allowed_effect_classes",
         "retry_strategy",
         "fallback_order",
     ]

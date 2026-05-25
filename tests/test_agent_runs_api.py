@@ -451,6 +451,39 @@ def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
     )
 
 
+def test_create_agent_run_enforces_harness_effect_class_boundaries(client: TestClient):
+    blocked = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+    assert blocked.status_code == 400
+    assert (
+        "Harness 'observe_only' does not allow capability effect class: run_variant (write_low_risk)"
+        in blocked.json()["detail"]
+    )
+
+    allowed = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["recommend_next_action"],
+        },
+    )
+    assert allowed.status_code == 200
+    run = allowed.json()["run"]
+    assert run["harness_id"] == "observe_only"
+    assert run["policy_profile_id"] == "observe"
+
+
 def test_seed_skill_specs_are_available():
     skills = {skill.id for skill in list_skill_specs()}
     assert "discover-protocol-candidates" in skills

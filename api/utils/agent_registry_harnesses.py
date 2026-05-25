@@ -14,6 +14,7 @@ _EDITABLE_FIELDS = (
     "default_policy_profile_id",
     "allowed_run_modes",
     "allowed_policy_profile_ids",
+    "allowed_effect_classes",
     "planner_mode",
     "retry_strategy",
     "fallback_order",
@@ -24,8 +25,16 @@ _EDITABLE_FIELDS = (
 _LIST_FIELDS = {
     "allowed_run_modes",
     "allowed_policy_profile_ids",
+    "allowed_effect_classes",
     "fallback_order",
     "stopping_conditions",
+}
+_SUPPORTED_EFFECT_CLASSES = {
+    "read",
+    "recommend",
+    "write_low_risk",
+    "external_side_effect",
+    "write_high_risk",
 }
 
 
@@ -50,6 +59,9 @@ def registry_harness_profile_preflight(
     allowed_policies = [
         str(item).strip() for item in proposed.get("allowed_policy_profile_ids") or []
     ]
+    allowed_effect_classes = [
+        str(item).strip() for item in proposed.get("allowed_effect_classes") or []
+    ]
     if not changed_fields:
         blockers.append("No harness profile fields will change.")
     if not run_mode_supported(default_run_mode):
@@ -62,6 +74,15 @@ def registry_harness_profile_preflight(
         blockers.append("allowed_run_modes must include default_run_mode.")
     if default_policy and default_policy not in allowed_policies:
         blockers.append("allowed_policy_profile_ids must include default_policy_profile_id.")
+    unknown_effect_classes = [
+        item for item in allowed_effect_classes if item not in _SUPPORTED_EFFECT_CLASSES
+    ]
+    if unknown_effect_classes:
+        blockers.append(
+            "Unsupported allowed_effect_classes: " + ", ".join(unknown_effect_classes)
+        )
+    if not allowed_effect_classes:
+        warnings.append("Harness has no allowed effect classes; planning may be unconstrained.")
     if proposed.get("id") != harness_id:
         blockers.append("Harness profile id cannot be changed.")
     if proposed.get("status") and proposed.get("status") != "active":
