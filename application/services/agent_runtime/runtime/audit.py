@@ -18,6 +18,7 @@ def record_run_event(
     event_type: str,
     status: str,
     note: Optional[str],
+    anchors: Optional[Dict[str, Any]] = None,
 ) -> None:
     run = deps.agent_runs.get_agent_run(run_id=run_id) or {}
     deps.agent_events.create_agent_event(
@@ -33,7 +34,7 @@ def record_run_event(
         trace_id=run.get("trace_id"),
         note=note,
         is_policy_event=False,
-        anchors={},
+        anchors=anchors or {},
     )
 
 

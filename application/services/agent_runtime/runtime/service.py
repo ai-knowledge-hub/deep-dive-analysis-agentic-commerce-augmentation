@@ -17,6 +17,10 @@ from application.services.agent_runtime.runtime.audit import (
     record_action_event,
     record_run_event,
 )
+from application.services.agent_runtime.runtime.status import (
+    apply_stopping_condition,
+    compute_next_run_status,
+)
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
 from application.services.agent_runtime.registry import (
     get_capability_spec,
@@ -164,9 +168,14 @@ class AgentRuntimeService:
                 lock_token=lock_token,
                 ttl_seconds=self._lock_ttl_seconds,
             )
+            stop = apply_stopping_condition(deps=self._deps, run=run)
+            if stop:
+                raise NoApprovedActionError(stop.note)
             action = self._claim_next_approved_action(run_id=run_id)
             if not action:
-                status = self._compute_next_run_status(run_id=run_id)
+                status = compute_next_run_status(
+                    deps=self._deps, run=run, run_id=run_id
+                )
                 self._deps.agent_runs.update_agent_run(
                     run_id=run_id,
                     status=status,
@@ -301,7 +310,10 @@ class AgentRuntimeService:
             next_state = next_state_for_capability(capability_name)
             if next_state:
                 self._deps.agent_runs.update_agent_run(run_id=run_id, state=next_state)
-            status = self._compute_next_run_status(run_id=run_id)
+            refreshed_run = self._require_run(run_id)
+            status = compute_next_run_status(
+                deps=self._deps, run=refreshed_run, run_id=run_id
+            )
             updated_run = self._deps.agent_runs.update_agent_run(
                 run_id=run_id,
                 status=status,
@@ -320,7 +332,7 @@ class AgentRuntimeService:
 
     def reconcile_run_status(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
-        status = self._compute_next_run_status(run_id=run_id)
+        status = compute_next_run_status(deps=self._deps, run=run, run_id=run_id)
         updated = self._deps.agent_runs.update_agent_run(
             run_id=run_id,
             status=status,
@@ -356,21 +368,6 @@ class AgentRuntimeService:
             if claimed:
                 return claimed
         return None
-
-    def _compute_next_run_status(self, *, run_id: str) -> str:
-        actions = self._deps.agent_actions.list_agent_actions(
-            agent_run_id=run_id, limit=500
-        )
-        statuses = {str(item.get("status") or "").lower() for item in actions}
-        if "failed" in statuses:
-            return "failed"
-        if "approved" in statuses or "executing" in statuses:
-            return "running"
-        if "proposed" in statuses:
-            return "planned"
-        if statuses and statuses.issubset({"executed", "rejected"}):
-            return "completed"
-        return "planned"
 
 
 def _execute_capability(**kwargs: Any) -> Dict[str, Any]:

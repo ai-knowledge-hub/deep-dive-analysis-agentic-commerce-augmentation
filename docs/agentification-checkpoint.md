@@ -126,12 +126,12 @@ Next steps:
 
 ### 4. Harness Profiles
 
-Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded. Harnesses also declare `allowed_effect_classes`; run creation rejects requested capabilities whose planned effect class is outside the harness boundary. This makes `observe_only` genuinely read/recommend-only while policy profiles still govern auto-execution and approval behavior. Planner mode now shapes initial planning: `inspect_and_recommend` keeps only read/recommend proposals, while `bounded_single_or_workflow` honors single-tool and max-initial-action objective constraints. Operators can update harness profiles through the guarded registry admin flow with dry-run preflight, confirmation, registry fingerprinting, and audit events.
+Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded. Harnesses also declare `allowed_effect_classes`; run creation rejects requested capabilities whose planned effect class is outside the harness boundary. This makes `observe_only` genuinely read/recommend-only while policy profiles still govern auto-execution and approval behavior. Planner mode now shapes initial planning: `inspect_and_recommend` keeps only read/recommend proposals, while `bounded_single_or_workflow` honors single-tool and max-initial-action objective constraints. Runtime stopping conditions now affect run status for the implemented conditions: `external_side_effect_required` pauses before pending external/high-risk actions, `recommendation_produced` completes observe/recommendation runs, and `all_actions_completed` completes runs once all actions are executed or rejected. Operators can update harness profiles through the guarded registry admin flow with dry-run preflight, confirmation, registry fingerprinting, and audit events.
 
 Next steps:
 
 - Persist agent-profile-to-harness default mappings after the profile model grows beyond the built-in defaults.
-- Continue making memory policy and stopping conditions affect runtime behavior beyond registry visibility.
+- Continue making memory policy and the remaining stopping conditions affect runtime behavior beyond registry visibility.
 
 ### 5. Protocol And Fallback Execution
 

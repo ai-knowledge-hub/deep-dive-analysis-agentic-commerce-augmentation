@@ -35,6 +35,7 @@ def _create_base_run(
     run_mode: str = "auto_execute_safe",
     allowed_capabilities: list[str] | None = None,
     status: str = "planned",
+    harness_id: str | None = None,
     policy_profile_id: str | None = None,
 ) -> dict:
     deps.clients.create_client(client_id="client-a", name="Client A")
@@ -52,6 +53,7 @@ def _create_base_run(
         run_mode=run_mode,
         state="battery_ready",
         status=status,
+        harness_id=harness_id,
         policy_profile_id=policy_profile_id,
     )
 
@@ -197,6 +199,83 @@ def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch)
     failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
     assert failed_action is not None
     assert failed_action["status"] == "failed"
+
+
+def test_step_once_pauses_when_harness_external_side_effect_boundary_is_met(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-external-effect.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["request_synthetic_validation"],
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="request_synthetic_validation",
+        inputs={"experiment_id": "exp-1"},
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(NoApprovedActionError, match="external side-effect"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    updated = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert updated is not None
+    assert updated["status"] == "paused"
+    unchanged = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert unchanged is not None
+    assert unchanged["status"] == "approved"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "paused"
+    assert event["anchors"]["stopping_condition"] == "external_side_effect_required"
+
+
+def test_reconcile_completes_when_recommendation_stopping_condition_is_met(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-recommendation.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="plan_only",
+        allowed_capabilities=["recommend_next_action"],
+        harness_id="observe_only",
+        policy_profile_id="observe",
+        status="running",
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="executed",
+        capability_name="recommend_next_action",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={"recommendation": {"action": "pause"}},
+        inputs_hash="in",
+        outputs_hash="out",
+        rationale="recommend pause",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.reconcile_run_status(run_id=run["id"])
+    assert result.run["status"] == "completed"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "completed"
+    assert event["anchors"]["stopping_condition"] == "recommendation_produced"
 
 
 def test_step_once_executes_read_only_protocol_adapter_and_records_receipt(tmp_path):
