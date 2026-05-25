@@ -389,6 +389,10 @@ Behavior:
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
 - Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
+- Protocol discovery run events with receipt evidence include `domain_summary`
+  so external assistants can read readiness status, readiness score, candidate
+  count, source counts, live/local evidence counts, and receipt id without
+  parsing raw receipt anchors.
 
 Use this endpoint for machine-friendly progress narration and polling.
 

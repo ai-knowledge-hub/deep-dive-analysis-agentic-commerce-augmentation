@@ -246,29 +246,65 @@ def external_agent_activity_items(
             }
         )
     for event in events:
-        items.append(
-            {
-                "type": "run_event",
-                "subtype": event.get("event_type"),
-                "status": event.get("status"),
-                "timestamp": event.get("timestamp"),
-                "job_id": job.get("id"),
-                "run_id": event.get("run_id") or job.get("run_id"),
-                "trace_id": event.get("trace_id") or job.get("trace_id"),
-                "event_id": event.get("id"),
-                "action_id": event.get("action_id"),
-                "sequence": event.get("sequence"),
-                "tool_id": event.get("tool_id"),
-                "skill_id": event.get("skill_id"),
-                "effect_class": event.get("effect_class"),
-                "capability_name": event.get("capability_name"),
-                "capability_version": event.get("capability_version"),
-                "is_policy_event": event.get("is_policy_event"),
-                "note": event.get("note"),
-                "anchors": event.get("anchors") or {},
-            }
-        )
+        item = {
+            "type": "run_event",
+            "subtype": event.get("event_type"),
+            "status": event.get("status"),
+            "timestamp": event.get("timestamp"),
+            "job_id": job.get("id"),
+            "run_id": event.get("run_id") or job.get("run_id"),
+            "trace_id": event.get("trace_id") or job.get("trace_id"),
+            "event_id": event.get("id"),
+            "action_id": event.get("action_id"),
+            "sequence": event.get("sequence"),
+            "tool_id": event.get("tool_id"),
+            "skill_id": event.get("skill_id"),
+            "effect_class": event.get("effect_class"),
+            "capability_name": event.get("capability_name"),
+            "capability_version": event.get("capability_version"),
+            "is_policy_event": event.get("is_policy_event"),
+            "note": event.get("note"),
+            "anchors": event.get("anchors") or {},
+        }
+        domain_summary = _run_event_domain_summary(event)
+        if domain_summary:
+            item["domain_summary"] = domain_summary
+        items.append(item)
     return sorted(items, key=lambda item: str(item.get("timestamp") or ""))
+
+
+def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
+    capability_name = str(event.get("capability_name") or "")
+    if capability_name != "discover_protocol_candidates":
+        return {}
+    anchors = event.get("anchors") if isinstance(event.get("anchors"), dict) else {}
+    receipt = anchors.get("receipt") if isinstance(anchors.get("receipt"), dict) else {}
+    evidence = receipt.get("evidence") if isinstance(receipt.get("evidence"), dict) else {}
+    if not evidence:
+        return {}
+    readiness = (
+        evidence.get("readiness_summary")
+        if isinstance(evidence.get("readiness_summary"), dict)
+        else {}
+    )
+    source_counts = (
+        evidence.get("source_counts")
+        if isinstance(evidence.get("source_counts"), dict)
+        else readiness.get("source_counts")
+        if isinstance(readiness.get("source_counts"), dict)
+        else {}
+    )
+    return {
+        "domain": "protocol_discovery",
+        "readiness_status": readiness.get("status"),
+        "readiness_score": readiness.get("score"),
+        "candidate_count": evidence.get("candidate_count")
+        or readiness.get("candidate_count"),
+        "source_counts": source_counts,
+        "live_source_count": readiness.get("live_source_count"),
+        "local_source_count": readiness.get("local_source_count"),
+        "receipt_id": anchors.get("receipt_id") or receipt.get("receipt_id"),
+    }
 
 
 def verify_external_agent_job_receipt(
