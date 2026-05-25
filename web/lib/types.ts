@@ -1059,6 +1059,7 @@ export type ExternalAgentProtocolDomainSummary = {
   domain: "protocol_discovery" | string; readiness_status?: string | null;
   readiness_score?: number | null; candidate_count?: number | null; receipt_id?: string | null;
   source_counts?: Record<string, number>; live_source_count?: number | null; local_source_count?: number | null;
+  [key: string]: unknown;
 };
 
 export type ExternalAgentActivityItem = { type: "job" | "receipt" | "run_event" | string; subtype?: string | null; capability_name?: string | null; domain_summary?: ExternalAgentProtocolDomainSummary; [key: string]: unknown; };

@@ -110,6 +110,16 @@ export function ExternalAgentJobPanel({
                     Candidates: {protocolSummary.candidate_count}
                   </span>
                 ) : null}
+                {typeof protocolSummary.protocol_count === "number" ? (
+                  <span className="control-chip">
+                    Protocols: {protocolSummary.protocol_count}
+                  </span>
+                ) : null}
+                {typeof protocolSummary.issue_count === "number" ? (
+                  <span className="control-chip">
+                    Issues: {protocolSummary.issue_count}
+                  </span>
+                ) : null}
                 {typeof protocolSummary.live_source_count === "number" ||
                 typeof protocolSummary.local_source_count === "number" ? (
                   <span className="control-chip">

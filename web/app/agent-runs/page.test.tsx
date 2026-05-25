@@ -1299,15 +1299,14 @@ describe("AgentRunsPage timeline presets", () => {
         {
           type: "run_event",
           subtype: "action_executed",
-          capability_name: "discover_protocol_candidates",
+          capability_name: "check_protocol_readiness",
           domain_summary: {
-            domain: "protocol_discovery",
-            readiness_status: "blocked",
+            domain: "protocol_readiness",
+            readiness_status: "needs_review",
             readiness_score: 0,
-            candidate_count: 1,
-            live_source_count: 0,
-            local_source_count: 1,
-            receipt_id: "receipt-protocol-discovery",
+            protocol_count: 1,
+            issue_count: 2,
+            receipt_id: "receipt-protocol-readiness",
           },
         },
       ],
@@ -1319,9 +1318,10 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
     expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
-    expect(screen.getByText(/Status: Blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
-    expect(screen.getByText(/Evidence: 0 live \/ 1 local/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocols: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Issues: 2/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",
