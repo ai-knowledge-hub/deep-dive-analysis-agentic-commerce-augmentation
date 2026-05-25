@@ -1306,6 +1306,12 @@ describe("AgentRunsPage timeline presets", () => {
             readiness_score: 0,
             protocol_count: 1,
             issue_count: 2,
+            top_issues: [
+              {
+                field: "ucp_profile",
+                message: "Missing UCP business profile for brand.",
+              },
+            ],
             receipt_id: "receipt-protocol-readiness",
           },
         },
@@ -1322,6 +1328,9 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocols: 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Issues: 2/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Why: Missing UCP business profile for brand/i),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",
