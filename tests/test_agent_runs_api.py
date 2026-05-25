@@ -523,6 +523,44 @@ def test_harness_planner_mode_filters_observe_only_plans(client: TestClient):
     assert [action["capability_name"] for action in actions] == ["recommend_next_action"]
 
 
+def test_harness_memory_policy_blocks_learning_mutation_plans(client: TestClient):
+    update_agent_registry_harness_profile(
+        profile_id="observe_only",
+        source="operator_override",
+        profile={
+            "id": "observe_only",
+            "name": "Observe Only",
+            "description": "Test memory policy with broadened effects.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "observe",
+            "allowed_run_modes": ["plan_only"],
+            "allowed_policy_profile_ids": ["observe"],
+            "allowed_effect_classes": ["read", "recommend", "write_low_risk"],
+            "planner_mode": "inspect_and_recommend",
+            "retry_strategy": "none",
+            "fallback_order": ["operator_chat"],
+            "approval_strategy": "read_only",
+            "memory_policy": "no_mutation",
+            "stopping_conditions": ["recommendation_produced"],
+        },
+    )
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["update_posterior_and_decisions"],
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "memory_policy forbids learning/memory mutation: update_posterior_and_decisions"
+        in response.json()["detail"]
+    )
+
+
 def test_bounded_harness_planner_mode_caps_initial_actions(client: TestClient):
     response = client.post(
         "/agent-runs",

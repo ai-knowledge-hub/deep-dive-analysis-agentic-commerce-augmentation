@@ -4,6 +4,8 @@ from typing import Any, Dict, List
 
 from application.services.agent_runtime.registry import get_capability_spec
 
+_LEARNING_MEMORY_MUTATION_CAPABILITIES = {"update_posterior_and_decisions"}
+
 
 class HarnessPostureError(ValueError):
     pass
@@ -29,6 +31,25 @@ def validate_harness_capability_effects(
     if blocked:
         raise HarnessPostureError(
             f"Harness '{harness_id}' does not allow capability effect class: "
+            + ", ".join(blocked)
+        )
+
+
+def validate_harness_memory_policy(
+    *, harness_profile: Dict[str, Any], allowed_capabilities: List[str]
+) -> None:
+    memory_policy = str(harness_profile.get("memory_policy") or "").strip()
+    if memory_policy != "no_mutation":
+        return
+    blocked = [
+        str(capability).strip()
+        for capability in allowed_capabilities
+        if str(capability).strip() in _LEARNING_MEMORY_MUTATION_CAPABILITIES
+    ]
+    if blocked:
+        harness_id = str(harness_profile.get("id") or "").strip()
+        raise HarnessPostureError(
+            f"Harness '{harness_id}' memory_policy forbids learning/memory mutation: "
             + ", ".join(blocked)
         )
 
@@ -60,5 +81,6 @@ def validate_harness_runtime_posture(
 __all__ = [
     "HarnessPostureError",
     "validate_harness_capability_effects",
+    "validate_harness_memory_policy",
     "validate_harness_runtime_posture",
 ]

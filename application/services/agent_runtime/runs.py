@@ -20,6 +20,7 @@ from application.services.agent_runtime.commands.recovery import (
 from application.services.agent_runtime.harness_posture import (
     HarnessPostureError,
     validate_harness_capability_effects,
+    validate_harness_memory_policy,
     validate_harness_runtime_posture,
 )
 from application.services.agent_runtime.registry import (
@@ -101,6 +102,10 @@ def create_agent_run_with_initial_plan(
             policy_profile_id=resolved_policy_profile_id,
         )
         validate_harness_capability_effects(
+            harness_profile=harness_profile,
+            allowed_capabilities=allowed_capabilities or [],
+        )
+        validate_harness_memory_policy(
             harness_profile=harness_profile,
             allowed_capabilities=allowed_capabilities or [],
         )

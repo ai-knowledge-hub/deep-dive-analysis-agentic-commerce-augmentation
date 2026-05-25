@@ -21,9 +21,14 @@ from application.services.agent_runtime.runtime.status import (
     apply_stopping_condition,
     compute_next_run_status,
 )
+from application.services.agent_runtime.harness_posture import (
+    HarnessPostureError,
+    validate_harness_memory_policy,
+)
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
 from application.services.agent_runtime.registry import (
     get_capability_spec,
+    get_harness_profile,
     next_state_for_capability,
     run_mode_supported,
     validate_outputs,
@@ -202,6 +207,13 @@ class AgentRuntimeService:
             try:
                 if not spec:
                     raise AgentRuntimeError(f"Unsupported capability: {capability_name}")
+                try:
+                    validate_harness_memory_policy(
+                        harness_profile=get_harness_profile(run.get("harness_id")) or {},
+                        allowed_capabilities=[capability_name],
+                    )
+                except HarnessPostureError as exc:
+                    raise AgentRuntimeError(str(exc)) from exc
                 inputs = spec.normalize_inputs(action.get("inputs") or {})
                 self._policy.validate_action_execution(
                     run=run,
