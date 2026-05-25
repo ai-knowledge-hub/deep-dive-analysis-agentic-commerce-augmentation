@@ -69,6 +69,13 @@ function formatChangeValue(value?: string | string[] | null) {
   return formatRegistryValue(value);
 }
 
+function formatBlockedReason(value?: string | null) {
+  if (value === "readiness_boundary_only_no_transaction_execution") {
+    return "Market research only, no transaction execution";
+  }
+  return formatRegistryValue(value);
+}
+
 function plannedExecutionAdapters(registry: AgentRuntimeRegistryResponse | null) {
   return (registry?.execution_adapters ?? []).filter(
     (adapter) => adapter.status === "planned",
@@ -1215,7 +1222,7 @@ export function RegistryPanel({
               <h4 className="control-section__title">Non-executable protocol intelligence</h4>
             </div>
             <span className="control-chip control-chip--attention">
-              visible, blocked
+              {plannedToolContracts.length} blocked
             </span>
           </div>
           <p className="panel__muted">
@@ -1255,7 +1262,10 @@ export function RegistryPanel({
                     {mapping.skill_ids.join(", ") || "unmapped"}
                   </div>
                   <div className="table__cell" data-label="Status">
-                    non-executable
+                    <div>non-executable</div>
+                    <div className="table__muted">
+                      {formatBlockedReason(mapping.blocked_reason)}
+                    </div>
                   </div>
                 </div>
               ))}

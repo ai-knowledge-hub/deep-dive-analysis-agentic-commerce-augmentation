@@ -945,8 +945,12 @@ describe("AgentRunsPage timeline presets", () => {
     expect(
       screen.getByText(/cannot create checkout, payment, cart, account, or browser transaction actions/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/1 blocked/i)).toBeInTheDocument();
     expect(screen.getByText(/protocol.ucp.checkout/i)).toBeInTheDocument();
     expect(screen.getByText(/readiness_boundary · protocol.checkout.v1/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Market research only, no transaction execution/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/^non-executable$/i).length).toBeGreaterThan(0);
     updateAgentRuntimeRegistryOwnershipMock
       .mockResolvedValueOnce({
