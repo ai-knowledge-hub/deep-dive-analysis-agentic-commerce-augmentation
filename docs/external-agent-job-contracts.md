@@ -114,6 +114,11 @@ Supported body fields:
 | `run_mode` | No | Optional run-mode override. When omitted, the runtime resolves the default from the selected harness/profile. |
 | `state` | No | Defaults to `battery_ready`. |
 
+For read-only protocol candidate discovery, callers can use
+`tool_id=protocol.discover_candidates` with `plan_mode=single_tool`. The linked
+run objective must include `query`; optional objective fields include
+`protocol` (`ucp` or `acp`), `brand_id`, `limit`, and `inferred_intent`.
+
 Default harness behavior:
 
 - `run_mode`, `policy_profile_id`, and `harness_id` are now behavior-defining, not future-only metadata.

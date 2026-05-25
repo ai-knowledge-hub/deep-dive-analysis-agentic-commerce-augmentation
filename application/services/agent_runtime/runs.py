@@ -31,7 +31,6 @@ from application.services.agent_runtime.registry import (
 class AgentRunPlanError(ValueError):
     pass
 
-
 def create_agent_run_with_initial_plan(
     *,
     deps: AppDeps,
@@ -59,7 +58,7 @@ def create_agent_run_with_initial_plan(
     agent_profile_defaults: Optional[Dict[str, Any]] = None,
     preferred_skill_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    _validate_plan_capabilities(allowed_capabilities or [])
+    _validate_plan_capabilities(allowed_capabilities or [], objective=objective or {})
     profile_defaults = dict(agent_profile_defaults or {})
     resolved_harness_id = (
         harness_id
@@ -133,7 +132,9 @@ def create_agent_run_with_initial_plan(
     return run
 
 
-def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
+def _validate_plan_capabilities(
+    allowed_capabilities: List[str], *, objective: Dict[str, Any]
+) -> None:
     requested = [
         str(capability).strip()
         for capability in allowed_capabilities
@@ -148,6 +149,7 @@ def _validate_plan_capabilities(allowed_capabilities: List[str]) -> None:
         experiment_id=None,
         allowed_capabilities=requested,
         capability_versions={},
+        objective=objective,
     ):
         raise AgentRunPlanError("allowed_capabilities did not produce any initial plan actions")
 
@@ -197,6 +199,7 @@ def _seed_initial_plan(
         experiment_id=experiment_id,
         allowed_capabilities=allowed_capabilities,
         capability_versions=capability_versions,
+        objective=run.get("objective") if isinstance(run.get("objective"), dict) else {},
     )
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)

@@ -37,19 +37,87 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def _token() -> str:
+def _token(*, scopes: list[str] | None = None) -> str:
     return build_agent_principal_token(
         principal_id="agent-ext-1",
         client_id=CLIENT_ID,
         principal_type="external_agent",
         agent_profile_id="buyer-assistant-v1",
-        scopes=[
+        scopes=scopes or [
             "external_agent_jobs:write",
             "external_agent_jobs:read",
             "tool:experiment.run_variant",
             "skill:optimize-product-representation",
         ],
     )
+
+
+def test_external_agent_job_can_seed_protocol_discovery_single_tool(
+    client: TestClient,
+):
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:protocol.discover_candidates",
+            "skill:discover-protocol-candidates",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "idempotency_key": "job-protocol-discovery-single-tool",
+            "tool_id": "protocol.discover_candidates",
+            "objective": {
+                "query": "blue running shoe",
+                "protocol": "ucp",
+                "limit": 7,
+            },
+        },
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["run"]["allowed_capabilities"] == [
+        "discover_protocol_candidates"
+    ]
+    assert payload["run"]["objective"]["plan_mode"] == "single_tool"
+
+    actions = default_deps().agent_actions.list_agent_actions(
+        agent_run_id=payload["run"]["id"], limit=10
+    )
+    assert [action["capability_name"] for action in actions] == [
+        "discover_protocol_candidates"
+    ]
+    assert actions[0]["inputs"] == {
+        "query": "blue running shoe",
+        "protocol": "ucp",
+        "limit": 7,
+    }
+    assert actions[0]["tool_id"] == "protocol.discover_candidates"
+    assert actions[0]["skill_id"] == "discover-protocol-candidates"
+
+
+def test_external_agent_protocol_discovery_requires_query(client: TestClient):
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "tool:protocol.discover_candidates",
+            "skill:discover-protocol-candidates",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "idempotency_key": "job-protocol-discovery-missing-query",
+            "tool_id": "protocol.discover_candidates",
+            "objective": {"protocol": "ucp"},
+        },
+    )
+
+    assert created.status_code == 400
+    assert created.json()["detail"]["code"] == "invalid_job_plan"
 
 
 def test_external_agent_activity_summarizes_protocol_discovery(

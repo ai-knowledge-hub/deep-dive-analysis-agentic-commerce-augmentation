@@ -21,6 +21,7 @@ def build_initial_plan(
     experiment_id: Optional[str],
     allowed_capabilities: List[str],
     capability_versions: Dict[str, Any],
+    objective: Optional[Dict[str, Any]] = None,
 ) -> List[ProposedAction]:
     """
     Minimal v0 planner.
@@ -30,6 +31,7 @@ def build_initial_plan(
     """
     allowed = {str(x).strip() for x in allowed_capabilities if str(x).strip()}
     versions = capability_versions or {}
+    objective = objective or {}
 
     def v(name: str) -> Optional[str]:
         value = versions.get(name)
@@ -40,6 +42,8 @@ def build_initial_plan(
         base_inputs = {"experiment_id": experiment_id}
     else:
         base_inputs = {}
+
+    protocol_discovery_inputs = _protocol_discovery_inputs(objective)
 
     if "freeze_retrieval_protocol" in allowed:
         actions.append(
@@ -95,6 +99,19 @@ def build_initial_plan(
                 inputs={**base_inputs, "variant_selection": "top_1"},
                 rationale="Run a single candidate to collect early signal within budget (requires baseline gate).",
                 confidence=0.55,
+            )
+        )
+    if "discover_protocol_candidates" in allowed and protocol_discovery_inputs:
+        actions.append(
+            ProposedAction(
+                capability_name="discover_protocol_candidates",
+                capability_version=v("discover_protocol_candidates"),
+                inputs=protocol_discovery_inputs,
+                rationale=(
+                    "Discover read-only ACP/UCP candidates and summarize "
+                    "merchant protocol readiness evidence."
+                ),
+                confidence=0.6,
             )
         )
     if "request_synthetic_validation" in allowed:
@@ -196,6 +213,43 @@ def build_initial_plan(
             )
         )
     return actions
+
+
+def _protocol_discovery_inputs(objective: Dict[str, Any]) -> Dict[str, Any]:
+    query = _first_non_empty(
+        objective.get("query"),
+        objective.get("search_query"),
+        objective.get("product_query"),
+    )
+    if not query:
+        return {}
+    inputs: Dict[str, Any] = {"query": query, "limit": _safe_limit(objective.get("limit"))}
+    brand_id = _first_non_empty(objective.get("brand_id"))
+    if brand_id:
+        inputs["brand_id"] = brand_id
+    protocol = _first_non_empty(objective.get("protocol"))
+    if protocol in {"ucp", "acp"}:
+        inputs["protocol"] = protocol
+    inferred_intent = objective.get("inferred_intent")
+    if isinstance(inferred_intent, dict):
+        inputs["inferred_intent"] = inferred_intent
+    return inputs
+
+
+def _first_non_empty(*values: Any) -> str | None:
+    for value in values:
+        parsed = str(value or "").strip()
+        if parsed:
+            return parsed
+    return None
+
+
+def _safe_limit(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 10
+    return max(1, min(parsed, 50))
 
 
 __all__ = ["ProposedAction", "build_initial_plan"]
