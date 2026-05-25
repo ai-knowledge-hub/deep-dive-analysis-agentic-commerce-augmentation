@@ -125,6 +125,76 @@ def test_external_agent_protocol_discovery_requires_query(client: TestClient):
     assert created.json()["detail"]["code"] == "invalid_job_plan"
 
 
+def test_external_agent_activity_summarizes_protocol_readiness(client: TestClient):
+    deps = default_deps()
+    deps.clients.create_brand(brand_id="brand-a", client_id=CLIENT_ID, name="Brand A")
+    deps.clients.create_product(
+        product_id="product-a",
+        brand_id="brand-a",
+        name="Blue Runner",
+        description="Daily blue running shoe.",
+        metadata={"ucp": {"offer_url": "https://example.test/p/blue-runner"}},
+    )
+    token = _token(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:protocol.readiness_check",
+            "skill:discover-protocol-candidates",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "idempotency_key": "job-activity-protocol-readiness",
+            "tool_id": "protocol.readiness_check",
+            "objective": {"product_id": "product-a", "protocol": "ucp"},
+        },
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    action = deps.agent_actions.list_agent_actions(
+        agent_run_id=payload["run"]["id"], limit=10
+    )[0]
+    assert action["inputs"] == {"product_id": "product-a", "protocols": ["ucp"]}
+    deps.agent_actions.transition_agent_action_status(
+        action_id=action["id"], from_status="proposed", to_status="approved"
+    )
+    AgentRuntimeService(deps=deps).step_once(
+        run_id=payload["run"]["id"], user_id="agent-ext-1"
+    )
+
+    activity = client.get(
+        f"/external-agent/jobs/{payload['job']['id']}/activity",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"capability_name": "check_protocol_readiness"},
+    )
+    assert activity.status_code == 200
+    protocol_event = next(
+        item
+        for item in activity.json()["items"]
+        if item.get("subtype") == "action_executed"
+        and item.get("capability_name") == "check_protocol_readiness"
+    )
+    assert protocol_event["domain_summary"]["domain"] == "protocol_readiness"
+    assert protocol_event["domain_summary"]["readiness_status"] == "needs_review"
+    assert protocol_event["domain_summary"]["protocol_count"] == 1
+    assert protocol_event["domain_summary"]["issue_count"] >= 1
+
+    operator_detail = client.get(
+        f"/external-agent/jobs/operator/by-run/{payload['run']['id']}",
+        params={"client_id": CLIENT_ID, "user_id": "operator-a"},
+    )
+    operator_event = next(
+        item
+        for item in operator_detail.json()["activity_items"]
+        if item.get("subtype") == "action_executed"
+        and item.get("capability_name") == "check_protocol_readiness"
+    )
+    assert operator_event["domain_summary"] == protocol_event["domain_summary"]
+
+
 def test_external_agent_activity_summarizes_protocol_discovery(
     client: TestClient,
 ):

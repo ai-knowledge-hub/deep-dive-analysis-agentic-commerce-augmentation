@@ -44,6 +44,7 @@ def build_initial_plan(
         base_inputs = {}
 
     protocol_discovery_inputs = _protocol_discovery_inputs(objective)
+    protocol_readiness_inputs = _protocol_readiness_inputs(objective)
 
     if "freeze_retrieval_protocol" in allowed:
         actions.append(
@@ -111,6 +112,16 @@ def build_initial_plan(
                     "Discover read-only ACP/UCP candidates and summarize "
                     "merchant protocol readiness evidence."
                 ),
+                confidence=0.6,
+            )
+        )
+    if "check_protocol_readiness" in allowed and protocol_readiness_inputs:
+        actions.append(
+            ProposedAction(
+                capability_name="check_protocol_readiness",
+                capability_version=v("check_protocol_readiness"),
+                inputs=protocol_readiness_inputs,
+                rationale="Check read-only ACP/UCP readiness for merchant protocol evidence.",
                 confidence=0.6,
             )
         )
@@ -233,6 +244,22 @@ def _protocol_discovery_inputs(objective: Dict[str, Any]) -> Dict[str, Any]:
     inferred_intent = objective.get("inferred_intent")
     if isinstance(inferred_intent, dict):
         inputs["inferred_intent"] = inferred_intent
+    return inputs
+
+
+def _protocol_readiness_inputs(objective: Dict[str, Any]) -> Dict[str, Any]:
+    product_id = _first_non_empty(objective.get("product_id"))
+    if not product_id:
+        return {}
+    inputs: Dict[str, Any] = {"product_id": product_id}
+    protocols = objective.get("protocols")
+    if isinstance(protocols, list):
+        selected = [str(item).strip() for item in protocols if str(item).strip()]
+        if selected:
+            inputs["protocols"] = selected
+    protocol = _first_non_empty(objective.get("protocol"))
+    if protocol in {"ucp", "acp"} and "protocols" not in inputs:
+        inputs["protocols"] = [protocol]
     return inputs
 
 

@@ -118,6 +118,10 @@ For read-only protocol candidate discovery, callers can use
 `tool_id=protocol.discover_candidates` with `plan_mode=single_tool`. The linked
 run objective must include `query`; optional objective fields include
 `protocol` (`ucp` or `acp`), `brand_id`, `limit`, and `inferred_intent`.
+For read-only protocol readiness checks, callers can use
+`tool_id=protocol.readiness_check` with `plan_mode=single_tool`. The linked run
+objective must include `product_id`; optional objective fields include
+`protocol` or `protocols`.
 
 Default harness behavior:
 
@@ -233,6 +237,9 @@ Behavior:
 - These are human-control-plane endpoints, not machine-facing job endpoints.
 - They require operator `user_id` context, tenant scoping, and a tenant role of `operator`, `owner`, or `admin`. Platform admins configured through `ADMIN_USER_IDS` are also accepted by the tenant-role helper.
 - They let tenant operators inspect the external-agent job linked to a selected `agent_run`, including job id, external principal, idempotency key, requested skill/tool, receipt history, latest receipt, and latest receipt verification.
+- Operator job details also include recent normalized `activity_items` for the
+  linked run. Protocol discovery and protocol readiness events include the same
+  `domain_summary` payloads exposed by the machine activity endpoint.
 - They do not mint new receipts. External agents still use `/receipt?refresh=true` when they need to issue a fresh non-terminal attestation.
 - They do not relax the principal-scoped machine API. `/external-agent/jobs/{job_id}` and sibling machine endpoints remain readable only by the creating external principal.
 
@@ -394,10 +401,11 @@ Behavior:
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
 - Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
-- Protocol discovery run events with receipt evidence include `domain_summary`
-  so external assistants can read readiness status, readiness score, candidate
-  count, source counts, live/local evidence counts, and receipt id without
-  parsing raw receipt anchors.
+- Protocol discovery and protocol readiness run events with receipt evidence
+  include `domain_summary` so external assistants can read readiness status,
+  readiness score, candidate or protocol counts, source counts where available,
+  live/local evidence counts where available, issue counts, and receipt id
+  without parsing raw receipt anchors.
 
 Use this endpoint for machine-friendly progress narration and polling.
 
@@ -443,7 +451,8 @@ Implemented now:
 
 Still to build:
 
-- richer domain-specific activity summaries beyond normalized event projection
+- richer domain-specific activity summaries beyond the protocol discovery and
+  protocol readiness summaries
 - full harness-profile enforcement
 - scoped credential management UI/API
 - production-grade tool permission registry instead of token-scope strings only

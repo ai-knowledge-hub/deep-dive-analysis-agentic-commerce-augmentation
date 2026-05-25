@@ -275,13 +275,22 @@ def external_agent_activity_items(
 
 def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
     capability_name = str(event.get("capability_name") or "")
-    if capability_name != "discover_protocol_candidates":
+    if capability_name not in {
+        "discover_protocol_candidates",
+        "check_protocol_readiness",
+    }:
         return {}
     anchors = event.get("anchors") if isinstance(event.get("anchors"), dict) else {}
     receipt = anchors.get("receipt") if isinstance(anchors.get("receipt"), dict) else {}
     evidence = receipt.get("evidence") if isinstance(receipt.get("evidence"), dict) else {}
     if not evidence:
         return {}
+    if capability_name == "check_protocol_readiness":
+        return _protocol_readiness_domain_summary(
+            evidence=evidence,
+            receipt=receipt,
+            receipt_id=anchors.get("receipt_id"),
+        )
     readiness = (
         evidence.get("readiness_summary")
         if isinstance(evidence.get("readiness_summary"), dict)
@@ -304,6 +313,28 @@ def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
         "live_source_count": readiness.get("live_source_count"),
         "local_source_count": readiness.get("local_source_count"),
         "receipt_id": anchors.get("receipt_id") or receipt.get("receipt_id"),
+    }
+
+
+def _protocol_readiness_domain_summary(
+    *, evidence: Dict[str, Any], receipt: Dict[str, Any], receipt_id: Any
+) -> Dict[str, Any]:
+    protocols = evidence.get("protocols_checked")
+    checked = protocols if isinstance(protocols, list) else []
+    ready = evidence.get("ready_protocols")
+    ready_protocols = ready if isinstance(ready, list) else []
+    try:
+        issue_count = int(evidence.get("issue_count") or 0)
+    except (TypeError, ValueError):
+        issue_count = 0
+    score = round(100 * len(ready_protocols) / len(checked)) if checked else None
+    return {
+        "domain": "protocol_readiness",
+        "readiness_status": "ready" if issue_count == 0 else "needs_review",
+        "readiness_score": score,
+        "protocol_count": len(checked),
+        "issue_count": issue_count,
+        "receipt_id": receipt_id or receipt.get("receipt_id"),
     }
 
 

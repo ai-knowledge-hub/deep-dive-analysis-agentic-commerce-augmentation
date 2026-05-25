@@ -110,10 +110,13 @@ export function ExternalAgentJobPanel({
                     Candidates: {protocolSummary.candidate_count}
                   </span>
                 ) : null}
-                <span className="control-chip">
-                  Evidence: {protocolSummary.live_source_count ?? 0} live /{" "}
-                  {protocolSummary.local_source_count ?? 0} local
-                </span>
+                {typeof protocolSummary.live_source_count === "number" ||
+                typeof protocolSummary.local_source_count === "number" ? (
+                  <span className="control-chip">
+                    Evidence: {protocolSummary.live_source_count ?? 0} live /{" "}
+                    {protocolSummary.local_source_count ?? 0} local
+                  </span>
+                ) : null}
               </div>
             </>
           ) : null}
@@ -136,7 +139,7 @@ function receiptChipClass(externalAgentJob: ExternalAgentJobOperatorDetail | nul
 function latestProtocolSummary(externalAgentJob: ExternalAgentJobOperatorDetail | null) {
   const summaries = (externalAgentJob?.activity_items ?? [])
     .map((item) => item.domain_summary)
-    .filter((summary) => summary?.domain === "protocol_discovery");
+    .filter((summary) => String(summary?.domain ?? "").startsWith("protocol_"));
   return summaries.at(-1) ?? null;
 }
 
