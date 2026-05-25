@@ -74,8 +74,6 @@ class ProtocolDiscoveryService:
             )
 
         out: List[Dict[str, Any]] = []
-        errors = 0
-        warnings = 0
         for candidate in candidates[:limit]:
             discovery_source = _candidate_discovery_source(candidate)
             issues = (
@@ -84,11 +82,6 @@ class ProtocolDiscoveryService:
                 else self._validate_ucp(candidate)
             )
             match = score_structured_match(structured, candidate)
-            for issue in issues:
-                if issue.severity == "error":
-                    errors += 1
-                if issue.severity == "warning":
-                    warnings += 1
             out.append(
                 {
                     "id": candidate.id,
@@ -121,15 +114,18 @@ class ProtocolDiscoveryService:
             ),
             reverse=True,
         )
+        limited = out[:limit]
+        readiness_summary = _readiness_summary(limited)
 
         return {
             "structured_query": structured.__dict__,
-            "candidates": out[:limit],
+            "candidates": limited,
             "summary": {
-                "count": len(out[:limit]),
-                "errors": errors,
-                "warnings": warnings,
-                "source_counts": _source_counts(out[:limit]),
+                "count": len(limited),
+                "errors": readiness_summary["issue_counts"]["error"],
+                "warnings": readiness_summary["issue_counts"]["warning"],
+                "source_counts": readiness_summary["source_counts"],
+                "readiness_summary": readiness_summary,
             },
         }
 
@@ -221,6 +217,74 @@ def _source_counts(candidates: List[Dict[str, Any]]) -> Dict[str, int]:
         source = str(candidate.get("discovery_source") or "unknown")
         counts[source] = counts.get(source, 0) + 1
     return counts
+
+
+def _readiness_summary(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    issue_counts = {"error": 0, "warning": 0, "info": 0}
+    protocol_counts: Dict[str, int] = {}
+    ready_candidates = 0
+    warning_candidates = 0
+    blocked_candidates = 0
+
+    for candidate in candidates:
+        protocol = str(candidate.get("protocol") or "unknown")
+        protocol_counts[protocol] = protocol_counts.get(protocol, 0) + 1
+        severities = []
+        for issue in candidate.get("readiness_issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            severity = str(issue.get("severity") or "").lower()
+            if severity in issue_counts:
+                issue_counts[severity] += 1
+                severities.append(severity)
+
+        if "error" in severities:
+            blocked_candidates += 1
+        elif "warning" in severities:
+            warning_candidates += 1
+        else:
+            ready_candidates += 1
+
+    candidate_count = len(candidates)
+    source_counts = _source_counts(candidates)
+    live_source_count = sum(
+        count
+        for source, count in source_counts.items()
+        if source in {"ucp_catalog_search", "acp_product_feed"}
+    )
+    local_source_count = sum(
+        count
+        for source, count in source_counts.items()
+        if source.endswith("_local_metadata")
+    )
+    if candidate_count == 0:
+        status = "no_candidates"
+        score = 0
+    elif blocked_candidates == candidate_count:
+        status = "blocked"
+        score = 0
+    else:
+        status = (
+            "needs_review"
+            if blocked_candidates > 0 or warning_candidates > 0
+            else "ready"
+        )
+        weighted_ready = ready_candidates + (warning_candidates * 0.5)
+        score = round(100 * weighted_ready / candidate_count)
+
+    return {
+        "status": status,
+        "score": score,
+        "candidate_count": candidate_count,
+        "ready_candidates": ready_candidates,
+        "warning_candidates": warning_candidates,
+        "blocked_candidates": blocked_candidates,
+        "issue_counts": issue_counts,
+        "protocol_counts": protocol_counts,
+        "source_counts": source_counts,
+        "live_source_count": live_source_count,
+        "local_source_count": local_source_count,
+    }
 
 
 __all__ = ["ProtocolDiscoveryService", "build_structured_query"]

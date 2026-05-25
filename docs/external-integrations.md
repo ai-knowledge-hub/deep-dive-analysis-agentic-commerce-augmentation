@@ -250,6 +250,11 @@ Discovery provenance:
 - The adapter receipt evidence includes `source_counts` so operators and
   external callers can audit whether a result set came from live protocol
   retrieval or local fallback metadata.
+- Discovery summaries and adapter receipts also include `readiness_summary`,
+  a compact market-research signal with ready, warning, and blocked candidate
+  counts, protocol/source counts, live versus local evidence counts, and a
+  0-100 score. This summarizes merchant protocol readiness only; it does not
+  authorize checkout, delegated payment, or browser fallback execution.
 
 Required env:
 - `PROTOCOL_FETCH_ALLOWLIST=merchant.example`

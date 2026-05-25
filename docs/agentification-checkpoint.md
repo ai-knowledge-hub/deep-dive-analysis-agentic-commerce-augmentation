@@ -156,7 +156,10 @@ can now use a guarded live product-feed path for opted-in brands, parsing
 JSON/JSONL/CSV feed records, honoring search eligibility flags, and normalizing
 records into read-only protocol candidates before falling back to local metadata.
 Discovery candidates now expose `discovery_source`, and adapter receipts include
-`source_counts` so live retrieval versus local fallback is auditable. The runtime
+`source_counts` so live retrieval versus local fallback is auditable. Discovery
+summaries and receipts now also include `readiness_summary`, a compact
+market-research signal for ready, warning, and blocked candidates, protocol and
+source mix, live versus local evidence, and a 0-100 readiness score. The runtime
 registry now also declares non-executable checkout, delegated-payment, and browser
 fallback readiness boundaries as `status=planned`, `contract_intent=readiness_boundary`,
 and no allowed executable capabilities. These contracts exist to support
