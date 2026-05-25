@@ -1219,6 +1219,11 @@ describe("AgentRunsPage timeline presets", () => {
                 blocked_candidates: 1,
                 live_source_count: 2,
                 local_source_count: 1,
+                top_blockers: [
+                  {
+                    message: "Missing UCP business profile for brand.",
+                  },
+                ],
               },
             },
           },
@@ -1246,6 +1251,9 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Review: 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Blocked: 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Evidence: 2 live \/ 1 local/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Why: Missing UCP business profile for brand/i),
+    ).toBeInTheDocument();
   });
 
   it("surfaces external-agent job context and verifies the latest receipt", async () => {

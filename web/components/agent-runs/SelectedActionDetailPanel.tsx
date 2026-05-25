@@ -86,6 +86,7 @@ type DiscoveryReadinessSummary = {
   blockedCandidates: number | null;
   liveSourceCount: number | null;
   localSourceCount: number | null;
+  issueMessage: string | null;
 };
 
 type Props = {
@@ -146,7 +147,21 @@ function discoveryReadinessForAction(
     blockedCandidates: numberOrNull(data.blocked_candidates),
     liveSourceCount: numberOrNull(data.live_source_count),
     localSourceCount: numberOrNull(data.local_source_count),
+    issueMessage: readinessIssueMessage(data),
   };
+}
+
+function readinessIssueMessage(data: Record<string, unknown>): string | null {
+  for (const key of ["top_blockers", "top_warnings"]) {
+    const list = data[key];
+    if (!Array.isArray(list)) continue;
+    const first = list.find((item) => item && typeof item === "object") as
+      | Record<string, unknown>
+      | undefined;
+    const message = typeof first?.message === "string" ? first.message : "";
+    if (message) return message;
+  }
+  return null;
 }
 
 function numberOrNull(value: unknown): number | null {
@@ -297,6 +312,9 @@ export function SelectedActionDetailPanel({
               {discoveryReadiness.localSourceCount ?? 0} local
             </span>
           </div>
+          {discoveryReadiness.issueMessage ? (
+            <p className="panel__muted">Why: {discoveryReadiness.issueMessage}</p>
+          ) : null}
         </>
       ) : null}
 
