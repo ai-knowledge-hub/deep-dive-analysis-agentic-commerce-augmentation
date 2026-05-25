@@ -60,6 +60,9 @@ def _token(*, scopes: list[str] | None = None) -> str:
 def test_external_agent_job_can_seed_protocol_discovery_single_tool(
     client: TestClient,
 ):
+    default_deps().clients.create_brand(
+        brand_id="brand-a", client_id=CLIENT_ID, name="Brand A"
+    )
     token = _token(
         scopes=[
             "external_agent_jobs:write",
@@ -73,6 +76,7 @@ def test_external_agent_job_can_seed_protocol_discovery_single_tool(
         headers={"Authorization": f"Bearer {token}"},
         json={
             "idempotency_key": "job-protocol-discovery-single-tool",
+            "brand_id": "brand-a",
             "tool_id": "protocol.discover_candidates",
             "objective": {
                 "query": "blue running shoe",
@@ -96,6 +100,7 @@ def test_external_agent_job_can_seed_protocol_discovery_single_tool(
     ]
     assert actions[0]["inputs"] == {
         "query": "blue running shoe",
+        "brand_id": "brand-a",
         "protocol": "ucp",
         "limit": 7,
     }
@@ -148,8 +153,9 @@ def test_external_agent_activity_summarizes_protocol_readiness(client: TestClien
         headers={"Authorization": f"Bearer {token}"},
         json={
             "idempotency_key": "job-activity-protocol-readiness",
+            "product_id": "product-a",
             "tool_id": "protocol.readiness_check",
-            "objective": {"product_id": "product-a", "protocol": "ucp"},
+            "objective": {"protocol": "ucp"},
         },
     )
     assert created.status_code == 200

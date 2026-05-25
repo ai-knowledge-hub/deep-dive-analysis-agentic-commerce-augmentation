@@ -118,10 +118,14 @@ For read-only protocol candidate discovery, callers can use
 `tool_id=protocol.discover_candidates` with `plan_mode=single_tool`. The linked
 run objective must include `query`; optional objective fields include
 `protocol` (`ucp` or `acp`), `brand_id`, `limit`, and `inferred_intent`.
+The top-level request `brand_id` is also passed into the seeded discovery action
+so brand-scoped and opt-in live retrieval paths do not require duplicate
+objective metadata.
 For read-only protocol readiness checks, callers can use
 `tool_id=protocol.readiness_check` with `plan_mode=single_tool`. The linked run
 objective must include `product_id`; optional objective fields include
-`protocol` or `protocols`.
+`protocol` or `protocols`. The top-level request `product_id` is also passed
+into the seeded readiness action.
 
 Default harness behavior:
 

@@ -171,13 +171,7 @@ def create_external_agent_job_route(
             brand_id=payload.brand_id,
             product_id=payload.product_id,
             experiment_id=payload.experiment_id,
-            objective={
-                **(payload.objective or {}),
-                "external_job": True,
-                "requested_skill_id": resolved["skill_id"],
-                "requested_tool_id": resolved["tool_id"],
-                "plan_mode": resolved["plan_mode"],
-            },
+            objective=_job_objective(payload=payload, resolved=resolved),
             allowed_capabilities=resolved["allowed_capabilities"],
             capability_versions=payload.capability_versions,
             budgets=payload.budgets,
@@ -653,6 +647,23 @@ def _resolve_requested_runtime_contract(
                 *([skill_id] if skill_id else []),
             ]
         ),
+    }
+
+
+def _job_objective(
+    *, payload: ExternalAgentJobCreateRequest, resolved: Dict[str, Any]
+) -> Dict[str, Any]:
+    objective = dict(payload.objective or {})
+    if payload.brand_id:
+        objective["brand_id"] = payload.brand_id
+    if payload.product_id:
+        objective["product_id"] = payload.product_id
+    return {
+        **objective,
+        "external_job": True,
+        "requested_skill_id": resolved["skill_id"],
+        "requested_tool_id": resolved["tool_id"],
+        "plan_mode": resolved["plan_mode"],
     }
 
 
