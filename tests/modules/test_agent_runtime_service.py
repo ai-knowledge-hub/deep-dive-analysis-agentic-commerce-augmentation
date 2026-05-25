@@ -344,6 +344,64 @@ def test_reconcile_completes_when_recommendation_stopping_condition_is_met(tmp_p
     assert event["anchors"]["stopping_condition"] == "recommendation_produced"
 
 
+def test_reconcile_completes_when_operator_supervised_actions_are_decided(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-decided.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="plan_only",
+        allowed_capabilities=["freeze_retrieval_protocol", "seed_hypotheses"],
+        harness_id="operator_supervised",
+        policy_profile_id="human_approval_required",
+        status="planned",
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="approved",
+        capability_name="freeze_retrieval_protocol",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={},
+        inputs_hash="in-1",
+        outputs_hash=None,
+        rationale="approved action",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=2,
+        status="rejected",
+        capability_name="seed_hypotheses",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={},
+        inputs_hash="in-2",
+        outputs_hash=None,
+        rationale="rejected action",
+        confidence=0.6,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.reconcile_run_status(run_id=run["id"])
+    assert result.run["status"] == "completed"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "completed"
+    assert event["anchors"]["stopping_condition"] == "all_actions_decided"
+
+
 def test_step_once_blocks_learning_mutation_when_harness_memory_policy_forbids_it(
     tmp_path, monkeypatch
 ):

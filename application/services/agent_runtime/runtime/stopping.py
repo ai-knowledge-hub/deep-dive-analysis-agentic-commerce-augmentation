@@ -59,6 +59,16 @@ def evaluate_stopping_conditions(
             condition="all_actions_completed",
             note="Run completed because all actions reached terminal decisions.",
         )
+    if (
+        "all_actions_decided" in conditions
+        and statuses
+        and statuses.issubset({"approved", "executed", "rejected"})
+    ):
+        return StopDecision(
+            status="completed",
+            condition="all_actions_decided",
+            note="Run completed because all actions were approved or rejected.",
+        )
     return None
 
 
