@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.composition import default_deps
 from api.utils.tenancy import require_client_id, require_client_role
 from application.ports.deps import AppDeps
+from application.services.agent_runtime.events import list_agent_run_events_page
 from api.utils.external_agent_jobs import (
+    external_agent_activity_items,
     job_status_payload,
     list_receipt_payloads,
     sync_job_status_from_run,
@@ -32,6 +34,7 @@ class ExternalAgentJobOperatorDetailResponse(BaseModel):
     receipts: List[Dict[str, Any]]
     latest_receipt: Optional[Dict[str, Any]] = None
     verification: Optional[Dict[str, Any]] = None
+    activity_items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 @router.get("/by-run/{run_id}")
@@ -57,12 +60,24 @@ def get_external_agent_job_for_operator_route(
         if latest_receipt
         else None
     )
+    events_page = list_agent_run_events_page(
+        deps=deps,
+        run_id=run_id,
+        client_id=scoped_client_id,
+        limit=50,
+    ).to_dict()
     return ExternalAgentJobOperatorDetailResponse(
         job=job_status_payload(job=job, run=run),
         run=run,
         receipts=receipts,
         latest_receipt=latest_receipt,
         verification=verification,
+        activity_items=external_agent_activity_items(
+            job=job,
+            run=run,
+            receipts=[],
+            events=events_page["events"],
+        ),
     )
 
 

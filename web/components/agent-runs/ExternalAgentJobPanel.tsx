@@ -16,6 +16,7 @@ export function ExternalAgentJobPanel({
   loading,
   onVerifyReceipt,
 }: Props) {
+  const protocolSummary = latestProtocolSummary(externalAgentJob);
   return (
     <section className="control-section">
       <div className="control-section__header">
@@ -92,6 +93,43 @@ export function ExternalAgentJobPanel({
               ))}
             </ul>
           ) : null}
+          {protocolSummary ? (
+            <>
+              <p className="panel__subheading">Protocol activity</p>
+              <div className="control-chip-row">
+                <span className="control-chip">
+                  Status: {readinessStatusLabel(protocolSummary.readiness_status)}
+                </span>
+                {typeof protocolSummary.readiness_score === "number" ? (
+                  <span className="control-chip">
+                    Score: {protocolSummary.readiness_score}/100
+                  </span>
+                ) : null}
+                {typeof protocolSummary.candidate_count === "number" ? (
+                  <span className="control-chip">
+                    Candidates: {protocolSummary.candidate_count}
+                  </span>
+                ) : null}
+                {typeof protocolSummary.protocol_count === "number" ? (
+                  <span className="control-chip">
+                    Protocols: {protocolSummary.protocol_count}
+                  </span>
+                ) : null}
+                {typeof protocolSummary.issue_count === "number" ? (
+                  <span className="control-chip">
+                    Issues: {protocolSummary.issue_count}
+                  </span>
+                ) : null}
+                {typeof protocolSummary.live_source_count === "number" ||
+                typeof protocolSummary.local_source_count === "number" ? (
+                  <span className="control-chip">
+                    Evidence: {protocolSummary.live_source_count ?? 0} live /{" "}
+                    {protocolSummary.local_source_count ?? 0} local
+                  </span>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </>
       ) : (
         <div className="panel__notice panel__notice--warning">
@@ -106,4 +144,21 @@ function receiptChipClass(externalAgentJob: ExternalAgentJobOperatorDetail | nul
   if (externalAgentJob?.verification?.valid) return "control-chip--success";
   if (externalAgentJob?.latest_receipt) return "control-chip--attention";
   return "";
+}
+
+function latestProtocolSummary(externalAgentJob: ExternalAgentJobOperatorDetail | null) {
+  const summaries = (externalAgentJob?.activity_items ?? [])
+    .map((item) => item.domain_summary)
+    .filter((summary) => String(summary?.domain ?? "").startsWith("protocol_"));
+  return summaries.at(-1) ?? null;
+}
+
+function readinessStatusLabel(status?: string | null): string {
+  const labels: Record<string, string> = {
+    blocked: "Blocked",
+    needs_review: "Needs review",
+    no_candidates: "No candidates",
+    ready: "Ready",
+  };
+  return status ? labels[status] ?? status.replaceAll("_", " ") : "Unknown";
 }

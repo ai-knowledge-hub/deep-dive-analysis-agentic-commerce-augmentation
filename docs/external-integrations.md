@@ -136,9 +136,16 @@ Current status:
   allowlisted.
 - ACP live feed discovery is available for read-only product feed URLs when a
   brand explicitly opts in through metadata and the merchant host is allowlisted.
-- Planned checkout, delegated-payment, and browser checkout fallback adapters
-  are visible in the runtime registry as `status=planned` external-side-effect
-  adapters, but they have no allowed executable capabilities yet.
+- Checkout, delegated-payment, and browser checkout fallback readiness
+  boundaries are visible in the runtime registry as `status=planned`,
+  `contract_intent=readiness_boundary` external-side-effect contracts, but they
+  have no allowed executable capabilities.
+- These readiness boundaries support merchant/protocol intelligence, not real
+  transactions. They expose an `external_write_execution` receipt contract only
+  as a guardrail for future implementation review. The contract requires
+  approval linkage, idempotency, external operation identifiers,
+  request/response fingerprints, verification status, adapter-specific evidence
+  fields, and a linked run event.
 
 Current external reference points:
 - UCP business profiles are discovered at `/.well-known/ucp`.
@@ -152,8 +159,8 @@ Still planned:
 - Broader ACP/UCP retrieval adapters for additional live merchant surfaces.
 - Strict local UCP `2026-04-08` schema bundle if offline schema validation is
   required.
-- Side-effecting checkout/payment/browser/CLI adapters only after governed
-  approvals and external-write receipts exist.
+- Broader checkout/payment/browser/CLI readiness probes only where they remain
+  non-transactional and evidence-only.
 
 UCP live discovery config:
 
@@ -243,6 +250,11 @@ Discovery provenance:
 - The adapter receipt evidence includes `source_counts` so operators and
   external callers can audit whether a result set came from live protocol
   retrieval or local fallback metadata.
+- Discovery summaries and adapter receipts also include `readiness_summary`,
+  a compact market-research signal with ready, warning, and blocked candidate
+  counts, protocol/source counts, live versus local evidence counts, and a
+  0-100 score. This summarizes merchant protocol readiness only; it does not
+  authorize checkout, delegated payment, or browser fallback execution.
 
 Required env:
 - `PROTOCOL_FETCH_ALLOWLIST=merchant.example`

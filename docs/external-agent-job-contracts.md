@@ -67,7 +67,7 @@ GET /agent-runs/registry
 Authorization: Bearer <agent-principal-token>
 ```
 
-Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`.
+Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`. Protocol checkout, payment, and browser fallback readiness boundaries are also exposed directly in `readiness_boundaries[]` with `tool_id`, `skill_ids`, `adapter_id`, `contract_intent=readiness_boundary`, `blocked_reason`, and the planned receipt contract so callers can distinguish market-research readiness signals from executable transaction tools without reverse-engineering lower-level mappings. The same metadata is mirrored on matching `skill_tool_mappings[]` rows for compatibility.
 
 ## Create Job
 
@@ -113,6 +113,19 @@ Supported body fields:
 | `requires_approval` | No | Defaults to `true`. |
 | `run_mode` | No | Optional run-mode override. When omitted, the runtime resolves the default from the selected harness/profile. |
 | `state` | No | Defaults to `battery_ready`. |
+
+For read-only protocol candidate discovery, callers can use
+`tool_id=protocol.discover_candidates` with `plan_mode=single_tool`. The linked
+run objective must include `query`; optional objective fields include
+`protocol` (`ucp` or `acp`), `brand_id`, `limit`, and `inferred_intent`.
+The top-level request `brand_id` is also passed into the seeded discovery action
+so brand-scoped and opt-in live retrieval paths do not require duplicate
+objective metadata.
+For read-only protocol readiness checks, callers can use
+`tool_id=protocol.readiness_check` with `plan_mode=single_tool`. The linked run
+objective must include `product_id`; optional objective fields include
+`protocol` or `protocols`. The top-level request `product_id` is also passed
+into the seeded readiness action.
 
 Default harness behavior:
 
@@ -184,7 +197,7 @@ Structured error shape:
 
 External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
 
-`declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it yet. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed this way so external agents can discover the future integration shape without being allowed to trigger side effects.
+`declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects. For readiness-boundary tools, the error `context` includes `contract_intent`, `adapter_id`, `blocked_reason`, and the planned `receipt_contract`.
 
 ## Get Job Status
 
@@ -228,6 +241,9 @@ Behavior:
 - These are human-control-plane endpoints, not machine-facing job endpoints.
 - They require operator `user_id` context, tenant scoping, and a tenant role of `operator`, `owner`, or `admin`. Platform admins configured through `ADMIN_USER_IDS` are also accepted by the tenant-role helper.
 - They let tenant operators inspect the external-agent job linked to a selected `agent_run`, including job id, external principal, idempotency key, requested skill/tool, receipt history, latest receipt, and latest receipt verification.
+- Operator job details also include recent normalized `activity_items` for the
+  linked run. Protocol discovery and protocol readiness events include the same
+  `domain_summary` payloads exposed by the machine activity endpoint.
 - They do not mint new receipts. External agents still use `/receipt?refresh=true` when they need to issue a fresh non-terminal attestation.
 - They do not relax the principal-scoped machine API. `/external-agent/jobs/{job_id}` and sibling machine endpoints remain readable only by the creating external principal.
 
@@ -389,6 +405,14 @@ Behavior:
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
 - Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
+- Protocol discovery and protocol readiness run events with receipt evidence
+  include `domain_summary` so external assistants can read readiness status,
+  readiness score, candidate or protocol counts, source counts where available,
+  live/local evidence counts where available, issue counts, and receipt id
+  without parsing raw receipt anchors.
+  - `protocol_discovery` summaries include `candidate_count`, `source_counts`,
+    `live_source_count`, and `local_source_count`.
+  - `protocol_readiness` summaries include `protocol_count` and `issue_count`.
 
 Use this endpoint for machine-friendly progress narration and polling.
 
@@ -434,7 +458,8 @@ Implemented now:
 
 Still to build:
 
-- richer domain-specific activity summaries beyond normalized event projection
+- richer domain-specific activity summaries beyond the protocol discovery and
+  protocol readiness summaries
 - full harness-profile enforcement
 - scoped credential management UI/API
 - production-grade tool permission registry instead of token-scope strings only

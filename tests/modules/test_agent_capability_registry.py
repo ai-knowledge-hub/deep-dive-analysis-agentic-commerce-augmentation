@@ -158,6 +158,48 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     assert planned_checkout_adapter["allowed_capabilities"] == []
     assert planned_checkout_adapter["writes_external_system"] is True
     assert planned_checkout_adapter["requires_operator_review"] is True
+    assert planned_checkout_adapter["contract_intent"] == "readiness_boundary"
+    assert "Real transaction execution is not supported" in planned_checkout_adapter[
+        "description"
+    ]
+    assert planned_checkout_adapter["receipt_contract"]["required"] is True
+    assert (
+        planned_checkout_adapter["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
+    assert "approval_receipt_id" in planned_checkout_adapter["receipt_contract"][
+        "required_fields"
+    ]
+    assert "checkout_session_id" in planned_checkout_adapter["receipt_contract"][
+        "evidence_fields"
+    ]
+    assert planned_checkout_adapter["receipt_contract"]["must_link_run_event"] is True
+    planned_payment_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "protocol.payment_delegation.v1"
+    )
+    planned_browser_adapter = next(
+        item
+        for item in payload["execution_adapters"]
+        if item["id"] == "fallback.browser_checkout.v1"
+    )
+    assert (
+        planned_payment_adapter["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
+    assert planned_payment_adapter["contract_intent"] == "readiness_boundary"
+    assert "payment_handler" in planned_payment_adapter["receipt_contract"][
+        "evidence_fields"
+    ]
+    assert (
+        planned_browser_adapter["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
+    assert planned_browser_adapter["contract_intent"] == "readiness_boundary"
+    assert "browser_session_id" in planned_browser_adapter["receipt_contract"][
+        "evidence_fields"
+    ]
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"
@@ -171,6 +213,28 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     assert "protocol.acp.checkout" in payload["declared_non_executable_skill_tools"]
     assert "protocol.payment.delegate" in payload["declared_non_executable_skill_tools"]
     assert "browser.checkout_fallback" in payload["declared_non_executable_skill_tools"]
+    readiness_boundaries = {
+        item["tool_id"]: item for item in payload["readiness_boundaries"]
+    }
+    assert set(readiness_boundaries) == {
+        "browser.checkout_fallback",
+        "protocol.acp.checkout",
+        "protocol.payment.delegate",
+        "protocol.ucp.checkout",
+    }
+    assert readiness_boundaries["protocol.ucp.checkout"]["adapter_id"] == (
+        "protocol.checkout.v1"
+    )
+    assert readiness_boundaries["protocol.ucp.checkout"]["contract_intent"] == (
+        "readiness_boundary"
+    )
+    assert readiness_boundaries["protocol.ucp.checkout"]["executable"] is False
+    assert readiness_boundaries["protocol.ucp.checkout"]["skill_ids"] == [
+        "execute-governed-protocol-commerce"
+    ]
+    assert readiness_boundaries["protocol.ucp.checkout"]["blocked_reason"] == (
+        "readiness_boundary_only_no_transaction_execution"
+    )
     assert next(
         item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
     )["executable"] is False
@@ -179,6 +243,21 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         for item in payload["skill_tool_mappings"]
         if item["tool_id"] == "protocol.ucp.checkout"
     )["executable"] is False
+    ucp_checkout_mapping = next(
+        item
+        for item in payload["skill_tool_mappings"]
+        if item["tool_id"] == "protocol.ucp.checkout"
+    )
+    assert ucp_checkout_mapping["adapter_id"] == "protocol.checkout.v1"
+    assert ucp_checkout_mapping["contract_intent"] == "readiness_boundary"
+    assert (
+        ucp_checkout_mapping["blocked_reason"]
+        == "readiness_boundary_only_no_transaction_execution"
+    )
+    assert (
+        ucp_checkout_mapping["receipt_contract"]["receipt_type"]
+        == "external_write_execution"
+    )
     assert tool["executable"] is True
     assert tool["external_agent_contract"]["minimal_request"] == {
         "tool_id": "experiment.run_variant",

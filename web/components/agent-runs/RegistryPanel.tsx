@@ -69,6 +69,13 @@ function formatChangeValue(value?: string | string[] | null) {
   return formatRegistryValue(value);
 }
 
+function formatBlockedReason(value?: string | null) {
+  if (value === "readiness_boundary_only_no_transaction_execution") {
+    return "Market research only, no transaction execution";
+  }
+  return formatRegistryValue(value);
+}
+
 function plannedExecutionAdapters(registry: AgentRuntimeRegistryResponse | null) {
   return (registry?.execution_adapters ?? []).filter(
     (adapter) => adapter.status === "planned",
@@ -76,6 +83,9 @@ function plannedExecutionAdapters(registry: AgentRuntimeRegistryResponse | null)
 }
 
 function plannedSkillToolContracts(registry: AgentRuntimeRegistryResponse | null) {
+  if (registry?.readiness_boundaries?.length) {
+    return registry.readiness_boundaries.slice(0, 6);
+  }
   const declared = new Set(registry?.declared_non_executable_skill_tools ?? []);
   return (registry?.skill_tool_mappings ?? [])
     .filter((mapping) => mapping.executable === false || declared.has(mapping.tool_id))
@@ -1208,23 +1218,26 @@ export function RegistryPanel({
         <section className="control-section">
           <div className="control-section__header">
             <div>
-              <span className="control-section__eyebrow">Planned execution</span>
-              <h4 className="control-section__title">Non-executable protocol contracts</h4>
+              <span className="control-section__eyebrow">Readiness boundaries</span>
+              <h4 className="control-section__title">Non-executable protocol intelligence</h4>
             </div>
             <span className="control-chip control-chip--attention">
-              visible, blocked
+              {plannedToolContracts.length} blocked
             </span>
           </div>
           <p className="panel__muted">
-            These contracts are visible for planning and review, but they cannot create agent
-            actions until governed approvals, scoped credentials, and external-write receipts are
-            implemented.
+            These contracts are visible for market research and merchant-readiness review. They
+            cannot create checkout, payment, cart, account, or browser transaction actions.
           </p>
           {plannedAdapters.length ? (
             <div className="agent-ops-summary">
               {plannedAdapters.map((adapter) => (
                 <span key={adapter.id} className="panel__badge panel__badge--secondary">
                   {adapter.id} · {adapter.effect_class ?? "unknown"} · planned
+                  {adapter.contract_intent ? ` · ${adapter.contract_intent}` : ""}
+                  {adapter.receipt_contract?.receipt_type
+                    ? ` · receipt: ${adapter.receipt_contract.receipt_type}`
+                    : ""}
                 </span>
               ))}
             </div>
@@ -1240,12 +1253,19 @@ export function RegistryPanel({
                 <div className="table__row" key={mapping.tool_id}>
                   <div className="table__cell" data-label="Tool contract">
                     <div className="table__strong">{mapping.tool_id}</div>
+                    <div className="table__muted">
+                      {mapping.contract_intent ?? "non-executable"}
+                      {mapping.adapter_id ? ` · ${mapping.adapter_id}` : ""}
+                    </div>
                   </div>
                   <div className="table__cell table__muted" data-label="Skills">
                     {mapping.skill_ids.join(", ") || "unmapped"}
                   </div>
                   <div className="table__cell" data-label="Status">
-                    non-executable
+                    <div>non-executable</div>
+                    <div className="table__muted">
+                      {formatBlockedReason(mapping.blocked_reason)}
+                    </div>
                   </div>
                 </div>
               ))}

@@ -23,10 +23,13 @@ from application.services.agent_runtime.registry.catalog import (
     list_tool_specs,
 )
 from application.services.agent_runtime.registry.harnesses import list_harness_profiles
+from application.services.agent_runtime.registry.non_executable import (
+    build_skill_tool_mappings,
+    non_executable_tool_contracts,
+)
 from application.services.agent_runtime.registry.profile_defaults import (
     normalize_agent_profile_defaults,
 )
-
 
 def registry_contract_payload(
     ownership_by_tool: Mapping[str, Mapping[str, Any]]
@@ -43,18 +46,12 @@ def registry_contract_payload(
         for capability in list_capability_specs()
     ]
     executable_tool_ids = {tool.id for tool in list_tool_specs()}
-    skill_ids_by_tool: Dict[str, list[str]] = {}
-    for skill in skills:
-        for tool_id in skill.get("tool_ids", []) or []:
-            skill_ids_by_tool.setdefault(str(tool_id), []).append(str(skill.get("id")))
-    skill_tool_mappings = [
-        {
-            "tool_id": tool_id,
-            "skill_ids": skill_ids,
-            "executable": tool_id in executable_tool_ids,
-        }
-        for tool_id, skill_ids in sorted(skill_ids_by_tool.items())
-    ]
+    adapters_by_id = {adapter.id: adapter.to_dict() for adapter in list_adapter_specs()}
+    skill_ids_by_tool, skill_tool_mappings = build_skill_tool_mappings(
+        skills=skills,
+        executable_tool_ids=executable_tool_ids,
+        adapters_by_id=adapters_by_id,
+    )
     skill_ids_by_executable_tool = {
         item["tool_id"]: item["skill_ids"]
         for item in skill_tool_mappings
@@ -68,20 +65,22 @@ def registry_contract_payload(
         selected = select_skill_for_tool_id(tool_id)
         skill_selection_by_tool[tool_id] = {
             "default_skill_id": selected.id if selected else None,
-            "candidate_skill_ids": [
-                skill.id for skill in skill_specs_for_tool_id(tool_id)
-            ],
+            "candidate_skill_ids": [skill.id for skill in skill_specs_for_tool_id(tool_id)],
         }
     return {
         "registry_version": REGISTRY_VERSION,
         "registry_ownership_source": "persistent" if ownership else "static_code",
-        "execution_adapters": [adapter.to_dict() for adapter in list_adapter_specs()],
+        "execution_adapters": list(adapters_by_id.values()),
         "skills": skills,
         "tools": tools,
         "capabilities": capabilities,
         "skill_ids_by_tool": skill_ids_by_tool,
         "skill_ids_by_executable_tool": skill_ids_by_executable_tool,
         "declared_non_executable_skill_tools": declared_non_executable_skill_tools,
+        "readiness_boundaries": non_executable_tool_contracts(
+            skill_ids_by_tool=skill_ids_by_tool,
+            adapters_by_id=adapters_by_id,
+        ),
         "skill_tool_mappings": skill_tool_mappings,
         "skill_selection_by_tool": skill_selection_by_tool,
         "recovery_templates": list_recovery_templates(),

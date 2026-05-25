@@ -1055,6 +1055,15 @@ export type ExternalAgentJobReceiptVerification = {
   blockers: string[];
 };
 
+export type ExternalAgentProtocolDomainSummary = {
+  domain: "protocol_discovery" | string; readiness_status?: string | null;
+  readiness_score?: number | null; candidate_count?: number | null; receipt_id?: string | null;
+  source_counts?: Record<string, number>; live_source_count?: number | null; local_source_count?: number | null;
+  [key: string]: unknown;
+};
+
+export type ExternalAgentActivityItem = { type: "job" | "receipt" | "run_event" | string; subtype?: string | null; capability_name?: string | null; domain_summary?: ExternalAgentProtocolDomainSummary; [key: string]: unknown; };
+
 export type ExternalAgentJobOperatorDetail = {
   job: {
     id: string;
@@ -1079,6 +1088,7 @@ export type ExternalAgentJobOperatorDetail = {
   receipts: Record<string, unknown>[];
   latest_receipt?: Record<string, unknown> | null;
   verification?: ExternalAgentJobReceiptVerification | null;
+  activity_items?: ExternalAgentActivityItem[];
 };
 
 export type AgentRunControlResponse = {
@@ -1255,12 +1265,30 @@ export type AgentRuntimeExecutionAdapter = {
   writes_external_system?: boolean;
   requires_operator_review?: boolean;
   description?: string;
+  contract_intent?: string;
+  receipt_contract?: {
+    required?: boolean;
+    receipt_type?: string;
+    required_fields?: string[];
+    evidence_fields?: string[];
+    must_link_run_event?: boolean;
+  };
 };
 
 export type AgentRuntimeSkillToolMapping = {
   tool_id: string;
   skill_ids: string[];
   executable: boolean;
+  adapter_id?: string;
+  contract_intent?: string;
+  blocked_reason?: string;
+  receipt_contract?: AgentRuntimeExecutionAdapter["receipt_contract"];
+};
+
+export type AgentRuntimeReadinessBoundary = AgentRuntimeSkillToolMapping & {
+  adapter_id: string;
+  contract_intent: string;
+  blocked_reason: string;
 };
 
 export type AgentRuntimeRegistryResponse = {
@@ -1278,6 +1306,7 @@ export type AgentRuntimeRegistryResponse = {
   capabilities: AgentRuntimeCapabilitySpec[];
   skill_ids_by_tool: Record<string, string[]>;
   declared_non_executable_skill_tools?: string[];
+  readiness_boundaries?: AgentRuntimeReadinessBoundary[];
   skill_tool_mappings?: AgentRuntimeSkillToolMapping[];
   skill_selection_by_tool?: Record<
     string,

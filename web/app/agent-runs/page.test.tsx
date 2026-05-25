@@ -252,6 +252,14 @@ describe("AgentRunsPage timeline presets", () => {
           external_side_effects: true,
           writes_external_system: true,
           requires_operator_review: true,
+          contract_intent: "readiness_boundary",
+          receipt_contract: {
+            required: true,
+            receipt_type: "external_write_execution",
+            required_fields: ["approval_receipt_id"],
+            evidence_fields: ["checkout_session_id"],
+            must_link_run_event: true,
+          },
         },
       ],
       skills: [
@@ -315,6 +323,16 @@ describe("AgentRunsPage timeline presets", () => {
         "protocol.ucp.checkout": ["execute-governed-protocol-commerce"],
       },
       declared_non_executable_skill_tools: ["protocol.ucp.checkout"],
+      readiness_boundaries: [
+        {
+          tool_id: "protocol.ucp.checkout",
+          skill_ids: ["execute-governed-protocol-commerce"],
+          executable: false,
+          adapter_id: "protocol.checkout.v1",
+          contract_intent: "readiness_boundary",
+          blocked_reason: "readiness_boundary_only_no_transaction_execution",
+        },
+      ],
       skill_tool_mappings: [
         {
           tool_id: "experiment.run_variant",
@@ -325,6 +343,9 @@ describe("AgentRunsPage timeline presets", () => {
           tool_id: "protocol.ucp.checkout",
           skill_ids: ["execute-governed-protocol-commerce"],
           executable: false,
+          adapter_id: "protocol.checkout.v1",
+          contract_intent: "readiness_boundary",
+          blocked_reason: "readiness_boundary_only_no_transaction_execution",
         },
       ],
       skill_selection_by_tool: {
@@ -915,9 +936,21 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
     expect(screen.getByText(/Release status: active/i)).toBeInTheDocument();
     expect(screen.getByText(/Source: registry_default/i)).toBeInTheDocument();
-    expect(screen.getByText(/Non-executable protocol contracts/i)).toBeInTheDocument();
-    expect(screen.getByText(/protocol.checkout.v1 · external_side_effect · planned/i)).toBeInTheDocument();
+    expect(screen.getByText(/Non-executable protocol intelligence/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /protocol.checkout.v1 · external_side_effect · planned · readiness_boundary · receipt: external_write_execution/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/cannot create checkout, payment, cart, account, or browser transaction actions/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 blocked/i)).toBeInTheDocument();
     expect(screen.getByText(/protocol.ucp.checkout/i)).toBeInTheDocument();
+    expect(screen.getByText(/readiness_boundary · protocol.checkout.v1/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Market research only, no transaction execution/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/^non-executable$/i).length).toBeGreaterThan(0);
     updateAgentRuntimeRegistryOwnershipMock
       .mockResolvedValueOnce({
@@ -1177,6 +1210,16 @@ describe("AgentRunsPage timeline presets", () => {
                 acp_product_feed: 2,
                 ucp_local_metadata: 1,
               },
+              readiness_summary: {
+                status: "needs_review",
+                score: 67,
+                candidate_count: 3,
+                ready_candidates: 1,
+                warning_candidates: 1,
+                blocked_candidates: 1,
+                live_source_count: 2,
+                local_source_count: 1,
+              },
             },
           },
           tool_id: "protocol.discover_candidates",
@@ -1195,6 +1238,14 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Discovery provenance/i)).toBeInTheDocument();
     expect(screen.getByText(/ACP product feed: 2/i)).toBeInTheDocument();
     expect(screen.getByText(/UCP local metadata: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocol readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score: 67\/100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Candidates: 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ready: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Blocked: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence: 2 live \/ 1 local/i)).toBeInTheDocument();
   });
 
   it("surfaces external-agent job context and verifies the latest receipt", async () => {
@@ -1244,6 +1295,21 @@ describe("AgentRunsPage timeline presets", () => {
         valid_scope: false,
         blockers: ["Receipt signature is invalid."],
       },
+      activity_items: [
+        {
+          type: "run_event",
+          subtype: "action_executed",
+          capability_name: "check_protocol_readiness",
+          domain_summary: {
+            domain: "protocol_readiness",
+            readiness_status: "needs_review",
+            readiness_score: 0,
+            protocol_count: 1,
+            issue_count: 2,
+            receipt_id: "receipt-protocol-readiness",
+          },
+        },
+      ],
     });
 
     render(<AgentRunsPage />);
@@ -1251,6 +1317,11 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
     expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
     expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocols: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Issues: 2/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",

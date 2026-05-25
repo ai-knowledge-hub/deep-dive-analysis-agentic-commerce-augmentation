@@ -41,7 +41,10 @@ from application.services.agent_runtime.agent_first import (
     list_skill_specs,
     select_skill_for_tool_id,
 )
-from application.services.agent_runtime.registry import get_tool_spec
+from application.services.agent_runtime.registry import (
+    get_tool_spec,
+    non_executable_tool_contract,
+)
 from application.services.agent_runtime.runs import (
     AgentRunPlanError,
     create_agent_run_with_initial_plan,
@@ -168,13 +171,7 @@ def create_external_agent_job_route(
             brand_id=payload.brand_id,
             product_id=payload.product_id,
             experiment_id=payload.experiment_id,
-            objective={
-                **(payload.objective or {}),
-                "external_job": True,
-                "requested_skill_id": resolved["skill_id"],
-                "requested_tool_id": resolved["tool_id"],
-                "plan_mode": resolved["plan_mode"],
-            },
+            objective=_job_objective(payload=payload, resolved=resolved),
             allowed_capabilities=resolved["allowed_capabilities"],
             capability_versions=payload.capability_versions,
             budgets=payload.budgets,
@@ -567,14 +564,19 @@ def _resolve_requested_runtime_contract(
     tool = get_tool_spec(tool_id) if tool_id else None
     if tool_id and not tool:
         if _is_declared_non_executable_tool(tool_id):
+            contract_context = non_executable_tool_contract(tool_id)
             raise external_agent_error(
                 status_code=400,
                 code="declared_non_executable_tool",
                 message=(
                     f"Tool '{tool_id}' is declared in the registry as a "
-                    "non-executable contract and cannot create jobs yet"
+                    "non-executable readiness boundary and cannot create jobs"
                 ),
-                context={"tool_id": tool_id, "executable": False},
+                context={
+                    "tool_id": tool_id,
+                    "executable": False,
+                    **contract_context,
+                },
             )
         raise external_agent_error(
             status_code=400,
@@ -645,6 +647,23 @@ def _resolve_requested_runtime_contract(
                 *([skill_id] if skill_id else []),
             ]
         ),
+    }
+
+
+def _job_objective(
+    *, payload: ExternalAgentJobCreateRequest, resolved: Dict[str, Any]
+) -> Dict[str, Any]:
+    objective = dict(payload.objective or {})
+    if payload.brand_id:
+        objective["brand_id"] = payload.brand_id
+    if payload.product_id:
+        objective["product_id"] = payload.product_id
+    return {
+        **objective,
+        "external_job": True,
+        "requested_skill_id": resolved["skill_id"],
+        "requested_tool_id": resolved["tool_id"],
+        "plan_mode": resolved["plan_mode"],
     }
 
 

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from domain.protocol.types import ProtocolCandidate, StructuredQuery
+from domain.protocol.types import (
+    ProtocolCandidate,
+    ProtocolReadinessIssue,
+    StructuredQuery,
+)
 from application.services.admin.protocol_discovery_service import ProtocolDiscoveryService
 from infrastructure.protocol.acp import discover_acp_candidates, validate_acp_candidate
 import infrastructure.protocol.acp_live as acp_live
@@ -480,3 +484,56 @@ def test_protocol_discovery_result_exposes_candidate_source_counts():
 
     assert result["candidates"][0]["discovery_source"] == "acp_product_feed"
     assert result["summary"]["source_counts"] == {"acp_product_feed": 1}
+    assert result["summary"]["readiness_summary"]["status"] == "ready"
+    assert result["summary"]["readiness_summary"]["score"] == 100
+    assert result["summary"]["readiness_summary"]["live_source_count"] == 1
+    assert result["summary"]["readiness_summary"]["protocol_counts"] == {"acp": 1}
+
+
+def test_protocol_discovery_result_exposes_readiness_summary():
+    ready_candidate = ProtocolCandidate(
+        id="sku-ready",
+        name="Ready Runner",
+        description="Ready road running shoe.",
+        protocol="acp",
+        price=129,
+        availability="in_stock",
+        raw={"source": "acp_product_feed"},
+    )
+    warning_candidate = ProtocolCandidate(
+        id="sku-warning",
+        name="Warning Runner",
+        description="Running shoe missing optional freshness metadata.",
+        protocol="ucp",
+        price=119,
+        availability="in_stock",
+        raw={"source": "ucp_local_metadata"},
+    )
+    service = ProtocolDiscoveryService(
+        discover_acp_fn=lambda **kwargs: [ready_candidate],
+        discover_ucp_fn=lambda **kwargs: [warning_candidate],
+        validate_acp_fn=lambda candidate: [],
+        validate_ucp_fn=lambda candidate: [
+            ProtocolReadinessIssue(
+                field="metadata.updated_at",
+                severity="warning",
+                message="missing feed freshness timestamp",
+            )
+        ],
+    )
+
+    result = service.discover(client_id="client-a", query="running shoe")
+
+    assert result["summary"]["readiness_summary"] == {
+        "status": "needs_review",
+        "score": 75,
+        "candidate_count": 2,
+        "ready_candidates": 1,
+        "warning_candidates": 1,
+        "blocked_candidates": 0,
+        "issue_counts": {"error": 0, "warning": 1, "info": 0},
+        "protocol_counts": {"acp": 1, "ucp": 1},
+        "source_counts": {"acp_product_feed": 1, "ucp_local_metadata": 1},
+        "live_source_count": 1,
+        "local_source_count": 1,
+    }

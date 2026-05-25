@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
 from application.services.agent_runtime.adapters.types import (
@@ -21,6 +21,8 @@ class AdapterSpec:
     writes_external_system: bool = False
     requires_operator_review: bool = False
     description: str = ""
+    contract_intent: str = "runtime_execution"
+    receipt_contract: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -62,9 +64,33 @@ _ADAPTERS: dict[str, AdapterSpec] = {
         writes_external_system=True,
         requires_operator_review=True,
         description=(
-            "Planned governed ACP/UCP checkout execution adapter. Not executable "
-            "until external-write receipts and policy gates are implemented."
+            "Non-executable ACP/UCP checkout readiness boundary for merchant "
+            "protocol intelligence. Real transaction execution is not supported."
         ),
+        contract_intent="readiness_boundary",
+        receipt_contract={
+            "required": True,
+            "receipt_type": "external_write_execution",
+            "required_fields": [
+                "receipt_id",
+                "adapter_id",
+                "permission_scope",
+                "approval_receipt_id",
+                "idempotency_key",
+                "external_operation_id",
+                "request_fingerprint",
+                "response_fingerprint",
+                "verification_status",
+            ],
+            "evidence_fields": [
+                "protocol",
+                "merchant_host",
+                "checkout_session_id",
+                "cart_fingerprint",
+                "rollback_or_cancel_reference",
+            ],
+            "must_link_run_event": True,
+        },
     ),
     "protocol.payment_delegation.v1": AdapterSpec(
         id="protocol.payment_delegation.v1",
@@ -77,9 +103,33 @@ _ADAPTERS: dict[str, AdapterSpec] = {
         writes_external_system=True,
         requires_operator_review=True,
         description=(
-            "Planned delegated-payment adapter. Not executable until scoped "
-            "credentials, approval receipts, and rollback evidence are implemented."
+            "Non-executable delegated-payment readiness boundary for merchant "
+            "protocol intelligence. Real payment delegation is not supported."
         ),
+        contract_intent="readiness_boundary",
+        receipt_contract={
+            "required": True,
+            "receipt_type": "external_write_execution",
+            "required_fields": [
+                "receipt_id",
+                "adapter_id",
+                "permission_scope",
+                "approval_receipt_id",
+                "idempotency_key",
+                "external_operation_id",
+                "request_fingerprint",
+                "response_fingerprint",
+                "verification_status",
+            ],
+            "evidence_fields": [
+                "payment_handler",
+                "delegation_scope",
+                "credential_reference",
+                "provider_reference",
+                "rollback_or_cancel_reference",
+            ],
+            "must_link_run_event": True,
+        },
     ),
     "fallback.browser_checkout.v1": AdapterSpec(
         id="fallback.browser_checkout.v1",
@@ -92,9 +142,33 @@ _ADAPTERS: dict[str, AdapterSpec] = {
         writes_external_system=True,
         requires_operator_review=True,
         description=(
-            "Planned narrow browser fallback for checkout verification/execution. "
-            "Not executable until browser permissions and evidence capture exist."
+            "Non-executable browser fallback readiness boundary for merchant "
+            "protocol intelligence. Browser transaction execution is not supported."
         ),
+        contract_intent="readiness_boundary",
+        receipt_contract={
+            "required": True,
+            "receipt_type": "external_write_execution",
+            "required_fields": [
+                "receipt_id",
+                "adapter_id",
+                "permission_scope",
+                "approval_receipt_id",
+                "idempotency_key",
+                "external_operation_id",
+                "request_fingerprint",
+                "response_fingerprint",
+                "verification_status",
+            ],
+            "evidence_fields": [
+                "browser_session_id",
+                "allowed_host",
+                "captured_artifact_ids",
+                "final_url",
+                "rollback_or_cancel_reference",
+            ],
+            "must_link_run_event": True,
+        },
     ),
 }
 
@@ -165,4 +239,6 @@ def _coerce_adapter_spec(value: AdapterSpec | Mapping[str, Any] | None) -> Adapt
         writes_external_system=bool(value.get("writes_external_system")),
         requires_operator_review=bool(value.get("requires_operator_review")),
         description=str(value.get("description") or ""),
+        contract_intent=str(value.get("contract_intent") or "runtime_execution"),
+        receipt_contract=dict(value.get("receipt_contract") or {}),
     )

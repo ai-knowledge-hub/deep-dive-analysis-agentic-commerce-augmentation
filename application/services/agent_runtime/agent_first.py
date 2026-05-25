@@ -174,8 +174,8 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         id="execute-governed-protocol-commerce",
         name="Execute Governed Protocol Commerce",
         description=(
-            "Planned governed ACP/UCP checkout, delegated payment, and browser "
-            "fallback execution once external-write receipts are available."
+            "Non-executable ACP/UCP checkout, delegated-payment, and browser "
+            "fallback readiness boundaries for merchant protocol intelligence."
         ),
         version="v1",
         tool_ids=(
@@ -186,7 +186,7 @@ _SKILL_SPECS: tuple[SkillSpec, ...] = (
         ),
         risk_class="external_side_effect",
         selection_priority=95,
-        intent_tags=("checkout", "payment", "protocol_execution"),
+        intent_tags=("checkout_readiness", "payment_readiness", "protocol_intelligence"),
     ),
 )
 

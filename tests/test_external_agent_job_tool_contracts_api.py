@@ -60,10 +60,17 @@ def test_external_agent_job_distinguishes_non_executable_from_unknown_tool(
     detail = non_executable.json()["detail"]
     assert detail["code"] == "declared_non_executable_tool"
     assert detail["retryable"] is False
-    assert detail["context"] == {
-        "tool_id": "protocol.ucp.checkout",
-        "executable": False,
-    }
+    assert detail["context"]["tool_id"] == "protocol.ucp.checkout"
+    assert detail["context"]["executable"] is False
+    assert detail["context"]["adapter_id"] == "protocol.checkout.v1"
+    assert detail["context"]["contract_intent"] == "readiness_boundary"
+    assert (
+        detail["context"]["blocked_reason"]
+        == "readiness_boundary_only_no_transaction_execution"
+    )
+    assert detail["context"]["receipt_contract"]["receipt_type"] == (
+        "external_write_execution"
+    )
 
     unknown = client.post(
         "/external-agent/jobs",
