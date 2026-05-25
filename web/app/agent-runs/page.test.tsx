@@ -1256,6 +1256,69 @@ describe("AgentRunsPage timeline presets", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows protocol readiness issues for selected actions", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "completed",
+        state: "protocol_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "auto_execute_safe",
+        allowed_capabilities: ["check_protocol_readiness"],
+      },
+      actions: [
+        {
+          id: "action-readiness",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "executed",
+          capability_name: "check_protocol_readiness",
+          capability_version: "v1",
+          rationale: "Check protocol readiness.",
+          inputs: { product_id: "product-a", protocols: ["ucp"] },
+          outputs: {
+            protocol_readiness: [
+              {
+                protocol: "ucp",
+                product_id: "product-a",
+                issue_count: 1,
+                ready: false,
+                issues: [
+                  {
+                    field: "ucp_profile",
+                    message: "Missing UCP business profile for brand.",
+                  },
+                ],
+              },
+            ],
+          },
+          tool_id: "protocol.readiness_check",
+          skill_id: "discover-protocol-candidates",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
+          tool_version: "v1",
+          skill_version: "v1",
+          effect_class: "read",
+        },
+      ],
+    });
+
+    render(<AgentRunsPage />);
+
+    expect(
+      await screen.findByText("Protocol readiness", { selector: ".panel__subheading" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocols: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Issues: 1/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Why: Missing UCP business profile for brand/i),
+    ).toBeInTheDocument();
+  });
+
   it("surfaces external-agent job context and verifies the latest receipt", async () => {
     getAgentRunMock.mockResolvedValue({
       run: {
