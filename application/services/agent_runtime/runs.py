@@ -140,6 +140,7 @@ def create_agent_run_with_initial_plan(
         registry_payload=registry_payload,
         active_registry_fingerprint=active_registry_fingerprint,
         preferred_skill_id=preferred_skill_id,
+        harness_profile=harness_profile,
     )
     return run
 
@@ -186,12 +187,14 @@ def _seed_initial_plan(
     registry_payload: Dict[str, Any],
     active_registry_fingerprint: str,
     preferred_skill_id: Optional[str],
+    harness_profile: Dict[str, Any],
 ) -> None:
     plan = build_initial_plan(
         experiment_id=experiment_id,
         allowed_capabilities=allowed_capabilities,
         capability_versions=capability_versions,
         objective=run.get("objective") if isinstance(run.get("objective"), dict) else {},
+        planner_mode=str(harness_profile.get("planner_mode") or ""),
     )
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)

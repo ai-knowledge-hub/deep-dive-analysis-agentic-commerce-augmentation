@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
+from application.services.agent_runtime.planner_modes import apply_planner_mode
+
 
 @dataclass(frozen=True)
 class ProposedAction:
@@ -22,6 +24,7 @@ def build_initial_plan(
     allowed_capabilities: List[str],
     capability_versions: Dict[str, Any],
     objective: Optional[Dict[str, Any]] = None,
+    planner_mode: Optional[str] = None,
 ) -> List[ProposedAction]:
     """
     Minimal v0 planner.
@@ -223,7 +226,11 @@ def build_initial_plan(
                 confidence=0.45,
             )
         )
-    return actions
+    return apply_planner_mode(
+        actions=actions,
+        planner_mode=planner_mode,
+        objective=objective,
+    )
 
 
 def _protocol_discovery_inputs(objective: Dict[str, Any]) -> Dict[str, Any]:
