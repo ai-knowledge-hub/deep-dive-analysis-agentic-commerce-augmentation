@@ -39,6 +39,12 @@ def evaluate_stopping_conditions(
             condition="budget_exhausted",
             note="Run paused because a harness budget is exhausted.",
         )
+    if "policy_block" in conditions and _has_policy_blocked_action(actions):
+        return StopDecision(
+            status="paused",
+            condition="policy_block",
+            note="Run paused because policy blocked an action.",
+        )
     if "recommendation_produced" in conditions and any(
         str(item.get("capability_name") or "") == "recommend_next_action"
         and str(item.get("status") or "").lower() == "executed"
@@ -101,6 +107,24 @@ def _has_pending_external_effect(actions: List[Dict[str, Any]]) -> bool:
         spec = get_capability_spec(str(action.get("capability_name") or ""))
         effect_class = str(getattr(spec, "effect_class", "") or "")
         if effect_class in {"external_side_effect", "write_high_risk"}:
+            return True
+    return False
+
+
+def _has_policy_blocked_action(actions: List[Dict[str, Any]]) -> bool:
+    for action in actions:
+        status = str(action.get("status") or "").lower()
+        if status != "failed":
+            continue
+        error = str(action.get("error") or "").strip().lower()
+        if not error:
+            continue
+        if (
+            "policy profile" in error
+            or "capability '" in error
+            or "budget exceeded" in error
+            or "missing required inputs" in error
+        ):
             return True
     return False
 

@@ -202,6 +202,53 @@ def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch)
     assert failed_action["status"] == "failed"
 
 
+def test_step_once_pauses_when_harness_policy_block_is_met(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent-runtime-stop-policy-block.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["seed_hypotheses"],
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="freeze_retrieval_protocol",
+        inputs={"experiment_id": "exp-1"},
+    )
+
+    def _unexpected_execute_capability(**kwargs):
+        raise AssertionError("policy should block before capability execution")
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _unexpected_execute_capability,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="policy blocked"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    updated = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert updated is not None
+    assert updated["status"] == "paused"
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+    assert "not allowed" in failed_action["error"]
+    event = next(
+        item
+        for item in deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=10)
+        if item["event_type"] == "run_stopping_condition_met"
+    )
+    assert event["status"] == "paused"
+    assert event["anchors"]["stopping_condition"] == "policy_block"
+
+
 def test_step_once_pauses_when_harness_external_side_effect_boundary_is_met(tmp_path):
     db_path = tmp_path / "agent-runtime-stop-external-effect.db"
     set_database_path(db_path)

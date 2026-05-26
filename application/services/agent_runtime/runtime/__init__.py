@@ -6,8 +6,8 @@ from application.services.agent_runtime.runtime.service import (
     RunBusyError,
     RunNotFoundError,
     RuntimeResult,
-    execute_capability,
 )
+from application.services.agent_runtime.runtime.execution import execute_capability
 
 __all__ = [
     "AgentRuntimeService",

@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
-import sys
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -11,12 +8,16 @@ from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities import (
     CapabilityContext,
     CapabilityExecutionError,
-    execute_capability,
 )
 from application.services.agent_runtime.runtime.audit import (
     record_action_event,
     record_run_event,
 )
+from application.services.agent_runtime.runtime.execution import execute_runtime_capability
+from application.services.agent_runtime.runtime.failures import (
+    record_policy_failure_and_stop,
+)
+from application.services.agent_runtime.runtime.payloads import hash_payload
 from application.services.agent_runtime.runtime.status import (
     apply_stopping_condition,
     compute_next_run_status,
@@ -64,16 +65,6 @@ class RuntimeResult:
     run: Dict[str, Any]
     action: Optional[Dict[str, Any]] = None
     message: Optional[str] = None
-
-
-def _hash_payload(value: Any) -> str:
-    try:
-        encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    except Exception:
-        encoded = str(value).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 class AgentRuntimeService:
@@ -226,7 +217,7 @@ class AgentRuntimeService:
                     client_id=str(run.get("client_id") or ""),
                     user_id=user_id,
                 )
-                outputs = _execute_capability(
+                outputs = execute_runtime_capability(
                     deps=self._deps,
                     context=context,
                     capability_name=capability_name,
@@ -235,12 +226,27 @@ class AgentRuntimeService:
                 output_errors = validate_outputs(spec, outputs)
                 if output_errors:
                     raise CapabilityExecutionError("; ".join(output_errors))
-            except (PolicyError, AgentRuntimeError) as exc:
+            except PolicyError as exc:
+                stop = record_policy_failure_and_stop(
+                    deps=self._deps,
+                    run=run,
+                    action=action,
+                    error=str(exc),
+                )
+                if stop:
+                    raise AgentRuntimeError(stop.note) from exc
+                self._deps.agent_runs.update_agent_run(
+                    run_id=run_id,
+                    status="failed",
+                    error=str(exc),
+                )
+                raise AgentRuntimeError(str(exc)) from exc
+            except AgentRuntimeError as exc:
                 self._deps.agent_actions.update_agent_action_status(
                     action_id=str(action.get("id") or ""),
                     status="failed",
                     outputs={},
-                    outputs_hash=_hash_payload({}),
+                    outputs_hash=hash_payload({}),
                     error=str(exc),
                 )
                 self._deps.agent_runs.update_agent_run(
@@ -263,7 +269,7 @@ class AgentRuntimeService:
                     action_id=str(action.get("id") or ""),
                     status="failed",
                     outputs={},
-                    outputs_hash=_hash_payload({}),
+                    outputs_hash=hash_payload({}),
                     error=str(exc),
                 )
                 self._deps.agent_runs.update_agent_run(
@@ -286,7 +292,7 @@ class AgentRuntimeService:
                     action_id=str(action.get("id") or ""),
                     status="failed",
                     outputs={},
-                    outputs_hash=_hash_payload({}),
+                    outputs_hash=hash_payload({}),
                     error=str(exc),
                 )
                 self._deps.agent_runs.update_agent_run(
@@ -309,7 +315,7 @@ class AgentRuntimeService:
                 action_id=str(action.get("id") or ""),
                 status="executed",
                 outputs=outputs,
-                outputs_hash=_hash_payload(outputs),
+                outputs_hash=hash_payload(outputs),
             )
             record_action_event(
                 deps=self._deps,
@@ -380,13 +386,6 @@ class AgentRuntimeService:
             if claimed:
                 return claimed
         return None
-
-
-def _execute_capability(**kwargs: Any) -> Dict[str, Any]:
-    runtime_package = sys.modules.get("application.services.agent_runtime.runtime")
-    patched = getattr(runtime_package, "execute_capability", execute_capability)
-    return patched(**kwargs)
-
 
 __all__ = [
     "AgentRuntimeService",
