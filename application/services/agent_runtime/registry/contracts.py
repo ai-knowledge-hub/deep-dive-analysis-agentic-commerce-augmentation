@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, Mapping, Sequence
 
@@ -22,7 +20,9 @@ from application.services.agent_runtime.registry.catalog import (
     list_recovery_templates,
     list_tool_specs,
 )
+from application.services.agent_runtime.registry.hashing import hash_registry_payload
 from application.services.agent_runtime.registry.harnesses import list_harness_profiles
+from application.services.agent_runtime.registry import memory_policy
 from application.services.agent_runtime.registry.non_executable import (
     build_skill_tool_mappings,
     non_executable_tool_contracts,
@@ -81,6 +81,7 @@ def registry_contract_payload(
             skill_ids_by_tool=skill_ids_by_tool,
             adapters_by_id=adapters_by_id,
         ),
+        "memory_policy_contracts": memory_policy.memory_policy_contracts(),
         "skill_tool_mappings": skill_tool_mappings,
         "skill_selection_by_tool": skill_selection_by_tool,
         "recovery_templates": list_recovery_templates(),
@@ -97,7 +98,7 @@ def registry_fingerprint(
     harness_profiles: Sequence[Mapping[str, Any]] | None = None,
     agent_profile_defaults: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
-    return _hash_payload(
+    return hash_registry_payload(
         registry_contract_payload(
             ownership_by_tool=ownership_by_tool,
             harness_profiles=harness_profiles,
@@ -121,6 +122,7 @@ def _serialize_tool(
     candidate_skill_ids = [skill.id for skill in skill_specs_for_tool_id(tool.id)]
     default_skill = select_skill_for_tool_id(tool.id)
     payload["executable"] = True
+    payload.update(memory_policy.memory_metadata_for_tool(tool.id))
     payload["external_agent_contract"] = {
         "job_endpoint": "POST /external-agent/jobs",
         "accepted_plan_modes": ["single_tool", "workflow"],
@@ -154,6 +156,7 @@ def _serialize_capability(
     capability: CapabilitySpec, ownership_by_tool: Mapping[str, Mapping[str, Any]]
 ) -> Dict[str, Any]:
     payload = _serialize_spec(capability)
+    payload.update(memory_policy.memory_metadata_for_capability(capability))
     candidate_skill_ids = [skill.id for skill in skill_specs_for_tool_id(capability.tool_id)]
     default_skill = select_skill_for_tool_id(capability.tool_id)
     payload["executable"] = True
@@ -184,7 +187,6 @@ def _serialize_capability(
     else:
         payload["ownership_source"] = "static_code"
     return payload
-
 
 def _normalize_ownership_by_tool(
     ownership_by_tool: Mapping[str, Mapping[str, Any]]
@@ -220,12 +222,6 @@ def _normalize_harness_profiles(
         item.pop("updated_at", None)
         normalized.append(item)
     return normalized
-
-
-def _hash_payload(value: Any) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
 
 def version_context_for_capability(
     capability_name: str | None,

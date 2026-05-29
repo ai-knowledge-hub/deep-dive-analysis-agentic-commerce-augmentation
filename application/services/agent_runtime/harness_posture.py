@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from application.services.agent_runtime.registry import get_capability_spec
 
 _LEARNING_MEMORY_MUTATION_CAPABILITIES = {"update_posterior_and_decisions"}
+_MEMORY_EFFECT_LEARNING_MUTATION = "learning_memory_mutation"
 
 
 class HarnessPostureError(ValueError):
@@ -54,6 +55,16 @@ def validate_harness_memory_policy(
         )
 
 
+def capability_memory_effect(capability_name: str | None) -> str:
+    if str(capability_name or "").strip() in _LEARNING_MEMORY_MUTATION_CAPABILITIES:
+        return _MEMORY_EFFECT_LEARNING_MUTATION
+    return "none"
+
+
+def learning_memory_mutation_capabilities() -> List[str]:
+    return sorted(_LEARNING_MEMORY_MUTATION_CAPABILITIES)
+
+
 def validate_harness_runtime_posture(
     *, harness_profile: Dict[str, Any], run_mode: str, policy_profile_id: str
 ) -> None:
@@ -79,7 +90,9 @@ def validate_harness_runtime_posture(
 
 
 __all__ = [
+    "capability_memory_effect",
     "HarnessPostureError",
+    "learning_memory_mutation_capabilities",
     "validate_harness_capability_effects",
     "validate_harness_memory_policy",
     "validate_harness_runtime_posture",

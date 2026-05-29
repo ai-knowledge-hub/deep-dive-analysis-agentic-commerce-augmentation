@@ -140,6 +140,23 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     )
     assert "new_metric_id" in posterior["output_schema"]["required"]
     assert "variant_id" in posterior["output_schema"]["required"]
+    assert posterior["memory_effect"] == "learning_memory_mutation"
+    assert posterior["blocked_by_memory_policies"] == ["no_mutation"]
+    memory_contract = next(
+        item
+        for item in payload["memory_policy_contracts"]
+        if item["memory_policy"] == "no_mutation"
+    )
+    assert memory_contract["blocked_memory_effects"] == ["learning_memory_mutation"]
+    assert memory_contract["blocked_capabilities"] == [
+        "update_posterior_and_decisions"
+    ]
+    learning_tool = next(
+        tool
+        for tool in payload["tools"]
+        if tool["id"] == "learning.update_posterior_and_decisions"
+    )
+    assert learning_tool["memory_effect"] == "learning_memory_mutation"
     validation_template = next(
         item
         for item in payload["recovery_templates"]
