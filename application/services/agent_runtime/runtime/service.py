@@ -21,6 +21,7 @@ from application.services.agent_runtime.runtime.payloads import hash_payload
 from application.services.agent_runtime.runtime.status import (
     apply_stopping_condition,
     compute_next_run_status,
+    record_operator_pause_condition,
 )
 from application.services.agent_runtime.harness_posture import (
     HarnessPostureError,
@@ -118,6 +119,7 @@ class AgentRuntimeService:
             status="paused",
             note="Run paused",
         )
+        record_operator_pause_condition(deps=self._deps, run=updated or run)
         return RuntimeResult(run=updated or run)
 
     def cancel_run(self, *, run_id: str) -> RuntimeResult:

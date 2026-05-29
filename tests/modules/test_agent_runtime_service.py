@@ -168,6 +168,32 @@ def test_step_once_rejects_paused_run(tmp_path):
     assert unchanged["status"] == "paused"
 
 
+def test_pause_run_records_operator_pause_stopping_condition(tmp_path):
+    db_path = tmp_path / "agent-runtime-operator-pause.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="plan_only",
+        harness_id="operator_supervised",
+        policy_profile_id="human_approval_required",
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.pause_run(run_id=run["id"])
+    assert result.run["status"] == "paused"
+    events = deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=10)
+    assert any(item["event_type"] == "run_paused" for item in events)
+    stop_event = next(
+        item
+        for item in events
+        if item["event_type"] == "run_stopping_condition_met"
+    )
+    assert stop_event["status"] == "paused"
+    assert stop_event["anchors"]["stopping_condition"] == "operator_pause"
+
+
 def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch):
     db_path = tmp_path / "agent-runtime-safe-auto-side-effect.db"
     set_database_path(db_path)

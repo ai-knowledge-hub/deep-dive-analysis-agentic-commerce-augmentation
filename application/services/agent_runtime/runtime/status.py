@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from application.ports.deps import AppDeps
+from application.services.agent_runtime.registry import get_harness_profile
 from application.services.agent_runtime.runtime.audit import record_run_event
 from application.services.agent_runtime.runtime.stopping import (
     StopDecision,
@@ -19,6 +20,25 @@ def apply_stopping_condition(*, deps: AppDeps, run: Dict[str, Any]) -> StopDecis
     deps.agent_runs.update_agent_run(run_id=run_id, status=stop.status, error=None)
     _record_stop(deps=deps, run_id=run_id, stop=stop)
     return stop
+
+
+def record_operator_pause_condition(*, deps: AppDeps, run: Dict[str, Any]) -> None:
+    harness = get_harness_profile(str(run.get("harness_id") or "")) or {}
+    conditions = {
+        str(item).strip()
+        for item in list(harness.get("stopping_conditions") or [])
+        if str(item).strip()
+    }
+    if "operator_pause" in conditions:
+        _record_stop(
+            deps=deps,
+            run_id=str(run.get("id") or ""),
+            stop=StopDecision(
+                status="paused",
+                condition="operator_pause",
+                note="Run paused by operator.",
+            ),
+        )
 
 
 def compute_next_run_status(*, deps: AppDeps, run: Dict[str, Any], run_id: str) -> str:
@@ -51,4 +71,8 @@ def _record_stop(*, deps: AppDeps, run_id: str, stop: StopDecision) -> None:
     )
 
 
-__all__ = ["apply_stopping_condition", "compute_next_run_status"]
+__all__ = [
+    "apply_stopping_condition",
+    "compute_next_run_status",
+    "record_operator_pause_condition",
+]
