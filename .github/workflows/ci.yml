@@ -45,6 +45,8 @@ jobs:
         run: make arch-check
       - name: Bloat Check
         run: make bloat-check
+      - name: Script Entrypoint Check
+        run: make script-entrypoint-check
       - name: Tests
         env:
           CATALOG_SOURCE: mock

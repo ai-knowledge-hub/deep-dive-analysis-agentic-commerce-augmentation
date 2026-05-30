@@ -338,11 +338,13 @@ If you see `No module named ruff` when running `make lint` or `make format`, run
 make lint
 make format
 make arch-check
+make bloat-check
+make script-entrypoint-check
 make test
 make web-lint
 ```
 
-Architecture checks are part of CI and enforce layer boundaries, including the command-route boundary that keeps HTTP routes behind command application services.
+Architecture checks are part of CI and enforce layer boundaries, command-route boundaries, import-cycle detection, coupling/dependency-depth thresholds, and per-function complexity caps. Bloat checks block file-size growth in known hotspots.
 
 ---
 
