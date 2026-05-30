@@ -18,11 +18,11 @@ The control plane should be the default. The lab should remain available when th
 
 | Mode | Routes | Purpose | Operator Question | System Behavior |
 | --- | --- | --- | --- | --- |
-| Entry | `/` | Choose the right workspace from current operational state. | Where should I look first? | Summarizes posture and routes to Inbox, Runs, Interventions, Learnings, or Lab. |
+| Entry | `/` | Choose the right workspace from current operational state. | Where should I look first? | Summarizes posture and routes to Inbox, Runs, Interventions, Insights, or Lab. |
 | Attention | `/inbox` | Triage blocked, failed, approval-needed, or review-needed work. | What needs attention now? | Groups recent execution by urgency/risk and links into specific runs/interventions. |
 | Supervision | `/runs` | Inspect and steer active/recent agent execution. | What is the agent doing and why? | Shows run state, actions, timeline, registry, harness, policy, receipts, and operator chat. |
 | Intervention | `/interventions` | Make explicit human decisions. | What do I need to approve, reject, retry, pause, or escalate? | Presents risky or blocked work as decision objects with preflight and confirmation. |
-| Learning | `/learnings` | Review what changed and what the system learned. | What changed, what got stronger/weaker, and what should happen next? | Summarizes evidence, validation, calibration, belief movement, and follow-up signals. |
+| Insights | `/learnings` | Review what changed and what the system learned. | What changed, what needs review, and what should happen next? | Summarizes outcomes, evidence, validation, recurring issues, and follow-up signals before exposing deeper mechanics. |
 | Advanced Lab | `/lab`, `/alignment`, `/evidence`, `/simulation`, `/experiments`, `/validation`, `/overview` | Explore, debug, and manually drive workflows. | What do I want to investigate or design directly? | Exposes deeper workflow tools that can later become agent-operated. |
 | Administration | `/admin` | Configure tenant/catalog/admin posture. | What system settings or catalog data need governance? | Handles setup/configuration outside the daily execution loop. |
 
@@ -37,24 +37,24 @@ flowchart TD
     Entry --> Inbox["Inbox: attention triage"]
     Entry --> Runs["Runs: execution supervision"]
     Entry --> Interventions["Interventions: decisions and recovery"]
-    Entry --> Learnings["Learnings: review changes"]
+    Entry --> Insights["Insights: review changes"]
     Entry --> Lab["Lab: advanced bench"]
 
     ExternalAPI --> Runtime
     Runtime --> Runs
     Runtime --> Inbox
     Runtime --> Interventions
-    Runtime --> Learnings
+    Runtime --> Insights
 
     Inbox --> Runs
     Inbox --> Interventions
     Runs --> Interventions
-    Runs --> Learnings
+    Runs --> Insights
     Interventions --> Runs
-    Interventions --> Learnings
-    Learnings --> Runs
+    Interventions --> Insights
+    Insights --> Runs
     Lab --> Runs
-    Lab --> Learnings
+    Lab --> Insights
 ```
 
 ## Agent Execution Flow
@@ -80,7 +80,7 @@ flowchart TD
 
     Policy -- "blocked / risky" --> Interventions["Interventions"]
     Receipts --> Runs["Runs timeline"]
-    Receipts --> Learnings["Learnings"]
+    Receipts --> Insights["Insights"]
 ```
 
 ## Operator Decision Loop
@@ -113,7 +113,7 @@ The root page is not a full dashboard. It should answer:
 
 - Is execution healthy?
 - Is anything blocked or risky?
-- Should the operator start in Inbox, Runs, Interventions, Learnings, or Lab?
+- Should the operator start in Inbox, Runs, Interventions, Insights, or Lab?
 
 Expected behavior:
 
@@ -158,9 +158,9 @@ Expected behavior:
 
 Interventions is where human accountability is concentrated.
 
-### Learning Mode
+### Insights Mode
 
-Learnings compress recent platform behavior.
+Insights compress recent platform behavior.
 
 Expected behavior:
 
@@ -168,7 +168,7 @@ Expected behavior:
 - Summarize validation outcomes, calibration drift, belief movement, and recurring failure modes.
 - Recommend follow-up work.
 
-Learnings should turn execution history into operator memory.
+Insights should turn execution history into operator memory while keeping internal mechanisms behind explanation and audit details.
 
 ### Advanced Lab Mode
 
@@ -211,7 +211,6 @@ Agents do the work.
 Runs explain the work.
 Inbox tells humans where attention is needed.
 Interventions capture accountable decisions.
-Learnings preserve what changed.
+Insights preserve what changed.
 Lab remains the advanced bench for exploration and workflow invention.
 ```
-

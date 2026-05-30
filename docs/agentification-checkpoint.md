@@ -56,7 +56,7 @@ The codebase now has the minimum spine for the pivot:
 - Recovery proposals now apply capability-specific templates so proposed actions carry safer default inputs, source-action context, and template IDs.
 - Interventions can now preflight, confirm, and create audited compensating proposals directly from those recommendations.
 - Compensating proposal command construction and UI rendering are now reusable control-plane primitives instead of Interventions-only inline logic.
-- Control-plane UX slices exist for Inbox, Runs, Interventions, and Learnings.
+- Control-plane UX slices exist for Inbox, Runs, Interventions, and Insights.
 - Primary control-plane pages now use the flattened visual language from `docs/ui-style-direction.md`; `/lab` is retained as an advanced bench with matching surface primitives.
 - `docs/operator-experience.md` is now the canonical operator/user guide, superseding the older lab-first guide in `docs/history/`.
 - Mock-auth local/E2E mode allows authenticated frontend development without live Clerk state.

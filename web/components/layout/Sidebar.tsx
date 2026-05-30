@@ -158,7 +158,7 @@ export function Sidebar({
     },
     {
       href: "/learnings",
-      label: "Learnings",
+      label: "Insights",
       shortLabel: "L",
       icon: (
         <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -73,7 +73,7 @@ The recommended primary navigation is:
 1. Inbox
 2. Runs
 3. Interventions
-4. Learnings
+4. Insights
 5. Admin
 
 Everything else becomes:
@@ -155,7 +155,7 @@ Primary contents:
 
 This should not be hidden inside long run timelines. It should be a dedicated, decision-efficient surface.
 
-### 4. Learnings
+### 4. Insights
 
 New route:
 
@@ -264,7 +264,7 @@ Primary section:
 - Inbox
 - Runs
 - Interventions
-- Learnings
+- Insights
 
 Secondary section:
 
@@ -320,7 +320,7 @@ This simplification should reuse existing components rather than replacing every
 
 Deliver:
 
-- add `Inbox`, `Interventions`, `Learnings`
+- add `Inbox`, `Interventions`, `Insights`
 - promote `Agent runs` into `Runs`
 - move lab-heavy routes into a secondary nav group
 - simplify `/` to a role-aware landing page
@@ -335,10 +335,10 @@ Deliver:
 - reduce root page to decision-oriented entry content
 - remove overlapping summary modules from `/`
 
-Status: in progress. The current root page is now a control-plane entry that loads a lightweight run snapshot, shows attention/active/recent counts, and recommends Inbox, Runs, Interventions, or Learnings based on current run state.
+Status: in progress. The current root page is now a control-plane entry that loads a lightweight run snapshot, shows attention/active/recent counts, and recommends Inbox, Runs, Interventions, or Insights based on current run state.
 
 Visual status: implemented for the primary agentic loop. `/`, `Runs`, `Inbox`,
-`Interventions`, and `Learnings` now use the flatter control-surface/list
+`Interventions`, and `Insights` now use the flatter control-surface/list
 language defined in `docs/ui-style-direction.md`.
 
 Lab status: retained as an advanced bench. `/lab` now uses the same visual
@@ -366,7 +366,7 @@ Deliver:
 - clearer state badges and failure surfaces
 
 Status: in progress. `Inbox` now groups recent work by `Critical`, `Review`,
-and `Watching` urgency, `Learnings` starts with recommended operator follow-ups
+and `Watching` urgency, `Insights` starts with recommended operator follow-ups
 and separates decision signals from general execution signals, and `Runs`
 orders the run selector by operator attention so failed and approval-needed
 execution contexts surface first.
@@ -379,7 +379,7 @@ The first UI slice should be intentionally small:
 2. add placeholder routes for:
    - `Inbox`
    - `Interventions`
-   - `Learnings`
+   - `Insights`
 3. move current workflow-heavy links into a `Lab` or secondary section in the sidebar
 4. simplify `/` so it primarily routes users to the correct workspace instead of rendering the full lab
 
@@ -403,7 +403,7 @@ Do not redesign the entire frontend at once.
 Use the current app structure as a migration base:
 
 - promote [web/app/agent-runs/page.tsx](/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx) into the core control-plane view
-- add `Inbox`, `Interventions`, and `Learnings`
+- add `Inbox`, `Interventions`, and `Insights`
 - demote the lab-heavy pages into a secondary navigation group
 - move the current all-in-one home page toward a lightweight role-aware entry point
 

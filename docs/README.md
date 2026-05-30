@@ -14,6 +14,7 @@ Use this index to avoid treating historical planning notes as active product or 
 - `codebase-cleanup-and-modularisation-plan.md`: cleanup and source modularisation plan.
 - `agentic-layer.md`: current runtime implementation notes.
 - `operator-experience.md`: current operator/user guide for the agentic control plane.
+- `usability-simplification-gate.md`: product-language and progressive-disclosure gate for hiding internal complexity.
 - `ux-flow-schema.md`: compact schema of UX modes, routing, and operator/agent flow.
 - `chat-led-operator-console-spec.md`: reference spec for chat-led control-plane interaction.
 - `ui-control-plane-simplification-plan.md`: current UI simplification roadmap.

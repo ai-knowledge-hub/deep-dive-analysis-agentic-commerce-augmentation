@@ -1,28 +1,30 @@
 # Agentic Commerce Control Plane
 
-**A governed agent execution fabric for commerce optimization: agents plan and run work through skills/tools, while humans supervise risk, approvals, recovery, and learning.**
+**A supervised agent workspace for improving commerce discoverability: set the goal, review the recommendation, approve the action, and monitor the outcome.**
 
 ---
 
 ## What This Repository Is
 
-This project is a multi-tenant agentic commerce control plane for:
-- governed agent runs across commerce optimization workflows,
-- human supervision, intervention, approval, and audit,
-- skills/tools registry management with policy and receipt checks,
-- intent-aware product discoverability optimization,
-- experiment/simulation-based screening,
-- real-world validation capture,
-- Bayesian-style belief updates,
-- memory distillation and reuse.
+This project is a multi-tenant control plane for commerce teams that want agents to improve how products are represented, discovered, validated, and monitored without forcing operators to drive every technical workflow manually.
 
-The core moat is not a single score or a standalone lab. It is the **governed feedback loop**: agents execute optimization work through policy-safe tools, every risky action is inspectable, and observed evidence updates future decisions.
+The default user model is intentionally simple:
+
+```text
+Goal -> Agent suggestion -> Human review -> Approved action -> Outcome
+```
+
+Operators should not need to understand simulations, calibration, memory artifacts, harnesses, or policy internals before they can do useful work. Those mechanisms remain available for explanation, audit, and administration, but the primary product experience is built around attention, review, approval, and outcomes.
+
+The core moat is the **governed feedback loop**: agents do the routine optimization work, humans stay in control of risky decisions, and observed outcomes improve future recommendations.
 
 Current product direction:
 - **Agent-first execution fabric**: principal-aware runs for humans, internal agents, and external agents; policy profiles; tool/skill lineage; registry-pinned actions; runtime receipt validation.
   See `docs/agentic-layer.md`.
-- **Human control plane**: Inbox, Runs, Interventions, and Learnings are the primary UX; Lab remains available as an advanced bench.
+- **Human control plane**: Inbox, Runs, Interventions, and Insights are the primary UX; Lab remains available as an advanced bench.
   See `docs/operator-experience.md`.
+- **Usability simplification gate**: primary product surfaces use operator language first and hide internal mechanisms behind explanation, audit, admin, or lab affordances.
+  See `docs/usability-simplification-gate.md`.
 - **Next build track**: external-agent job APIs, harness profiles, protocol/fallback execution adapters, and deeper control-plane UX simplification.
   See the `Next Development Tracks` section in `docs/agentification-checkpoint.md`.
 
@@ -30,19 +32,29 @@ Current product direction:
 
 ## Product Positioning
 
-This app is a **governed agent execution + validation + learning** platform.
+This app is a **supervised agent optimization** platform.
 
-- **Execution:** policy-governed agent runs with skill/tool lineage and auditable receipts.
-- **Supervision:** human approval, intervention, recovery, and command observability.
-- **Screening:** synthetic LLM judge signals (fast iteration).
-- **Validation:** observed reality signals plus provider-integrated synthetic checks.
-- **Learning:** belief revision + memory distillation + calibration profiles.
+- **Set direction:** choose the product or commercial goal that needs improvement.
+- **Review suggestions:** inspect what the agent recommends and why.
+- **Approve action:** approve, reject, retry, pause, or recover risky work.
+- **Monitor outcome:** see what changed and whether the system should keep going.
+- **Open the machinery when needed:** advanced users can inspect validation, evidence, policy, registry, and runtime details.
 
 It does **not** claim guaranteed production ranking outcomes from lab scores alone.
 
 ---
 
-## Core Learning Loop
+## Operator Loop
+
+The daily product loop is:
+
+1. Start in **Inbox** to see what needs attention.
+2. Open **Runs** to understand what the agent is doing.
+3. Use **Interventions** when a decision, approval, retry, or recovery is required.
+4. Review **Insights** to see what changed and what the system recommends next.
+5. Use **Lab** only when deeper manual investigation is needed.
+
+## Internal Learning Loop
 
 1. Run simulation/experiments to generate candidate improvements.
 2. Validate with synthetic and/or observed signals.
@@ -51,6 +63,8 @@ It does **not** claim guaranteed production ranking outcomes from lab scores alo
 5. Use those artifacts in future query generation and copy optimization.
 6. Recalibrate policy weights from drift between synthetic vs observed outcomes.
 7. Convert posterior into decision action (`promote_variant`, `iterate_variant`, `reject_hypothesis`).
+
+These are implementation mechanisms. Product surfaces should introduce them only as progressive disclosure under explanation, provenance, audit, or advanced-lab views.
 
 Loop APIs:
 - `GET /loop/state`

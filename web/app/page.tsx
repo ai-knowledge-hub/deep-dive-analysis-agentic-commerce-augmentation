@@ -41,10 +41,10 @@ const PRIMARY_ENTRY_CARDS: EntryCard[] = [
     badge: "Control",
   },
   {
-    title: "Learnings",
-    summary: "Review what changed recently and where the next operator attention should go.",
+    title: "Insights",
+    summary: "Review what changed recently and where operator attention should go next.",
     href: "/learnings",
-    cta: "Open learnings",
+    cta: "Open insights",
     badge: "Review",
   },
 ];
@@ -122,7 +122,7 @@ function buildControlPlaneSnapshot(runs: AgentRun[]): ControlPlaneSnapshot {
     approvalHintCount: approvalHints.length,
     recentCount: runs.length,
     recommendedHref: runs.length > 0 ? "/learnings" : "/runs",
-    recommendedCta: runs.length > 0 ? "Review learnings" : "Start in runs",
+    recommendedCta: runs.length > 0 ? "Review insights" : "Start in runs",
     recommendedSummary:
       runs.length > 0
         ? "No immediate execution blockers found. Review what changed recently."
@@ -303,7 +303,7 @@ export default function HomePage() {
                 <div className="control-list__row">
                   <div className="control-list__title">If execution is healthy but opaque</div>
                   <div className="panel__muted">
-                    Start in `Runs`, use the operator chat for explanation, then finish in `Learnings` to understand what changed.
+                    Start in `Runs`, use the operator chat for explanation, then finish in `Insights` to understand what changed.
                   </div>
                 </div>
                 <div className="control-list__row">
