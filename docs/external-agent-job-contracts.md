@@ -416,6 +416,10 @@ Behavior:
     `top_warnings`.
   - `protocol_readiness` summaries include `protocol_count`, `issue_count`,
     and `top_issues`.
+- Runtime stopping-condition events include `domain_summary` with
+  `domain=runtime_stopping_condition`, the stopping condition, outcome status,
+  operator-attention flag, terminal flag, and note so agents can distinguish
+  completed plans from pauses that need intervention.
 
 Use this endpoint for machine-friendly progress narration and polling.
 

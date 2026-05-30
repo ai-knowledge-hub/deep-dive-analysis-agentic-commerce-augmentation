@@ -275,12 +275,24 @@ def external_agent_activity_items(
 
 def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
     capability_name = str(event.get("capability_name") or "")
+    event_type = str(event.get("event_type") or "")
+    anchors = event.get("anchors") if isinstance(event.get("anchors"), dict) else {}
+    if event_type == "run_stopping_condition_met":
+        condition = str(anchors.get("stopping_condition") or "").strip()
+        if condition:
+            return {
+                "domain": "runtime_stopping_condition",
+                "stopping_condition": condition,
+                "outcome_status": event.get("status"),
+                "operator_attention_required": event.get("status") == "paused",
+                "terminal": event.get("status") in {"completed", "failed", "canceled"},
+                "note": event.get("note"),
+            }
     if capability_name not in {
         "discover_protocol_candidates",
         "check_protocol_readiness",
     }:
         return {}
-    anchors = event.get("anchors") if isinstance(event.get("anchors"), dict) else {}
     receipt = anchors.get("receipt") if isinstance(anchors.get("receipt"), dict) else {}
     evidence = receipt.get("evidence") if isinstance(receipt.get("evidence"), dict) else {}
     if not evidence:
