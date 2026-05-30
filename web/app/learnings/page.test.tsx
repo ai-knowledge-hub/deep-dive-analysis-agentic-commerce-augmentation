@@ -118,6 +118,7 @@ describe("LearningsPage", () => {
     expect(screen.getByText(/Validation accuracy/i)).toBeInTheDocument();
     expect(screen.getByText(/82%/i)).toBeInTheDocument();
     expect(screen.getAllByText(/shipping clarity/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Start with close validation gaps/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Decision signals/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Execution signals/i)).toBeInTheDocument();
     expect(screen.getByText(/Review recent execution drift/i)).toBeInTheDocument();
@@ -133,8 +134,8 @@ describe("LearningsPage", () => {
     const user = userEvent.setup();
     render(<LearningsPage />);
 
-    await screen.findByText(/Close validation gaps/i);
-    await user.click(screen.getByRole("button", { name: /Open validation/i }));
+    await screen.findAllByText(/Close validation gaps/i);
+    await user.click(screen.getAllByRole("button", { name: /Open validation/i })[0]);
 
     expect(pushMock).toHaveBeenCalledWith("/validation");
   });

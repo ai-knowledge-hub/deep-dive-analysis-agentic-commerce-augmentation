@@ -18,7 +18,9 @@ const PRIMARY_FILES = [
   "components/agent/operatorChatLogic.ts",
   "components/agent-runs/SelectedActionDetailPanel.tsx",
   "components/agent-runs/RunStartGuide.tsx",
+  "components/interventions/InterventionStartGuide.tsx",
   "components/interventions/InterventionQueueSections.tsx",
+  "components/learnings/InsightsStartGuide.tsx",
 ];
 
 const INTERNAL_TERMS = [

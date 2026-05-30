@@ -80,6 +80,7 @@ retrieval, and local metadata fallback evidence.
 Role: explicit human control.
 
 Use it for approvals, rejects, retries, pauses, escalations, recovery proposals, and compensating actions. Risky or side-effectful work should surface here instead of being buried inside long timelines.
+The top of Interventions should pick the single highest-priority human decision first, then show the full queue for review.
 
 Primary questions:
 
@@ -93,6 +94,7 @@ Primary questions:
 Role: insights into what changed.
 
 Use it to understand recent evidence, outcome movement, recurring failure modes, and recommended follow-up work. Detailed calibration, belief, memory, and audit mechanics should be available as explanation or advanced detail, not as the first thing the operator must understand.
+The top of Insights should lead with one recommended follow-up before raw learning context.
 
 Primary questions:
 

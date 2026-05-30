@@ -18,6 +18,7 @@ import {
   PausesSection,
   RetriesSection,
 } from "../../components/interventions/InterventionQueueSections";
+import { InterventionStartGuide } from "../../components/interventions/InterventionStartGuide";
 import {
   buildApprovalItems,
   buildCommandItems,
@@ -49,6 +50,74 @@ import type {
   AgentCompensatingAction,
   AgentRunCommandPreflight,
 } from "../../lib/types";
+
+type BriefingMetric = {
+  label: string;
+  value: string | number;
+  tone?: "default" | "warning";
+};
+
+function buildInterventionBriefing({
+  userId,
+  runIdParam,
+  approvalsCount,
+  commandsCount,
+  escalationsCount,
+  pausesCount,
+  retriesCount,
+}: {
+  userId: string | null;
+  runIdParam: string;
+  approvalsCount: number;
+  commandsCount: number;
+  escalationsCount: number;
+  pausesCount: number;
+  retriesCount: number;
+}) {
+  if (!userId) {
+    return "Sign in to review approvals, retries, pauses, and escalation-worthy runs.";
+  }
+  const total =
+    approvalsCount + retriesCount + pausesCount + escalationsCount + commandsCount;
+  if (total === 0) {
+    if (runIdParam) {
+      return `Run ${runIdParam.slice(0, 8)} does not currently need operator intervention.`;
+    }
+    return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
+  }
+  const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
+  return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${escalationsCount} escalations, ${approvalsCount} approvals, ${commandsCount} recovery item${commandsCount === 1 ? "" : "s"}, ${retriesCount} retry or resume action${retriesCount === 1 ? "" : "s"}, and ${pausesCount} active run pause decision${pausesCount === 1 ? "" : "s"}.`;
+}
+
+function buildInterventionMetrics({
+  approvalsCount,
+  commandsCount,
+  escalationsCount,
+  pausesCount,
+  retriesCount,
+}: {
+  approvalsCount: number;
+  commandsCount: number;
+  escalationsCount: number;
+  pausesCount: number;
+  retriesCount: number;
+}): BriefingMetric[] {
+  return [
+    {
+      label: "Escalations",
+      value: escalationsCount,
+      tone: escalationsCount > 0 ? "warning" : "default",
+    },
+    { label: "Approvals", value: approvalsCount },
+    {
+      label: "Commands",
+      value: commandsCount,
+      tone: commandsCount > 0 ? "warning" : "default",
+    },
+    { label: "Retries", value: retriesCount },
+    { label: "Pauses", value: pausesCount },
+  ];
+}
 
 function InterventionsPageContent() {
   const router = useRouter();
@@ -170,23 +239,15 @@ function InterventionsPageContent() {
   );
 
   const briefing = useMemo(() => {
-    if (!userId) {
-      return "Sign in to review approvals, retries, pauses, and escalation-worthy runs.";
-    }
-    const total =
-      visibleApprovals.length +
-      visibleRetries.length +
-      visiblePauses.length +
-      visibleEscalations.length +
-      visibleCommands.length;
-    if (total === 0) {
-      if (runIdParam) {
-        return `Run ${runIdParam.slice(0, 8)} does not currently need operator intervention.`;
-      }
-      return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
-    }
-    const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
-    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleCommands.length} recovery item${visibleCommands.length === 1 ? "" : "s"}, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
+    return buildInterventionBriefing({
+      userId,
+      runIdParam,
+      approvalsCount: visibleApprovals.length,
+      commandsCount: visibleCommands.length,
+      escalationsCount: visibleEscalations.length,
+      pausesCount: visiblePauses.length,
+      retriesCount: visibleRetries.length,
+    });
   }, [
     runIdParam,
     userId,
@@ -302,6 +363,10 @@ function InterventionsPageContent() {
     router.push(buildRunsHref({ runId }));
   }
 
+  function openRuns() {
+    router.push(buildRunsHref({ runId: runIdParam || null }));
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -341,13 +406,13 @@ function InterventionsPageContent() {
             title="Intervention briefing"
             subtitle="Use interventions when the system needs an explicit human decision, not just observation."
             summary={briefing}
-            metrics={[
-              { label: "Escalations", value: escalations.length, tone: escalations.length > 0 ? "warning" : "default" },
-              { label: "Approvals", value: approvals.length },
-              { label: "Commands", value: commands.length, tone: commands.length > 0 ? "warning" : "default" },
-              { label: "Retries", value: retries.length },
-              { label: "Pauses", value: pauses.length },
-            ]}
+            metrics={buildInterventionMetrics({
+              approvalsCount: approvals.length,
+              commandsCount: commands.length,
+              escalationsCount: escalations.length,
+              pausesCount: pauses.length,
+              retriesCount: retries.length,
+            })}
             status={statusMessage}
             error={error}
           />
@@ -376,6 +441,18 @@ function InterventionsPageContent() {
           ) : null}
 
           <section className="control-grid control-grid--compact control-grid--full">
+            <InterventionStartGuide
+              escalations={visibleEscalations}
+              commands={visibleCommands}
+              approvals={visibleApprovals}
+              retries={visibleRetries}
+              pauses={visiblePauses}
+              busyKey={busyKey}
+              onApprove={(actionId) => void handleDecision(actionId, "approve")}
+              onOpenRun={openRun}
+              onControlRun={(runId, action) => void handleRunControl(runId, action)}
+              onOpenRuns={openRuns}
+            />
             <EscalationsSection items={visibleEscalations} onOpenRun={openRun} />
             <CommandWorkSection
               items={visibleCommands}

@@ -305,8 +305,9 @@ describe("InterventionsPage", () => {
     expect(listAgentRuntimeRegistryMock).toHaveBeenCalledWith("user-a");
 
     expect(
-      await screen.findByText(/Experiment exp-fail needs manual recovery/i),
+      (await screen.findAllByText(/Experiment exp-fail needs manual recovery/i))[0],
     ).toBeInTheDocument();
+    expect(screen.getByText(/Start with escalation/i)).toBeInTheDocument();
     expect(
       screen.getByText(/approve publish_copy_revision/i),
     ).toBeInTheDocument();
@@ -436,12 +437,32 @@ describe("InterventionsPage", () => {
     render(<InterventionsPage />);
 
     expect(await screen.findByText(/Run-scoped view/i)).toBeInTheDocument();
+    expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
     expect(screen.getByText(/approve publish_copy_revision/i)).toBeInTheDocument();
     expect(
-      screen.queryByText(/Experiment exp-fail needs manual recovery/i),
+      screen.queryByText(/^Experiment exp-fail needs manual recovery$/i),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Back to selected run/i }));
     expect(pushMock).toHaveBeenCalledWith("/runs?run_id=run-2");
+  });
+
+  it("lets the run-scoped start guide approve the selected action", async () => {
+    searchParamsValue = "run_id=run-2";
+    const user = userEvent.setup();
+    render(<InterventionsPage />);
+
+    await screen.findByText(/Start with approval/i);
+    await user.click(
+      screen.getByRole("button", { name: /Approve selected action/i }),
+    );
+
+    await waitFor(() => {
+      expect(decideAgentActionMock).toHaveBeenCalledWith(
+        "act-approve",
+        { decision: "approve" },
+        "user-a",
+      );
+    });
   });
 });

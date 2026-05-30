@@ -8,6 +8,10 @@ import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefi
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { Sidebar } from "../../components/layout/Sidebar";
 import {
+  InsightsStartGuide,
+  type InsightRecommendation,
+} from "../../components/learnings/InsightsStartGuide";
+import {
   getAgentRunEvents,
   getOverviewChanges,
   getOverviewSummary,
@@ -29,12 +33,7 @@ type LearningSignal = {
   category: "policy" | "failure" | "execution";
 };
 
-type Recommendation = {
-  title: string;
-  summary: string;
-  href: string;
-  cta: string;
-};
+type Recommendation = InsightRecommendation;
 
 type LearningGroup = {
   id: string;
@@ -311,6 +310,11 @@ export default function LearningsPage() {
           />
 
           <section className="control-grid control-grid--compact control-grid--full">
+            <InsightsStartGuide
+              recommendation={recommendations[0] ?? null}
+              onOpenRecommendation={(href) => router.push(href)}
+              onOpenRuns={() => router.push(buildRunsHref({ runId: null }))}
+            />
             <section className="control-surface">
               <div className="control-section__header">
                 <div>
