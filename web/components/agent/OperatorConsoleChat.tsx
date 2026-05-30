@@ -13,6 +13,7 @@ import type {
   AgentRuntimeRecoveryTemplate,
   AgentRuntimeSkillSpec,
 } from "../../lib/types";
+import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 import { OperatorChatPrompts } from "./OperatorChatPrompts";
 import { OperatorChatSummary } from "./OperatorChatSummary";
 import { OperatorChatThread } from "./OperatorChatThread";
@@ -343,7 +344,7 @@ export function OperatorConsoleChat({
           .join(" ");
       case "open_context":
         if (run.experiment_id) {
-          return "The most useful related context for this run is the linked experiment. Open it when you need to compare the run against the originating hypothesis, variants, and outcome framing.";
+          return "The most useful related context for this run is the linked optimization test. Open it when you need to compare the run against the original assumption, variants, and outcome framing.";
         }
         if (derived.validationLinkedActions.length > 0) {
           return "This run has validation-linked actions. Opening the validation workspace is the best next context jump because it tells you whether observed evidence supports the next move.";
@@ -389,17 +390,17 @@ export function OperatorConsoleChat({
         setMessages((current) => [
           ...current,
           {
-            id: `assistant-${Date.now()}-${command_type}-preflight`,
+            id: `assistant-${Date.now()}-${command_type}-safety-check`,
             role: "assistant",
             content: [
-              `Preflight: ${preflight.summary}`,
+              `Safety check: ${softenOperatorText(preflight.summary)}`,
               preflight.blockers.length > 0
-                ? `Blocker: ${preflight.blockers[0]}`
+                ? `Blocker: ${softenOperatorText(preflight.blockers[0])}`
                 : "",
               preflight.warnings.length > 0
-                ? `Warning: ${preflight.warnings[0]}`
+                ? `Warning: ${softenOperatorText(preflight.warnings[0])}`
                 : "",
-              `Rollback: ${preflight.rollback_guidance}`,
+              `Recovery path: ${softenOperatorText(preflight.rollback_guidance)}`,
               preflight.requires_confirmation && pendingCommandKey !== commandKey
                 ? "Click the command again to confirm."
                 : "",

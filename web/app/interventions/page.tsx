@@ -186,7 +186,7 @@ function InterventionsPageContent() {
       return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
     }
     const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
-    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleCommands.length} command-originated item${visibleCommands.length === 1 ? "" : "s"}, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
+    return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${visibleEscalations.length} escalations, ${visibleApprovals.length} approvals, ${visibleCommands.length} recovery item${visibleCommands.length === 1 ? "" : "s"}, ${visibleRetries.length} retry or resume action${visibleRetries.length === 1 ? "" : "s"}, and ${visiblePauses.length} active run pause decision${visiblePauses.length === 1 ? "" : "s"}.`;
   }, [
     runIdParam,
     userId,
@@ -282,14 +282,14 @@ function InterventionsPageContent() {
         await issueAgentRunCommand(item.run.id, command, userId);
         setPendingCompensatingKey(null);
         setStatusMessage(
-          `Compensating proposal created for ${recommendation.capability_name}.`,
+          `Recovery proposal created for ${recommendation.capability_name}.`,
         );
         await loadInterventions();
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Unable to create compensating proposal.",
+            : "Unable to create recovery proposal.",
         );
       } finally {
         setBusyKey(null);
@@ -339,7 +339,7 @@ function InterventionsPageContent() {
           <ControlPlaneBriefing
             label="Decision"
             title="Intervention briefing"
-            subtitle="Use interventions when the runtime needs an explicit human decision, not just observation."
+            subtitle="Use interventions when the system needs an explicit human decision, not just observation."
             summary={briefing}
             metrics={[
               { label: "Escalations", value: escalations.length, tone: escalations.length > 0 ? "warning" : "default" },

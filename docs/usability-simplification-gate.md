@@ -128,3 +128,13 @@ Use this prompt when reviewing product-surface changes:
 > Does this change help an operator complete a business task with less conceptual load, or does it make them understand more of the internal system?
 
 If the answer is "more internal system", the change should either be moved behind progressive disclosure or redesigned around the operator decision.
+
+## Automated Guard
+
+Run the primary-surface language guard before merging UI changes:
+
+```bash
+make web-ui-language-check
+```
+
+The guard scans the main operator surfaces for internal mechanism terms such as `preflight`, `harness`, `registry`, `posterior`, `snapshot`, and `compensating action`. Advanced/admin surfaces may still use those terms when the operator intentionally opens implementation details.

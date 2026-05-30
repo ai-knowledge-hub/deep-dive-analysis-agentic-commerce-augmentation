@@ -6,6 +6,7 @@ import type {
   AgentRunCommandPreflight,
   AgentRunEvent,
 } from "../../lib/types";
+import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 import { compensatingProposalLabel } from "./compensatingProposal";
 
 type Props = {
@@ -40,19 +41,23 @@ export function CompensatingProposalControl({
     <>
       {recommendation ? (
         <div className="list__meta">
-          Compensating action: {compensatingProposalLabel(recommendation)}
+          Recovery action: {softenOperatorText(compensatingProposalLabel(recommendation))}
         </div>
       ) : null}
       {preflight ? (
         <div className="panel__notice panel__notice--info">
-          <strong>Preflight:</strong> {preflight.summary}{" "}
+          <strong>Safety check:</strong> {softenOperatorText(preflight.summary)}{" "}
           <span className="panel__badge panel__badge--secondary">
             Risk: {preflight.risk_level}
           </span>
-          {preflight.blockers[0] ? <div>Blocker: {preflight.blockers[0]}</div> : null}
-          {preflight.warnings[0] ? <div>Warning: {preflight.warnings[0]}</div> : null}
-          <div>Rollback: {preflight.rollback_guidance}</div>
-          {needsConfirmation ? <div>Click again to confirm proposal creation.</div> : null}
+          {preflight.blockers[0] ? (
+            <div>Blocker: {softenOperatorText(preflight.blockers[0])}</div>
+          ) : null}
+          {preflight.warnings[0] ? (
+            <div>Warning: {softenOperatorText(preflight.warnings[0])}</div>
+          ) : null}
+          <div>Recovery path: {softenOperatorText(preflight.rollback_guidance)}</div>
+          {needsConfirmation ? <div>Click again to confirm recovery proposal creation.</div> : null}
         </div>
       ) : null}
       <div className="agent-ops-summary">
@@ -80,8 +85,8 @@ export function CompensatingProposalControl({
             {busy
               ? "Checking..."
               : needsConfirmation
-                ? "Confirm compensating proposal"
-                : "Create compensating proposal"}
+                ? "Confirm recovery proposal"
+                : "Create recovery proposal"}
           </button>
         ) : null}
         <button

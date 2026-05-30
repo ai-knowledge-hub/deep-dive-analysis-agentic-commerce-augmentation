@@ -925,12 +925,12 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/Execute one candidate variant against frozen snapshots/i),
+      screen.getByText(/Execute one candidate variant against saved evidence/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Compare the metric against control before promotion/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Registry: agent-runtime-static-v1/)).toBeInTheDocument();
+    expect(screen.getByText(/Tool contract: agent-runtime-static-v1/)).toBeInTheDocument();
     expect(screen.getByText(/Run registry: agent-runtime-static-v1/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Fingerprint: abcdef123456/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Registry source: static_code/i)).toBeInTheDocument();
@@ -1012,7 +1012,7 @@ describe("AgentRunsPage timeline presets", () => {
     await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
     await userEvent.clear(screen.getByLabelText(/Steward team/i));
     await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
-    await userEvent.click(screen.getByRole("button", { name: /Preflight ownership/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Preview ownership change/i }));
     expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenCalledWith(
       "experiment.run_variant",
       {
@@ -1023,7 +1023,7 @@ describe("AgentRunsPage timeline presets", () => {
       },
       "user-a",
     );
-    expect(await screen.findByText(/Preflight: medium risk/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Safety check: medium risk/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Apply ownership/i }));
     expect(updateAgentRuntimeRegistryOwnershipMock).toHaveBeenLastCalledWith(
       "experiment.run_variant",
@@ -1112,7 +1112,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Backfill updated 5 records/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
-    expect(screen.getByText(/Receipt fingerprint: abcdef123456/i)).toBeInTheDocument();
+    expect(screen.getByText(/Receipt id: abcdef123456/i)).toBeInTheDocument();
     expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();

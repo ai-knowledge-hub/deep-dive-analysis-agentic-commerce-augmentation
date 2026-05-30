@@ -6,29 +6,30 @@ import type {
   AgentRegistryOwnershipPreflight,
   AgentRuntimeCapabilitySpec,
 } from "../../lib/types";
+import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 
 const CAPABILITY_EXPLAIN: Record<
   string,
   { summary: string; sideEffects: string[] }
 > = {
   freeze_retrieval_protocol: {
-    summary: "Freezes retrieval snapshots for stable, fair variant comparison.",
-    sideEffects: ["Writes retrieval snapshots", "Pins snapshot version"],
+    summary: "Saves a stable evidence set for fair variant comparison.",
+    sideEffects: ["Writes saved evidence set", "Pins evidence version"],
   },
   run_control_baseline: {
-    summary: "Runs control on frozen snapshots to establish baseline gate.",
+    summary: "Runs control on saved evidence to establish baseline gate.",
     sideEffects: ["Creates run row", "Creates baseline metric row"],
   },
   seed_hypotheses: {
-    summary: "Builds hypotheses from baseline gaps and winner-signal deltas.",
-    sideEffects: ["Creates hypothesis rows"],
+    summary: "Builds test ideas from baseline gaps and winner-signal deltas.",
+    sideEffects: ["Creates test idea rows"],
   },
   generate_variants: {
     summary: "Generates and persists candidate variants from loop/cold-start evidence.",
     sideEffects: ["Creates variant rows", "Stores generation provenance"],
   },
   run_variant: {
-    summary: "Executes candidate variant on frozen snapshots.",
+    summary: "Executes candidate variant on the saved evidence set.",
     sideEffects: ["Creates run row", "Creates metric row with decision fields"],
   },
   request_synthetic_validation: {
@@ -40,7 +41,7 @@ const CAPABILITY_EXPLAIN: Record<
     sideEffects: ["Reads validation/metrics state", "Returns explicit gate statuses"],
   },
   update_posterior_and_decisions: {
-    summary: "Recomputes posterior and decision outputs from latest evidence.",
+    summary: "Updates confidence and decision outputs from latest evidence.",
     sideEffects: ["Creates decision-refresh metric row"],
   },
   recommend_next_action: {
@@ -279,9 +280,11 @@ export function SelectedActionDetailPanel({
         </span>
       </div>
       <p className="panel__muted">
-        {selectedCapabilitySpec?.summary ??
-          CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
-          "Capability summary not yet documented."}
+        {softenOperatorText(
+          selectedCapabilitySpec?.summary ??
+            CAPABILITY_EXPLAIN[selectedAction.capability_name]?.summary ??
+            "Capability summary not yet documented.",
+        )}
       </p>
       <div className="control-chip-row">
         <span className="control-chip">
@@ -294,10 +297,10 @@ export function SelectedActionDetailPanel({
           Effect: {selectedAction.effect_class ?? "unknown"}
         </span>
         <span className="control-chip">
-          Registry: {selectedAction.registry_version ?? "unpinned"}
+          Tool contract: {selectedAction.registry_version ?? "unpinned"}
         </span>
         <span className="control-chip">
-          Receipt fingerprint:{" "}
+          Receipt id:{" "}
           {selectedAction.registry_fingerprint
             ? selectedAction.registry_fingerprint.slice(0, 12)
             : "unpinned"}
@@ -313,7 +316,7 @@ export function SelectedActionDetailPanel({
       <p className="panel__subheading">What it changes</p>
       <ul className="panel__list panel__list--compact">
         {sideEffects.map((effect, index) => (
-          <li key={`${effect}-${index}`}>{effect}</li>
+          <li key={`${effect}-${index}`}>{softenOperatorText(effect)}</li>
         ))}
       </ul>
 
@@ -384,18 +387,18 @@ export function SelectedActionDetailPanel({
         </>
       ) : null}
 
-      <p className="panel__subheading">Registry review checklist</p>
+      <p className="panel__subheading">Tool contract review</p>
       {selectedCapabilitySpec?.review_checklist?.length ? (
         <ul className="panel__list panel__list--compact">
           {selectedCapabilitySpec.review_checklist.map((item, index) => (
-            <li key={`${item}-${index}`}>{item}</li>
+            <li key={`${item}-${index}`}>{softenOperatorText(item)}</li>
           ))}
         </ul>
       ) : (
-        <p className="panel__muted">No registry checklist captured for this capability yet.</p>
+        <p className="panel__muted">No tool-contract checklist captured for this capability yet.</p>
       )}
 
-      <p className="panel__subheading">Registry ownership</p>
+      <p className="panel__subheading">Tool ownership</p>
       <div className="control-chip-row">
         <span className="control-chip">
           Owner: {selectedCapabilitySpec?.owner_principal_id ?? "unassigned"}
@@ -429,21 +432,23 @@ export function SelectedActionDetailPanel({
           </label>
           {ownershipPreflight ? (
             <div className="panel__notice panel__notice--info">
-              <strong>Preflight: {ownershipPreflight.risk_level ?? "unknown"} risk</strong>
+              <strong>Safety check: {ownershipPreflight.risk_level ?? "unknown"} risk</strong>
               <p>
-                {ownershipPreflight.summary ??
-                  "Review this registry ownership change before applying it."}
+                {softenOperatorText(
+                  ownershipPreflight.summary ??
+                    "Review this tool ownership change before applying it.",
+                )}
               </p>
               {ownershipPreflight.warnings?.length ? (
                 <ul className="panel__list panel__list--compact">
                   {ownershipPreflight.warnings.map((warning, index) => (
-                    <li key={`${warning}-${index}`}>{warning}</li>
+                    <li key={`${warning}-${index}`}>{softenOperatorText(warning)}</li>
                   ))}
                 </ul>
               ) : null}
               {ownershipPreflight.rollback_guidance ? (
                 <p className="panel__muted">
-                  Rollback: {ownershipPreflight.rollback_guidance}
+                  Recovery path: {softenOperatorText(ownershipPreflight.rollback_guidance)}
                 </p>
               ) : null}
             </div>
@@ -459,7 +464,7 @@ export function SelectedActionDetailPanel({
                 !ownershipForm.steward_team.trim()
               }
             >
-              {ownershipBusy ? "Checking ownership" : "Preflight ownership"}
+              {ownershipBusy ? "Checking ownership" : "Preview ownership change"}
             </button>
             <button
               type="button"
@@ -482,23 +487,26 @@ export function SelectedActionDetailPanel({
         <div className="panel__notice panel__notice--info">{ownershipNotice}</div>
       ) : null}
 
-      <p className="panel__subheading">Rollback guidance</p>
+      <p className="panel__subheading">Recovery guidance</p>
       <p className="panel__muted">
-        {selectedAction.rollback_guidance || "No rollback guidance captured for this action yet."}
+        {softenOperatorText(
+          selectedAction.rollback_guidance ||
+            "No recovery guidance captured for this action yet.",
+        )}
       </p>
 
-      <p className="panel__subheading">Compensating actions</p>
+      <p className="panel__subheading">Recovery actions</p>
       {selectedAction.compensating_actions?.length ? (
         <ul className="panel__list panel__list--compact">
           {selectedAction.compensating_actions.map((item, index) => (
-            <li key={`${item.capability_name ?? item.label ?? "compensating"}-${index}`}>
-              {item.label ?? item.capability_name ?? "Review compensating action"}
-              {item.rationale ? `: ${item.rationale}` : ""}
+            <li key={`${item.capability_name ?? item.label ?? "recovery"}-${index}`}>
+              {softenOperatorText(item.label ?? item.capability_name ?? "Review recovery action")}
+              {item.rationale ? `: ${softenOperatorText(item.rationale)}` : ""}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="panel__muted">No compensating action recommendation captured.</p>
+        <p className="panel__muted">No recovery action recommendation captured.</p>
       )}
 
       <p className="panel__subheading">Rationale and confidence</p>

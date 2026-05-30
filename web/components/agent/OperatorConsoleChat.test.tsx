@@ -652,8 +652,8 @@ describe("OperatorConsoleChat", () => {
     expect(await screen.findByText(/Review metric metric-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Compare variant variant-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Open validation job job-1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Rollback guidance: Low-risk writes/i)).toBeInTheDocument();
-    expect(screen.getByText(/Compensating action: Ask policy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recovery guidance: Low-risk writes/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recovery action: Ask policy/i)).toBeInTheDocument();
   });
 
   it("preflights and confirms step and cancel commands", async () => {

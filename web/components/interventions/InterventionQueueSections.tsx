@@ -1,6 +1,7 @@
 import React from "react";
 import { CompensatingProposalControl } from "../agent/CompensatingProposalControl";
 import { compensatingProposalKey } from "../agent/compensatingProposal";
+import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 import type { AgentCompensatingAction, AgentRun, AgentRunCommandPreflight } from "../../lib/types";
 import { formatEventTime, formatRunLabel } from "./interventionLogic";
 import type {
@@ -73,13 +74,13 @@ function describeRisk(risk: RiskLevel): string {
 }
 
 function formatHarnessValue(value?: string | null): string {
-  return String(value || "not set").replaceAll("_", " ");
+  return softenOperatorText(String(value || "not set").replaceAll("_", " "));
 }
 
 function fallbackOrder(item: HarnessAwareIntervention): string {
   return (
     item.harness?.fallback_order?.map(formatHarnessValue).join(" -> ") ||
-    "registry recovery or operator review"
+    "recovery workflow or operator review"
   );
 }
 
@@ -90,7 +91,9 @@ function HarnessPosture({
   item: HarnessAwareIntervention & { run: AgentRun };
   focus: "approval" | "retry" | "fallback" | "stop";
 }) {
-  const harnessName = item.harness?.name ?? item.run.harness_id ?? "operator supervised";
+  const harnessName = softenOperatorText(
+    item.harness?.name ?? item.run.harness_id ?? "operator supervised",
+  );
   const focusEntry =
     focus === "approval"
       ? { label: "Approval", value: formatHarnessValue(item.harness?.approval_strategy) }
@@ -108,7 +111,7 @@ function HarnessPosture({
   return (
     <div className="panel__meta-strip panel__meta-strip--flat">
       <div>
-        <strong>Harness</strong>: {harnessName}
+        <strong>Execution posture</strong>: {harnessName}
       </div>
       <div>
         <strong>{focusEntry.label}</strong>: {focusEntry.value}
@@ -117,7 +120,7 @@ function HarnessPosture({
         <strong>Mode</strong>: {formatHarnessValue(item.run.run_mode)}
       </div>
       <div>
-        <strong>Policy</strong>: {formatHarnessValue(item.run.policy_profile_id)}
+        <strong>Safety rules</strong>: {formatHarnessValue(item.run.policy_profile_id)}
       </div>
     </div>
   );
@@ -158,7 +161,7 @@ export function EscalationsSection({ items, onOpenRun }: EscalationsProps) {
             <div key={`escalation-${item.run.id}`} className="intervention-item">
               <div className="list__title">{item.title}</div>
               <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-              <div className="panel__muted">{item.summary}</div>
+              <div className="panel__muted">{softenOperatorText(item.summary)}</div>
               <HarnessPosture item={item} focus="fallback" />
               {item.latestEvent?.timestamp ? (
                 <div className="list__meta">
@@ -193,12 +196,12 @@ export function CommandWorkSection({
   return (
     <section className="control-surface intervention-section">
       <div className="control-section__header">
-        <h3>Command-originated work</h3>
+        <h3>Recovery work</h3>
         <span className="control-chip control-chip--attention">{items.length}</span>
       </div>
       {items.length === 0 ? (
         <div className="panel__muted">
-          No high-risk command receipts or retry proposals need intervention.
+          No high-risk recovery proposals need intervention.
         </div>
       ) : (
         <div className="intervention-list">
@@ -212,10 +215,12 @@ export function CommandWorkSection({
               <div key={`command-${item.event.id}`} className="intervention-item">
                 <div className="list__title">{item.title}</div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-                <div className="panel__muted">{item.summary}</div>
+                <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="fallback" />
                 {item.rollbackGuidance ? (
-                  <div className="list__meta">Rollback: {item.rollbackGuidance}</div>
+                  <div className="list__meta">
+                    Recovery path: {softenOperatorText(item.rollbackGuidance)}
+                  </div>
                 ) : null}
                 <CompensatingProposalControl
                   recommendation={compensating}
@@ -260,7 +265,7 @@ export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: Appr
                   {formatRunLabel(item.run)}: approve {item.action.capability_name}
                 </div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-                <div className="panel__muted">{item.summary}</div>
+                <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="approval" />
                 <div className="control-chip-row">
                   <span className="control-chip">
@@ -327,7 +332,7 @@ export function RetriesSection({ items, busyKey, onRunControl, onOpenRun }: Retr
               <div key={`retry-${item.run.id}`} className="intervention-item">
                 <div className="list__title">{item.title}</div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-                <div className="panel__muted">{item.summary}</div>
+                <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="retry" />
                 <div className="detail__actions">
                   <button
@@ -379,7 +384,7 @@ export function PausesSection({ items, busyKey, onRunControl, onOpenRun }: Pause
               <div key={`pause-${item.run.id}`} className="intervention-item">
                 <div className="list__title">{formatRunLabel(item.run)} is executing</div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-                <div className="panel__muted">{item.summary}</div>
+                <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="stop" />
                 <div className="detail__actions">
                   <button

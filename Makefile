@@ -44,6 +44,10 @@ web-lint:
 web-complexity-check:
 	cd web && pnpm complexity-check
 
+.PHONY: web-ui-language-check
+web-ui-language-check:
+	cd web && pnpm ui-language-check
+
 .PHONY: web-test
 web-test:
 	cd web && pnpm test

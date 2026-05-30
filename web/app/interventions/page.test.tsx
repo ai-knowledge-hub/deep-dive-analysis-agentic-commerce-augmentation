@@ -320,15 +320,15 @@ describe("InterventionsPage", () => {
       screen.getByText(/Experiment exp-retr has a recovery proposal/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Rollback: Low-risk writes can usually be superseded/i),
+      screen.getByText(/Recovery path: Low-risk writes can usually be superseded/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Compensating action: Ask policy for the safest/i),
+      screen.getByText(/Recovery action: Ask policy for the safest/i),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/Harness/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Execution posture/i)[0]).toBeInTheDocument();
     expect(screen.getAllByText(/Safe Autonomy B2B/i)[0]).toBeInTheDocument();
     expect(
-      screen.getAllByText(/registry recovery template -> operator intervention/i)[0],
+      screen.getAllByText(/tool contract recovery template -> operator intervention/i)[0],
     ).toBeInTheDocument();
     expect(screen.getByText(/last safe checkpoint/i)).toBeInTheDocument();
     expect(screen.getByText(/operator pause/i)).toBeInTheDocument();
@@ -370,13 +370,13 @@ describe("InterventionsPage", () => {
     });
   });
 
-  it("creates compensating proposals from command-originated recommendations", async () => {
+  it("creates recovery proposals from command-originated recommendations", async () => {
     const user = userEvent.setup();
     render(<InterventionsPage />);
 
-    await screen.findByText(/Compensating action: Ask policy for the safest/i);
+    await screen.findByText(/Recovery action: Ask policy for the safest/i);
     await user.click(
-      screen.getByRole("button", { name: /Create compensating proposal/i }),
+      screen.getByRole("button", { name: /Create recovery proposal/i }),
     );
 
     await waitFor(() => {
@@ -398,12 +398,12 @@ describe("InterventionsPage", () => {
         "user-a",
       );
     });
-    expect(await screen.findByText(/Preflight passed with medium risk/i)).toBeInTheDocument();
-    expect(screen.getByText(/Click again to confirm proposal creation/i)).toBeInTheDocument();
+    expect(await screen.findByText(/safety check passed with medium risk/i)).toBeInTheDocument();
+    expect(screen.getByText(/Click again to confirm recovery proposal creation/i)).toBeInTheDocument();
     expect(issueAgentRunCommandMock).not.toHaveBeenCalled();
 
     await user.click(
-      screen.getByRole("button", { name: /Confirm compensating proposal/i }),
+      screen.getByRole("button", { name: /Confirm recovery proposal/i }),
     );
 
     await waitFor(() => {
@@ -426,7 +426,7 @@ describe("InterventionsPage", () => {
       );
     });
     expect(
-      await screen.findByText(/Compensating proposal created for recommend_next_action/i),
+      await screen.findByText(/Recovery proposal created for recommend_next_action/i),
     ).toBeInTheDocument();
   });
 
