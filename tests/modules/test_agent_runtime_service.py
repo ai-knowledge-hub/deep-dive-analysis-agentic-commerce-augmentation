@@ -311,6 +311,78 @@ def test_step_once_pauses_when_harness_external_side_effect_boundary_is_met(tmp_
     assert event["anchors"]["stopping_condition"] == "external_side_effect_required"
 
 
+def test_step_once_runs_safe_prefix_before_future_external_side_effect(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "agent-runtime-safe-prefix-before-external.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=[
+            "freeze_retrieval_protocol",
+            "request_synthetic_validation",
+        ],
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    safe_action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="freeze_retrieval_protocol",
+    )
+    external_action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=2,
+        status="proposed",
+        capability_name="request_synthetic_validation",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={},
+        inputs_hash="in-external",
+        outputs_hash=None,
+        rationale="future external action",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    def _fake_execute_capability(**kwargs):
+        assert kwargs["capability_name"] == "freeze_retrieval_protocol"
+        return {"ok": True, "status": "done"}
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _fake_execute_capability,
+    )
+
+    result = AgentRuntimeService(deps=deps).step_once(run_id=run["id"], user_id="user-a")
+
+    executed = deps.agent_actions.get_agent_action(action_id=safe_action["id"])
+    future = deps.agent_actions.get_agent_action(action_id=external_action["id"])
+    assert executed is not None
+    assert executed["status"] == "executed"
+    assert future is not None
+    assert future["status"] == "proposed"
+    assert result.action is not None
+    assert result.action["id"] == safe_action["id"]
+    assert result.run["status"] == "paused"
+    events = deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=20)
+    assert any(
+        item["event_type"] == "action_executed" and item["action_id"] == safe_action["id"]
+        for item in events
+    )
+    assert any(
+        item["event_type"] == "run_stopping_condition_met"
+        and item["anchors"]["stopping_condition"] == "external_side_effect_required"
+        for item in events
+    )
+
+
 def test_step_once_pauses_when_harness_budget_is_exhausted(tmp_path):
     db_path = tmp_path / "agent-runtime-stop-budget.db"
     set_database_path(db_path)

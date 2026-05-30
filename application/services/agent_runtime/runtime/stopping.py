@@ -100,15 +100,25 @@ def _budget_exhausted(*, run: Dict[str, Any], actions: List[Dict[str, Any]]) -> 
 
 
 def _has_pending_external_effect(actions: List[Dict[str, Any]]) -> bool:
-    for action in actions:
-        status = str(action.get("status") or "").lower()
-        if status not in {"approved", "executing", "proposed"}:
-            continue
-        spec = get_capability_spec(str(action.get("capability_name") or ""))
-        effect_class = str(getattr(spec, "effect_class", "") or "")
-        if effect_class in {"external_side_effect", "write_high_risk"}:
-            return True
-    return False
+    claimable = [
+        item
+        for item in actions
+        if str(item.get("status") or "").lower() in {"approved", "executing"}
+    ]
+    if claimable:
+        return _has_external_effect(claimable[0])
+    proposed = [
+        item
+        for item in actions
+        if str(item.get("status") or "").lower() == "proposed"
+    ]
+    return bool(proposed) and _has_external_effect(proposed[0])
+
+
+def _has_external_effect(action: Dict[str, Any]) -> bool:
+    spec = get_capability_spec(str(action.get("capability_name") or ""))
+    effect_class = str(getattr(spec, "effect_class", "") or "")
+    return effect_class in {"external_side_effect", "write_high_risk"}
 
 
 def _has_policy_blocked_action(actions: List[Dict[str, Any]]) -> bool:
