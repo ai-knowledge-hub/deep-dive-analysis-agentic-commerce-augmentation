@@ -195,7 +195,7 @@ Structured error shape:
 }
 ```
 
-External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, `idempotency_in_progress`, `idempotent_job_run_missing`, `external_agent_job_not_found`, `external_agent_job_run_not_found`, and `external_agent_receipt_not_available`.
+External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, `idempotency_in_progress`, `idempotent_job_run_missing`, `external_agent_job_not_found`, `external_agent_job_run_not_found`, `external_agent_event_page_not_found`, and `external_agent_receipt_not_available`.
 
 `declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects. For readiness-boundary tools, the error `context` includes `contract_intent`, `adapter_id`, `blocked_reason`, and the planned `receipt_contract`.
 
@@ -405,6 +405,7 @@ Behavior:
 - Items are normalized as `job`, `receipt`, or `run_event` so external assistants do not have to stitch multiple endpoints together.
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
+- Unknown or out-of-scope `event_id`/cursor references return `external_agent_event_page_not_found` with `job_id` and cursor context rather than a free-form 404 string.
 - Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
 - Protocol discovery and protocol readiness run events with receipt evidence
   include `domain_summary` so external assistants can read readiness status,
@@ -451,6 +452,7 @@ Behavior:
 - Only the creating principal can read the job event feed.
 - The endpoint returns the linked run's `agent_events` feed.
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
+- Unknown or out-of-scope `event_id`/cursor references return `external_agent_event_page_not_found` with retryable=false.
 
 ## Current Implementation Boundary
 

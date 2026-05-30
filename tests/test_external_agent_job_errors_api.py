@@ -36,13 +36,13 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def _headers() -> dict[str, str]:
+def _headers(*, scopes: list[str] | None = None) -> dict[str, str]:
     token = build_agent_principal_token(
         principal_id="agent-ext-1",
         client_id=CLIENT_ID,
         principal_type="external_agent",
         agent_profile_id="buyer-assistant-v1",
-        scopes=["external_agent_jobs:read"],
+        scopes=scopes or ["external_agent_jobs:read"],
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -69,3 +69,79 @@ def test_external_agent_job_missing_receipt_uses_stable_job_error_code(
     assert detail["code"] == "external_agent_job_not_found"
     assert detail["retryable"] is False
     assert detail["context"] == {"job_id": "job-missing"}
+
+
+def test_external_agent_activity_missing_event_uses_stable_error_code(
+    client: TestClient,
+):
+    headers = _headers(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:experiment.run_variant",
+            "skill:optimize-product-representation",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers=headers,
+        json={
+            "idempotency_key": "job-missing-activity-event",
+            "tool_id": "experiment.run_variant",
+        },
+    )
+    assert created.status_code == 200
+    job_id = created.json()["job"]["id"]
+
+    response = client.get(
+        f"/external-agent/jobs/{job_id}/activity?event_id=event-missing",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["code"] == "external_agent_event_page_not_found"
+    assert detail["retryable"] is False
+    assert detail["context"] == {
+        "job_id": job_id,
+        "event_id": "event-missing",
+        "reason": "Agent event not found",
+    }
+
+
+def test_external_agent_events_missing_event_uses_stable_error_code(
+    client: TestClient,
+):
+    headers = _headers(
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:experiment.run_variant",
+            "skill:optimize-product-representation",
+        ]
+    )
+    created = client.post(
+        "/external-agent/jobs",
+        headers=headers,
+        json={
+            "idempotency_key": "job-missing-events-event",
+            "tool_id": "experiment.run_variant",
+        },
+    )
+    assert created.status_code == 200
+    job_id = created.json()["job"]["id"]
+
+    response = client.get(
+        f"/external-agent/jobs/{job_id}/events?event_id=event-missing",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["code"] == "external_agent_event_page_not_found"
+    assert detail["retryable"] is False
+    assert detail["context"] == {
+        "job_id": job_id,
+        "event_id": "event-missing",
+        "reason": "Agent event not found",
+    }

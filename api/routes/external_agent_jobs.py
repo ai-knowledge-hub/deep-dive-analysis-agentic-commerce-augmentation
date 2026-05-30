@@ -442,7 +442,13 @@ def get_external_agent_job_activity_route(
             around=max(1, min(int(around), 2000)),
         ).to_dict()
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _external_agent_event_page_not_found(
+            job_id=job_id,
+            reason=str(exc),
+            before=before,
+            after=after,
+            event_id=event_id,
+        ) from exc
     items = external_agent_activity_items(
         job=job,
         run=run,
@@ -513,7 +519,13 @@ def get_external_agent_job_events_route(
             around=max(1, min(int(around), 2000)),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _external_agent_event_page_not_found(
+            job_id=job_id,
+            reason=str(exc),
+            before=before,
+            after=after,
+            event_id=event_id,
+        ) from exc
     payload = page.to_dict()
     sync_job_status_from_run(job=job, run=run)
     set_external_agent_poll_headers(response)
@@ -582,6 +594,29 @@ def _external_agent_job_run_not_found(*, job_id: str) -> HTTPException:
         code="external_agent_job_run_not_found",
         message="External agent job run not found",
         context={"job_id": job_id},
+    )
+
+
+def _external_agent_event_page_not_found(
+    *,
+    job_id: str,
+    reason: str,
+    before: Optional[str] = None,
+    after: Optional[str] = None,
+    event_id: Optional[str] = None,
+) -> HTTPException:
+    context = {"job_id": job_id}
+    if before:
+        context["before"] = before
+    if after:
+        context["after"] = after
+    if event_id:
+        context["event_id"] = event_id
+    return external_agent_error(
+        status_code=404,
+        code="external_agent_event_page_not_found",
+        message="External agent event page not found",
+        context={**context, "reason": reason},
     )
 
 
