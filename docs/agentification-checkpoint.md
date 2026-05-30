@@ -116,7 +116,7 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection. Protocol discovery, protocol readiness, and runtime stopping-condition activity now expose `domain_summary` payloads for machine callers and operator supervision.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection. Protocol discovery, protocol readiness, runtime stopping-condition, recovery recommendation, and policy recommendation activity now expose `domain_summary` payloads for machine callers and operator supervision.
 
 Next steps:
 

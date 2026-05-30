@@ -288,6 +288,31 @@ def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
                 "terminal": event.get("status") in {"completed", "failed", "canceled"},
                 "note": event.get("note"),
             }
+    if event_type in {"action_recovery_proposed", "action_retry_proposed"}:
+        compensating = anchors.get("compensating_actions")
+        return {
+            "domain": "recovery_recommendation",
+            "recommended_capability": capability_name or None,
+            "recommended_tool_id": event.get("tool_id"),
+            "recovery_strategy": anchors.get("recovery_strategy")
+            or anchors.get("retry_strategy"),
+            "recovery_template_id": anchors.get("recovery_template_id"),
+            "source_action_id": anchors.get("source_action_id")
+            or anchors.get("original_action_id"),
+            "side_effects": anchors.get("side_effects") or [],
+            "compensating_action_count": len(compensating)
+            if isinstance(compensating, list)
+            else 0,
+            "rollback_guidance": anchors.get("rollback_guidance"),
+        }
+    if capability_name == "recommend_next_action":
+        return {
+            "domain": "policy_recommendation",
+            "recommendation_status": event.get("status"),
+            "recommended_tool_id": event.get("tool_id"),
+            "operator_attention_required": event.get("status") == "proposed",
+            "note": event.get("note"),
+        }
     if capability_name not in {
         "discover_protocol_candidates",
         "check_protocol_readiness",

@@ -92,3 +92,54 @@ def test_external_agent_activity_summarizes_runtime_stopping_conditions(
         "terminal": False,
         "note": "Run paused because policy blocked an action.",
     }
+
+
+def test_external_agent_activity_summarizes_recovery_recommendations(
+    client: TestClient,
+):
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(),
+        json={"idempotency_key": "job-recovery-summary", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    run_id = payload["run"]["id"]
+    job_id = payload["job"]["id"]
+
+    default_deps().agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=3,
+        event_type="action_recovery_proposed",
+        status="proposed",
+        capability_name="recommend_next_action",
+        capability_version=None,
+        tool_id="policy.recommend_next_action",
+        note="Recovery action proposed by operator change-plan command",
+        anchors={
+            "source_action_id": "action-failed-1",
+            "recovery_strategy": "create_recovery_action",
+            "recovery_template_id": "recommend_next_action",
+            "side_effects": ["create_experiment_recommendation"],
+            "rollback_guidance": "Ask policy for the safest next action.",
+            "compensating_actions": [{"capability": "recommend_next_action"}],
+        },
+    )
+
+    activity = client.get(f"/external-agent/jobs/{job_id}/activity", headers=_headers())
+    assert activity.status_code == 200
+    recovery_item = next(
+        item for item in activity.json()["items"] if item["subtype"] == "action_recovery_proposed"
+    )
+    assert recovery_item["domain_summary"] == {
+        "domain": "recovery_recommendation",
+        "recommended_capability": "recommend_next_action",
+        "recommended_tool_id": "policy.recommend_next_action",
+        "recovery_strategy": "create_recovery_action",
+        "recovery_template_id": "recommend_next_action",
+        "source_action_id": "action-failed-1",
+        "side_effects": ["create_experiment_recommendation"],
+        "compensating_action_count": 1,
+        "rollback_guidance": "Ask policy for the safest next action.",
+    }

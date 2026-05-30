@@ -420,6 +420,13 @@ Behavior:
   `domain=runtime_stopping_condition`, the stopping condition, outcome status,
   operator-attention flag, terminal flag, and note so agents can distinguish
   completed plans from pauses that need intervention.
+- Recovery proposal events include `domain_summary` with
+  `domain=recovery_recommendation`, recommended capability/tool, recovery
+  strategy, template id, source action id, side effects, compensating action
+  count, and rollback guidance.
+- `recommend_next_action` run events include `domain=policy_recommendation`
+  with recommendation status, recommended tool id, operator-attention flag, and
+  note.
 
 Use this endpoint for machine-friendly progress narration and polling.
 
