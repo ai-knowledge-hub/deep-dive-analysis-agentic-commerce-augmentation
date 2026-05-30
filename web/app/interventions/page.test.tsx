@@ -307,7 +307,7 @@ describe("InterventionsPage", () => {
     expect(
       (await screen.findAllByText(/Experiment exp-fail needs manual recovery/i))[0],
     ).toBeInTheDocument();
-    expect(screen.getByText(/Start with escalation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
     expect(
       screen.getByText(/approve publish_copy_revision/i),
     ).toBeInTheDocument();

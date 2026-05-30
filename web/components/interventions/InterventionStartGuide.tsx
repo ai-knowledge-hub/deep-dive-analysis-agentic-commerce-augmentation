@@ -2,12 +2,15 @@
 
 import React, { useMemo } from "react";
 import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import { sortByPriorityAndRisk } from "./interventionLogic";
 import type {
   ApprovalItem,
   CommandItem,
   EscalationItem,
   PauseItem,
+  Priority,
   RetryItem,
+  RiskLevel,
 } from "./interventionTypes";
 
 type Guide =
@@ -52,6 +55,12 @@ type Props = {
   onOpenRuns: () => void;
 };
 
+type Candidate = Guide & {
+  priority: Priority;
+  risk: RiskLevel;
+  run: ApprovalItem["run"];
+};
+
 function buildGuide({
   escalations,
   commands,
@@ -59,73 +68,73 @@ function buildGuide({
   retries,
   pauses,
 }: Pick<Props, "escalations" | "commands" | "approvals" | "retries" | "pauses">): Guide {
-  const approvalRunIds = new Set(approvals.map((item) => item.run.id));
-  const escalation = escalations.find((item) => !approvalRunIds.has(item.run.id));
-  if (escalation) {
-    return {
+  const candidates: Candidate[] = [
+    ...escalations.map((item) => ({
       title: "Start with escalation",
-      summary: softenOperatorText(`${escalation.title}. ${escalation.summary}`),
+      summary: softenOperatorText(`${item.title}. ${item.summary}`),
       chip: "Escalation",
       cta: "Open run",
       tone: "attention",
       action: "open",
-      runId: escalation.run.id,
-    };
-  }
-
-  const command = commands[0];
-  if (command) {
-    return {
+      runId: item.run.id,
+      priority: item.priority,
+      risk: item.risk,
+      run: item.run,
+    }) satisfies Candidate),
+    ...commands.map((item) => ({
       title: "Start with recovery work",
-      summary: softenOperatorText(`${command.title}. ${command.summary}`),
+      summary: softenOperatorText(`${item.title}. ${item.summary}`),
       chip: "Recovery",
       cta: "Open run",
       tone: "attention",
       action: "open",
-      runId: command.run.id,
-    };
-  }
-
-  const approval = approvals[0];
-  if (approval) {
-    return {
+      runId: item.run.id,
+      priority: item.priority,
+      risk: item.risk,
+      run: item.run,
+    }) satisfies Candidate),
+    ...approvals.map((item) => ({
       title: "Start with approval",
-      summary: softenOperatorText(approval.summary),
+      summary: softenOperatorText(item.summary),
       chip: "Approval",
       cta: "Approve selected action",
       tone: "attention",
       action: "approve",
-      actionId: approval.action.id,
-    };
-  }
-
-  const retry = retries[0];
-  if (retry) {
-    return {
+      actionId: item.action.id,
+      priority: item.priority,
+      risk: item.risk,
+      run: item.run,
+    }) satisfies Candidate),
+    ...retries.map((item) => ({
       title: "Start with resume",
-      summary: softenOperatorText(retry.summary),
+      summary: softenOperatorText(item.summary),
       chip: "Resume",
-      cta: retry.control === "start" ? "Resume selected run" : "Step selected run",
+      cta: item.control === "start" ? "Resume selected run" : "Step selected run",
       tone: "attention",
       action: "control",
-      runId: retry.run.id,
-      control: retry.control,
-    };
-  }
-
-  const pause = pauses[0];
-  if (pause) {
-    return {
+      runId: item.run.id,
+      control: item.control,
+      priority: item.priority,
+      risk: item.risk,
+      run: item.run,
+    }) satisfies Candidate),
+    ...pauses.map((item) => ({
       title: "Start with pause decision",
-      summary: softenOperatorText(pause.summary),
+      summary: softenOperatorText(item.summary),
       chip: "Pause",
       cta: "Pause selected run",
       tone: "attention",
       action: "control",
-      runId: pause.run.id,
+      runId: item.run.id,
       control: "pause",
-    };
-  }
+      priority: item.priority,
+      risk: item.risk,
+      run: item.run,
+    }) satisfies Candidate),
+  ];
+
+  const candidate = sortByPriorityAndRisk(candidates)[0];
+  if (candidate) return candidate;
 
   return {
     title: "No decision needed",
