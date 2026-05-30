@@ -161,7 +161,7 @@ function buildRecommendations(
     recommendations.push({
       title: "Keep supervised execution moving",
       summary:
-        "Current signals look stable. Use recent learnings to keep the next batch of runs moving and expand autonomy carefully.",
+        "Current signals look stable. Use recent insights to keep the next batch of runs moving and expand autonomy carefully.",
       href: "/runs",
       cta: "Open runs",
     });
@@ -214,7 +214,7 @@ export default function LearningsPage() {
       );
       setSignals(eventRows.filter((item): item is LearningSignal => Boolean(item)).slice(0, 4));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load learnings.");
+      setError(err instanceof Error ? err.message : "Unable to load insights.");
     } finally {
       setLoading(false);
     }
@@ -276,7 +276,7 @@ export default function LearningsPage() {
       <main className="main main--detail">
         <div className="detail">
           <DetailHeader
-            title="Learnings"
+            title="Insights"
             subtitle="What changed recently, why it matters, and where the operator should look next."
             onMenu={() => setSidebarOpen(true)}
             onBack={() => router.push("/runs")}
@@ -295,8 +295,8 @@ export default function LearningsPage() {
 
           <ControlPlaneBriefing
             label="Review"
-            title="Learning briefing"
-            subtitle="Learnings compress recent platform behavior into operator-readable takeaways."
+            title="Insights briefing"
+            subtitle="Insights compress recent platform behavior into operator-readable takeaways."
             summary={briefing}
             metrics={[
               {

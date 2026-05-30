@@ -30,8 +30,11 @@ The lab remains available, but it is no longer the primary mental model for the 
 The primary control-plane loop is:
 
 ```text
-Inbox -> Runs -> Interventions -> Learnings -> Lab only when deeper exploration is needed
+Inbox -> Runs -> Interventions -> Insights -> Lab only when deeper exploration is needed
 ```
+
+The usability gate for this loop is documented in `docs/usability-simplification-gate.md`.
+Primary screens should show goals, recommendations, review decisions, risks, outcomes, and next actions before exposing implementation mechanisms.
 
 ### `/`
 
@@ -85,9 +88,9 @@ Primary questions:
 
 ### `/learnings`
 
-Role: review what changed.
+Role: insights into what changed.
 
-Use it to understand recent evidence, calibration changes, belief updates, validation outcomes, skill performance, and recommended follow-up work.
+Use it to understand recent evidence, outcome movement, recurring failure modes, and recommended follow-up work. Detailed calibration, belief, memory, and audit mechanics should be available as explanation or advanced detail, not as the first thing the operator must understand.
 
 Primary questions:
 
@@ -170,7 +173,7 @@ Primary surfaces:
 - Inbox (`/inbox`)
 - Runs (`/runs`)
 - Interventions (`/interventions`)
-- Learnings (`/learnings`)
+- Insights (`/learnings`)
 
 Advanced lab surfaces:
 

@@ -25,7 +25,7 @@ Plane + Minimalist Density**.
 Start with `Runs`, because it currently carries the most nested operational UI.
 The first implementation uses flatter primitives for the run rail and selected
 run execution summary before applying the same language to `Inbox`,
-`Interventions`, and `Learnings`.
+`Interventions`, and `Insights`.
 
 ## Current Adoption Checkpoint
 
