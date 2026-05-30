@@ -195,7 +195,7 @@ Structured error shape:
 }
 ```
 
-External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
+External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, `idempotency_in_progress`, and `external_agent_receipt_not_available`.
 
 `declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects. For readiness-boundary tools, the error `context` includes `contract_intent`, `adapter_id`, `blocked_reason`, and the planned `receipt_contract`.
 
@@ -262,6 +262,7 @@ Behavior:
 - By default the endpoint returns the stored latest receipt without recomputing evidence or writing a new receipt.
 - Use `refresh=true` to mint a fresh non-terminal receipt. Terminal statuses (`completed`, `failed`, `canceled`) may mint a latest-status receipt automatically.
 - If no stored receipt exists for a non-terminal job and `refresh=false`, the endpoint returns `404` with guidance to call `refresh=true`.
+- That missing-receipt response is retry-safe: it uses `detail.code=external_agent_receipt_not_available`, includes `Retry-After` and `X-Agent-Poll-Interval-Seconds`, and sets `context.refresh_available=true`.
 - The receipt is signed with HMAC-SHA256 and includes a `key_id` for the server-side verifier key family.
 - The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, registry pins, and execution evidence digests.
 - If the linked run status or signed context changes, a refresh issues and stores a new receipt.

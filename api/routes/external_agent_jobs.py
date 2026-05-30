@@ -313,9 +313,22 @@ def get_external_agent_job_receipt_route(
     else:
         receipt = stored_external_agent_job_receipt(job=job, run=run)
         if not receipt:
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=404,
-                detail="No stored receipt exists for this job status; call with refresh=true to mint one.",
+                code="external_agent_receipt_not_available",
+                message=(
+                    "No stored receipt exists for this job status; call with "
+                    "refresh=true to mint one or poll until the job reaches a "
+                    "terminal status."
+                ),
+                retryable=True,
+                retry_after_seconds=POLL_RETRY_AFTER_SECONDS,
+                context={
+                    "job_id": job_id,
+                    "status": current_status,
+                    "refresh_available": True,
+                    "refresh_query": "refresh=true",
+                },
             )
     set_external_agent_poll_headers(response)
     return ExternalAgentJobReceiptResponse(receipt=receipt)
