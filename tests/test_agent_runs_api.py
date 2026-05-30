@@ -451,6 +451,137 @@ def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
     )
 
 
+def test_create_agent_run_enforces_harness_effect_class_boundaries(client: TestClient):
+    blocked = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+    assert blocked.status_code == 400
+    assert (
+        "Harness 'observe_only' does not allow capability effect class: run_variant (write_low_risk)"
+        in blocked.json()["detail"]
+    )
+
+    allowed = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["recommend_next_action"],
+        },
+    )
+    assert allowed.status_code == 200
+    run = allowed.json()["run"]
+    assert run["harness_id"] == "observe_only"
+    assert run["policy_profile_id"] == "observe"
+
+
+def test_harness_planner_mode_filters_observe_only_plans(client: TestClient):
+    update_agent_registry_harness_profile(
+        profile_id="observe_only",
+        source="operator_override",
+        profile={
+            "id": "observe_only",
+            "name": "Observe Only",
+            "description": "Test observe planner filtering with broad effects.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "observe",
+            "allowed_run_modes": ["plan_only"],
+            "allowed_policy_profile_ids": ["observe"],
+            "allowed_effect_classes": ["read", "recommend", "write_low_risk"],
+            "planner_mode": "inspect_and_recommend",
+            "retry_strategy": "none",
+            "fallback_order": ["operator_chat"],
+            "approval_strategy": "read_only",
+            "memory_policy": "no_mutation",
+            "stopping_conditions": ["recommendation_produced"],
+        },
+    )
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["run_variant", "recommend_next_action"],
+        },
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    actions = default_deps().agent_actions.list_agent_actions(
+        agent_run_id=run["id"], limit=10
+    )
+    assert [action["capability_name"] for action in actions] == ["recommend_next_action"]
+
+
+def test_harness_memory_policy_blocks_learning_mutation_plans(client: TestClient):
+    update_agent_registry_harness_profile(
+        profile_id="observe_only",
+        source="operator_override",
+        profile={
+            "id": "observe_only",
+            "name": "Observe Only",
+            "description": "Test memory policy with broadened effects.",
+            "default_run_mode": "plan_only",
+            "default_policy_profile_id": "observe",
+            "allowed_run_modes": ["plan_only"],
+            "allowed_policy_profile_ids": ["observe"],
+            "allowed_effect_classes": ["read", "recommend", "write_low_risk"],
+            "planner_mode": "inspect_and_recommend",
+            "retry_strategy": "none",
+            "fallback_order": ["operator_chat"],
+            "approval_strategy": "read_only",
+            "memory_policy": "no_mutation",
+            "stopping_conditions": ["recommendation_produced"],
+        },
+    )
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "observe_only",
+            "policy_profile_id": "observe",
+            "allowed_capabilities": ["update_posterior_and_decisions"],
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "memory_policy forbids learning/memory mutation: update_posterior_and_decisions"
+        in response.json()["detail"]
+    )
+
+
+def test_bounded_harness_planner_mode_caps_initial_actions(client: TestClient):
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "harness_id": "safe_autonomy_b2b",
+            "policy_profile_id": "safe_auto",
+            "run_mode": "auto_execute_safe",
+            "objective": {"max_initial_actions": 1},
+            "allowed_capabilities": ["seed_hypotheses", "run_variant"],
+        },
+    )
+    assert response.status_code == 200
+    run = response.json()["run"]
+    actions = default_deps().agent_actions.list_agent_actions(
+        agent_run_id=run["id"], limit=10
+    )
+    assert [action["capability_name"] for action in actions] == ["seed_hypotheses"]
+
+
 def test_seed_skill_specs_are_available():
     skills = {skill.id for skill in list_skill_specs()}
     assert "discover-protocol-candidates" in skills

@@ -222,6 +222,8 @@ def _source_counts(candidates: List[Dict[str, Any]]) -> Dict[str, int]:
 def _readiness_summary(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
     issue_counts = {"error": 0, "warning": 0, "info": 0}
     protocol_counts: Dict[str, int] = {}
+    top_blockers: List[Dict[str, Any]] = []
+    top_warnings: List[Dict[str, Any]] = []
     ready_candidates = 0
     warning_candidates = 0
     blocked_candidates = 0
@@ -237,6 +239,10 @@ def _readiness_summary(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
             if severity in issue_counts:
                 issue_counts[severity] += 1
                 severities.append(severity)
+                if severity == "error" and len(top_blockers) < 3:
+                    top_blockers.append(_issue_summary(candidate, issue))
+                if severity == "warning" and len(top_warnings) < 3:
+                    top_warnings.append(_issue_summary(candidate, issue))
 
         if "error" in severities:
             blocked_candidates += 1
@@ -284,6 +290,18 @@ def _readiness_summary(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
         "source_counts": source_counts,
         "live_source_count": live_source_count,
         "local_source_count": local_source_count,
+        "top_blockers": top_blockers,
+        "top_warnings": top_warnings,
+    }
+
+
+def _issue_summary(candidate: Dict[str, Any], issue: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "candidate_id": candidate.get("id"),
+        "protocol": candidate.get("protocol"),
+        "field": issue.get("field"),
+        "message": issue.get("message"),
+        "fix": issue.get("fix"),
     }
 
 

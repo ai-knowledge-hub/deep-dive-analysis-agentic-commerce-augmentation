@@ -187,6 +187,7 @@ def test_external_agent_activity_summarizes_protocol_readiness(client: TestClien
     assert protocol_event["domain_summary"]["readiness_status"] == "needs_review"
     assert protocol_event["domain_summary"]["protocol_count"] == 1
     assert protocol_event["domain_summary"]["issue_count"] >= 1
+    assert protocol_event["domain_summary"]["top_issues"][0]["field"]
 
     operator_detail = client.get(
         f"/external-agent/jobs/operator/by-run/{payload['run']['id']}",
@@ -273,6 +274,16 @@ def test_external_agent_activity_summarizes_protocol_discovery(
         "source_counts": {"ucp_local_metadata": 1},
         "live_source_count": 0,
         "local_source_count": 1,
+        "top_blockers": [
+            {
+                "candidate_id": "product-a",
+                "protocol": "ucp",
+                "field": "ucp_profile",
+                "message": "Missing UCP business profile for brand.",
+                "fix": "Add brands.metadata_json.ucp_profile (/.well-known/ucp equivalent).",
+            }
+        ],
+        "top_warnings": [],
         "receipt_id": protocol_event["domain_summary"]["receipt_id"],
     }
 

@@ -253,8 +253,10 @@ Discovery provenance:
 - Discovery summaries and adapter receipts also include `readiness_summary`,
   a compact market-research signal with ready, warning, and blocked candidate
   counts, protocol/source counts, live versus local evidence counts, and a
-  0-100 score. This summarizes merchant protocol readiness only; it does not
-  authorize checkout, delegated payment, or browser fallback execution.
+  0-100 score. It also carries `top_blockers` and `top_warnings` so callers
+  can explain why a result set is blocked or needs review. This summarizes
+  merchant protocol readiness only; it does not authorize checkout, delegated
+  payment, or browser fallback execution.
 
 Required env:
 - `PROTOCOL_FETCH_ALLOWLIST=merchant.example`

@@ -116,22 +116,22 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection. Protocol discovery and protocol readiness activity now expose receipt-backed `domain_summary` payloads for machine callers and operator supervision.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection. Protocol discovery, protocol readiness, runtime stopping-condition, recovery recommendation, policy recommendation, validation readiness, and promotion readiness activity now expose `domain_summary` payloads for machine callers and operator supervision. Credential metadata now publishes the supported scope claim vocabulary, wildcard rules, least-privilege examples, and registry paths where callers can discover exact tool/skill scope alternatives before minting external-agent bearer tokens.
 
 Next steps:
 
 - Add richer domain-specific activity summaries beyond protocol readiness and discovery.
-- Add scoped credentials for tool/skill access.
+- Add issuer/admin APIs for scoped credential issuance, rotation, and revocation.
 - Add retry-safe responses across more external-agent endpoints.
 
 ### 4. Harness Profiles
 
-Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded.
+Current state: `harness_id` is now behavior-defining for run creation. Harness profiles are seeded into persistent registry tables, active persisted profiles are preferred over static defaults, agent profile IDs resolve to default harnesses, and run creation rejects harness/run-mode/policy mismatches before any plan is seeded. Harnesses also declare `allowed_effect_classes`; run creation rejects requested capabilities whose planned effect class is outside the harness boundary. This makes `observe_only` genuinely read/recommend-only while policy profiles still govern auto-execution and approval behavior. Planner mode now shapes initial planning: `inspect_and_recommend` keeps only read/recommend proposals, while `bounded_single_or_workflow` honors single-tool and max-initial-action objective constraints. Runtime stopping conditions now affect run status for the implemented conditions: `external_side_effect_required` pauses before pending external/high-risk actions, `budget_exhausted` pauses when action/variant/cost budgets are consumed, `policy_block` pauses when policy blocks an action, `operator_pause` records explicit operator pauses as stopping-condition events, `recommendation_produced` completes observe/recommendation runs, `all_actions_completed` completes runs once all actions are executed or rejected, and `all_actions_decided` completes operator-supervised runs once all actions are approved or rejected. Memory policy is now enforced for `no_mutation`: learning/memory mutation capabilities such as `update_posterior_and_decisions` are rejected at plan creation and again before execution, and the registry exposes `memory_policy_contracts[]`, `memory_effect`, and `blocked_by_memory_policies` so callers can see those boundaries up front. Operators can update harness profiles through the guarded registry admin flow with dry-run preflight, confirmation, registry fingerprinting, and audit events.
 
 Next steps:
 
-- Add a guarded admin edit flow for harness profiles once tenant-specific overrides are ready for operators.
 - Persist agent-profile-to-harness default mappings after the profile model grows beyond the built-in defaults.
+- Continue expanding memory policy coverage as more learning or memory mutation capabilities are added.
 
 ### 5. Protocol And Fallback Execution
 
@@ -159,7 +159,8 @@ Discovery candidates now expose `discovery_source`, and adapter receipts include
 `source_counts` so live retrieval versus local fallback is auditable. Discovery
 summaries and receipts now also include `readiness_summary`, a compact
 market-research signal for ready, warning, and blocked candidates, protocol and
-source mix, live versus local evidence, and a 0-100 readiness score. The runtime
+source mix, live versus local evidence, top blockers/warnings, and a 0-100
+readiness score. The runtime
 registry now also declares non-executable checkout, delegated-payment, and browser
 fallback readiness boundaries as `status=planned`, `contract_intent=readiness_boundary`,
 and no allowed executable capabilities. These contracts exist to support

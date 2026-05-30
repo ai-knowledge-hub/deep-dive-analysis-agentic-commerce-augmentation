@@ -17,6 +17,12 @@ from application.services.agent_runtime.commands.recovery import (
     _compensating_actions_for_capability,
     _hash_payload,
 )
+from application.services.agent_runtime.harness_posture import (
+    HarnessPostureError,
+    validate_harness_capability_effects,
+    validate_harness_memory_policy,
+    validate_harness_runtime_posture,
+)
 from application.services.agent_runtime.registry import (
     default_harness_id_for_agent_profile,
     get_capability_spec,
@@ -89,11 +95,22 @@ def create_agent_run_with_initial_plan(
         raise AgentRunPlanError(
             f"Unsupported policy_profile_id: {resolved_policy_profile_id}"
         )
-    _validate_harness_runtime_posture(
-        harness_profile=harness_profile,
-        run_mode=normalized_run_mode,
-        policy_profile_id=resolved_policy_profile_id,
-    )
+    try:
+        validate_harness_runtime_posture(
+            harness_profile=harness_profile,
+            run_mode=normalized_run_mode,
+            policy_profile_id=resolved_policy_profile_id,
+        )
+        validate_harness_capability_effects(
+            harness_profile=harness_profile,
+            allowed_capabilities=allowed_capabilities or [],
+        )
+        validate_harness_memory_policy(
+            harness_profile=harness_profile,
+            allowed_capabilities=allowed_capabilities or [],
+        )
+    except HarnessPostureError as exc:
+        raise AgentRunPlanError(str(exc)) from exc
     trace_id = new_trace_id()
     run = deps.agent_runs.create_agent_run(
         client_id=client_id,
@@ -128,6 +145,7 @@ def create_agent_run_with_initial_plan(
         registry_payload=registry_payload,
         active_registry_fingerprint=active_registry_fingerprint,
         preferred_skill_id=preferred_skill_id,
+        harness_profile=harness_profile,
     )
     return run
 
@@ -164,26 +182,6 @@ def _harness_profile_from_registry_payload(
     return get_harness_profile(normalized) if harness_profile_supported(normalized) else None
 
 
-def _validate_harness_runtime_posture(
-    *, harness_profile: Dict[str, Any], run_mode: str, policy_profile_id: str
-) -> None:
-    harness_id = str(harness_profile.get("id") or "").strip()
-    allowed_run_modes = {
-        str(item).strip()
-        for item in list(harness_profile.get("allowed_run_modes") or [])
-        if str(item).strip()
-    }
-    if allowed_run_modes and run_mode not in allowed_run_modes:
-        raise AgentRunPlanError(f"Harness '{harness_id}' does not allow run_mode: {run_mode}")
-    allowed_policy_profiles = {
-        str(item).strip()
-        for item in list(harness_profile.get("allowed_policy_profile_ids") or [])
-        if str(item).strip()
-    }
-    if allowed_policy_profiles and policy_profile_id not in allowed_policy_profiles:
-        raise AgentRunPlanError(f"Harness '{harness_id}' does not allow policy_profile_id: {policy_profile_id}")
-
-
 def _seed_initial_plan(
     *,
     deps: AppDeps,
@@ -194,12 +192,14 @@ def _seed_initial_plan(
     registry_payload: Dict[str, Any],
     active_registry_fingerprint: str,
     preferred_skill_id: Optional[str],
+    harness_profile: Dict[str, Any],
 ) -> None:
     plan = build_initial_plan(
         experiment_id=experiment_id,
         allowed_capabilities=allowed_capabilities,
         capability_versions=capability_versions,
         objective=run.get("objective") if isinstance(run.get("objective"), dict) else {},
+        planner_mode=str(harness_profile.get("planner_mode") or ""),
     )
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)

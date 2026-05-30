@@ -86,6 +86,9 @@ type DiscoveryReadinessSummary = {
   blockedCandidates: number | null;
   liveSourceCount: number | null;
   localSourceCount: number | null;
+  protocolCount: number | null;
+  issueCount: number | null;
+  issueMessage: string | null;
 };
 
 type Props = {
@@ -146,7 +149,67 @@ function discoveryReadinessForAction(
     blockedCandidates: numberOrNull(data.blocked_candidates),
     liveSourceCount: numberOrNull(data.live_source_count),
     localSourceCount: numberOrNull(data.local_source_count),
+    protocolCount: null,
+    issueCount: null,
+    issueMessage: readinessIssueMessage(data),
   };
+}
+
+function protocolReadinessForAction(action: AgentAction): DiscoveryReadinessSummary | null {
+  const outputs = (action.outputs ?? {}) as Record<string, unknown>;
+  const readiness = Array.isArray(outputs.protocol_readiness)
+    ? outputs.protocol_readiness
+    : [];
+  if (!readiness.length) return null;
+  const readyCount = readiness.filter(
+    (item) => item && typeof item === "object" && (item as Record<string, unknown>).ready === true,
+  ).length;
+  const issueCount = readiness.reduce((total, item) => {
+    const raw = item && typeof item === "object" ? (item as Record<string, unknown>).issue_count : 0;
+    return total + (numberOrNull(raw) ?? 0);
+  }, 0);
+  return {
+    status: issueCount === 0 ? "ready" : "needs_review",
+    score: Math.round((100 * readyCount) / readiness.length),
+    candidateCount: null,
+    readyCandidates: null,
+    warningCandidates: null,
+    blockedCandidates: null,
+    liveSourceCount: null,
+    localSourceCount: null,
+    protocolCount: readiness.length,
+    issueCount,
+    issueMessage: protocolIssueMessage(readiness),
+  };
+}
+
+function readinessIssueMessage(data: Record<string, unknown>): string | null {
+  for (const key of ["top_blockers", "top_warnings"]) {
+    const list = data[key];
+    if (!Array.isArray(list)) continue;
+    const first = list.find((item) => item && typeof item === "object") as
+      | Record<string, unknown>
+      | undefined;
+    const message = typeof first?.message === "string" ? first.message : "";
+    if (message) return message;
+  }
+  return null;
+}
+
+function protocolIssueMessage(readiness: unknown[]): string | null {
+  for (const item of readiness) {
+    const issues =
+      item && typeof item === "object"
+        ? (item as Record<string, unknown>).issues
+        : null;
+    if (!Array.isArray(issues)) continue;
+    const first = issues.find((issue) => issue && typeof issue === "object") as
+      | Record<string, unknown>
+      | undefined;
+    const message = typeof first?.message === "string" ? first.message : "";
+    if (message) return message;
+  }
+  return null;
 }
 
 function numberOrNull(value: unknown): number | null {
@@ -201,7 +264,8 @@ export function SelectedActionDetailPanel({
         ];
   const metricId = metricIdForAction(selectedAction);
   const discoverySourceCounts = discoverySourceCountsForAction(selectedAction);
-  const discoveryReadiness = discoveryReadinessForAction(selectedAction);
+  const discoveryReadiness =
+    discoveryReadinessForAction(selectedAction) ?? protocolReadinessForAction(selectedAction);
 
   return (
     <section className="agent-action-detail control-section">
@@ -283,20 +347,40 @@ export function SelectedActionDetailPanel({
                 Candidates: {discoveryReadiness.candidateCount}
               </span>
             ) : null}
-            <span className="control-chip">
-              Ready: {discoveryReadiness.readyCandidates ?? 0}
-            </span>
-            <span className="control-chip">
-              Review: {discoveryReadiness.warningCandidates ?? 0}
-            </span>
-            <span className="control-chip">
-              Blocked: {discoveryReadiness.blockedCandidates ?? 0}
-            </span>
-            <span className="control-chip">
-              Evidence: {discoveryReadiness.liveSourceCount ?? 0} live /{" "}
-              {discoveryReadiness.localSourceCount ?? 0} local
-            </span>
+            {discoveryReadiness.protocolCount !== null ? (
+              <span className="control-chip">
+                Protocols: {discoveryReadiness.protocolCount}
+              </span>
+            ) : null}
+            {discoveryReadiness.issueCount !== null ? (
+              <span className="control-chip">Issues: {discoveryReadiness.issueCount}</span>
+            ) : null}
+            {discoveryReadiness.readyCandidates !== null ? (
+              <span className="control-chip">
+                Ready: {discoveryReadiness.readyCandidates ?? 0}
+              </span>
+            ) : null}
+            {discoveryReadiness.warningCandidates !== null ? (
+              <span className="control-chip">
+                Review: {discoveryReadiness.warningCandidates ?? 0}
+              </span>
+            ) : null}
+            {discoveryReadiness.blockedCandidates !== null ? (
+              <span className="control-chip">
+                Blocked: {discoveryReadiness.blockedCandidates ?? 0}
+              </span>
+            ) : null}
+            {discoveryReadiness.liveSourceCount !== null ||
+            discoveryReadiness.localSourceCount !== null ? (
+              <span className="control-chip">
+                Evidence: {discoveryReadiness.liveSourceCount ?? 0} live /{" "}
+                {discoveryReadiness.localSourceCount ?? 0} local
+              </span>
+            ) : null}
           </div>
+          {discoveryReadiness.issueMessage ? (
+            <p className="panel__muted">Why: {discoveryReadiness.issueMessage}</p>
+          ) : null}
         </>
       ) : null}
 

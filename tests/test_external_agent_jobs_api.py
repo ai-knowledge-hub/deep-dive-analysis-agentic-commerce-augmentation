@@ -888,6 +888,12 @@ def test_external_agent_job_polling_endpoints_do_not_mint_receipts(
         f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
     )
     assert missing_receipt.status_code == 404
+    detail = missing_receipt.json()["detail"]
+    assert detail["code"] == "external_agent_receipt_not_available"
+    assert detail["retryable"] is True
+    assert detail["retry_after_seconds"] == 3
+    assert detail["context"]["refresh_available"] is True
+    assert missing_receipt.headers["retry-after"] == missing_receipt.headers["x-agent-poll-interval-seconds"] == "3"
 
     receipt_list = client.get(
         f"/external-agent/jobs/{job_id}/receipts", headers=_headers(token)

@@ -275,12 +275,72 @@ def external_agent_activity_items(
 
 def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
     capability_name = str(event.get("capability_name") or "")
+    event_type = str(event.get("event_type") or "")
+    anchors = event.get("anchors") if isinstance(event.get("anchors"), dict) else {}
+    if event_type == "run_stopping_condition_met":
+        condition = str(anchors.get("stopping_condition") or "").strip()
+        if condition:
+            return {
+                "domain": "runtime_stopping_condition",
+                "stopping_condition": condition,
+                "outcome_status": event.get("status"),
+                "operator_attention_required": event.get("status") == "paused",
+                "terminal": event.get("status") in {"completed", "failed", "canceled"},
+                "note": event.get("note"),
+            }
+    if event_type in {"action_recovery_proposed", "action_retry_proposed"}:
+        compensating = anchors.get("compensating_actions")
+        return {
+            "domain": "recovery_recommendation",
+            "recommended_capability": capability_name or None,
+            "recommended_tool_id": event.get("tool_id"),
+            "recovery_strategy": anchors.get("recovery_strategy")
+            or anchors.get("retry_strategy"),
+            "recovery_template_id": anchors.get("recovery_template_id"),
+            "source_action_id": anchors.get("source_action_id")
+            or anchors.get("original_action_id"),
+            "side_effects": anchors.get("side_effects") or [],
+            "compensating_action_count": len(compensating)
+            if isinstance(compensating, list)
+            else 0,
+            "rollback_guidance": anchors.get("rollback_guidance"),
+        }
+    if capability_name == "recommend_next_action":
+        return {
+            "domain": "policy_recommendation",
+            "recommendation_status": event.get("status"),
+            "recommended_tool_id": event.get("tool_id"),
+            "operator_attention_required": event.get("status") == "proposed",
+            "note": event.get("note"),
+        }
+    if capability_name == "review_validation_readiness":
+        return {
+            "domain": "validation_readiness",
+            "readiness_status": event.get("status"),
+            "review_scope": "promotion_gates",
+            "operator_attention_required": event.get("status") == "proposed",
+            "tool_id": event.get("tool_id"),
+            "note": event.get("note"),
+        }
+    if capability_name in {
+        "promote_variant_lab",
+        "promote_variant_prod",
+        "publish_copy_revision",
+    }:
+        return {
+            "domain": "promotion_readiness",
+            "readiness_status": event.get("status"),
+            "promotion_tier": _promotion_tier_for_capability(capability_name),
+            "operator_attention_required": event.get("status") == "proposed",
+            "effect_class": event.get("effect_class"),
+            "tool_id": event.get("tool_id"),
+            "note": event.get("note"),
+        }
     if capability_name not in {
         "discover_protocol_candidates",
         "check_protocol_readiness",
     }:
         return {}
-    anchors = event.get("anchors") if isinstance(event.get("anchors"), dict) else {}
     receipt = anchors.get("receipt") if isinstance(anchors.get("receipt"), dict) else {}
     evidence = receipt.get("evidence") if isinstance(receipt.get("evidence"), dict) else {}
     if not evidence:
@@ -312,8 +372,18 @@ def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
         "source_counts": source_counts,
         "live_source_count": readiness.get("live_source_count"),
         "local_source_count": readiness.get("local_source_count"),
+        "top_blockers": readiness.get("top_blockers") or [],
+        "top_warnings": readiness.get("top_warnings") or [],
         "receipt_id": anchors.get("receipt_id") or receipt.get("receipt_id"),
     }
+
+
+def _promotion_tier_for_capability(capability_name: str) -> str:
+    if capability_name == "promote_variant_prod":
+        return "prod"
+    if capability_name == "publish_copy_revision":
+        return "publish"
+    return "lab"
 
 
 def _protocol_readiness_domain_summary(
@@ -334,6 +404,7 @@ def _protocol_readiness_domain_summary(
         "readiness_score": score,
         "protocol_count": len(checked),
         "issue_count": issue_count,
+        "top_issues": evidence.get("top_issues") or [],
         "receipt_id": receipt_id or receipt.get("receipt_id"),
     }
 

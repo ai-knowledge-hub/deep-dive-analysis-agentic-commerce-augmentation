@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import sys
+import types
+
+import pytest
+from fastapi.testclient import TestClient
+
+if "google" not in sys.modules:
+    google_pkg = types.ModuleType("google")
+    genai_pkg = types.ModuleType("google.genai")
+    genai_types_pkg = types.ModuleType("google.genai.types")
+    genai_pkg.Client = lambda *args, **kwargs: None
+    genai_pkg.types = genai_types_pkg
+    google_pkg.genai = genai_pkg
+    sys.modules["google"] = google_pkg
+    sys.modules["google.genai"] = genai_pkg
+    sys.modules["google.genai.types"] = genai_types_pkg
+
+from api.composition import default_deps
+from api.main import app
+from api.utils.principals import build_agent_principal_token
+from shared.config.env import get_settings
+from shared.db.connection import init_db, set_database_path
+
+CLIENT_ID = "client-a"
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_PRINCIPAL_SIGNING_SECRET", "test-agent-secret")
+    get_settings.cache_clear()
+    set_database_path(tmp_path / "external-agent-activity-summaries.db")
+    init_db()
+    default_deps().clients.create_client(client_id=CLIENT_ID, name="Client A")
+    return TestClient(app)
+
+
+def _headers() -> dict[str, str]:
+    token = build_agent_principal_token(
+        principal_id="agent-ext-1",
+        client_id=CLIENT_ID,
+        principal_type="external_agent",
+        agent_profile_id="buyer-assistant-v1",
+        scopes=[
+            "external_agent_jobs:write",
+            "external_agent_jobs:read",
+            "tool:experiment.run_variant",
+            "skill:optimize-product-representation",
+        ],
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_external_agent_activity_summarizes_runtime_stopping_conditions(
+    client: TestClient,
+):
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(),
+        json={"idempotency_key": "job-stop-summary", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    run_id = payload["run"]["id"]
+    job_id = payload["job"]["id"]
+
+    default_deps().agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=2,
+        event_type="run_stopping_condition_met",
+        status="paused",
+        capability_name=None,
+        capability_version=None,
+        note="Run paused because policy blocked an action.",
+        anchors={"stopping_condition": "policy_block"},
+    )
+
+    activity = client.get(f"/external-agent/jobs/{job_id}/activity", headers=_headers())
+    assert activity.status_code == 200
+    stop_item = next(
+        item
+        for item in activity.json()["items"]
+        if item["subtype"] == "run_stopping_condition_met"
+    )
+    assert stop_item["domain_summary"] == {
+        "domain": "runtime_stopping_condition",
+        "stopping_condition": "policy_block",
+        "outcome_status": "paused",
+        "operator_attention_required": True,
+        "terminal": False,
+        "note": "Run paused because policy blocked an action.",
+    }
+
+
+def test_external_agent_activity_summarizes_recovery_recommendations(
+    client: TestClient,
+):
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(),
+        json={"idempotency_key": "job-recovery-summary", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    run_id = payload["run"]["id"]
+    job_id = payload["job"]["id"]
+
+    default_deps().agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=3,
+        event_type="action_recovery_proposed",
+        status="proposed",
+        capability_name="recommend_next_action",
+        capability_version=None,
+        tool_id="policy.recommend_next_action",
+        note="Recovery action proposed by operator change-plan command",
+        anchors={
+            "source_action_id": "action-failed-1",
+            "recovery_strategy": "create_recovery_action",
+            "recovery_template_id": "recommend_next_action",
+            "side_effects": ["create_experiment_recommendation"],
+            "rollback_guidance": "Ask policy for the safest next action.",
+            "compensating_actions": [{"capability": "recommend_next_action"}],
+        },
+    )
+
+    activity = client.get(f"/external-agent/jobs/{job_id}/activity", headers=_headers())
+    assert activity.status_code == 200
+    recovery_item = next(
+        item for item in activity.json()["items"] if item["subtype"] == "action_recovery_proposed"
+    )
+    assert recovery_item["domain_summary"] == {
+        "domain": "recovery_recommendation",
+        "recommended_capability": "recommend_next_action",
+        "recommended_tool_id": "policy.recommend_next_action",
+        "recovery_strategy": "create_recovery_action",
+        "recovery_template_id": "recommend_next_action",
+        "source_action_id": "action-failed-1",
+        "side_effects": ["create_experiment_recommendation"],
+        "compensating_action_count": 1,
+        "rollback_guidance": "Ask policy for the safest next action.",
+    }
+
+
+def test_external_agent_activity_summarizes_validation_and_promotion_paths(
+    client: TestClient,
+):
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(),
+        json={"idempotency_key": "job-validation-summary", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    run_id = payload["run"]["id"]
+    job_id = payload["job"]["id"]
+
+    deps = default_deps()
+    deps.agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=4,
+        event_type="action_proposed",
+        status="proposed",
+        capability_name="review_validation_readiness",
+        capability_version="v1",
+        tool_id="validation.review_readiness",
+        effect_class="read",
+        note="Review observed and synthetic validation gates before promotion decisions.",
+        anchors={},
+    )
+    deps.agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=5,
+        event_type="action_proposed",
+        status="proposed",
+        capability_name="promote_variant_prod",
+        capability_version="v1",
+        tool_id="promotion.promote_variant_prod",
+        effect_class="write_high_risk",
+        note="Promote a candidate to prod tier only when readiness gates pass.",
+        anchors={},
+    )
+
+    activity = client.get(f"/external-agent/jobs/{job_id}/activity", headers=_headers())
+    assert activity.status_code == 200
+    items = activity.json()["items"]
+    readiness = next(
+        item for item in items if item.get("capability_name") == "review_validation_readiness"
+    )
+    promotion = next(
+        item for item in items if item.get("capability_name") == "promote_variant_prod"
+    )
+    assert readiness["domain_summary"] == {
+        "domain": "validation_readiness",
+        "readiness_status": "proposed",
+        "review_scope": "promotion_gates",
+        "operator_attention_required": True,
+        "tool_id": "validation.review_readiness",
+        "note": "Review observed and synthetic validation gates before promotion decisions.",
+    }
+    assert promotion["domain_summary"] == {
+        "domain": "promotion_readiness",
+        "readiness_status": "proposed",
+        "promotion_tier": "prod",
+        "operator_attention_required": True,
+        "effect_class": "write_high_risk",
+        "tool_id": "promotion.promote_variant_prod",
+        "note": "Promote a candidate to prod tier only when readiness gates pass.",
+    }

@@ -17,6 +17,7 @@ export function ExternalAgentJobPanel({
   onVerifyReceipt,
 }: Props) {
   const protocolSummary = latestProtocolSummary(externalAgentJob);
+  const protocolIssue = protocolSummaryIssue(protocolSummary);
   return (
     <section className="control-section">
       <div className="control-section__header">
@@ -128,6 +129,9 @@ export function ExternalAgentJobPanel({
                   </span>
                 ) : null}
               </div>
+              {protocolIssue ? (
+                <p className="panel__muted">Why: {protocolIssue}</p>
+              ) : null}
             </>
           ) : null}
         </>
@@ -161,4 +165,17 @@ function readinessStatusLabel(status?: string | null): string {
     ready: "Ready",
   };
   return status ? labels[status] ?? status.replaceAll("_", " ") : "Unknown";
+}
+
+function protocolSummaryIssue(summary: ReturnType<typeof latestProtocolSummary>): string | null {
+  const lists = [summary?.top_issues, summary?.top_blockers, summary?.top_warnings];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    const first = list.find((item) => item && typeof item === "object") as
+      | Record<string, unknown>
+      | undefined;
+    const message = typeof first?.message === "string" ? first.message : "";
+    if (message) return message;
+  }
+  return null;
 }

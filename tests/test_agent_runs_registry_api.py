@@ -119,6 +119,10 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     )
     assert safe_harness["default_run_mode"] == "auto_execute_safe"
     assert safe_harness["retry_strategy"] == "last_safe_checkpoint"
+    observe_harness = next(
+        profile for profile in payload["harness_profiles"] if profile["id"] == "observe_only"
+    )
+    assert observe_harness["allowed_effect_classes"] == ["read", "recommend"]
     run_variant = next(
         capability
         for capability in payload["capabilities"]
@@ -136,6 +140,23 @@ def test_agent_runtime_registry_endpoint_exposes_skills_tools_and_policies(
     )
     assert "new_metric_id" in posterior["output_schema"]["required"]
     assert "variant_id" in posterior["output_schema"]["required"]
+    assert posterior["memory_effect"] == "learning_memory_mutation"
+    assert posterior["blocked_by_memory_policies"] == ["no_mutation"]
+    memory_contract = next(
+        item
+        for item in payload["memory_policy_contracts"]
+        if item["memory_policy"] == "no_mutation"
+    )
+    assert memory_contract["blocked_memory_effects"] == ["learning_memory_mutation"]
+    assert memory_contract["blocked_capabilities"] == [
+        "update_posterior_and_decisions"
+    ]
+    learning_tool = next(
+        tool
+        for tool in payload["tools"]
+        if tool["id"] == "learning.update_posterior_and_decisions"
+    )
+    assert learning_tool["memory_effect"] == "learning_memory_mutation"
     validation_template = next(
         item
         for item in payload["recovery_templates"]
@@ -295,6 +316,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
             "user_id": USER_ID,
             "description": "Operator-governed safe autonomy.",
             "retry_strategy": "operator_confirmed",
+            "allowed_effect_classes": ["read", "recommend"],
             "fallback_order": ["operator_chat"],
         },
     )
@@ -305,6 +327,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
     assert preflight_payload["preflight"]["allowed"] is True
     assert preflight_payload["preflight"]["changed_fields"] == [
         "description",
+        "allowed_effect_classes",
         "retry_strategy",
         "fallback_order",
     ]
@@ -364,6 +387,7 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
             "user_id": USER_ID,
             "description": "Operator-governed safe autonomy.",
             "retry_strategy": "operator_confirmed",
+            "allowed_effect_classes": ["read", "recommend"],
             "fallback_order": ["operator_chat"],
             "dry_run": False,
             "preflight_confirmed": True,
@@ -375,9 +399,11 @@ def test_agent_runtime_registry_harness_update_is_guarded_and_audited(
     assert payload["registry_fingerprint"] != first["registry_fingerprint"]
     assert payload["harness_profile"]["source"] == "operator_override"
     assert payload["harness_profile"]["retry_strategy"] == "operator_confirmed"
+    assert payload["harness_profile"]["allowed_effect_classes"] == ["read", "recommend"]
     assert payload["audit_event"]["event_type"] == "registry_harness_profile_updated"
     assert payload["audit_event"]["diff"]["changed_fields"] == [
         "description",
+        "allowed_effect_classes",
         "retry_strategy",
         "fallback_order",
     ]

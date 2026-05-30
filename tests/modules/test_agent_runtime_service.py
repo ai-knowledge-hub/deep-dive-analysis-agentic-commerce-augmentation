@@ -34,7 +34,9 @@ def _create_base_run(
     deps,
     run_mode: str = "auto_execute_safe",
     allowed_capabilities: list[str] | None = None,
+    budgets: dict | None = None,
     status: str = "planned",
+    harness_id: str | None = None,
     policy_profile_id: str | None = None,
 ) -> dict:
     deps.clients.create_client(client_id="client-a", name="Client A")
@@ -46,12 +48,13 @@ def _create_base_run(
         objective={},
         allowed_capabilities=allowed_capabilities or ["freeze_retrieval_protocol"],
         capability_versions={},
-        budgets={},
+        budgets=budgets or {},
         approval_policy={},
         requires_approval=True,
         run_mode=run_mode,
         state="battery_ready",
         status=status,
+        harness_id=harness_id,
         policy_profile_id=policy_profile_id,
     )
 
@@ -165,6 +168,32 @@ def test_step_once_rejects_paused_run(tmp_path):
     assert unchanged["status"] == "paused"
 
 
+def test_pause_run_records_operator_pause_stopping_condition(tmp_path):
+    db_path = tmp_path / "agent-runtime-operator-pause.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="plan_only",
+        harness_id="operator_supervised",
+        policy_profile_id="human_approval_required",
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.pause_run(run_id=run["id"])
+    assert result.run["status"] == "paused"
+    events = deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=10)
+    assert any(item["event_type"] == "run_paused" for item in events)
+    stop_event = next(
+        item
+        for item in events
+        if item["event_type"] == "run_stopping_condition_met"
+    )
+    assert stop_event["status"] == "paused"
+    assert stop_event["anchors"]["stopping_condition"] == "operator_pause"
+
+
 def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch):
     db_path = tmp_path / "agent-runtime-safe-auto-side-effect.db"
     set_database_path(db_path)
@@ -197,6 +226,364 @@ def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch)
     failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
     assert failed_action is not None
     assert failed_action["status"] == "failed"
+
+
+def test_step_once_pauses_when_harness_policy_block_is_met(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent-runtime-stop-policy-block.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["seed_hypotheses"],
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="freeze_retrieval_protocol",
+        inputs={"experiment_id": "exp-1"},
+    )
+
+    def _unexpected_execute_capability(**kwargs):
+        raise AssertionError("policy should block before capability execution")
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _unexpected_execute_capability,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="policy blocked"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    updated = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert updated is not None
+    assert updated["status"] == "paused"
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+    assert "not allowed" in failed_action["error"]
+    event = next(
+        item
+        for item in deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=10)
+        if item["event_type"] == "run_stopping_condition_met"
+    )
+    assert event["status"] == "paused"
+    assert event["anchors"]["stopping_condition"] == "policy_block"
+
+
+def test_step_once_pauses_when_harness_external_side_effect_boundary_is_met(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-external-effect.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["request_synthetic_validation"],
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="request_synthetic_validation",
+        inputs={"experiment_id": "exp-1"},
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(NoApprovedActionError, match="external side-effect"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    updated = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert updated is not None
+    assert updated["status"] == "paused"
+    unchanged = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert unchanged is not None
+    assert unchanged["status"] == "approved"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "paused"
+    assert event["anchors"]["stopping_condition"] == "external_side_effect_required"
+
+
+def test_step_once_runs_safe_prefix_before_future_external_side_effect(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "agent-runtime-safe-prefix-before-external.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=[
+            "freeze_retrieval_protocol",
+            "request_synthetic_validation",
+        ],
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    safe_action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="freeze_retrieval_protocol",
+    )
+    external_action = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=2,
+        status="proposed",
+        capability_name="request_synthetic_validation",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={},
+        inputs_hash="in-external",
+        outputs_hash=None,
+        rationale="future external action",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    def _fake_execute_capability(**kwargs):
+        assert kwargs["capability_name"] == "freeze_retrieval_protocol"
+        return {"ok": True, "status": "done"}
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _fake_execute_capability,
+    )
+
+    result = AgentRuntimeService(deps=deps).step_once(run_id=run["id"], user_id="user-a")
+
+    executed = deps.agent_actions.get_agent_action(action_id=safe_action["id"])
+    future = deps.agent_actions.get_agent_action(action_id=external_action["id"])
+    assert executed is not None
+    assert executed["status"] == "executed"
+    assert future is not None
+    assert future["status"] == "proposed"
+    assert result.action is not None
+    assert result.action["id"] == safe_action["id"]
+    assert result.run["status"] == "paused"
+    events = deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=20)
+    assert any(
+        item["event_type"] == "action_executed" and item["action_id"] == safe_action["id"]
+        for item in events
+    )
+    assert any(
+        item["event_type"] == "run_stopping_condition_met"
+        and item["anchors"]["stopping_condition"] == "external_side_effect_required"
+        for item in events
+    )
+
+
+def test_step_once_pauses_when_harness_budget_is_exhausted(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-budget.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["freeze_retrieval_protocol"],
+        budgets={"max_actions": 1},
+        harness_id="safe_autonomy_b2b",
+        policy_profile_id="safe_auto",
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="executed",
+        capability_name="freeze_retrieval_protocol",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={"ok": True},
+        inputs_hash="in",
+        outputs_hash="out",
+        rationale="already used budget",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+    pending = deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=2,
+        status="approved",
+        capability_name="freeze_retrieval_protocol",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-2"},
+        outputs={},
+        inputs_hash="in-2",
+        outputs_hash=None,
+        rationale="would exceed budget",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(NoApprovedActionError, match="budget"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    updated = deps.agent_runs.get_agent_run(run_id=run["id"])
+    assert updated is not None
+    assert updated["status"] == "paused"
+    unchanged = deps.agent_actions.get_agent_action(action_id=pending["id"])
+    assert unchanged is not None
+    assert unchanged["status"] == "approved"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "paused"
+    assert event["anchors"]["stopping_condition"] == "budget_exhausted"
+
+
+def test_reconcile_completes_when_recommendation_stopping_condition_is_met(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-recommendation.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="plan_only",
+        allowed_capabilities=["recommend_next_action"],
+        harness_id="observe_only",
+        policy_profile_id="observe",
+        status="running",
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="executed",
+        capability_name="recommend_next_action",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={"recommendation": {"action": "pause"}},
+        inputs_hash="in",
+        outputs_hash="out",
+        rationale="recommend pause",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.reconcile_run_status(run_id=run["id"])
+    assert result.run["status"] == "completed"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "completed"
+    assert event["anchors"]["stopping_condition"] == "recommendation_produced"
+
+
+def test_reconcile_completes_when_operator_supervised_actions_are_decided(tmp_path):
+    db_path = tmp_path / "agent-runtime-stop-decided.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="plan_only",
+        allowed_capabilities=["freeze_retrieval_protocol", "seed_hypotheses"],
+        harness_id="operator_supervised",
+        policy_profile_id="human_approval_required",
+        status="planned",
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=1,
+        status="approved",
+        capability_name="freeze_retrieval_protocol",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={},
+        inputs_hash="in-1",
+        outputs_hash=None,
+        rationale="approved action",
+        confidence=0.8,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+    deps.agent_actions.create_agent_action(
+        agent_run_id=run["id"],
+        sequence=2,
+        status="rejected",
+        capability_name="seed_hypotheses",
+        capability_version="v1",
+        inputs={"experiment_id": "exp-1"},
+        outputs={},
+        inputs_hash="in-2",
+        outputs_hash=None,
+        rationale="rejected action",
+        confidence=0.6,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    result = runtime.reconcile_run_status(run_id=run["id"])
+    assert result.run["status"] == "completed"
+    event = deps.agent_events.list_agent_events(
+        agent_run_id=run["id"], event_type="run_stopping_condition_met", limit=1
+    )[0]
+    assert event["status"] == "completed"
+    assert event["anchors"]["stopping_condition"] == "all_actions_decided"
+
+
+def test_step_once_blocks_learning_mutation_when_harness_memory_policy_forbids_it(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "agent-runtime-memory-policy.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["update_posterior_and_decisions"],
+        harness_id="observe_only",
+        policy_profile_id="safe_auto",
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="update_posterior_and_decisions",
+        inputs={"experiment_id": "exp-1"},
+    )
+
+    def _unexpected_execute_capability(**kwargs):
+        raise AssertionError("memory policy should block before execution")
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _unexpected_execute_capability,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="memory_policy forbids"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+    assert "memory_policy forbids" in str(failed_action["error"])
 
 
 def test_step_once_executes_read_only_protocol_adapter_and_records_receipt(tmp_path):

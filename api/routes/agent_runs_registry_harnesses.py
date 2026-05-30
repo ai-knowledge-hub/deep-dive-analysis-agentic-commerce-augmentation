@@ -28,6 +28,7 @@ class AgentRegistryHarnessProfileUpdateRequest(BaseModel):
     default_policy_profile_id: Optional[str] = None
     allowed_run_modes: Optional[List[str]] = None
     allowed_policy_profile_ids: Optional[List[str]] = None
+    allowed_effect_classes: Optional[List[str]] = None
     planner_mode: Optional[str] = None
     retry_strategy: Optional[str] = None
     fallback_order: Optional[List[str]] = None

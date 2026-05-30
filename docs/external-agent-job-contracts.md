@@ -56,7 +56,16 @@ Credential metadata:
 GET /external-agent/credentials/metadata
 ```
 
-The metadata endpoint exposes the current token contract for integrators: token type, signing algorithm, current `kid`, expected audience, issuer, default TTL, maximum TTL, and whether server-side key rotation/JWKS-style discovery is available. The current implementation is issuer-managed HMAC with a single configured key id; token issuance and rotation APIs are still future work.
+The metadata endpoint exposes the current token contract for integrators: token type, signing algorithm, current `kid`, expected audience, issuer, default TTL, maximum TTL, and whether server-side key rotation/JWKS-style discovery is available. It also publishes the machine-readable `scopes` claim vocabulary:
+
+- Endpoint scopes: `external_agent_jobs:write`, `external_agent_jobs:read`, `agent_runs:read`, and `agent_runs:write`.
+- Tool scopes: `tool:<tool_id>` for one executable registry tool, or `tools:*` for all executable tools.
+- Skill scopes: `skill:<skill_id>` for one registry skill, or `skills:*` for all skills.
+- Global wildcard: `*`, intended only for trusted internal or administrative machine principals.
+- Least-privilege examples for single-tool jobs, read-only protocol discovery jobs, and registry discovery.
+- Registry discovery paths for exact per-tool and per-capability scope alternatives: `tools[].external_agent_contract.required_scopes` and `capabilities[].external_agent_contract.required_scopes`.
+
+The current implementation is issuer-managed HMAC with a single configured key id; token issuance and rotation APIs are still future work.
 
 ## Discover Runtime Tools
 
@@ -67,7 +76,7 @@ GET /agent-runs/registry
 Authorization: Bearer <agent-principal-token>
 ```
 
-Use the registry before creating jobs. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`. Protocol checkout, payment, and browser fallback readiness boundaries are also exposed directly in `readiness_boundaries[]` with `tool_id`, `skill_ids`, `adapter_id`, `contract_intent=readiness_boundary`, `blocked_reason`, and the planned receipt contract so callers can distinguish market-research readiness signals from executable transaction tools without reverse-engineering lower-level mappings. The same metadata is mirrored on matching `skill_tool_mappings[]` rows for compatibility.
+Use the credential metadata endpoint to understand scope syntax, then use the registry before creating jobs to discover the exact tool/skill scope alternatives for current registry content. Executable tools and capabilities include an `external_agent_contract` block with accepted plan modes, required scope alternatives, candidate/default skills, and a minimal request template. Harness profiles include `allowed_effect_classes`; job/run creation rejects requested capabilities whose planned effect class is outside the selected harness boundary, for example write actions under `observe_only`. Harness `planner_mode` also shapes the initial action queue: inspect/recommend harnesses keep read/recommend proposals, while bounded harnesses honor single-tool and max-initial-action constraints. Implemented harness stopping conditions can pause or complete runs at runtime; for example, `external_side_effect_required` pauses before pending external/high-risk actions, `budget_exhausted` pauses when declared action/variant/cost budgets are consumed, `policy_block` pauses when policy blocks an action, `operator_pause` records explicit operator pauses, and `all_actions_decided` completes operator-supervised plans after approval/rejection decisions. `memory_policy=no_mutation` blocks learning/memory mutation capabilities at job/run creation and execution time; callers can inspect `memory_policy_contracts[]`, plus each tool/capability `memory_effect` and `blocked_by_memory_policies`, before requesting work. Skill-only declarations that are not accepted by `POST /external-agent/jobs` are marked through `skill_tool_mappings[].executable=false` and listed in `declared_non_executable_skill_tools`. Protocol checkout, payment, and browser fallback readiness boundaries are also exposed directly in `readiness_boundaries[]` with `tool_id`, `skill_ids`, `adapter_id`, `contract_intent=readiness_boundary`, `blocked_reason`, and the planned receipt contract so callers can distinguish market-research readiness signals from executable transaction tools without reverse-engineering lower-level mappings. The same metadata is mirrored on matching `skill_tool_mappings[]` rows for compatibility.
 
 ## Create Job
 
@@ -195,7 +204,7 @@ Structured error shape:
 }
 ```
 
-External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, and `idempotency_in_progress`.
+External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, `idempotency_in_progress`, `idempotent_job_run_missing`, `external_agent_job_not_found`, `external_agent_job_run_not_found`, `external_agent_event_page_not_found`, and `external_agent_receipt_not_available`.
 
 `declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects. For readiness-boundary tools, the error `context` includes `contract_intent`, `adapter_id`, `blocked_reason`, and the planned `receipt_contract`.
 
@@ -262,6 +271,7 @@ Behavior:
 - By default the endpoint returns the stored latest receipt without recomputing evidence or writing a new receipt.
 - Use `refresh=true` to mint a fresh non-terminal receipt. Terminal statuses (`completed`, `failed`, `canceled`) may mint a latest-status receipt automatically.
 - If no stored receipt exists for a non-terminal job and `refresh=false`, the endpoint returns `404` with guidance to call `refresh=true`.
+- That missing-receipt response is retry-safe: it uses `detail.code=external_agent_receipt_not_available`, includes `Retry-After` and `X-Agent-Poll-Interval-Seconds`, and sets `context.refresh_available=true`.
 - The receipt is signed with HMAC-SHA256 and includes a `key_id` for the server-side verifier key family.
 - The signed payload covers the job, linked run, principal, status, trace, requested skill/tool, registry pins, and execution evidence digests.
 - If the linked run status or signed context changes, a refresh issues and stores a new receipt.
@@ -404,6 +414,7 @@ Behavior:
 - Items are normalized as `job`, `receipt`, or `run_event` so external assistants do not have to stitch multiple endpoints together.
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
 - The response includes `event_page` and `page` with the run-event cursor metadata. `summary.page_scope` is `run_events`.
+- Unknown or out-of-scope `event_id`/cursor references return `external_agent_event_page_not_found` with `job_id` and cursor context rather than a free-form 404 string.
 - Run-event activity items include execution integrity anchors such as `sequence`, `effect_class`, `capability_version`, `is_policy_event`, and event `anchors`. Runtime-created action events populate anchors with `inputs_hash`, `outputs_hash`, registry/tool/skill versions, registry fingerprint, and receipt linkage where available.
 - Protocol discovery and protocol readiness run events with receipt evidence
   include `domain_summary` so external assistants can read readiness status,
@@ -411,8 +422,26 @@ Behavior:
   live/local evidence counts where available, issue counts, and receipt id
   without parsing raw receipt anchors.
   - `protocol_discovery` summaries include `candidate_count`, `source_counts`,
-    `live_source_count`, and `local_source_count`.
-  - `protocol_readiness` summaries include `protocol_count` and `issue_count`.
+    `live_source_count`, `local_source_count`, `top_blockers`, and
+    `top_warnings`.
+  - `protocol_readiness` summaries include `protocol_count`, `issue_count`,
+    and `top_issues`.
+- Runtime stopping-condition events include `domain_summary` with
+  `domain=runtime_stopping_condition`, the stopping condition, outcome status,
+  operator-attention flag, terminal flag, and note so agents can distinguish
+  completed plans from pauses that need intervention.
+- Recovery proposal events include `domain_summary` with
+  `domain=recovery_recommendation`, recommended capability/tool, recovery
+  strategy, template id, source action id, side effects, compensating action
+  count, and rollback guidance.
+- `recommend_next_action` run events include `domain=policy_recommendation`
+  with recommendation status, recommended tool id, operator-attention flag, and
+  note.
+- Validation review events include `domain=validation_readiness` with readiness
+  status, review scope, operator-attention flag, tool id, and note.
+- Promotion and publish path events include `domain=promotion_readiness` with
+  readiness status, promotion tier/path, operator-attention flag, effect class,
+  tool id, and note.
 
 Use this endpoint for machine-friendly progress narration and polling.
 
@@ -432,6 +461,7 @@ Behavior:
 - Only the creating principal can read the job event feed.
 - The endpoint returns the linked run's `agent_events` feed.
 - Query params match the run event feed: `event_type`, `status`, `capability_name`, `since`, `until`, `before`, `after`, `event_id`, `around`, and `limit`.
+- Unknown or out-of-scope `event_id`/cursor references return `external_agent_event_page_not_found` with retryable=false.
 
 ## Current Implementation Boundary
 

@@ -1219,6 +1219,11 @@ describe("AgentRunsPage timeline presets", () => {
                 blocked_candidates: 1,
                 live_source_count: 2,
                 local_source_count: 1,
+                top_blockers: [
+                  {
+                    message: "Missing UCP business profile for brand.",
+                  },
+                ],
               },
             },
           },
@@ -1246,6 +1251,72 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Review: 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Blocked: 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Evidence: 2 live \/ 1 local/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Why: Missing UCP business profile for brand/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows protocol readiness issues for selected actions", async () => {
+    getAgentRunMock.mockResolvedValue({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "completed",
+        state: "protocol_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "auto_execute_safe",
+        allowed_capabilities: ["check_protocol_readiness"],
+      },
+      actions: [
+        {
+          id: "action-readiness",
+          agent_run_id: "run-1",
+          sequence: 1,
+          status: "executed",
+          capability_name: "check_protocol_readiness",
+          capability_version: "v1",
+          rationale: "Check protocol readiness.",
+          inputs: { product_id: "product-a", protocols: ["ucp"] },
+          outputs: {
+            protocol_readiness: [
+              {
+                protocol: "ucp",
+                product_id: "product-a",
+                issue_count: 1,
+                ready: false,
+                issues: [
+                  {
+                    field: "ucp_profile",
+                    message: "Missing UCP business profile for brand.",
+                  },
+                ],
+              },
+            ],
+          },
+          tool_id: "protocol.readiness_check",
+          skill_id: "discover-protocol-candidates",
+          registry_version: "agent-runtime-static-v1",
+          registry_fingerprint: "abcdef1234567890",
+          tool_version: "v1",
+          skill_version: "v1",
+          effect_class: "read",
+        },
+      ],
+    });
+
+    render(<AgentRunsPage />);
+
+    expect(
+      await screen.findByText("Protocol readiness", { selector: ".panel__subheading" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
+    expect(screen.getByText(/Protocols: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Issues: 1/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Why: Missing UCP business profile for brand/i),
+    ).toBeInTheDocument();
   });
 
   it("surfaces external-agent job context and verifies the latest receipt", async () => {
@@ -1306,6 +1377,12 @@ describe("AgentRunsPage timeline presets", () => {
             readiness_score: 0,
             protocol_count: 1,
             issue_count: 2,
+            top_issues: [
+              {
+                field: "ucp_profile",
+                message: "Missing UCP business profile for brand.",
+              },
+            ],
             receipt_id: "receipt-protocol-readiness",
           },
         },
@@ -1322,6 +1399,9 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocols: 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Issues: 2/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Why: Missing UCP business profile for brand/i),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",

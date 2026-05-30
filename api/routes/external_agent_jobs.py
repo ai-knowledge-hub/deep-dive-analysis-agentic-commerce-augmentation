@@ -101,7 +101,7 @@ def create_external_agent_job_route(
             run_id=existing["run_id"], client_id=principal.client_id
         )
         if not run:
-            raise HTTPException(status_code=409, detail="idempotent job run is missing")
+            raise _idempotent_job_run_missing(job_id=str(existing.get("id") or ""))
         job = job_status_payload(job=existing, run=run)
         return ExternalAgentJobResponse(job=job, run=run, idempotent_replay=True)
 
@@ -133,7 +133,7 @@ def create_external_agent_job_route(
                 run_id=existing["run_id"], client_id=principal.client_id
             )
             if not run:
-                raise HTTPException(status_code=409, detail="idempotent job run is missing")
+                raise _idempotent_job_run_missing(job_id=str(existing.get("id") or ""))
             job = job_status_payload(job=existing, run=run)
             return ExternalAgentJobResponse(job=job, run=run, idempotent_replay=True)
         reservation = get_external_agent_job_idempotency_reservation(
@@ -250,7 +250,7 @@ def create_external_agent_job_route(
             run_id=created["run_id"], client_id=principal.client_id
         )
         if not existing_run:
-            raise HTTPException(status_code=409, detail="idempotent job run is missing")
+            raise _idempotent_job_run_missing(job_id=str(created.get("id") or ""))
         job = job_status_payload(job=created, run=existing_run)
         return ExternalAgentJobResponse(job=job, run=existing_run, idempotent_replay=True)
     response["job_id"] = created["id"]
@@ -279,10 +279,10 @@ def get_external_agent_job_route(
         job_id=job_id, client_id=principal.client_id, principal_id=principal.principal_id
     )
     if not job:
-        raise HTTPException(status_code=404, detail="External agent job not found")
+        raise _external_agent_job_not_found(job_id=job_id)
     run = deps.agent_runs.get_agent_run(run_id=job["run_id"], client_id=principal.client_id)
     if not run:
-        raise HTTPException(status_code=404, detail="External agent job run not found")
+        raise _external_agent_job_run_not_found(job_id=job_id)
     job = sync_job_status_from_run(job=job, run=run)
     set_external_agent_poll_headers(response)
     return ExternalAgentJobResponse(job=job_status_payload(job=job, run=run), run=run)
@@ -313,9 +313,22 @@ def get_external_agent_job_receipt_route(
     else:
         receipt = stored_external_agent_job_receipt(job=job, run=run)
         if not receipt:
-            raise HTTPException(
+            raise external_agent_error(
                 status_code=404,
-                detail="No stored receipt exists for this job status; call with refresh=true to mint one.",
+                code="external_agent_receipt_not_available",
+                message=(
+                    "No stored receipt exists for this job status; call with "
+                    "refresh=true to mint one or poll until the job reaches a "
+                    "terminal status."
+                ),
+                retryable=True,
+                retry_after_seconds=POLL_RETRY_AFTER_SECONDS,
+                context={
+                    "job_id": job_id,
+                    "status": current_status,
+                    "refresh_available": True,
+                    "refresh_query": "refresh=true",
+                },
             )
     set_external_agent_poll_headers(response)
     return ExternalAgentJobReceiptResponse(receipt=receipt)
@@ -429,7 +442,13 @@ def get_external_agent_job_activity_route(
             around=max(1, min(int(around), 2000)),
         ).to_dict()
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _external_agent_event_page_not_found(
+            job_id=job_id,
+            reason=str(exc),
+            before=before,
+            after=after,
+            event_id=event_id,
+        ) from exc
     items = external_agent_activity_items(
         job=job,
         run=run,
@@ -500,7 +519,13 @@ def get_external_agent_job_events_route(
             around=max(1, min(int(around), 2000)),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _external_agent_event_page_not_found(
+            job_id=job_id,
+            reason=str(exc),
+            before=before,
+            after=after,
+            event_id=event_id,
+        ) from exc
     payload = page.to_dict()
     sync_job_status_from_run(job=job, run=run)
     set_external_agent_poll_headers(response)
@@ -546,12 +571,62 @@ def _require_scoped_job_and_run(
         principal_id=principal.principal_id,
     )
     if not job:
-        raise HTTPException(status_code=404, detail="External agent job not found")
+        raise _external_agent_job_not_found(job_id=job_id)
     run = deps.agent_runs.get_agent_run(run_id=job["run_id"], client_id=principal.client_id)
     if not run:
-        raise HTTPException(status_code=404, detail="External agent job run not found")
+        raise _external_agent_job_run_not_found(job_id=job_id)
     job = sync_job_status_from_run(job=job, run=run)
     return job, run
+
+
+def _external_agent_job_not_found(*, job_id: str) -> HTTPException:
+    return external_agent_error(
+        status_code=404,
+        code="external_agent_job_not_found",
+        message="External agent job not found",
+        context={"job_id": job_id},
+    )
+
+
+def _external_agent_job_run_not_found(*, job_id: str) -> HTTPException:
+    return external_agent_error(
+        status_code=404,
+        code="external_agent_job_run_not_found",
+        message="External agent job run not found",
+        context={"job_id": job_id},
+    )
+
+
+def _external_agent_event_page_not_found(
+    *,
+    job_id: str,
+    reason: str,
+    before: Optional[str] = None,
+    after: Optional[str] = None,
+    event_id: Optional[str] = None,
+) -> HTTPException:
+    context = {"job_id": job_id}
+    if before:
+        context["before"] = before
+    if after:
+        context["after"] = after
+    if event_id:
+        context["event_id"] = event_id
+    return external_agent_error(
+        status_code=404,
+        code="external_agent_event_page_not_found",
+        message="External agent event page not found",
+        context={**context, "reason": reason},
+    )
+
+
+def _idempotent_job_run_missing(*, job_id: str) -> HTTPException:
+    return external_agent_error(
+        status_code=409,
+        code="idempotent_job_run_missing",
+        message="idempotent job run is missing",
+        context={"job_id": job_id},
+    )
 
 
 def _resolve_requested_runtime_contract(

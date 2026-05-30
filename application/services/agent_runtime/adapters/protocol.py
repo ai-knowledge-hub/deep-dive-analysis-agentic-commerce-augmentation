@@ -63,6 +63,7 @@ def execute_protocol_readiness_check(
         "protocols_checked": protocols,
         "ready_protocols": [item["protocol"] for item in readiness if item["ready"]],
         "issue_count": sum(int(item["issue_count"]) for item in readiness),
+        "top_issues": _top_readiness_issues(readiness),
     }
     subject = {
         "product_id": product_id,
@@ -212,6 +213,27 @@ def _safe_limit(value: Any) -> int:
     except (TypeError, ValueError):
         return 10
     return max(1, min(parsed, 50))
+
+
+def _top_readiness_issues(readiness: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    out: list[Dict[str, Any]] = []
+    for item in readiness:
+        for issue in item.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            out.append(
+                {
+                    "protocol": item.get("protocol"),
+                    "product_id": item.get("product_id"),
+                    "field": issue.get("field"),
+                    "severity": issue.get("severity"),
+                    "message": issue.get("message"),
+                    "fix": issue.get("fix"),
+                }
+            )
+            if len(out) >= 3:
+                return out
+    return out
 
 
 def _to_protocol_candidate(product: Dict[str, Any], *, protocol: str) -> ProtocolCandidate:
