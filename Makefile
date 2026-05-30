@@ -40,6 +40,10 @@ run-frontend:
 web-lint:
 	cd web && pnpm lint
 
+.PHONY: web-complexity-check
+web-complexity-check:
+	cd web && pnpm complexity-check
+
 .PHONY: web-test
 web-test:
 	cd web && pnpm test

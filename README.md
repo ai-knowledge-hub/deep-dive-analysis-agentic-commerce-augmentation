@@ -342,9 +342,10 @@ make bloat-check
 make script-entrypoint-check
 make test
 make web-lint
+make web-complexity-check
 ```
 
-Architecture checks are part of CI and enforce layer boundaries, command-route boundaries, import-cycle detection, coupling/dependency-depth thresholds, and per-function complexity caps. Bloat checks block file-size growth in known hotspots.
+Architecture checks are part of CI and enforce layer boundaries, command-route boundaries, import-cycle detection, coupling/dependency-depth thresholds, and per-function complexity caps. Bloat checks block file-size growth in known hotspots. The frontend complexity check applies the same idea to TS/TSX imports, cycles, page coupling, relative import depth, and component/function complexity.
 
 ---
 

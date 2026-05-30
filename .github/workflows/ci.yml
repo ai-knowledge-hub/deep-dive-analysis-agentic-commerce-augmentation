@@ -53,3 +53,19 @@ jobs:
           LLM_PROVIDER: openrouter
           OPENROUTER_API_KEY: test-key
         run: make test
+
+  frontend-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.15.1 --activate
+      - name: Install frontend dependencies
+        run: cd web && pnpm install --frozen-lockfile
+      - name: Frontend Complexity Check
+        run: make web-complexity-check
