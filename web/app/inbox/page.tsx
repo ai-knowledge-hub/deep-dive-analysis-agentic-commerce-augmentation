@@ -12,6 +12,7 @@ import {
   getAgentRunEvents,
   listAgentRuns,
 } from "../../lib/api";
+import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 import { buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
@@ -33,6 +34,13 @@ type InboxGroup = {
   badgeTone: "warning" | "secondary";
   emptyLabel: string;
   items: InboxItem[];
+};
+
+type InboxNextAction = {
+  item: InboxItem | null;
+  label: string;
+  summary: string;
+  cta: string;
 };
 
 function formatRunLabel(run: AgentRun): string {
@@ -118,6 +126,49 @@ function buildWatchingSummary(run: AgentRun): InboxItem | null {
         ? "Run is paused and may need a start/resume decision if work should continue."
         : `Run is currently ${status}; inspect the run if progress looks stale or opaque.`,
     statusLabel: run.state || status,
+  };
+}
+
+function buildInboxNextAction(
+  criticalItems: InboxItem[],
+  reviewItems: InboxItem[],
+  watchingItems: InboxItem[],
+): InboxNextAction {
+  const critical = criticalItems[0] ?? null;
+  if (critical) {
+    return {
+      item: critical,
+      label: "Start with failed work",
+      summary: `${critical.title}: ${critical.summary}`,
+      cta: "Review failed run",
+    };
+  }
+
+  const review = reviewItems[0] ?? null;
+  if (review) {
+    return {
+      item: review,
+      label: review.kind === "approval" ? "Review the pending approval" : "Review the alert",
+      summary: `${review.title}: ${review.summary}`,
+      cta: review.kind === "approval" ? "Review approval" : "Review alert",
+    };
+  }
+
+  const watching = watchingItems[0] ?? null;
+  if (watching) {
+    return {
+      item: watching,
+      label: "Continue supervision",
+      summary: `${watching.title}: ${watching.summary}`,
+      cta: "Open watched run",
+    };
+  }
+
+  return {
+    item: null,
+    label: "No action needed",
+    summary: "No urgent work is waiting. Check Insights for recent outcomes or Runs when you are ready to supervise new work.",
+    cta: "Review insights",
   };
 }
 
@@ -257,6 +308,11 @@ export default function InboxPage() {
     },
   ];
 
+  const nextAction = useMemo(
+    () => buildInboxNextAction(criticalItems, reviewItems, watchingItems),
+    [criticalItems, reviewItems, watchingItems],
+  );
+
   function renderItem(item: InboxItem) {
     return (
       <button
@@ -270,7 +326,7 @@ export default function InboxPage() {
           {item.run.status ?? "unknown"} · {item.run.state ?? "unknown"} ·{" "}
           {item.statusLabel}
         </div>
-        <div className="panel__muted">{item.summary}</div>
+        <div className="panel__muted">{softenOperatorText(item.summary)}</div>
         {item.latestEvent?.timestamp ? (
           <div className="control-list__meta">
             Latest event: {formatEventTime(item.latestEvent.timestamp)}
@@ -352,6 +408,42 @@ export default function InboxPage() {
             ]}
             error={error}
           />
+
+          <section className="control-surface control-grid__full">
+            <div className="control-section__header">
+              <div>
+                <span className="control-section__eyebrow">Start here</span>
+                <h3 className="control-section__title">{nextAction.label}</h3>
+                <div className="control-section__summary">
+                  The inbox picks one clear first move from the highest-priority queue.
+                </div>
+              </div>
+              <span
+                className={`control-chip ${
+                  nextAction.item?.urgency === "critical" ? "control-chip--attention" : ""
+                }`}
+              >
+                {loading ? "Loading" : nextAction.item?.urgency ?? "Clear"}
+              </span>
+            </div>
+            <div className="panel__notice panel__notice--info">
+              {softenOperatorText(nextAction.summary)}
+            </div>
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() =>
+                  nextAction.item
+                    ? router.push(buildRunsHref({ runId: nextAction.item.run.id }))
+                    : router.push("/learnings")
+                }
+                disabled={loading}
+              >
+                {nextAction.cta}
+              </button>
+            </div>
+          </section>
 
           <section className="control-grid control-grid--compact control-grid--full">
             {groups.map(renderGroup)}
