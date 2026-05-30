@@ -388,7 +388,7 @@ export default function LearningsPage() {
               <div className="control-section__header">
                 <div>
                   <span className="control-section__eyebrow">Readiness</span>
-                  <h3 className="control-section__title">Readiness snapshot</h3>
+                  <h3 className="control-section__title">Readiness status</h3>
                 </div>
                 <span className="control-chip">KPIs</span>
               </div>

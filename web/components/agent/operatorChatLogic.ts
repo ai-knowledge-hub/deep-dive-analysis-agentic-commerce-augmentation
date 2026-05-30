@@ -1,4 +1,5 @@
 import type { AgentAction, AgentRun, AgentRunCommandResponse, AgentRunCommandType } from "../../lib/types";
+import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 import type { PromptId } from "./operatorChatTypes";
 
 export function formatRunLabel(run: AgentRun | null): string {
@@ -68,7 +69,7 @@ function buildArtifactGuidance(action: AgentAction): string[] {
     guidance.push(`Review metric ${metricId} in the experiment evidence before approving downstream promotion.`);
   }
   if (variantId) {
-    guidance.push(`Compare variant ${variantId} against the control and latest posterior.`);
+    guidance.push(`Compare variant ${variantId} against the control and latest confidence update.`);
   }
   if (validationJobId) {
     guidance.push(`Open validation job ${validationJobId} to inspect synthetic/observed agreement.`);
@@ -77,10 +78,10 @@ function buildArtifactGuidance(action: AgentAction): string[] {
     guidance.push(`Inspect copy revision ${revisionId} and confirm the published text/audit event.`);
   }
   if (hypothesisId) {
-    guidance.push(`Check hypothesis ${hypothesisId} to see which belief this action supports or challenges.`);
+    guidance.push(`Check test idea ${hypothesisId} to see which assumption this action supports or challenges.`);
   }
   if (action.snapshot_version != null) {
-    guidance.push(`Use snapshot version ${action.snapshot_version} when comparing retrieval-backed results.`);
+    guidance.push(`Use evidence version ${action.snapshot_version} when comparing retrieval-backed results.`);
   }
   if (action.error) {
     guidance.push(`Failure note: ${action.error}`);
@@ -100,7 +101,7 @@ export function buildCommandOutcome(
   }
   const parts = [`Command completed: ${commandType}.`];
   if (response.message) {
-    parts.push(response.message);
+    parts.push(softenOperatorText(response.message));
   }
   if (response.action) {
     parts.push(
@@ -110,11 +111,11 @@ export function buildCommandOutcome(
       parts.push(`Retry count is ${response.action.retry_count}.`);
     }
     if (response.action.rollback_guidance) {
-      parts.push(`Rollback guidance: ${response.action.rollback_guidance}`);
+      parts.push(`Recovery guidance: ${softenOperatorText(response.action.rollback_guidance)}`);
     }
     const compensatingAction = response.action.compensating_actions?.[0];
     if (compensatingAction?.label) {
-      parts.push(`Compensating action: ${compensatingAction.label}.`);
+      parts.push(`Recovery action: ${softenOperatorText(compensatingAction.label)}.`);
     }
     const guidance = buildArtifactGuidance(response.action);
     if (guidance.length > 0) {
@@ -127,9 +128,9 @@ export function buildCommandOutcome(
     );
   }
   if (response.preflight?.risk_level) {
-    parts.push(`Preflight risk was ${response.preflight.risk_level}.`);
+    parts.push(`Safety-check risk was ${response.preflight.risk_level}.`);
   }
-  return parts.join(" ");
+  return softenOperatorText(parts.join(" "));
 }
 
 export function preferredRecoveryCapability(capabilities: string[]): string {

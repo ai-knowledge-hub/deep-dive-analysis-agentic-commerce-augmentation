@@ -157,7 +157,7 @@ export default function HomePage() {
       setSnapshotError(
         error instanceof Error
           ? error.message
-          : "Unable to load the control-plane snapshot.",
+          : "Unable to load the control-plane status.",
       );
     } finally {
       setLoadingSnapshot(false);
@@ -213,7 +213,7 @@ export default function HomePage() {
           />
           {snapshotError ? (
             <div className="panel__notice panel__notice--warning">
-              Control-plane snapshot unavailable: {snapshotError}
+              Control-plane status unavailable: {snapshotError}
             </div>
           ) : null}
 
@@ -248,7 +248,7 @@ export default function HomePage() {
                   onClick={() => loadSnapshot()}
                   disabled={loadingSnapshot}
                 >
-                  Refresh snapshot
+                  Refresh status
                 </button>
               </div>
             </section>

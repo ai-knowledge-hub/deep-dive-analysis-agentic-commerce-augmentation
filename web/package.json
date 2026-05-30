@@ -8,6 +8,7 @@
     "start": "pnpm exec next start",
     "lint": "pnpm exec next lint",
     "complexity-check": "node ../scripts/checks/web_complexity_check.mjs",
+    "ui-language-check": "node ../scripts/checks/ui_language_check.mjs",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",
     "test:e2e": "NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm run build && NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm exec playwright test",

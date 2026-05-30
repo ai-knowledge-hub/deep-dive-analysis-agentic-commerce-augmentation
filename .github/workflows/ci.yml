@@ -69,3 +69,5 @@ jobs:
         run: cd web && pnpm install --frozen-lockfile
       - name: Frontend Complexity Check
         run: make web-complexity-check
+      - name: Frontend UI Language Check
+        run: make web-ui-language-check
