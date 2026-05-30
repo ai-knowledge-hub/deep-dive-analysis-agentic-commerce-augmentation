@@ -17,6 +17,7 @@ const PRIMARY_FILES = [
   "components/agent/OperatorConsoleChat.tsx",
   "components/agent/operatorChatLogic.ts",
   "components/agent-runs/SelectedActionDetailPanel.tsx",
+  "components/agent-runs/RunStartGuide.tsx",
   "components/interventions/InterventionQueueSections.tsx",
 ];
 

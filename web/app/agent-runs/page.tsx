@@ -67,6 +67,7 @@ import { ExternalAgentJobPanel } from "../../components/agent-runs/ExternalAgent
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
 import { RunSelectionRail } from "../../components/agent-runs/RunSelectionRail";
+import { RunStartGuide } from "../../components/agent-runs/RunStartGuide";
 import { SelectedActionDetailPanel } from "../../components/agent-runs/SelectedActionDetailPanel";
 import {
   approvalReceiptForEvent,
@@ -1374,6 +1375,22 @@ function AgentRunsPageContent() {
             error={error}
           />
 
+          <RunStartGuide
+            selectedRun={selectedRun}
+            nextRecommendedAction={nextRecommendedAction}
+            loading={loading}
+            onApprove={(actionId) => {
+              void handleDecision(actionId, "approve");
+            }}
+            onOpenInterventions={() => {
+              if (selectedRun?.id) router.push(`/interventions?run_id=${selectedRun.id}`);
+            }}
+            onStart={() => {
+              void handleRunControl("start");
+            }}
+            onReviewAction={setSelectedActionId}
+          />
+
           <div className="agent-workspace">
             <section className="control-surface agent-workspace__rail">
               <RunSelectionRail
@@ -1532,34 +1549,6 @@ function AgentRunsPageContent() {
 
                 {selectedRun && (
                   <>
-                    <section className="agent-next-action">
-                      <div className="control-section__header">
-                        <div>
-                          <span className="control-section__eyebrow">Recommendation</span>
-                          <h4 className="control-section__title">Next recommended action</h4>
-                        </div>
-                        {nextRecommendedAction.action ? (
-                          <span className="control-chip">
-                            #{nextRecommendedAction.action.sequence} ·{" "}
-                            {nextRecommendedAction.action.capability_name}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="panel__muted">{nextRecommendedAction.hint}</p>
-                      {nextRecommendedAction.action?.rationale ? (
-                        <p className="panel__muted">{nextRecommendedAction.action.rationale}</p>
-                      ) : null}
-                      {nextRecommendedAction.guardrails.length > 0 ? (
-                        <ul className="panel__list panel__list--compact">
-                          {nextRecommendedAction.guardrails.map((reason) => (
-                            <li key={reason} className="agent-guardrail-reason">
-                              {reason}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </section>
-
                     <div className="panel__meta-strip panel__meta-strip--flat">
                       <div>
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}

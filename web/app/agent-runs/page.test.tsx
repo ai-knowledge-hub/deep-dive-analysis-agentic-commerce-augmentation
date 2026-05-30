@@ -770,12 +770,56 @@ describe("AgentRunsPage timeline presets", () => {
     });
 
     render(<AgentRunsPage />);
-    await waitFor(() => expect(screen.getByText("Next recommended action")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Intervention needed")).toBeInTheDocument());
+    expect(screen.getAllByRole("button", { name: /Open interventions/i }).length).toBeGreaterThan(0);
     expect(
       screen.getAllByText(/Run is failed\. Start a new run or move to a healthy run state\./i)
         .length,
     ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  });
+
+  it("surfaces a primary approve action above run details", async () => {
+    const user = userEvent.setup();
+    getAgentRunMock.mockResolvedValueOnce({
+      run: {
+        id: "run-1",
+        experiment_id: "exp-1",
+        status: "planned",
+        state: "battery_ready",
+        budgets: {},
+        requires_approval: true,
+        run_mode: "plan_only",
+      },
+      actions: [
+        {
+          id: "act-1",
+          sequence: 1,
+          status: "proposed",
+          capability_name: "run_variant",
+          capability_version: "v1",
+          rationale: "Run candidate after review.",
+          confidence: 0.7,
+          inputs: {},
+          outputs: {},
+        },
+      ],
+    });
+
+    render(<AgentRunsPage />);
+
+    expect(await screen.findByText("Approve the next action")).toBeInTheDocument();
+    expect(screen.getAllByText(/Run candidate after review/i).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /Approve next action/i }));
+
+    await waitFor(() =>
+      expect(decideAgentActionMock).toHaveBeenCalledWith(
+        "act-1",
+        { decision: "approve" },
+        "user-a",
+      ),
+    );
   });
 
   it("lets operator chat drive timeline filters and next-action selection", async () => {
