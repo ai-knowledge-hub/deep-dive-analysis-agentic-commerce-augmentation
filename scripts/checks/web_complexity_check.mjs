@@ -11,7 +11,6 @@ const ts = require(path.join(WEB_ROOT, "node_modules", "typescript"));
 const SOURCE_DIRS = ["app", "components", "lib"];
 const EXTRA_FILES = [
   "middleware.ts",
-  "next.config.mjs",
   "playwright.config.ts",
   "vitest.config.ts",
   "vitest.setup.ts",
@@ -52,7 +51,8 @@ const APP_IMPORT_ALLOWLIST = new Set([
 function main(argv) {
   const options = parseArgs(argv);
   const files = collectSourceFiles();
-  const report = buildReport(files, options);
+  const compilerOptions = readCompilerOptions();
+  const report = buildReport(files, options, compilerOptions);
   if (options.reportJson) {
     fs.mkdirSync(path.dirname(options.reportJson), { recursive: true });
     fs.writeFileSync(options.reportJson, `${JSON.stringify(report, null, 2)}\n`);
@@ -101,7 +101,7 @@ function parseArgs(argv) {
   return options;
 }
 
-function buildReport(files, options) {
+function buildReport(files, options, compilerOptions) {
   const fileSet = new Set(files);
   const graph = new Map();
   const internalImportCounts = new Map();
@@ -131,7 +131,12 @@ function buildReport(files, options) {
         );
       }
 
-      const resolved = resolveInternalImport(file, importRecord.specifier, fileSet);
+      const resolved = resolveInternalImport(
+        file,
+        importRecord.specifier,
+        fileSet,
+        compilerOptions,
+      );
       if (!resolved) {
         continue;
       }
@@ -229,6 +234,9 @@ function walk(current, files) {
     return;
   }
   if (EXTENSIONS.includes(path.extname(current))) {
+    if (isTestFile(current)) {
+      return;
+    }
     files.push(current);
   }
 }
@@ -323,17 +331,58 @@ function functionName(node) {
   return "<anonymous>";
 }
 
-function resolveInternalImport(fromFile, specifier, fileSet) {
-  if (!specifier.startsWith(".")) {
-    return null;
+function resolveInternalImport(fromFile, specifier, fileSet, compilerOptions) {
+  const resolvedModule = ts.resolveModuleName(
+    specifier,
+    fromFile,
+    compilerOptions,
+    ts.sys,
+  ).resolvedModule;
+  if (resolvedModule) {
+    const resolvedFile = path.resolve(resolvedModule.resolvedFileName);
+    if (fileSet.has(resolvedFile)) {
+      return resolvedFile;
+    }
   }
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  for (const candidate of candidatePaths(base)) {
+
+  for (const candidate of candidatePaths(path.resolve(path.dirname(fromFile), specifier))) {
     if (fileSet.has(candidate)) {
       return candidate;
     }
   }
   return null;
+}
+
+function readCompilerOptions() {
+  const tsconfigPath = path.join(WEB_ROOT, "tsconfig.json");
+  const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  if (configFile.error) {
+    throw new Error(ts.flattenDiagnosticMessageText(configFile.error.messageText, "\n"));
+  }
+  const parsed = ts.parseJsonConfigFileContent(
+    configFile.config,
+    ts.sys,
+    WEB_ROOT,
+    {},
+    tsconfigPath,
+  );
+  if (parsed.errors.length > 0) {
+    throw new Error(
+      parsed.errors
+        .map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n"))
+        .join("\n"),
+    );
+  }
+  return parsed.options;
+}
+
+function isTestFile(file) {
+  const basename = path.basename(file);
+  return (
+    basename.includes(".test.") ||
+    basename.includes(".spec.") ||
+    file.split(path.sep).includes("__tests__")
+  );
 }
 
 function candidatePaths(base) {
