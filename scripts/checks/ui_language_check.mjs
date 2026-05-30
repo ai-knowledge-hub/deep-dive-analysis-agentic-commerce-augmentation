@@ -10,6 +10,7 @@ const ts = require(path.join(WEB_ROOT, "node_modules", "typescript"));
 
 const PRIMARY_FILES = [
   "app/page.tsx",
+  "app/inbox/page.tsx",
   "app/interventions/page.tsx",
   "app/learnings/page.tsx",
   "components/agent/CompensatingProposalControl.tsx",

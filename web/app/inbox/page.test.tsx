@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React, { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -130,12 +131,24 @@ describe("InboxPage", () => {
     expect(screen.getByText("Critical")).toBeInTheDocument();
     expect(screen.getByText("Review")).toBeInTheDocument();
     expect(screen.getByText("Watching")).toBeInTheDocument();
-    expect(await screen.findByText(/Experiment exp-1 failed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Validation provider failed/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Experiment exp-1 failed/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Validation provider failed/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Policy blocked promotion/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-2 needs approval/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Experiment exp-3 is running/i)).toBeInTheDocument();
+  });
+
+  it("surfaces one next action and routes to the highest-priority run", async () => {
+    const user = userEvent.setup();
+    render(<InboxPage />);
+
+    expect(await screen.findByText(/Start with failed work/i)).toBeInTheDocument();
+    expect(screen.getByText(/Experiment exp-1 failed: Validation provider failed/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Review failed run/i }));
+
+    expect(pushMock).toHaveBeenCalledWith("/runs?run_id=run-1");
   });
 });

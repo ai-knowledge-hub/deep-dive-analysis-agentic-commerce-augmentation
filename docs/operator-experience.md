@@ -47,6 +47,7 @@ Use it to understand the current operational posture and pick the right next wor
 Role: attention queue.
 
 Use it when the operator needs to know what requires attention now. Items should be grouped by urgency and risk, not only by creation time.
+The top of the Inbox should also choose one clear first move so operators do not have to scan every queue before acting.
 
 Primary questions:
 
