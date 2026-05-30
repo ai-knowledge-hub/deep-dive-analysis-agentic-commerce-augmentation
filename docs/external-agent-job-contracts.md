@@ -427,6 +427,11 @@ Behavior:
 - `recommend_next_action` run events include `domain=policy_recommendation`
   with recommendation status, recommended tool id, operator-attention flag, and
   note.
+- Validation review events include `domain=validation_readiness` with readiness
+  status, review scope, operator-attention flag, tool id, and note.
+- Promotion and publish path events include `domain=promotion_readiness` with
+  readiness status, promotion tier/path, operator-attention flag, effect class,
+  tool id, and note.
 
 Use this endpoint for machine-friendly progress narration and polling.
 

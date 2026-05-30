@@ -313,6 +313,29 @@ def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
             "operator_attention_required": event.get("status") == "proposed",
             "note": event.get("note"),
         }
+    if capability_name == "review_validation_readiness":
+        return {
+            "domain": "validation_readiness",
+            "readiness_status": event.get("status"),
+            "review_scope": "promotion_gates",
+            "operator_attention_required": event.get("status") == "proposed",
+            "tool_id": event.get("tool_id"),
+            "note": event.get("note"),
+        }
+    if capability_name in {
+        "promote_variant_lab",
+        "promote_variant_prod",
+        "publish_copy_revision",
+    }:
+        return {
+            "domain": "promotion_readiness",
+            "readiness_status": event.get("status"),
+            "promotion_tier": _promotion_tier_for_capability(capability_name),
+            "operator_attention_required": event.get("status") == "proposed",
+            "effect_class": event.get("effect_class"),
+            "tool_id": event.get("tool_id"),
+            "note": event.get("note"),
+        }
     if capability_name not in {
         "discover_protocol_candidates",
         "check_protocol_readiness",
@@ -353,6 +376,14 @@ def _run_event_domain_summary(event: Dict[str, Any]) -> Dict[str, Any]:
         "top_warnings": readiness.get("top_warnings") or [],
         "receipt_id": anchors.get("receipt_id") or receipt.get("receipt_id"),
     }
+
+
+def _promotion_tier_for_capability(capability_name: str) -> str:
+    if capability_name == "promote_variant_prod":
+        return "prod"
+    if capability_name == "publish_copy_revision":
+        return "publish"
+    return "lab"
 
 
 def _protocol_readiness_domain_summary(

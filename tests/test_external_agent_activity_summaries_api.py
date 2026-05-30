@@ -143,3 +143,72 @@ def test_external_agent_activity_summarizes_recovery_recommendations(
         "compensating_action_count": 1,
         "rollback_guidance": "Ask policy for the safest next action.",
     }
+
+
+def test_external_agent_activity_summarizes_validation_and_promotion_paths(
+    client: TestClient,
+):
+    created = client.post(
+        "/external-agent/jobs",
+        headers=_headers(),
+        json={"idempotency_key": "job-validation-summary", "tool_id": "experiment.run_variant"},
+    )
+    assert created.status_code == 200
+    payload = created.json()
+    run_id = payload["run"]["id"]
+    job_id = payload["job"]["id"]
+
+    deps = default_deps()
+    deps.agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=4,
+        event_type="action_proposed",
+        status="proposed",
+        capability_name="review_validation_readiness",
+        capability_version="v1",
+        tool_id="validation.review_readiness",
+        effect_class="read",
+        note="Review observed and synthetic validation gates before promotion decisions.",
+        anchors={},
+    )
+    deps.agent_events.create_agent_event(
+        agent_run_id=run_id,
+        action_id=None,
+        sequence=5,
+        event_type="action_proposed",
+        status="proposed",
+        capability_name="promote_variant_prod",
+        capability_version="v1",
+        tool_id="promotion.promote_variant_prod",
+        effect_class="write_high_risk",
+        note="Promote a candidate to prod tier only when readiness gates pass.",
+        anchors={},
+    )
+
+    activity = client.get(f"/external-agent/jobs/{job_id}/activity", headers=_headers())
+    assert activity.status_code == 200
+    items = activity.json()["items"]
+    readiness = next(
+        item for item in items if item.get("capability_name") == "review_validation_readiness"
+    )
+    promotion = next(
+        item for item in items if item.get("capability_name") == "promote_variant_prod"
+    )
+    assert readiness["domain_summary"] == {
+        "domain": "validation_readiness",
+        "readiness_status": "proposed",
+        "review_scope": "promotion_gates",
+        "operator_attention_required": True,
+        "tool_id": "validation.review_readiness",
+        "note": "Review observed and synthetic validation gates before promotion decisions.",
+    }
+    assert promotion["domain_summary"] == {
+        "domain": "promotion_readiness",
+        "readiness_status": "proposed",
+        "promotion_tier": "prod",
+        "operator_attention_required": True,
+        "effect_class": "write_high_risk",
+        "tool_id": "promotion.promote_variant_prod",
+        "note": "Promote a candidate to prod tier only when readiness gates pass.",
+    }
