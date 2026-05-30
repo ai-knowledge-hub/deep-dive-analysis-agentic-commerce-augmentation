@@ -2329,6 +2329,10 @@ input[type="checkbox"]:focus-visible {
   margin-bottom: 12px;
 }
 
+.agent-start-guide {
+  margin-bottom: 12px;
+}
+
 .agent-run-summary__chips {
   display: flex;
   flex-wrap: wrap;

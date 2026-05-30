@@ -61,6 +61,7 @@ Primary questions:
 Role: execution supervision.
 
 Use it to inspect active and recent agent execution. Runs should expose principal, harness, policy, registry, skills, tools, action state, timeline, receipts, and operator chat context.
+The top of Runs should keep one start-here decision visible before detailed queue, timeline, and audit context.
 
 Primary questions:
 
