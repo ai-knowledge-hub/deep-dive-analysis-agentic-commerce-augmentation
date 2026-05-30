@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -20,6 +20,11 @@ class ExternalAgentCredentialMetadataResponse(BaseModel):
     max_ttl_seconds: int
     rotation_supported: bool
     issuer_managed: bool
+    scope_claim: str
+    scope_wildcards: list[str]
+    scope_catalog: list[dict[str, Any]]
+    least_privilege_examples: list[dict[str, Any]]
+    registry_scope_discovery: dict[str, Any]
     issuance_endpoint: Optional[str] = None
     jwks_endpoint: Optional[str] = None
 

@@ -90,6 +90,85 @@ def agent_principal_token_metadata() -> dict[str, Any]:
         "max_ttl_seconds": int(settings.agent_principal_token_max_ttl_seconds),
         "rotation_supported": False,
         "issuer_managed": True,
+        "scope_claim": "scopes",
+        "scope_wildcards": ["*", "tools:*", "skills:*"],
+        "scope_catalog": [
+            {
+                "scope": "external_agent_jobs:write",
+                "kind": "endpoint",
+                "grants": "create external-agent jobs for the token principal",
+                "required_for": ["POST /external-agent/jobs"],
+            },
+            {
+                "scope": "external_agent_jobs:read",
+                "kind": "endpoint",
+                "grants": "read jobs, receipts, activity, and events owned by the token principal",
+                "required_for": [
+                    "GET /external-agent/jobs/{job_id}",
+                    "GET /external-agent/jobs/{job_id}/receipt",
+                    "GET /external-agent/jobs/{job_id}/receipts",
+                    "GET /external-agent/jobs/{job_id}/activity",
+                    "GET /external-agent/jobs/{job_id}/events",
+                    "GET /agent-runs/registry",
+                ],
+            },
+            {
+                "scope": "agent_runs:read",
+                "kind": "endpoint",
+                "grants": "read scoped agent-run registry and run-event surfaces",
+                "required_for": ["GET /agent-runs/registry"],
+            },
+            {
+                "scope": "agent_runs:write",
+                "kind": "endpoint",
+                "grants": "create or operate scoped agent runs where external-agent access is allowed",
+                "required_for": ["agent-run write routes"],
+            },
+            {
+                "scope": "tool:<tool_id>",
+                "kind": "tool",
+                "grants": "request one registry tool through external-agent jobs",
+                "wildcard": "tools:*",
+                "required_for": ["POST /external-agent/jobs"],
+            },
+            {
+                "scope": "skill:<skill_id>",
+                "kind": "skill",
+                "grants": "request one registry skill or the default skill selected for a tool",
+                "wildcard": "skills:*",
+                "required_for": ["POST /external-agent/jobs"],
+            },
+        ],
+        "least_privilege_examples": [
+            {
+                "name": "single executable tool job",
+                "scopes": [
+                    "external_agent_jobs:write",
+                    "external_agent_jobs:read",
+                    "tool:experiment.run_variant",
+                    "skill:optimize-product-representation",
+                ],
+            },
+            {
+                "name": "read-only protocol discovery job",
+                "scopes": [
+                    "external_agent_jobs:write",
+                    "external_agent_jobs:read",
+                    "tool:protocol.discover_candidates",
+                    "skill:discover-protocol-candidates",
+                ],
+            },
+            {
+                "name": "registry discovery only",
+                "scopes": ["external_agent_jobs:read"],
+            },
+        ],
+        "registry_scope_discovery": {
+            "endpoint": "GET /agent-runs/registry",
+            "tool_contract_path": "tools[].external_agent_contract.required_scopes",
+            "capability_contract_path": "capabilities[].external_agent_contract.required_scopes",
+            "readiness_boundary_path": "readiness_boundaries[]",
+        },
     }
 
 

@@ -116,12 +116,12 @@ Remaining:
 
 ### 3. External Agent API Contracts
 
-Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection. Protocol discovery, protocol readiness, runtime stopping-condition, recovery recommendation, policy recommendation, validation readiness, and promotion readiness activity now expose `domain_summary` payloads for machine callers and operator supervision.
+Current state: machine-principal run creation exists, and the first external-agent job facade creates scoped, idempotent jobs linked to agent runs. External agents can read scoped job status, signed latest-status receipts, historical receipt lists, linked run events, and a normalized job activity projection. Protocol discovery, protocol readiness, runtime stopping-condition, recovery recommendation, policy recommendation, validation readiness, and promotion readiness activity now expose `domain_summary` payloads for machine callers and operator supervision. Credential metadata now publishes the supported scope claim vocabulary, wildcard rules, least-privilege examples, and registry paths where callers can discover exact tool/skill scope alternatives before minting external-agent bearer tokens.
 
 Next steps:
 
 - Add richer domain-specific activity summaries beyond protocol readiness and discovery.
-- Add scoped credentials for tool/skill access.
+- Add issuer/admin APIs for scoped credential issuance, rotation, and revocation.
 - Add retry-safe responses across more external-agent endpoints.
 
 ### 4. Harness Profiles
