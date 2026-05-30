@@ -195,7 +195,7 @@ Structured error shape:
 }
 ```
 
-External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, `idempotency_in_progress`, and `external_agent_receipt_not_available`.
+External-agent endpoints use stable error codes where autonomous callers need branching behavior, including `external_agent_auth_required`, `missing_external_agent_scope`, `missing_tool_scope`, `missing_skill_scope`, `declared_non_executable_tool`, `unsupported_tool`, `unsupported_skill`, `unsupported_capability`, `incompatible_skill_tool`, `invalid_plan_mode`, `invalid_job_plan`, `idempotency_payload_mismatch`, `idempotency_in_progress`, `idempotent_job_run_missing`, `external_agent_job_not_found`, `external_agent_job_run_not_found`, and `external_agent_receipt_not_available`.
 
 `declared_non_executable_tool` means the requested `tool_id` is visible in the registry as a planned or non-executable skill contract, but there is no executable runtime adapter behind it. Current protocol checkout, payment delegation, and browser fallback checkout contracts are intentionally exposed as readiness boundaries so external agents can discover merchant/protocol capability posture for market research without being allowed to trigger checkout, payment, cart, account, or browser transaction side effects. For readiness-boundary tools, the error `context` includes `contract_intent`, `adapter_id`, `blocked_reason`, and the planned `receipt_contract`.
 
