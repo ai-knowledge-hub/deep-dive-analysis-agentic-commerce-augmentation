@@ -312,6 +312,13 @@ describe("InterventionsPage", () => {
       screen.getByText(/approve publish_copy_revision/i),
     ).toBeInTheDocument();
     expect(
+      screen.getByText(/the run can continue with/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/publish copy revision/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/the run stays waiting and needs a safer next action/i),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(/Experiment exp-retr is ready to resume/i),
     ).toBeInTheDocument();
     expect(

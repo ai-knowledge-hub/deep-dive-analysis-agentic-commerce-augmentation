@@ -146,6 +146,22 @@ function InterventionMeta({
   );
 }
 
+function ApprovalOutcomeSummary({ item }: { item: ApprovalItem }) {
+  const actionName = softenOperatorText(
+    String(item.action.capability_name ?? "the selected action").replaceAll("_", " "),
+  );
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div>
+        <strong>Approve:</strong> the run can continue with {actionName}.
+      </div>
+      <div>
+        <strong>Reject:</strong> the run stays waiting and needs a safer next action.
+      </div>
+    </div>
+  );
+}
+
 export function EscalationsSection({ items, onOpenRun }: EscalationsProps) {
   return (
     <section className="control-surface intervention-section">
@@ -279,6 +295,7 @@ export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: Appr
                   </span>
                 </div>
                 <div className="list__meta">{item.reason}</div>
+                <ApprovalOutcomeSummary item={item} />
                 <div className="detail__actions">
                   <button
                     type="button"
