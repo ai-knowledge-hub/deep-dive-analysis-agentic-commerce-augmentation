@@ -6,7 +6,11 @@ import type {
   AgentRegistryOwnershipPreflight,
   AgentRuntimeCapabilitySpec,
 } from "../../lib/types";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import {
+  formatOperatorActionName,
+  formatOperatorIdentifier,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
 
 const CAPABILITY_EXPLAIN: Record<
   string,
@@ -267,6 +271,7 @@ export function SelectedActionDetailPanel({
   const discoverySourceCounts = discoverySourceCountsForAction(selectedAction);
   const discoveryReadiness =
     discoveryReadinessForAction(selectedAction) ?? protocolReadinessForAction(selectedAction);
+  const actionLabel = formatOperatorActionName(selectedAction.capability_name);
 
   return (
     <section className="agent-action-detail control-section">
@@ -275,9 +280,7 @@ export function SelectedActionDetailPanel({
           <span className="control-section__eyebrow">Action detail</span>
           <h4 className="control-section__title">Selected action details</h4>
         </div>
-        <span className="control-chip">
-          {selectedAction.capability_name}
-        </span>
+        <span className="control-chip">Action: {actionLabel}</span>
       </div>
       <p className="panel__muted">
         {softenOperatorText(
@@ -288,13 +291,13 @@ export function SelectedActionDetailPanel({
       </p>
       <div className="control-chip-row">
         <span className="control-chip">
-          Skill: {selectedAction.skill_id ?? "unmapped"}
+          Skill: {formatOperatorIdentifier(selectedAction.skill_id ?? "unmapped")}
         </span>
         <span className="control-chip">
-          Tool: {selectedAction.tool_id ?? "legacy"}
+          Tool: {formatOperatorIdentifier(selectedAction.tool_id ?? "legacy")}
         </span>
         <span className="control-chip">
-          Effect: {selectedAction.effect_class ?? "unknown"}
+          Effect: {formatOperatorIdentifier(selectedAction.effect_class ?? "unknown")}
         </span>
         <span className="control-chip">
           Tool contract: {selectedAction.registry_version ?? "unpinned"}
@@ -500,7 +503,9 @@ export function SelectedActionDetailPanel({
         <ul className="panel__list panel__list--compact">
           {selectedAction.compensating_actions.map((item, index) => (
             <li key={`${item.capability_name ?? item.label ?? "recovery"}-${index}`}>
-              {softenOperatorText(item.label ?? item.capability_name ?? "Review recovery action")}
+              {item.label
+                ? softenOperatorText(item.label)
+                : formatOperatorActionName(item.capability_name ?? "Review recovery action")}
               {item.rationale ? `: ${softenOperatorText(item.rationale)}` : ""}
             </li>
           ))}

@@ -965,6 +965,10 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
+    expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Tool: experiment run variant/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Effect: write low risk/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Optimize Product Representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
