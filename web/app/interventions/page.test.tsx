@@ -312,6 +312,10 @@ describe("InterventionsPage", () => {
       screen.getByText(/approve publish copy revision/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/approve publish_copy_revision/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Skill:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tool:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/legacy/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unmapped/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/the run can continue with/i),
     ).toBeInTheDocument();

@@ -314,17 +314,6 @@ export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: Appr
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{formatApprovalSummary(item)}</div>
                 <HarnessPosture item={item} focus="approval" />
-                <div className="control-chip-row">
-                  <span className="control-chip">
-                    Skill: {item.action.skill_id ?? "unmapped"}
-                  </span>
-                  <span className="control-chip">
-                    Tool: {item.action.tool_id ?? "legacy"}
-                  </span>
-                  <span className="control-chip">
-                    Effect: {item.action.effect_class ?? item.risk}
-                  </span>
-                </div>
                 <div className="list__meta">{item.reason}</div>
                 <ApprovalOutcomeSummary item={item} />
                 <div className="detail__actions">
