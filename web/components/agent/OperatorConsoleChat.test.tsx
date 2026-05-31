@@ -573,7 +573,8 @@ describe("OperatorConsoleChat", () => {
 
     expect(await screen.findByText(/Command completed: start/i)).toBeInTheDocument();
     expect(screen.getByText(/Run resumed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run is running in variants_ready state/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run is running in variants ready state/i)).toBeInTheDocument();
+    expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
   });
 
   it("adds artifact-specific guidance to command outcomes", async () => {

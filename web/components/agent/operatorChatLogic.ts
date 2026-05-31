@@ -1,5 +1,9 @@
 import type { AgentAction, AgentRun, AgentRunCommandResponse, AgentRunCommandType } from "../../lib/types";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import {
+  formatOperatorActionName,
+  formatOperatorIdentifier,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
 import type { PromptId } from "./operatorChatTypes";
 
 export function formatRunLabel(run: AgentRun | null): string {
@@ -105,7 +109,7 @@ export function buildCommandOutcome(
   }
   if (response.action) {
     parts.push(
-      `Action ${response.action.capability_name ?? response.action.id} is now ${response.action.status ?? "updated"}.`,
+      `Action ${formatOperatorActionName(response.action.capability_name ?? response.action.id)} is now ${response.action.status ?? "updated"}.`,
     );
     if (response.action.retry_count && response.action.retry_count > 0) {
       parts.push(`Retry count is ${response.action.retry_count}.`);
@@ -124,7 +128,7 @@ export function buildCommandOutcome(
   }
   if (response.run) {
     parts.push(
-      `Run is ${response.run.status ?? "unknown"} in ${response.run.state ?? "unknown"} state.`,
+      `Run is ${response.run.status ?? "unknown"} in ${formatOperatorIdentifier(response.run.state)} state.`,
     );
   }
   if (response.preflight?.risk_level) {

@@ -15,6 +15,7 @@ import type {
 } from "../../lib/types";
 import {
   formatOperatorActionName,
+  formatOperatorIdentifier,
   softenOperatorText,
 } from "../../lib/operatorDisplayLanguage";
 import { OperatorChatPrompts } from "./OperatorChatPrompts";
@@ -210,7 +211,7 @@ export function OperatorConsoleChat({
       return "Select a run to get a guided briefing. I can then explain failures, blocked actions, and the safest next step.";
     }
     const parts = [
-      `${formatRunLabel(run)} is ${run.status ?? "unknown"} in ${run.state ?? "unknown"} state.`,
+      `${formatRunLabel(run)} is ${run.status ?? "unknown"} in ${formatOperatorIdentifier(run.state)} state.`,
     ];
     if (derived.failedActions.length > 0) {
       parts.push(`${derived.failedActions.length} action failure${derived.failedActions.length === 1 ? "" : "s"} need review.`);
