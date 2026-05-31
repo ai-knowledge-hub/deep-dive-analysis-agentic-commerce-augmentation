@@ -23,6 +23,7 @@ type Props = {
   activeFlowSteps: FlowStep[];
   labLoopSteps: LabLoopStep[];
   lastRun: ExperimentRun | null;
+  variantLabelById: Map<string, string>;
   latestBelief: BrandBelief | null;
   latestBeliefSummary: string;
   nextFlowAction: NextFlowActionView;
@@ -50,6 +51,7 @@ export function LabLoopPanel({
   activeFlowSteps,
   labLoopSteps,
   lastRun,
+  variantLabelById,
   latestBelief,
   latestBeliefSummary,
   nextFlowAction,
@@ -118,6 +120,7 @@ export function LabLoopPanel({
         activeFlowSteps={activeFlowSteps}
         labLoopSteps={labLoopSteps}
         lastRun={lastRun}
+        variantLabelById={variantLabelById}
         latestBelief={latestBelief}
         latestBeliefSummary={latestBeliefSummary}
         nextFlowAction={nextFlowAction}

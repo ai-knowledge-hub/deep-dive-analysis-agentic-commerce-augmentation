@@ -24,6 +24,7 @@ type FlowStatusPanelProps = {
   activeFlowSteps: FlowStep[];
   labLoopSteps: LabLoopStep[];
   lastRun: ExperimentRun | null;
+  variantLabelById?: Map<string, string>;
   latestBelief: BrandBelief | null;
   latestBeliefSummary: string;
   nextFlowAction: NextFlowActionView;
@@ -40,6 +41,7 @@ export function FlowStatusPanel({
   activeFlowSteps,
   labLoopSteps,
   lastRun,
+  variantLabelById,
   latestBelief,
   latestBeliefSummary,
   nextFlowAction,
@@ -49,6 +51,10 @@ export function FlowStatusPanel({
   onRunNextFlowAction,
   onOpenValidation,
 }: FlowStatusPanelProps) {
+  const lastRunVariantLabel = lastRun?.variant_id
+    ? variantLabelById?.get(lastRun.variant_id) ?? `Variant ${lastRun.variant_id.slice(0, 8)}`
+    : null;
+
   return (
     <>
       <div className="flow-rail">
@@ -92,7 +98,7 @@ export function FlowStatusPanel({
               : "No runs yet"}
           </div>
           <div className="lab-loop__summary-meta">
-            {lastRun?.variant_id ? `Variant: ${lastRun.variant_id}` : "Run a variant to start"}
+            {lastRunVariantLabel ? `Variant: ${lastRunVariantLabel}` : "Run a variant to start"}
           </div>
         </div>
         <div className="lab-loop__summary-card">

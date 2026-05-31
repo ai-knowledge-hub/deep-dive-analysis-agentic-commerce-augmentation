@@ -407,6 +407,11 @@ function ExperimentsPageContent() {
     });
   }, [runIdParam, selectedExperimentId]);
 
+  const variantLabelById = useMemo(
+    () => new Map(variants.map((variant) => [variant.id, variant.label])),
+    [variants],
+  );
+
   const experimentBackHref = useMemo(() => {
     if (!runIdParam) {
       return "/lab";
@@ -1589,6 +1594,7 @@ function ExperimentsPageContent() {
               activeFlowSteps={activeFlowSteps}
               labLoopSteps={labLoopSteps}
               lastRun={lastRun}
+              variantLabelById={variantLabelById}
               latestBelief={latestBelief}
               latestBeliefSummary={latestBeliefSummary}
               nextFlowAction={nextFlowAction}
@@ -1869,6 +1875,7 @@ function ExperimentsPageContent() {
             batteries={batteries}
             savingExperimentId={savingExperimentId}
             queryMap={queryMap}
+            variantLabelById={variantLabelById}
             runGapDetails={runGapDetails}
             hypothesisLabelById={hypothesisLabelById}
             hypothesisStatementById={hypothesisStatementById}
