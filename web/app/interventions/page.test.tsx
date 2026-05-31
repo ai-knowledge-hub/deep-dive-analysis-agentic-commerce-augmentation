@@ -307,6 +307,10 @@ describe("InterventionsPage", () => {
     expect(
       (await screen.findAllByText(/Experiment exp-fail needs manual recovery/i))[0],
     ).toBeInTheDocument();
+    expect(screen.getByText(/Start with the top card/i)).toBeInTheDocument();
+    expect(screen.getByText(/decisions waiting/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Recovery/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Resume/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
     expect(
       screen.getByText(/approve publish copy revision/i),

@@ -33,10 +33,10 @@ export function buildInterventionBriefing({
     if (runIdParam) {
       return `Run ${runIdParam.slice(0, 8)} does not currently need operator intervention.`;
     }
-    return "No intervention-worthy items are waiting right now. The execution fabric is currently running without operator action.";
+    return "No decisions are waiting right now. Return to Runs when you want to supervise execution.";
   }
   const prefix = runIdParam ? `Run ${runIdParam.slice(0, 8)} has ` : "";
-  return `${prefix}${total} intervention item${total === 1 ? "" : "s"}: ${escalationsCount} escalations, ${approvalsCount} approvals, ${commandsCount} recovery item${commandsCount === 1 ? "" : "s"}, ${retriesCount} retry or resume action${retriesCount === 1 ? "" : "s"}, and ${pausesCount} active run pause decision${pausesCount === 1 ? "" : "s"}.`;
+  return `${prefix}${total} decision${total === 1 ? "" : "s"} waiting. Start with the recommended card, then use the queue sections only when you need more context.`;
 }
 
 export function buildInterventionMetrics({
@@ -54,11 +54,11 @@ export function buildInterventionMetrics({
     },
     { label: "Approvals", value: approvalsCount },
     {
-      label: "Commands",
+      label: "Recovery",
       value: commandsCount,
       tone: commandsCount > 0 ? "warning" : "default",
     },
-    { label: "Retries", value: retriesCount },
+    { label: "Resume", value: retriesCount },
     { label: "Pauses", value: pausesCount },
   ];
 }

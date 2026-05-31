@@ -341,7 +341,7 @@ function InterventionsPageContent() {
           <ControlPlaneBriefing
             label="Decision"
             title="Intervention briefing"
-            subtitle="Use interventions when the system needs an explicit human decision, not just observation."
+            subtitle="Start with the top card. Counts are only there to size the queue."
             summary={briefing}
             metrics={buildInterventionMetrics({
               approvalsCount: approvals.length,

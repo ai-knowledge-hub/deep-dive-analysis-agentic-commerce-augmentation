@@ -964,6 +964,11 @@ describe("AgentRunsPage timeline presets", () => {
 
     render(<AgentRunsPage />);
 
+    expect(await screen.findByText(/Advanced runtime details/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the next proposed action first/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Start$/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText(/Advanced runtime details/i));
+
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
     expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
