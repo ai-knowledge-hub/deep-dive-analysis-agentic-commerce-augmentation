@@ -1065,14 +1065,14 @@ function ExperimentsPageContent() {
         recommendations.length > 0,
     );
     return [
-      { id: 1, label: "battery_ready", done: batteryReady },
-      { id: 2, label: "retrieval_snapshots_ready", done: retrievalSnapshotsReady },
-      { id: 3, label: "baseline_scored", done: baselineScored },
-      { id: 4, label: "hypotheses_ready", done: hypothesesReady },
-      { id: 5, label: "variants_ready", done: variantsReady },
-      { id: 6, label: "experiment_run_completed", done: runCompleted },
-      { id: 7, label: "validation_completed", done: validated },
-      { id: 8, label: "posterior_updated", done: posteriorUpdated },
+      { id: 1, label: "Battery ready", done: batteryReady },
+      { id: 2, label: "Saved evidence ready", done: retrievalSnapshotsReady },
+      { id: 3, label: "Baseline scored", done: baselineScored },
+      { id: 4, label: "Test ideas ready", done: hypothesesReady },
+      { id: 5, label: "Variants ready", done: variantsReady },
+      { id: 6, label: "Experiment run completed", done: runCompleted },
+      { id: 7, label: "Validation completed", done: validated },
+      { id: 8, label: "Confidence updated", done: posteriorUpdated },
     ];
   }, [
     experimentForm.batteryId,
