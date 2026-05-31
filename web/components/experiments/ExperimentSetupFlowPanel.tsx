@@ -37,12 +37,12 @@ export function ExperimentSetupFlowPanel({
       </div>
       <div className="panel__meta">
         <span className="panel__badge panel__badge--secondary">
-          Protocol snapshot: {protocolSnapshotVersion && protocolSnapshotVersion > 0
+          Evidence protocol: {protocolSnapshotVersion && protocolSnapshotVersion > 0
             ? `v${protocolSnapshotVersion}`
             : "pending"}
         </span>
         <span className="panel__badge panel__badge--secondary">
-          Hypotheses: {hypothesesReady ? "ready" : "pending"}
+          Test ideas: {hypothesesReady ? "ready" : "pending"}
         </span>
       </div>
       <p className="panel__subheading">Setup phase · Step 1</p>

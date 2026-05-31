@@ -1,3 +1,5 @@
+import React from "react";
+
 type SignalCount = { signal: string; count: number };
 
 type ExperimentGapSummary = {
@@ -34,8 +36,8 @@ export function ExperimentOutcomeReview({
               Judge consensus win rate:{" "}
               {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
             </li>
-            <li>Snapshot version: {renderMetricValue(latestMetric.snapshot_version, "-")}</li>
-            <li>Posterior: {renderMetricValue(latestMetric.posterior, "-")}</li>
+            <li>Evidence version: {renderMetricValue(latestMetric.snapshot_version, "-")}</li>
+            <li>Confidence: {renderMetricValue(latestMetric.posterior, "-")}</li>
             <li>Decision action: {renderMetricValue(latestMetric.decision_action, "-")}</li>
           </ul>
         ) : (

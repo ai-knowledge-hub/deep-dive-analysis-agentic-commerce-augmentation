@@ -1,3 +1,4 @@
+import React from "react";
 import type { ExperimentVariant } from "../../lib/types";
 
 type ExperimentVariantRunItemProps = {
@@ -94,7 +95,7 @@ export function ExperimentVariantRunItem({
             Runs: {renderMetricValue(metricValues.total_runs)}
           </span>
           <span className="panel__muted">
-            Posterior: {renderMetricValue(metricValues.posterior)}
+            Confidence: {renderMetricValue(metricValues.posterior)}
           </span>
           <span className="panel__muted">
             Decision: {renderMetricValue(metricValues.decision_action)}
