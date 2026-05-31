@@ -140,15 +140,38 @@ describe("InboxPage", () => {
     expect(screen.getByText(/Experiment exp-3 is running/i)).toBeInTheDocument();
   });
 
-  it("surfaces one next action and routes to the highest-priority run", async () => {
+  it("surfaces one next action and routes decision work to interventions", async () => {
     const user = userEvent.setup();
     render(<InboxPage />);
 
     expect(await screen.findByText(/Start with failed work/i)).toBeInTheDocument();
     expect(screen.getByText(/Experiment exp-1 failed: Validation provider failed/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Review failed run/i }));
+    await user.click(screen.getByRole("button", { name: /Review intervention/i }));
 
-    expect(pushMock).toHaveBeenCalledWith("/runs?run_id=run-1");
+    expect(pushMock).toHaveBeenCalledWith("/interventions?run_id=run-1");
+  });
+
+  it("routes approval-only start actions directly to interventions", async () => {
+    const user = userEvent.setup();
+    listAgentRunsMock.mockResolvedValue({
+      runs: [
+        {
+          id: "run-2",
+          experiment_id: "exp-2",
+          status: "planned",
+          state: "variants_ready",
+          requires_approval: true,
+        },
+      ],
+    });
+    getAgentRunEventsMock.mockResolvedValue({ events: [] });
+
+    render(<InboxPage />);
+
+    expect(await screen.findByText(/Review the pending approval/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Review approval/i }));
+
+    expect(pushMock).toHaveBeenCalledWith("/interventions?run_id=run-2");
   });
 });

@@ -19,6 +19,10 @@ export function buildRunsHref(context: RouteContext = {}): string {
   return buildHref("/runs", context);
 }
 
+export function buildInterventionsHref(context: RouteContext = {}): string {
+  return buildHref("/interventions", context);
+}
+
 export function buildExperimentHref(
   experimentId?: string | null,
   context: Pick<RouteContext, "runId"> = {},

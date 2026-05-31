@@ -13,7 +13,7 @@ import {
   listAgentRuns,
 } from "../../lib/api";
 import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
-import { buildRunsHref } from "../../lib/routes";
+import { buildInterventionsHref, buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
 type InboxItem = {
@@ -41,6 +41,7 @@ type InboxNextAction = {
   label: string;
   summary: string;
   cta: string;
+  href: string;
 };
 
 function formatRunLabel(run: AgentRun): string {
@@ -140,7 +141,8 @@ function buildInboxNextAction(
       item: critical,
       label: "Start with failed work",
       summary: `${critical.title}: ${critical.summary}`,
-      cta: "Review failed run",
+      cta: "Review intervention",
+      href: buildInterventionsHref({ runId: critical.run.id }),
     };
   }
 
@@ -151,6 +153,7 @@ function buildInboxNextAction(
       label: review.kind === "approval" ? "Review the pending approval" : "Review the alert",
       summary: `${review.title}: ${review.summary}`,
       cta: review.kind === "approval" ? "Review approval" : "Review alert",
+      href: buildInterventionsHref({ runId: review.run.id }),
     };
   }
 
@@ -161,6 +164,7 @@ function buildInboxNextAction(
       label: "Continue supervision",
       summary: `${watching.title}: ${watching.summary}`,
       cta: "Open watched run",
+      href: buildRunsHref({ runId: watching.run.id }),
     };
   }
 
@@ -169,6 +173,7 @@ function buildInboxNextAction(
     label: "No action needed",
     summary: "No urgent work is waiting. Check Insights for recent outcomes or Runs when you are ready to supervise new work.",
     cta: "Review insights",
+    href: "/learnings",
   };
 }
 
@@ -433,11 +438,7 @@ export default function InboxPage() {
               <button
                 type="button"
                 className="button button--primary"
-                onClick={() =>
-                  nextAction.item
-                    ? router.push(buildRunsHref({ runId: nextAction.item.run.id }))
-                    : router.push("/learnings")
-                }
+                onClick={() => router.push(nextAction.href)}
                 disabled={loading}
               >
                 {nextAction.cta}
