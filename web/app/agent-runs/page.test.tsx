@@ -1452,6 +1452,8 @@ describe("AgentRunsPage timeline presets", () => {
         Boolean(node?.textContent?.includes("Skill: optimize product representation")),
       ).length,
     ).toBeGreaterThan(0);
+    expect(screen.getByText(/Latest receipt: external agent job accepted/i)).toBeInTheDocument();
+    expect(screen.queryByText(/external_agent_job_accepted/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();

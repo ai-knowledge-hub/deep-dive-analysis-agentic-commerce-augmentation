@@ -72,7 +72,11 @@ export function ExternalAgentJobPanel({
           </div>
           {externalAgentJob.latest_receipt ? (
             <div className="panel__notice">
-              Latest receipt: {String(externalAgentJob.latest_receipt.receipt_type ?? "external job")} ·{" "}
+              Latest receipt:{" "}
+              {formatOperatorIdentifier(
+                String(externalAgentJob.latest_receipt.receipt_type ?? "external job"),
+              )}{" "}
+              ·{" "}
               {String(externalAgentJob.latest_receipt.status ?? "unknown")} ·{" "}
               {String(externalAgentJob.latest_receipt.receipt_context_hash ?? "").slice(0, 12)}
               <button
