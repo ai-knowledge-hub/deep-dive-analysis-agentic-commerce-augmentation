@@ -407,6 +407,11 @@ function ExperimentsPageContent() {
     });
   }, [runIdParam, selectedExperimentId]);
 
+  const variantLabelById = useMemo(
+    () => new Map(variants.map((variant) => [variant.id, variant.label])),
+    [variants],
+  );
+
   const experimentBackHref = useMemo(() => {
     if (!runIdParam) {
       return "/lab";
@@ -1065,14 +1070,14 @@ function ExperimentsPageContent() {
         recommendations.length > 0,
     );
     return [
-      { id: 1, label: "battery_ready", done: batteryReady },
-      { id: 2, label: "retrieval_snapshots_ready", done: retrievalSnapshotsReady },
-      { id: 3, label: "baseline_scored", done: baselineScored },
-      { id: 4, label: "hypotheses_ready", done: hypothesesReady },
-      { id: 5, label: "variants_ready", done: variantsReady },
-      { id: 6, label: "experiment_run_completed", done: runCompleted },
-      { id: 7, label: "validation_completed", done: validated },
-      { id: 8, label: "posterior_updated", done: posteriorUpdated },
+      { id: 1, label: "Battery ready", done: batteryReady },
+      { id: 2, label: "Saved evidence ready", done: retrievalSnapshotsReady },
+      { id: 3, label: "Baseline scored", done: baselineScored },
+      { id: 4, label: "Test ideas ready", done: hypothesesReady },
+      { id: 5, label: "Variants ready", done: variantsReady },
+      { id: 6, label: "Experiment run completed", done: runCompleted },
+      { id: 7, label: "Validation completed", done: validated },
+      { id: 8, label: "Confidence updated", done: posteriorUpdated },
     ];
   }, [
     experimentForm.batteryId,
@@ -1211,15 +1216,15 @@ function ExperimentsPageContent() {
     }
     if (!executionState?.phases?.retrieval_snapshots_ready?.done) {
       return {
-        label: "Run retrieval snapshots (Step 2)",
-        helper: "Run baseline/control variant to collect retrieval snapshots.",
+        label: "Save evidence set (Step 2)",
+        helper: "Run the baseline or control variant to save comparable evidence.",
         action: "run_first_variant" as const,
       };
     }
     if (variants.length === 0) {
       return {
         label: "Create variants (Step 5)",
-        helper: "Generate copy variants from retrieval evidence and hypotheses.",
+        helper: "Generate copy variants from saved evidence and test ideas.",
         action: "scroll_variants" as const,
       };
     }
@@ -1589,6 +1594,7 @@ function ExperimentsPageContent() {
               activeFlowSteps={activeFlowSteps}
               labLoopSteps={labLoopSteps}
               lastRun={lastRun}
+              variantLabelById={variantLabelById}
               latestBelief={latestBelief}
               latestBeliefSummary={latestBeliefSummary}
               nextFlowAction={nextFlowAction}
@@ -1869,6 +1875,7 @@ function ExperimentsPageContent() {
             batteries={batteries}
             savingExperimentId={savingExperimentId}
             queryMap={queryMap}
+            variantLabelById={variantLabelById}
             runGapDetails={runGapDetails}
             hypothesisLabelById={hypothesisLabelById}
             hypothesisStatementById={hypothesisStatementById}

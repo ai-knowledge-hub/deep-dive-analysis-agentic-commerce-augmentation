@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { AgentRun } from "../../lib/types";
+import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
 
 type Props = {
   latestAgentRun: AgentRun | null;
@@ -14,6 +15,11 @@ export function AgentOperatorModePanel({
   hasSelectedExperiment,
   onOpenRuns,
 }: Props) {
+  const latestRunSummary = latestAgentRun
+    ? `${latestAgentRun.status ?? "unknown"} · ${formatOperatorIdentifier(latestAgentRun.state)}`
+    : "none yet";
+  const runModeLabel = formatOperatorIdentifier(latestAgentRun?.run_mode ?? "plan_only");
+
   return (
     <section className="panel__card panel__card--secondary">
       <div className="panel__header">
@@ -28,12 +34,10 @@ export function AgentOperatorModePanel({
       <div className="panel__meta-strip">
         <div>
           <strong>Latest agent run</strong>: {" "}
-          {latestAgentRun
-            ? `${latestAgentRun.status ?? "unknown"} · ${latestAgentRun.state ?? "unknown"}`
-            : "none yet"}
+          {latestRunSummary}
         </div>
         <div>
-          <strong>Run mode</strong>: {latestAgentRun?.run_mode ?? "plan_only"}
+          <strong>Run mode</strong>: {runModeLabel}
         </div>
       </div>
       <div className="panel__actions panel__actions--priority">

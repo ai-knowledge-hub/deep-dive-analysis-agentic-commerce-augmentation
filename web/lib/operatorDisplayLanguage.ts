@@ -23,3 +23,15 @@ export function softenOperatorText(value?: string | null): string {
   }
   return text;
 }
+
+export function formatOperatorActionName(value?: string | null): string {
+  return softenOperatorText(String(value || "selected action").replaceAll("_", " "));
+}
+
+export function formatOperatorIdentifier(value?: string | null): string {
+  return softenOperatorText(
+    String(value || "not set")
+      .replace(/[._-]+/g, " ")
+      .trim(),
+  );
+}

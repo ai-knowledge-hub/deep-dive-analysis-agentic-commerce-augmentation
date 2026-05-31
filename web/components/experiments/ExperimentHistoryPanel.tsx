@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import React, { type RefObject } from "react";
 import { buildSimulationHref } from "../../lib/routes";
 import type {
   Experiment,
@@ -24,6 +24,7 @@ type ExperimentHistoryPanelProps = {
   batteries: QueryBattery[];
   savingExperimentId: string | null;
   queryMap: Map<string, string>;
+  variantLabelById: Map<string, string>;
   runGapDetails: Map<string, SimulationGapReport>;
   hypothesisLabelById: Map<string, string>;
   hypothesisStatementById: Map<string, Record<string, unknown>>;
@@ -51,6 +52,7 @@ export function ExperimentHistoryPanel({
   batteries,
   savingExperimentId,
   queryMap,
+  variantLabelById,
   runGapDetails,
   hypothesisLabelById,
   hypothesisStatementById,
@@ -66,6 +68,11 @@ export function ExperimentHistoryPanel({
   onToggleHypothesis,
   onDeleteRun,
 }: ExperimentHistoryPanelProps) {
+  const formatVariantLabel = (variantId: string) =>
+    variantLabelById.get(variantId) ?? `Variant ${variantId.slice(0, 8)}`;
+  const formatShortReference = (value: string) =>
+    value.replace(/^simulation-run[-_]?/, "").slice(0, 8);
+
   return (
     <section className="panel__card panel__card--secondary panel__card--full-row">
       <div className="panel__header">
@@ -221,13 +228,15 @@ export function ExperimentHistoryPanel({
                       </span>
                     </div>
                     <div className="panel__meta panel__meta--stack">
-                      <span className="history-panel__meta">Variant: {run.variant_id}</span>
+                      <span className="history-panel__meta">
+                        Variant: {formatVariantLabel(run.variant_id)}
+                      </span>
                       {typeof run.snapshot_version === "number" ? (
-                        <span className="history-panel__meta">Snapshot: v{run.snapshot_version}</span>
+                        <span className="history-panel__meta">Evidence version: v{run.snapshot_version}</span>
                       ) : null}
                       {run.hypothesis_id ? (
                         <span className="history-panel__meta">
-                          Hypothesis: {hypothesisLabelById.get(run.hypothesis_id) ?? "Hypothesis-linked"}
+                          Test idea: {hypothesisLabelById.get(run.hypothesis_id) ?? "Linked test idea"}
                         </span>
                       ) : null}
                       {run.hypothesis_id ? (
@@ -243,8 +252,8 @@ export function ExperimentHistoryPanel({
                           }
                         >
                           {expandedHypothesisId === run.hypothesis_id
-                            ? "Hide hypothesis details"
-                            : "View hypothesis details"}
+                            ? "Hide test idea details"
+                            : "View test idea details"}
                         </button>
                       ) : null}
                       {run.hypothesis_id && expandedHypothesisId === run.hypothesis_id ? (
@@ -262,13 +271,14 @@ export function ExperimentHistoryPanel({
                       ) : null}
                       {run.simulation_run_id ? (
                         <span className="history-panel__meta">
-                          Run ID:{" "}
+                          Simulation:{" "}
                           <a
                             className="panel__link"
                             href={buildSimulationHref(run.simulation_run_id)}
                           >
-                            {run.simulation_run_id}
+                            Open linked simulation
                           </a>
+                          {" · "}Ref: {formatShortReference(run.simulation_run_id)}
                         </span>
                       ) : null}
                       {runGapDetails.get(run.id) ? (

@@ -6,6 +6,7 @@ import type {
   AgentRuntimeRecoveryTemplate,
   AgentRuntimeSkillSpec,
 } from "../../lib/types";
+import { formatOperatorActionName } from "../../lib/operatorDisplayLanguage";
 
 type Props = {
   run: AgentRun | null;
@@ -27,7 +28,7 @@ type Props = {
 };
 
 function recoveryCapabilityLabel(capabilityName: string): string {
-  return capabilityName.replaceAll("_", " ");
+  return formatOperatorActionName(capabilityName);
 }
 
 export function OperatorCommandControls({
@@ -43,6 +44,8 @@ export function OperatorCommandControls({
   onRecoverySkillChange,
   onIssueCommand,
 }: Props) {
+  const selectedActionLabel = formatOperatorActionName(selectedAction?.capability_name);
+
   return (
     <div className="panel__actions">
       <button
@@ -51,7 +54,7 @@ export function OperatorCommandControls({
         onClick={() =>
           void onIssueCommand(
             "approve",
-            `Approve ${selectedAction?.capability_name ?? "selected action"}`,
+            `Approve ${selectedActionLabel}`,
             selectedAction?.id,
           )
         }
@@ -65,7 +68,7 @@ export function OperatorCommandControls({
         onClick={() =>
           void onIssueCommand(
             "reject",
-            `Reject ${selectedAction?.capability_name ?? "selected action"}`,
+            `Reject ${selectedActionLabel}`,
             selectedAction?.id,
           )
         }
@@ -79,7 +82,7 @@ export function OperatorCommandControls({
         onClick={() =>
           void onIssueCommand(
             "retry",
-            `Retry ${selectedAction?.capability_name ?? "selected action"}`,
+            `Retry ${selectedActionLabel}`,
             selectedAction?.id,
             { retry_strategy: "same_action" },
           )
@@ -94,7 +97,7 @@ export function OperatorCommandControls({
         onClick={() =>
           void onIssueCommand(
             "retry",
-            `Retry ${selectedAction?.capability_name ?? "selected action"} from checkpoint`,
+            `Retry ${selectedActionLabel} from checkpoint`,
             selectedAction?.id,
             { retry_strategy: "last_safe_checkpoint" },
           )
@@ -109,7 +112,7 @@ export function OperatorCommandControls({
         onClick={() =>
           void onIssueCommand(
             "retry",
-            `Create recovery action for ${selectedAction?.capability_name ?? "selected action"}`,
+            `Create recovery action for ${selectedActionLabel}`,
             selectedAction?.id,
             {
               retry_strategy: "create_recovery_action",

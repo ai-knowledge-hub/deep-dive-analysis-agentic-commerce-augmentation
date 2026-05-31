@@ -24,7 +24,7 @@ export function CanonicalIntentSpecPanel({
         Capture objective product context used by bottom-up query generation.
       </p>
       <p className="panel__meta">
-        Saved under selected product metadata path: <code>canonical_intent_spec</code>.
+        Saved with the selected product as its canonical intent profile.
       </p>
       <button
         type="button"

@@ -1,6 +1,10 @@
 "use client";
 
 import React from "react";
+import {
+  formatOperatorActionName,
+  formatOperatorIdentifier,
+} from "../../lib/operatorDisplayLanguage";
 import type { AgentAction } from "../../lib/types";
 
 type BudgetSeverity = "ok" | "warn" | "danger";
@@ -124,7 +128,7 @@ export function RunActionsPanel({
           {budgetState.actionBlocked
             ? "max actions reached."
             : budgetState.variantBlocked
-              ? "max variant runs reached for run_variant."
+              ? "max variant runs reached for run variant."
               : "max cost reached."}{" "}
           Proposed risky approvals are disabled until budget changes.
         </div>
@@ -169,15 +173,21 @@ export function RunActionsPanel({
                 {action.sequence}
               </div>
               <div className="table__cell" data-label="Capability">
-                <div className="table__strong">{action.capability_name}</div>
+                <div className="table__strong">
+                  {formatOperatorActionName(action.capability_name)}
+                </div>
                 {action.capability_version ? (
                   <div className="table__muted">{action.capability_version}</div>
                 ) : null}
                 {action.skill_id || action.tool_id ? (
                   <div className="table__muted">
-                    {action.skill_id ? `Skill: ${action.skill_id}` : null}
+                    {action.skill_id
+                      ? `Skill: ${formatOperatorIdentifier(action.skill_id)}`
+                      : null}
                     {action.skill_id && action.tool_id ? " · " : null}
-                    {action.tool_id ? `Tool: ${action.tool_id}` : null}
+                    {action.tool_id
+                      ? `Tool: ${formatOperatorIdentifier(action.tool_id)}`
+                      : null}
                   </div>
                 ) : null}
               </div>

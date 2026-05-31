@@ -903,7 +903,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(payload.status).toBe("proposed");
 
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
-    expect(screen.getByText(/Selection: publish_copy_revision/i)).toBeInTheDocument();
+    expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /Variant: variant-/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
@@ -965,6 +965,10 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
+    expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Tool: experiment run variant/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Effect: write low risk/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Optimize Product Representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
@@ -1201,7 +1205,7 @@ describe("AgentRunsPage timeline presets", () => {
 
     render(<AgentRunsPage />);
 
-    await screen.findByText(/Selection: run_variant/i);
+    await screen.findByText(/Selection: run variant/i);
     await userEvent.click(screen.getByRole("button", { name: /Approve selected/i }));
 
     expect(preflightAgentRunCommandMock).toHaveBeenCalledWith(
@@ -1209,7 +1213,7 @@ describe("AgentRunsPage timeline presets", () => {
       {
         command_type: "approve",
         action_id: "action-1",
-        message: "Approve run_variant",
+        message: "Approve run variant",
       },
       "user-a",
     );
@@ -1219,7 +1223,7 @@ describe("AgentRunsPage timeline presets", () => {
       {
         command_type: "approve",
         action_id: "action-1",
-        message: "Approve run_variant",
+        message: "Approve run variant",
       },
       "user-a",
     );
@@ -1438,6 +1442,18 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
     expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
     expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Tool: experiment run variant")),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Skill: optimize product representation")),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/Latest receipt: external agent job accepted/i)).toBeInTheDocument();
+    expect(screen.queryByText(/external_agent_job_accepted/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();

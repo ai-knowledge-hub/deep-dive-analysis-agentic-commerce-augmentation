@@ -1,8 +1,12 @@
 import React from "react";
 import { CompensatingProposalControl } from "../agent/CompensatingProposalControl";
 import { compensatingProposalKey } from "../agent/compensatingProposal";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import {
+  formatOperatorIdentifier,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
 import type { AgentCompensatingAction, AgentRun, AgentRunCommandPreflight } from "../../lib/types";
+import { formatActionLabel, formatApprovalSummary } from "./interventionDisplay";
 import { formatEventTime, formatRunLabel } from "./interventionLogic";
 import type {
   ApprovalItem,
@@ -141,7 +145,53 @@ function InterventionMeta({
         {describePriority(priority)}
       </span>
       <span className="control-chip">{describeRisk(risk)}</span>
-      <span>{run.status ?? "unknown"}</span> · <span>{run.state ?? "unknown"}</span>
+      <span>{run.status ?? "unknown"}</span> ·{" "}
+      <span>{formatOperatorIdentifier(run.state)}</span>
+    </div>
+  );
+}
+
+function ApprovalOutcomeSummary({ item }: { item: ApprovalItem }) {
+  const actionName = formatActionLabel(item.action.capability_name);
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div>
+        <strong>Approve:</strong> the run can continue with {actionName}.
+      </div>
+      <div>
+        <strong>Reject:</strong> the run stays waiting and needs a safer next action.
+      </div>
+    </div>
+  );
+}
+
+function ResumeOutcomeSummary({ item }: { item: RetryItem }) {
+  const primaryLabel = item.control === "start" ? "Resume" : "Step";
+  const primaryText =
+    item.control === "start"
+      ? "the run continues with the approved work."
+      : "the run moves forward by one supervised step.";
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div>
+        <strong>{primaryLabel}:</strong> {primaryText}
+      </div>
+      <div>
+        <strong>Inspect:</strong> review the run before moving it forward.
+      </div>
+    </div>
+  );
+}
+
+function PauseOutcomeSummary() {
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div>
+        <strong>Pause:</strong> the run stops before more work continues.
+      </div>
+      <div>
+        <strong>Cancel:</strong> the run ends and future work needs a new run.
+      </div>
     </div>
   );
 }
@@ -262,23 +312,14 @@ export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: Appr
             return (
               <div key={`approval-${item.action.id}`} className="intervention-item">
                 <div className="list__title">
-                  {formatRunLabel(item.run)}: approve {item.action.capability_name}
+                  {formatRunLabel(item.run)}: approve{" "}
+                  {formatActionLabel(item.action.capability_name)}
                 </div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-                <div className="panel__muted">{softenOperatorText(item.summary)}</div>
+                <div className="panel__muted">{formatApprovalSummary(item)}</div>
                 <HarnessPosture item={item} focus="approval" />
-                <div className="control-chip-row">
-                  <span className="control-chip">
-                    Skill: {item.action.skill_id ?? "unmapped"}
-                  </span>
-                  <span className="control-chip">
-                    Tool: {item.action.tool_id ?? "legacy"}
-                  </span>
-                  <span className="control-chip">
-                    Effect: {item.action.effect_class ?? item.risk}
-                  </span>
-                </div>
                 <div className="list__meta">{item.reason}</div>
+                <ApprovalOutcomeSummary item={item} />
                 <div className="detail__actions">
                   <button
                     type="button"
@@ -334,6 +375,7 @@ export function RetriesSection({ items, busyKey, onRunControl, onOpenRun }: Retr
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="retry" />
+                <ResumeOutcomeSummary item={item} />
                 <div className="detail__actions">
                   <button
                     type="button"
@@ -386,6 +428,7 @@ export function PausesSection({ items, busyKey, onRunControl, onOpenRun }: Pause
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="stop" />
+                <PauseOutcomeSummary />
                 <div className="detail__actions">
                   <button
                     type="button"

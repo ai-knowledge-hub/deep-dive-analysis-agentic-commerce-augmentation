@@ -309,10 +309,28 @@ describe("InterventionsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/approve publish_copy_revision/i),
+      screen.getByText(/approve publish copy revision/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/approve publish_copy_revision/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Skill:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tool:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/legacy/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unmapped/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/the run can continue with/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/publish copy revision/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/the run stays waiting and needs a safer next action/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-retr is ready to resume/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the run continues with the approved work/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/review the run before moving it forward/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-retr has a retry proposal/i),
@@ -320,6 +338,12 @@ describe("InterventionsPage", () => {
     expect(
       screen.getByText(/Experiment exp-retr has a recovery proposal/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Signal:\s*Retry proposal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Signal:\s*Recovery proposal/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Status:\s*Proposed/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Risk:\s*medium/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/action_retry_proposed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/write_low_risk/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/Recovery path: Low-risk writes can usually be superseded/i),
     ).toBeInTheDocument();
@@ -336,13 +360,21 @@ describe("InterventionsPage", () => {
     expect(
       screen.getByText(/Experiment exp-acti is executing/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the run stops before more work continues/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the run ends and future work needs a new run/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/variants ready/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
   });
 
   it("approves queued actions from the interventions queue", async () => {
     const user = userEvent.setup();
     render(<InterventionsPage />);
 
-    await screen.findByText(/approve publish_copy_revision/i);
+    await screen.findByText(/approve publish copy revision/i);
     await user.click(screen.getByRole("button", { name: "Approve" }));
 
     await waitFor(() => {
@@ -427,8 +459,11 @@ describe("InterventionsPage", () => {
       );
     });
     expect(
-      await screen.findByText(/Recovery proposal created for recommend_next_action/i),
+      await screen.findByText(/Recovery proposal created for recommend next action/i),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Recovery proposal created for recommend_next_action/i),
+    ).not.toBeInTheDocument();
   });
 
   it("scopes interventions to the selected run when run_id is provided", async () => {
@@ -438,7 +473,7 @@ describe("InterventionsPage", () => {
 
     expect(await screen.findByText(/Run-scoped view/i)).toBeInTheDocument();
     expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
-    expect(screen.getByText(/approve publish_copy_revision/i)).toBeInTheDocument();
+    expect(screen.getByText(/approve publish copy revision/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/^Experiment exp-fail needs manual recovery$/i),
     ).not.toBeInTheDocument();

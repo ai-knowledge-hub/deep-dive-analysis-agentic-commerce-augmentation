@@ -78,6 +78,31 @@ function isInAppByokMode(mode: ModeType | string | null | undefined): boolean {
 function isProviderIntegrationMode(mode: ModeType | string | null | undefined): boolean {
   return mode === "provider_openai_mcp" || mode === "provider_gemini_function";
 }
+
+function formatSetupStatus(value: boolean | null | undefined): string {
+  if (value === null || value === undefined) return "Unknown";
+  return value ? "Setup needed" : "Ready";
+}
+
+function formatReturnStatus(value: boolean | null | undefined): string {
+  return value ? "Result returned" : "Waiting for result";
+}
+
+function formatDisplayToken(value: string | null | undefined, fallback: string): string {
+  const text = String(value || fallback)
+    .replace(/[._-]+/g, " ")
+    .trim();
+  if (!text) return fallback;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatCopyRevisionOption(revision: CopyRevision): string {
+  const source = formatDisplayToken(revision.source_type, "Copy");
+  const status = formatDisplayToken(revision.status, "Draft");
+  const reference = revision.id.replace(/^copy-revision[-_]?/, "").slice(0, 8);
+  return `${source} revision · ${status} · Ref ${reference}`;
+}
+
 type ValidationNextAction =
   | "configure_provider"
   | "select_synthetic_item"
@@ -487,7 +512,7 @@ function ValidationPageContent() {
     if (entityType === "copy_revision") {
       return copyRevisions.map((revision) => ({
         id: revision.id,
-        label: `${revision.source_type} · ${revision.status} · ${revision.id.slice(0, 8)}`,
+        label: formatCopyRevisionOption(revision),
       }));
     }
     return batteries.map((battery) => ({
@@ -871,7 +896,7 @@ function ValidationPageContent() {
         return;
       case "submit_external_result":
         if (!externalJson.trim()) {
-          setStatus("Paste structured JSON in Step 2 before submitting external results.");
+          setStatus("Add the structured result in Step 2 before submitting external results.");
           window.setTimeout(() => setStatus(null), 3000);
           return;
         }
@@ -1055,7 +1080,7 @@ function ValidationPageContent() {
             <div className="panel__subheading">Step 2 · Run synthetic validation</div>
             <p className="panel__step-helper">
               Create one validation job for the selected item. In-app mode executes immediately;
-              external mode waits for paste-back JSON.
+              manual entry lets you add a structured result when the provider cannot return it automatically.
             </p>
             <p className="panel__muted">
               LLM judge validation for fast screening, consistency checks, and copy-vs-copy comparisons.
@@ -1172,7 +1197,7 @@ function ValidationPageContent() {
                   <option value="in_app_byok">In-app (BYOK)</option>
                   <option value="provider_openai_mcp">Provider run (ChatGPT MCP)</option>
                   <option value="provider_gemini_function">Provider run (Gemini function)</option>
-                  <option value="manual_fallback">Manual fallback (paste-back)</option>
+                  <option value="manual_fallback">Manual result entry</option>
                 </select>
               </label>
               <label className="panel__label">
@@ -1209,29 +1234,23 @@ function ValidationPageContent() {
             </div>
             {isProviderIntegrationMode(mode) ? (
               <section className="panel__notice panel__notice--info">
-                <strong>Provider automation contract</strong>
+                <strong>Provider automation status</strong>
                 <p className="panel__muted">
                   {providerLaunchInfo?.instructions ??
-                    "Complete one-time provider setup, then run validation in provider UI with callback return."}
+                    "Complete one-time provider setup, then run validation in the provider workspace. Results return here when the provider finishes."}
                 </p>
                 <div className="panel__meta panel__meta--stack">
                   <span className="panel__muted">
-                    Provider run id:{" "}
+                    Provider reference:{" "}
                     {providerLaunchInfo?.provider_run_id ??
                       job?.provider_run_id ??
                       "Not started"}
                   </span>
                   <span className="panel__muted">
-                    Setup required:{" "}
-                    {providerLaunchInfo?.setup_required === null ||
-                    providerLaunchInfo?.setup_required === undefined
-                      ? "unknown"
-                      : providerLaunchInfo.setup_required
-                        ? "yes"
-                        : "no"}
+                    Setup status: {formatSetupStatus(providerLaunchInfo?.setup_required)}
                   </span>
                   <span className="panel__muted">
-                    Callback verified: {job?.callback_verified ? "yes" : "pending"}
+                    Return status: {formatReturnStatus(job?.callback_verified)}
                   </span>
                 </div>
                 <div className="panel__actions">
@@ -1524,15 +1543,15 @@ function ValidationPageContent() {
               </div>
               <div className="panel__subheading">Supplement · Paste external result</div>
               <p className="panel__step-helper">
-                Expand this only when external mode is used. Submit structured JSON to complete the
-                synthetic validation result.
+                Use this only for manual result entry. Submit the structured result to complete the
+                synthetic validation.
               </p>
               <details className="panel__details">
                 <summary className="panel__details-summary">Open external instructions</summary>
                 <pre className="panel__pre">{job.external_instructions}</pre>
                 <div className="panel__grid validation__grid">
                   <label className="panel__label">
-                    <span>Paste structured JSON</span>
+                    <span>Structured result</span>
                     <textarea
                       className="panel__textarea"
                       rows={6}

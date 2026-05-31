@@ -20,6 +20,7 @@ const PRIMARY_FILES = [
   "components/agent-runs/RunStartGuide.tsx",
   "components/interventions/InterventionStartGuide.tsx",
   "components/interventions/InterventionQueueSections.tsx",
+  "components/interventions/interventionDisplay.ts",
   "components/learnings/InsightsStartGuide.tsx",
 ];
 

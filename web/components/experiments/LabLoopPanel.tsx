@@ -23,6 +23,7 @@ type Props = {
   activeFlowSteps: FlowStep[];
   labLoopSteps: LabLoopStep[];
   lastRun: ExperimentRun | null;
+  variantLabelById: Map<string, string>;
   latestBelief: BrandBelief | null;
   latestBeliefSummary: string;
   nextFlowAction: NextFlowActionView;
@@ -50,6 +51,7 @@ export function LabLoopPanel({
   activeFlowSteps,
   labLoopSteps,
   lastRun,
+  variantLabelById,
   latestBelief,
   latestBeliefSummary,
   nextFlowAction,
@@ -80,12 +82,12 @@ export function LabLoopPanel({
         {variantCount} variants · {runCount} runs · {metricCount} metrics · {beliefCount} beliefs
       </p>
       <p className="lab-loop__hint">
-        The lab loop turns hypotheses into evidence and updates brand beliefs with every run.
+        The lab loop turns test ideas into evidence and updates brand beliefs with every run.
       </p>
       {labMode === "lab" ? (
         <section className="panel__notice panel__notice--info lab-contract">
           <strong>Lab mode contract:</strong> Automation handles the default path (battery,
-          queries, baseline/hypothesis variants, and optional auto-run).
+          queries, baseline/test-idea variants, and optional auto-run).
           <div className="panel__actions">
             <label className="panel__toggle">
               <input
@@ -93,7 +95,7 @@ export function LabLoopPanel({
                 checked={labAutoRunEnabled}
                 onChange={(event) => onLabAutoRunEnabledChange(event.target.checked)}
               />
-              <span>Auto-run baseline + hypothesis after experiment creation</span>
+              <span>Auto-run baseline + test idea after experiment creation</span>
             </label>
             <button
               type="button"
@@ -118,6 +120,7 @@ export function LabLoopPanel({
         activeFlowSteps={activeFlowSteps}
         labLoopSteps={labLoopSteps}
         lastRun={lastRun}
+        variantLabelById={variantLabelById}
         latestBelief={latestBelief}
         latestBeliefSummary={latestBeliefSummary}
         nextFlowAction={nextFlowAction}

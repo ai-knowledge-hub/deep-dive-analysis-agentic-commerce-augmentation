@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import React, { type Dispatch, type SetStateAction } from "react";
 import type { LoopGeneratedVariantCandidate } from "../../lib/types";
 import { GeneratedCopyPreview } from "./GeneratedCopyPreview";
 
@@ -19,6 +19,26 @@ type CopyRevisionOption = {
   updated_at?: string | null;
   status?: string | null;
 };
+
+function formatDisplayToken(value: string | null | undefined, fallback: string): string {
+  const text = String(value || fallback)
+    .replace(/[._-]+/g, " ")
+    .trim();
+  if (!text) return fallback;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatVariantSourceMode(value: VariantSourceMode): string {
+  if (value === "loop_evidence") return "Loop evidence";
+  if (value === "cold_start") return "Cold start";
+  return formatDisplayToken(value, "Manual");
+}
+
+function formatSimulationRevisionOption(revision: CopyRevisionOption): string {
+  const timestamp = revision.updated_at ?? revision.created_at;
+  const updatedLabel = timestamp ? new Date(timestamp).toLocaleString() : "No date";
+  return `${updatedLabel} · ${formatDisplayToken(revision.status, "Draft")}`;
+}
 
 type Props = {
   variantSourceMode: VariantSourceMode;
@@ -109,7 +129,7 @@ export function VariantCreationPanel({
         <div className="variant-source__header">
           <h4>Choose variant source</h4>
           <span className="panel__muted">
-            Recommended now: <strong>{recommendedVariantSource.replace("_", " ")}</strong>
+            Recommended now: <strong>{formatVariantSourceMode(recommendedVariantSource)}</strong>
           </span>
         </div>
         <div className="variant-source__tabs">
@@ -259,9 +279,7 @@ export function VariantCreationPanel({
                 ) : null}
                 {simulationRevisions.map((revision) => (
                   <option key={revision.id} value={revision.id}>
-                    {new Date(
-                      revision.updated_at ?? revision.created_at ?? "",
-                    ).toLocaleString()} · {revision.status ?? "draft"}
+                    {formatSimulationRevisionOption(revision)}
                   </option>
                 ))}
               </select>

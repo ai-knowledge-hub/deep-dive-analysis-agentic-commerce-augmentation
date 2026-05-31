@@ -1,4 +1,5 @@
 import React from "react";
+import { formatOperatorActionName } from "../../lib/operatorDisplayLanguage";
 import type { AgentAction, AgentRun } from "../../lib/types";
 
 type Props = {
@@ -48,7 +49,7 @@ export function OperatorChatSummary({
           <span className="panel__badge panel__badge--secondary">Policy: {policyCount}</span>
           {selectedAction ? (
             <span className="panel__badge panel__badge--warning">
-              Selection: {selectedAction.capability_name}
+              Selection: {formatOperatorActionName(selectedAction.capability_name)}
             </span>
           ) : null}
         </div>

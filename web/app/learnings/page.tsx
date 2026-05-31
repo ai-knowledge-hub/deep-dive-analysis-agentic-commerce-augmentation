@@ -17,6 +17,7 @@ import {
   getOverviewSummary,
   listAgentRuns,
 } from "../../lib/api";
+import { formatOperatorActionName } from "../../lib/operatorDisplayLanguage";
 import { buildRunsHref } from "../../lib/routes";
 import type {
   AgentRun,
@@ -82,7 +83,7 @@ function buildSignal(run: AgentRun, event: AgentRunEvent): LearningSignal {
         : `${formatRunLabel(run)} completed an execution step`;
   const summary =
     event.note ||
-    `Recent ${category} signal on ${event.capability_name ?? "the active workflow"}.`;
+    `Recent ${category} signal on ${formatOperatorActionName(event.capability_name ?? "the active workflow")}.`;
   return { run, event, title, summary, category };
 }
 

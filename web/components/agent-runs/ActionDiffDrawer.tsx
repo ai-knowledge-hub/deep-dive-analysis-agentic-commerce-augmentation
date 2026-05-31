@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { formatOperatorActionName } from "../../lib/operatorDisplayLanguage";
 import type { AgentAction } from "../../lib/types";
 
 type DiffBlock = {
@@ -114,7 +115,8 @@ export function ActionDiffDrawer({
         </div>
         <div className="drawer__body">
           <p className="panel__muted">
-            Action #{selectedAction.sequence} · {selectedAction.capability_name}
+            Action #{selectedAction.sequence} ·{" "}
+            {formatOperatorActionName(selectedAction.capability_name)}
           </p>
 
           <p className="panel__subheading">Output changes vs previous action</p>

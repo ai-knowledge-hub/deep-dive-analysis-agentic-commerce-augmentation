@@ -141,4 +141,52 @@ describe("ValidationPage", () => {
       expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
     });
   });
+
+  it("uses readable provider automation labels", async () => {
+    const user = userEvent.setup();
+    render(<ValidationPage />);
+
+    await screen.findByText(/Synthetic validation signal/i);
+
+    await user.selectOptions(screen.getByLabelText(/^Mode$/i), "provider_openai_mcp");
+
+    expect(await screen.findByText(/Provider automation status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Provider reference:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Setup status: Unknown/i)).toBeInTheDocument();
+    expect(screen.getByText(/Return status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Provider run id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Setup required/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Callback verified/i)).not.toBeInTheDocument();
+  });
+
+  it("uses readable copy revision option labels", async () => {
+    const user = userEvent.setup();
+    listCopyRevisionsMock.mockResolvedValue({
+      revisions: [
+        {
+          id: "copy-revision-abcdef123456",
+          client_id: "client-a",
+          product_id: "product-1",
+          source_type: "simulation_run",
+          base_description: "Base copy",
+          candidate_description: "Candidate copy",
+          status: "ready_for_review",
+        },
+      ],
+    });
+
+    render(<ValidationPage />);
+
+    await screen.findByText(/Synthetic validation signal/i);
+
+    await user.selectOptions(screen.getByLabelText(/Entity type/i), "copy_revision");
+
+    expect(
+      await screen.findByRole("option", {
+        name: /Simulation run revision · Ready for review · Ref abcdef12/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/simulation_run · ready_for_review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/copy-revision-abcdef123456/i)).not.toBeInTheDocument();
+  });
 });

@@ -12,8 +12,11 @@ import {
   getAgentRunEvents,
   listAgentRuns,
 } from "../../lib/api";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
-import { buildRunsHref } from "../../lib/routes";
+import {
+  formatOperatorActionName,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
+import { buildInterventionsHref, buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
 type InboxItem = {
@@ -41,6 +44,7 @@ type InboxNextAction = {
   label: string;
   summary: string;
   cta: string;
+  href: string;
 };
 
 function formatRunLabel(run: AgentRun): string {
@@ -69,7 +73,7 @@ function buildApprovalSummary(run: AgentRun, actions: AgentAction[]): InboxItem 
     urgency: "review",
     title: `${formatRunLabel(run)} needs approval`,
     summary: first?.rationale
-      ? `Next proposed action is ${first.capability_name}. ${first.rationale}`
+      ? `Next proposed action is ${formatOperatorActionName(first.capability_name)}. ${first.rationale}`
       : `There are ${proposed.length} proposed action${proposed.length === 1 ? "" : "s"} waiting for operator review.`,
     statusLabel: `${proposed.length} proposed`,
     proposedCount: proposed.length,
@@ -87,7 +91,7 @@ function buildPolicySummary(run: AgentRun, events: AgentRunEvent[]): InboxItem |
     title: `${formatRunLabel(run)} triggered a policy alert`,
     summary:
       latest.note ||
-      `Policy event recorded for ${latest.capability_name ?? "unknown capability"}.`,
+      `Policy event recorded for ${formatOperatorActionName(latest.capability_name ?? "unknown capability")}.`,
     statusLabel: latest.status || "policy",
     latestEvent: latest,
   };
@@ -140,7 +144,8 @@ function buildInboxNextAction(
       item: critical,
       label: "Start with failed work",
       summary: `${critical.title}: ${critical.summary}`,
-      cta: "Review failed run",
+      cta: "Review intervention",
+      href: buildInterventionsHref({ runId: critical.run.id }),
     };
   }
 
@@ -151,6 +156,7 @@ function buildInboxNextAction(
       label: review.kind === "approval" ? "Review the pending approval" : "Review the alert",
       summary: `${review.title}: ${review.summary}`,
       cta: review.kind === "approval" ? "Review approval" : "Review alert",
+      href: buildInterventionsHref({ runId: review.run.id }),
     };
   }
 
@@ -161,6 +167,7 @@ function buildInboxNextAction(
       label: "Continue supervision",
       summary: `${watching.title}: ${watching.summary}`,
       cta: "Open watched run",
+      href: buildRunsHref({ runId: watching.run.id }),
     };
   }
 
@@ -169,6 +176,7 @@ function buildInboxNextAction(
     label: "No action needed",
     summary: "No urgent work is waiting. Check Insights for recent outcomes or Runs when you are ready to supervise new work.",
     cta: "Review insights",
+    href: "/learnings",
   };
 }
 
@@ -433,11 +441,7 @@ export default function InboxPage() {
               <button
                 type="button"
                 className="button button--primary"
-                onClick={() =>
-                  nextAction.item
-                    ? router.push(buildRunsHref({ runId: nextAction.item.run.id }))
-                    : router.push("/learnings")
-                }
+                onClick={() => router.push(nextAction.href)}
                 disabled={loading}
               >
                 {nextAction.cta}
