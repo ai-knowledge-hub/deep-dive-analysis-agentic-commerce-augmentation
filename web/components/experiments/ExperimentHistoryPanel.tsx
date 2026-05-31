@@ -232,11 +232,11 @@ export function ExperimentHistoryPanel({
                         Variant: {formatVariantLabel(run.variant_id)}
                       </span>
                       {typeof run.snapshot_version === "number" ? (
-                        <span className="history-panel__meta">Snapshot: v{run.snapshot_version}</span>
+                        <span className="history-panel__meta">Evidence version: v{run.snapshot_version}</span>
                       ) : null}
                       {run.hypothesis_id ? (
                         <span className="history-panel__meta">
-                          Hypothesis: {hypothesisLabelById.get(run.hypothesis_id) ?? "Hypothesis-linked"}
+                          Test idea: {hypothesisLabelById.get(run.hypothesis_id) ?? "Linked test idea"}
                         </span>
                       ) : null}
                       {run.hypothesis_id ? (
@@ -252,8 +252,8 @@ export function ExperimentHistoryPanel({
                           }
                         >
                           {expandedHypothesisId === run.hypothesis_id
-                            ? "Hide hypothesis details"
-                            : "View hypothesis details"}
+                            ? "Hide test idea details"
+                            : "View test idea details"}
                         </button>
                       ) : null}
                       {run.hypothesis_id && expandedHypothesisId === run.hypothesis_id ? (

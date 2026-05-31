@@ -87,7 +87,7 @@ export function LabLoopPanel({
       {labMode === "lab" ? (
         <section className="panel__notice panel__notice--info lab-contract">
           <strong>Lab mode contract:</strong> Automation handles the default path (battery,
-          queries, baseline/hypothesis variants, and optional auto-run).
+          queries, baseline/test-idea variants, and optional auto-run).
           <div className="panel__actions">
             <label className="panel__toggle">
               <input
@@ -95,7 +95,7 @@ export function LabLoopPanel({
                 checked={labAutoRunEnabled}
                 onChange={(event) => onLabAutoRunEnabledChange(event.target.checked)}
               />
-              <span>Auto-run baseline + hypothesis after experiment creation</span>
+              <span>Auto-run baseline + test idea after experiment creation</span>
             </label>
             <button
               type="button"

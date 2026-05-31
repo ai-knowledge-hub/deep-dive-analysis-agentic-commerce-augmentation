@@ -1216,15 +1216,15 @@ function ExperimentsPageContent() {
     }
     if (!executionState?.phases?.retrieval_snapshots_ready?.done) {
       return {
-        label: "Run retrieval snapshots (Step 2)",
-        helper: "Run baseline/control variant to collect retrieval snapshots.",
+        label: "Save evidence set (Step 2)",
+        helper: "Run the baseline or control variant to save comparable evidence.",
         action: "run_first_variant" as const,
       };
     }
     if (variants.length === 0) {
       return {
         label: "Create variants (Step 5)",
-        helper: "Generate copy variants from retrieval evidence and hypotheses.",
+        helper: "Generate copy variants from saved evidence and test ideas.",
         action: "scroll_variants" as const,
       };
     }
