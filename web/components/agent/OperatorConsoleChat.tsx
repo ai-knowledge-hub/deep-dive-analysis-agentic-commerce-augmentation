@@ -13,7 +13,10 @@ import type {
   AgentRuntimeRecoveryTemplate,
   AgentRuntimeSkillSpec,
 } from "../../lib/types";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import {
+  formatOperatorActionName,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
 import { OperatorChatPrompts } from "./OperatorChatPrompts";
 import { OperatorChatSummary } from "./OperatorChatSummary";
 import { OperatorChatThread } from "./OperatorChatThread";
@@ -194,7 +197,7 @@ export function OperatorConsoleChat({
         content: [
           `${formatRunLabel(run)} is ready for review.`,
           selectedAction
-            ? `Current selection is ${selectedAction.capability_name} (${selectedAction.status ?? "unknown"}).`
+            ? `Current selection is ${formatOperatorActionName(selectedAction.capability_name)} (${selectedAction.status ?? "unknown"}).`
             : "No action is selected yet.",
           "Use the quick prompts to explain the state, understand failures, or decide the safest next step.",
         ].join(" "),
@@ -217,7 +220,7 @@ export function OperatorConsoleChat({
     }
     if (nextRecommendedAction.action) {
       parts.push(
-        `Next suggested step is ${nextRecommendedAction.action.capability_name}.`,
+        `Next suggested step is ${formatOperatorActionName(nextRecommendedAction.action.capability_name)}.`,
       );
     }
     if (derived.policyEvents.length > 0) {
@@ -225,7 +228,7 @@ export function OperatorConsoleChat({
     }
     if (selectedAction) {
       parts.push(
-        `Selected action is ${selectedAction.capability_name} with ${actionRiskLabel(selectedAction).toLowerCase()} profile.`,
+        `Selected action is ${formatOperatorActionName(selectedAction.capability_name)} with ${actionRiskLabel(selectedAction).toLowerCase()} profile.`,
       );
     }
     return parts.join(" ");
@@ -266,7 +269,7 @@ export function OperatorConsoleChat({
           derived.failedActions.length > 0
             ? `Most recent failed capabilities are ${derived.failedActions
                 .slice(0, 3)
-                .map((item) => item.capability_name)
+                .map((item) => formatOperatorActionName(item.capability_name))
                 .join(", ")}.`
             : "",
           derived.latestFailureEvent?.note
@@ -282,7 +285,7 @@ export function OperatorConsoleChat({
         }
         if (String(selectedAction.status || "").toLowerCase() !== "proposed") {
           return [
-            `${selectedAction.capability_name} is currently ${selectedAction.status}. It is not blocked in the proposal stage anymore.`,
+            `${formatOperatorActionName(selectedAction.capability_name)} is currently ${selectedAction.status}. It is not blocked in the proposal stage anymore.`,
             `Risk profile is ${actionRiskLabel(selectedAction).toLowerCase()}.`,
             selectedAction.rationale
               ? `Recorded rationale: ${selectedAction.rationale}`
@@ -294,7 +297,7 @@ export function OperatorConsoleChat({
         }
         if (nextRecommendedAction.guardrails.length === 0) {
           return [
-            `${selectedAction.capability_name} is proposed and not currently blocked by a budget guardrail.`,
+            `${formatOperatorActionName(selectedAction.capability_name)} is proposed and not currently blocked by a budget guardrail.`,
             `Risk profile is ${actionRiskLabel(selectedAction).toLowerCase()}.`,
             selectedAction.rationale
               ? `Recorded rationale: ${selectedAction.rationale}`
@@ -305,7 +308,7 @@ export function OperatorConsoleChat({
             .join(" ");
         }
         return [
-          `${selectedAction.capability_name} is being held by guardrails.`,
+          `${formatOperatorActionName(selectedAction.capability_name)} is being held by guardrails.`,
           `Risk profile is ${actionRiskLabel(selectedAction).toLowerCase()}.`,
           `Main reason: ${nextRecommendedAction.guardrails[0]}.`,
           derived.latestPolicyEvent?.note
@@ -330,7 +333,7 @@ export function OperatorConsoleChat({
             .join(" ");
         }
         return [
-          `Recommended next step is ${nextRecommendedAction.action.capability_name}.`,
+          `Recommended next step is ${formatOperatorActionName(nextRecommendedAction.action.capability_name)}.`,
           nextRecommendedAction.hint,
           `Risk profile is ${actionRiskLabel(nextRecommendedAction.action).toLowerCase()}.`,
           nextRecommendedAction.action.rationale

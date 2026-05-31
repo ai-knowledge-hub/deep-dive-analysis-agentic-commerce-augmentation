@@ -903,7 +903,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(payload.status).toBe("proposed");
 
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
-    expect(screen.getByText(/Selection: publish_copy_revision/i)).toBeInTheDocument();
+    expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /Variant: variant-/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
@@ -1201,7 +1201,7 @@ describe("AgentRunsPage timeline presets", () => {
 
     render(<AgentRunsPage />);
 
-    await screen.findByText(/Selection: run_variant/i);
+    await screen.findByText(/Selection: run variant/i);
     await userEvent.click(screen.getByRole("button", { name: /Approve selected/i }));
 
     expect(preflightAgentRunCommandMock).toHaveBeenCalledWith(
@@ -1209,7 +1209,7 @@ describe("AgentRunsPage timeline presets", () => {
       {
         command_type: "approve",
         action_id: "action-1",
-        message: "Approve run_variant",
+        message: "Approve run variant",
       },
       "user-a",
     );
@@ -1219,7 +1219,7 @@ describe("AgentRunsPage timeline presets", () => {
       {
         command_type: "approve",
         action_id: "action-1",
-        message: "Approve run_variant",
+        message: "Approve run variant",
       },
       "user-a",
     );

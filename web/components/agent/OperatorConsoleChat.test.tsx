@@ -72,7 +72,8 @@ describe("OperatorConsoleChat", () => {
       />,
     );
 
-    expect(screen.getByText(/Selection: publish_copy_revision/i)).toBeInTheDocument();
+    expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Selection: publish_copy_revision/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Policy: 1/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Explain selected action/i }));
@@ -216,7 +217,7 @@ describe("OperatorConsoleChat", () => {
     expect(onIssueCommand).toHaveBeenCalledWith({
       command_type: "approve",
       action_id: "action-1",
-      message: "Approve publish_copy_revision",
+      message: "Approve publish copy revision",
     });
     expect(await screen.findByText(/Command receipt recorded: approve/i)).toBeInTheDocument();
   });
@@ -359,7 +360,7 @@ describe("OperatorConsoleChat", () => {
       expect(onIssueCommand).toHaveBeenCalledWith({
         command_type: "retry",
         action_id: "action-1",
-        message: "Retry run_variant",
+        message: "Retry run variant",
         metadata: { retry_strategy: "same_action" },
       }),
     );
@@ -472,7 +473,7 @@ describe("OperatorConsoleChat", () => {
     expect(onIssueCommand).toHaveBeenCalledWith({
       command_type: "retry",
       action_id: "action-1",
-      message: "Retry run_variant from checkpoint",
+      message: "Retry run variant from checkpoint",
       metadata: { retry_strategy: "last_safe_checkpoint" },
     });
 
@@ -480,7 +481,7 @@ describe("OperatorConsoleChat", () => {
     expect(onIssueCommand).toHaveBeenCalledWith({
       command_type: "retry",
       action_id: "action-1",
-      message: "Create recovery action for run_variant",
+      message: "Create recovery action for run variant",
       metadata: {
         retry_strategy: "create_recovery_action",
         capability_name: "recommend_next_action",

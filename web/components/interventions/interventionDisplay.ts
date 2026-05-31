@@ -1,8 +1,8 @@
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import { formatOperatorActionName } from "../../lib/operatorDisplayLanguage";
 import type { ApprovalItem } from "./interventionTypes";
 
 export function formatActionLabel(value?: string | null): string {
-  return softenOperatorText(String(value || "selected action").replaceAll("_", " "));
+  return formatOperatorActionName(value);
 }
 
 export function formatApprovalSummary(item: ApprovalItem): string {
