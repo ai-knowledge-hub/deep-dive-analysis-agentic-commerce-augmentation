@@ -23,6 +23,7 @@ import {
   buildInterventionBriefing,
   buildInterventionMetrics,
 } from "../../components/interventions/interventionBriefing";
+import { formatActionLabel } from "../../components/interventions/interventionDisplay";
 import {
   buildApprovalItems,
   buildCommandItems,
@@ -279,7 +280,7 @@ function InterventionsPageContent() {
         await issueAgentRunCommand(item.run.id, command, userId);
         setPendingCompensatingKey(null);
         setStatusMessage(
-          `Recovery proposal created for ${recommendation.capability_name}.`,
+          `Recovery proposal created for ${formatActionLabel(recommendation.capability_name)}.`,
         );
         await loadInterventions();
       } catch (err) {

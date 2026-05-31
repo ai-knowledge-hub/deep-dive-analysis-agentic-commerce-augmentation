@@ -457,8 +457,11 @@ describe("InterventionsPage", () => {
       );
     });
     expect(
-      await screen.findByText(/Recovery proposal created for recommend_next_action/i),
+      await screen.findByText(/Recovery proposal created for recommend next action/i),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Recovery proposal created for recommend_next_action/i),
+    ).not.toBeInTheDocument();
   });
 
   it("scopes interventions to the selected run when run_id is provided", async () => {
