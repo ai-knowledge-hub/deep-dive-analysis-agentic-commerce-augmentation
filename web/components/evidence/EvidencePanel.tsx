@@ -51,9 +51,9 @@ export function EvidencePanel({
         </div>
         <div className="empty-state">
           <div className="empty-state__icon">🔍</div>
-          <h4 className="empty-state__title">No Evidence Data</h4>
+          <h4 className="empty-state__title">No evidence yet</h4>
           <p className="empty-state__description">
-            Run a chat query to generate evidence-based product discovery results.
+            Run a chat query to collect product evidence for this intent.
           </p>
         </div>
 
@@ -394,7 +394,7 @@ export function EvidencePanel({
         <div className="panel__separator" />
         <section className="panel__notice panel__notice--info outcome-snapshot">
           <div className="panel__meta">
-            <strong>Outcome snapshot</strong>
+            <strong>Outcome summary</strong>
             <span className="panel__badge panel__badge--secondary">Unified view</span>
           </div>
           <div className="outcome-snapshot__grid">
@@ -700,7 +700,7 @@ export function EvidencePanel({
                 </div>
 
                 <div className="explain-card">
-                  <div className="explain-card__title">Our copy snapshot</div>
+                  <div className="explain-card__title">Your copy summary</div>
                   <p className="copy-block">
                     {targetProductCopy
                       ? targetProductCopy
@@ -742,7 +742,7 @@ export function EvidencePanel({
                 </summary>
                 <div className="explain-grid">
                   <div className="explain-card">
-                    <div className="explain-card__title">Alignment Score distribution</div>
+                    <div className="explain-card__title">Alignment score distribution</div>
                     <div className="histogram">
                       {histogram.map((bucket) => (
                         <div key={bucket.label} className="histogram__row">
@@ -773,7 +773,7 @@ export function EvidencePanel({
                 </summary>
                 <div className="explain-grid explain-grid--signals">
                   <div className="explain-card">
-                    <div className="explain-card__title">Intent/Goal signals</div>
+                    <div className="explain-card__title">Intent and goal signals</div>
                     <p className="explain-card__note">
                       Derived from the clarified intent. Higher weight = more explicit in
                       the query.
