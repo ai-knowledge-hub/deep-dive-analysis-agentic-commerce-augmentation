@@ -128,9 +128,9 @@ export function ExperimentHistoryPanel({
                         ) : null}
                       </div>
                       {experiment.hypothesis ? (
-                        <span className="history-panel__meta">Hypothesis configured</span>
+                        <span className="history-panel__meta">Test idea configured</span>
                       ) : (
-                        <span className="history-panel__meta">No hypothesis yet</span>
+                        <span className="history-panel__meta">No test idea yet</span>
                       )}
                       <span className="history-panel__meta">
                         Created: {formatTimestamp(experiment.created_at)}

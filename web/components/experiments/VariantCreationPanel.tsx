@@ -226,7 +226,7 @@ export function VariantCreationPanel({
                   role === "control"
                     ? "Control (current copy)"
                     : prev.label === "Control (current copy)"
-                      ? "Hypothesis (variant)"
+                      ? "Test idea variant"
                       : prev.label,
               }));
             }}

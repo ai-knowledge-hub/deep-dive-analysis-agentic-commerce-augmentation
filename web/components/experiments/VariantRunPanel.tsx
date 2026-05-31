@@ -100,7 +100,7 @@ export function VariantRunPanel({
     <>
       <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
       <p className="panel__step-helper">
-        Runs in retrieval-backed mode use frozen protocol snapshots to keep variant comparisons fair.
+        Retrieval-backed runs use the active evidence protocol to keep variant comparisons fair.
       </p>
       <ExperimentRunSettings
         runMode={runMode}
@@ -129,8 +129,8 @@ export function VariantRunPanel({
                   tested={tested}
                   hypothesisLabel={
                     hypothesisId
-                      ? hypothesisLabelById.get(hypothesisId) ?? "Hypothesis-linked"
-                      : "Hypothesis-linked"
+                      ? hypothesisLabelById.get(hypothesisId) ?? "Linked test idea"
+                      : "Linked test idea"
                   }
                   hypothesisStatement={
                     hypothesisId ? (hypothesisStatementById.get(hypothesisId) ?? null) : null

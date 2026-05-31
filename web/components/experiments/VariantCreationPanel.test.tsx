@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -72,5 +72,40 @@ describe("VariantCreationPanel", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/loop_evidence/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/ready_for_review/i)).not.toBeInTheDocument();
+  });
+
+  it("uses test idea as the default candidate label after switching from control", () => {
+    const setVariantForm = vi.fn((updater) =>
+      updater({
+        label: "Control (current copy)",
+        role: "control",
+        description: "",
+        type: "copy",
+        payload: "{}",
+      }),
+    );
+
+    render(
+      <VariantCreationPanel
+        {...baseProps}
+        variantSourceMode="manual"
+        recommendedVariantSource="manual"
+        simulationRevisions={[]}
+        variantForm={{
+          ...baseProps.variantForm,
+          role: "control",
+          label: "Control (current copy)",
+        }}
+        setVariantForm={setVariantForm}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: /Role/i }), {
+      target: { value: "candidate" },
+    });
+
+    expect(setVariantForm.mock.results[0]?.value).toEqual(
+      expect.objectContaining({ label: "Test idea variant" }),
+    );
   });
 });

@@ -59,7 +59,7 @@ export function ExperimentVariantRunItem({
             className="panel__action panel__action--ghost"
             onClick={onToggleHypothesis}
           >
-            {hypothesisExpanded ? "Hide hypothesis details" : "View hypothesis details"}
+            {hypothesisExpanded ? "Hide test idea details" : "View test idea details"}
           </button>
         </div>
       ) : null}

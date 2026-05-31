@@ -127,7 +127,7 @@ function ExperimentsPageContent() {
     competitorPolicy: "",
   });
   const [variantForm, setVariantForm] = useState({
-    label: "Hypothesis (variant)",
+    label: "Test idea variant",
     role: "candidate",
     description: "",
     type: "copy",
@@ -890,7 +890,7 @@ function ExperimentsPageContent() {
         tone: brandId ? "ready" : "pending",
       },
       {
-        label: "Hypothesis",
+        label: "Test idea",
         status: hypothesisReady ? "Ready" : "Draft",
         tone: hypothesisReady ? "ready" : "pending",
       },
@@ -1022,7 +1022,7 @@ function ExperimentsPageContent() {
         label = forText ? `${ifText} (${forText})` : ifText;
       }
       if (!label) {
-        label = `Hypothesis ${index + 1}`;
+        label = `Test idea ${index + 1}`;
       }
       if (label.length > 72) {
         label = `${label.slice(0, 69)}...`;
@@ -1083,15 +1083,13 @@ function ExperimentsPageContent() {
     experimentForm.batteryId,
     hasValidationSignals,
     loopGeneratedVariants.length,
-    metrics.length,
     nextTest,
-    queries.length,
     recommendations.length,
     runs.length,
     executionState?.phases,
     selectedExperiment?.battery_id,
+    selectedExperiment?.hypothesis,
     selectedExperiment?.last_run_at,
-    selectedExperimentId,
     variants.length,
   ]);
 
@@ -1139,7 +1137,7 @@ function ExperimentsPageContent() {
     : !batteryReadyForRun
       ? "Complete Step 1-2 first: battery must have enabled saved queries."
     : !variantsReadyForRun
-      ? "Create at least baseline + hypothesis variants first."
+      ? "Create at least baseline + test idea variants first."
     : !(selectedExperiment?.battery_id || experimentForm.batteryId)
       ? "Link a battery to this experiment first."
     : queries.length === 0

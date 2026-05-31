@@ -57,4 +57,47 @@ describe("ExperimentHistoryPanel", () => {
     expect(screen.queryByText(/Snapshot:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Hypothesis:/i)).not.toBeInTheDocument();
   });
+
+  it("uses test idea wording for experiment history status", () => {
+    render(
+      <ExperimentHistoryPanel
+        experiments={[
+          {
+            id: "experiment-1",
+            name: "Homepage copy test",
+            status: "draft",
+            hypothesis: { if: "price clarity improves trust" },
+            created_at: "2026-05-31T10:00:00Z",
+          },
+        ]}
+        runs={[]}
+        metricsCount={0}
+        variantCount={0}
+        historyCollapsed={false}
+        selectedExperimentId={null}
+        experimentSnapshots={{}}
+        batteries={[]}
+        savingExperimentId={null}
+        queryMap={new Map()}
+        variantLabelById={new Map()}
+        runGapDetails={new Map()}
+        hypothesisLabelById={new Map()}
+        hypothesisStatementById={new Map()}
+        expandedHypothesisId={null}
+        runsSectionRef={createRef<HTMLDivElement>()}
+        formatTimestamp={(value) => value ?? "Not set"}
+        onToggleHistory={vi.fn()}
+        onSelectExperiment={vi.fn()}
+        onSaveExperimentDraft={vi.fn()}
+        onScrollVariants={vi.fn()}
+        onScrollRuns={vi.fn()}
+        onScrollMetrics={vi.fn()}
+        onToggleHypothesis={vi.fn()}
+        onDeleteRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Test idea configured/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Hypothesis configured/i)).not.toBeInTheDocument();
+  });
 });

@@ -23,6 +23,8 @@ describe("OutcomeSnapshot", () => {
     );
 
     expect(screen.getByText(/Evidence protocol:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Outcome summary/i)).toBeInTheDocument();
     expect(screen.queryByText(/Protocol snapshot/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Outcome snapshot/i)).not.toBeInTheDocument();
   });
 });
