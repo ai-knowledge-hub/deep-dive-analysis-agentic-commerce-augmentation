@@ -38,6 +38,7 @@ import {
   verifyAgentRuntimeRegistryApprovalReceipt,
   verifyExternalAgentJobReceiptForRun,
 } from "../../lib/api";
+import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
 import { DetailHeader } from "../../components/layout/DetailHeader";
@@ -118,6 +119,17 @@ const AGENT_FLOW_STEPS: { id: string; label: string }[] = [
   { id: "validation_completed", label: "Validation completed" },
   { id: "posterior_updated", label: "Confidence updated" },
 ];
+
+function formatRunStateLabel(state?: string | null): string {
+  return (
+    AGENT_FLOW_STEPS.find((step) => step.id === state)?.label ??
+    formatOperatorIdentifier(state)
+  );
+}
+
+function formatRunModeLabel(mode?: string | null): string {
+  return formatOperatorIdentifier(mode || "plan_only");
+}
 
 function AgentRunsPageContent() {
   const router = useRouter();
@@ -1554,14 +1566,14 @@ function AgentRunsPageContent() {
                         <strong>Status</strong>: {selectedRun.status ?? "unknown"}
                       </div>
                       <div>
-                        <strong>State</strong>: {selectedRun.state ?? "unknown"}
+                        <strong>State</strong>: {formatRunStateLabel(selectedRun.state)}
                       </div>
                       <div>
                         <strong>Approval</strong>:{" "}
                         {selectedRun.requires_approval ? "required" : "auto-execute safe steps"}
                       </div>
                       <div>
-                        <strong>Mode</strong>: {selectedRun.run_mode || "plan_only"}
+                        <strong>Mode</strong>: {formatRunModeLabel(selectedRun.run_mode)}
                       </div>
                       <div>
                         <strong>Budget</strong>: max actions{" "}
