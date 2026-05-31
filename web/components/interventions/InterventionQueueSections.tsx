@@ -1,7 +1,10 @@
 import React from "react";
 import { CompensatingProposalControl } from "../agent/CompensatingProposalControl";
 import { compensatingProposalKey } from "../agent/compensatingProposal";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import {
+  formatOperatorIdentifier,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
 import type { AgentCompensatingAction, AgentRun, AgentRunCommandPreflight } from "../../lib/types";
 import { formatActionLabel, formatApprovalSummary } from "./interventionDisplay";
 import { formatEventTime, formatRunLabel } from "./interventionLogic";
@@ -142,7 +145,8 @@ function InterventionMeta({
         {describePriority(priority)}
       </span>
       <span className="control-chip">{describeRisk(risk)}</span>
-      <span>{run.status ?? "unknown"}</span> · <span>{run.state ?? "unknown"}</span>
+      <span>{run.status ?? "unknown"}</span> ·{" "}
+      <span>{formatOperatorIdentifier(run.state)}</span>
     </div>
   );
 }

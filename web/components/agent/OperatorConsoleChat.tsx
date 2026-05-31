@@ -251,7 +251,7 @@ export function OperatorConsoleChat({
         return briefing;
       case "explain_run":
         return [
-          `${formatRunLabel(run)} is currently ${run.status ?? "unknown"} and has progressed to ${run.state ?? "unknown"}.`,
+          `${formatRunLabel(run)} is currently ${run.status ?? "unknown"} and has progressed to ${formatOperatorIdentifier(run.state)}.`,
           `This run has ${actions.length} recorded action${actions.length === 1 ? "" : "s"} and ${events.length} timeline event${events.length === 1 ? "" : "s"}.`,
           `Queue mix is ${derived.proposedActions.length} proposed, ${derived.approvedActions.length} approved, ${derived.executedActions.length} executed, and ${derived.failedActions.length} failed.`,
           run.run_mode === "plan_only"

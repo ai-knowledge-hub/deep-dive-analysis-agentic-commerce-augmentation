@@ -76,6 +76,10 @@ describe("OperatorConsoleChat", () => {
     expect(screen.queryByText(/Selection: publish_copy_revision/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Policy: 1/i)).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: /Explain run/i }));
+    expect(screen.getByText(/progressed to variants ready/i)).toBeInTheDocument();
+    expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: /Explain selected action/i }));
 
     expect(

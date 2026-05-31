@@ -366,6 +366,8 @@ describe("InterventionsPage", () => {
     expect(
       screen.getByText(/the run ends and future work needs a new run/i),
     ).toBeInTheDocument();
+    expect(screen.getAllByText(/variants ready/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
   });
 
   it("approves queued actions from the interventions queue", async () => {

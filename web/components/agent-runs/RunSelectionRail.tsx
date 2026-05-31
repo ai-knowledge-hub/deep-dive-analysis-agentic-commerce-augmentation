@@ -1,5 +1,6 @@
 import React from "react";
 import type { AgentRun } from "../../lib/types";
+import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
 import { runAttentionLabel } from "./runAttention";
 
 type RunCounters = {
@@ -58,7 +59,7 @@ export function RunSelectionRail({
                 <div className="control-data-row__main">
                   <div className="control-data-row__title">{formatRunLabel(run)}</div>
                   <div className="control-data-row__meta">
-                    {run.status ?? "unknown"} · {run.state ?? "unknown"}
+                    {run.status ?? "unknown"} · {formatOperatorIdentifier(run.state)}
                   </div>
                 </div>
                 {attentionLabel ? (
