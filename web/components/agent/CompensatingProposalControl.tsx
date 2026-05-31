@@ -27,6 +27,18 @@ function formatEventTime(value?: string | null): string {
   return parsed.toLocaleString();
 }
 
+function formatSignalLabel(eventType?: string | null): string {
+  if (eventType === "action_retry_proposed") return "Retry proposal";
+  if (eventType === "action_recovery_proposed") return "Recovery proposal";
+  if (eventType?.startsWith("operator_command_")) return "Operator command";
+  return "Recovery signal";
+}
+
+function formatStatusLabel(status?: string | null): string {
+  const value = String(status || "unknown").replaceAll("_", " ");
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function CompensatingProposalControl({
   recommendation,
   event,
@@ -62,13 +74,13 @@ export function CompensatingProposalControl({
       ) : null}
       <div className="agent-ops-summary">
         <span className="panel__badge panel__badge--secondary">
-          Event: {event.event_type}
+          Signal: {formatSignalLabel(event.event_type)}
         </span>
         <span className="panel__badge panel__badge--secondary">
-          Status: {event.status}
+          Status: {formatStatusLabel(event.status)}
         </span>
         <span className="panel__badge panel__badge--secondary">
-          Effect: {event.effect_class ?? risk}
+          Risk: {risk}
         </span>
       </div>
       {event.timestamp ? (

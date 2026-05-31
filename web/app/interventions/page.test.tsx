@@ -338,6 +338,12 @@ describe("InterventionsPage", () => {
     expect(
       screen.getByText(/Experiment exp-retr has a recovery proposal/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Signal:\s*Retry proposal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Signal:\s*Recovery proposal/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Status:\s*Proposed/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Risk:\s*medium/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/action_retry_proposed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/write_low_risk/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/Recovery path: Low-risk writes can usually be superseded/i),
     ).toBeInTheDocument();
