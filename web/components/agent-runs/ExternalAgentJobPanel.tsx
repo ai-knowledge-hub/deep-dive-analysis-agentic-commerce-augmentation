@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
 import type { ExternalAgentJobOperatorDetail } from "../../lib/types";
 
 type Props = {
@@ -56,10 +57,14 @@ export function ExternalAgentJobPanel({
               <strong>Job status</strong>: {externalAgentJob.job.status ?? "unknown"}
             </div>
             <div>
-              <strong>Tool</strong>: {externalAgentJob.job.requested_tool_id ?? "workflow"}
+              <strong>Tool</strong>:{" "}
+              {formatOperatorIdentifier(externalAgentJob.job.requested_tool_id ?? "workflow")}
             </div>
             <div>
-              <strong>Skill</strong>: {externalAgentJob.job.requested_skill_id ?? "auto-selected"}
+              <strong>Skill</strong>:{" "}
+              {formatOperatorIdentifier(
+                externalAgentJob.job.requested_skill_id ?? "auto-selected",
+              )}
             </div>
             <div>
               <strong>Receipts</strong>: {externalAgentJob.receipts.length}

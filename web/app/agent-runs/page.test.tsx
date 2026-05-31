@@ -1442,6 +1442,16 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
     expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
     expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Tool: experiment run variant")),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Skill: optimize product representation")),
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
