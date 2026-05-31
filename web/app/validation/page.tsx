@@ -88,6 +88,21 @@ function formatReturnStatus(value: boolean | null | undefined): string {
   return value ? "Result returned" : "Waiting for result";
 }
 
+function formatDisplayToken(value: string | null | undefined, fallback: string): string {
+  const text = String(value || fallback)
+    .replace(/[._-]+/g, " ")
+    .trim();
+  if (!text) return fallback;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatCopyRevisionOption(revision: CopyRevision): string {
+  const source = formatDisplayToken(revision.source_type, "Copy");
+  const status = formatDisplayToken(revision.status, "Draft");
+  const reference = revision.id.replace(/^copy-revision[-_]?/, "").slice(0, 8);
+  return `${source} revision · ${status} · Ref ${reference}`;
+}
+
 type ValidationNextAction =
   | "configure_provider"
   | "select_synthetic_item"
@@ -497,7 +512,7 @@ function ValidationPageContent() {
     if (entityType === "copy_revision") {
       return copyRevisions.map((revision) => ({
         id: revision.id,
-        label: `${revision.source_type} · ${revision.status} · ${revision.id.slice(0, 8)}`,
+        label: formatCopyRevisionOption(revision),
       }));
     }
     return batteries.map((battery) => ({

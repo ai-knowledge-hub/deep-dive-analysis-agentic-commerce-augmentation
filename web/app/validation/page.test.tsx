@@ -158,4 +158,35 @@ describe("ValidationPage", () => {
     expect(screen.queryByText(/Setup required/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Callback verified/i)).not.toBeInTheDocument();
   });
+
+  it("uses readable copy revision option labels", async () => {
+    const user = userEvent.setup();
+    listCopyRevisionsMock.mockResolvedValue({
+      revisions: [
+        {
+          id: "copy-revision-abcdef123456",
+          client_id: "client-a",
+          product_id: "product-1",
+          source_type: "simulation_run",
+          base_description: "Base copy",
+          candidate_description: "Candidate copy",
+          status: "ready_for_review",
+        },
+      ],
+    });
+
+    render(<ValidationPage />);
+
+    await screen.findByText(/Synthetic validation signal/i);
+
+    await user.selectOptions(screen.getByLabelText(/Entity type/i), "copy_revision");
+
+    expect(
+      await screen.findByRole("option", {
+        name: /Simulation run revision · Ready for review · Ref abcdef12/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/simulation_run · ready_for_review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/copy-revision-abcdef123456/i)).not.toBeInTheDocument();
+  });
 });
