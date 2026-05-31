@@ -39,4 +39,35 @@ describe("ExperimentVariantRunItem", () => {
     expect(screen.getByText(/Confidence: 0.74/i)).toBeInTheDocument();
     expect(screen.queryByText(/Posterior/i)).not.toBeInTheDocument();
   });
+
+  it("uses test idea wording for linked variant details", () => {
+    render(
+      <ExperimentVariantRunItem
+        variant={{
+          id: "variant-1",
+          experiment_id: "exp-1",
+          label: "Homepage benefit copy",
+          type: "copy",
+          hypothesis_id: "hypothesis-1",
+        }}
+        tested={false}
+        hypothesisLabel="Price clarity test"
+        hypothesisStatement={{ if: "Price clarity improves trust" }}
+        hypothesisExpanded={false}
+        copyExpanded={false}
+        resolvedDescription="Clear pricing copy"
+        metricValues={null}
+        runButtonProminent={false}
+        running={false}
+        canRun
+        renderMetricValue={(value) => String(value)}
+        onToggleHypothesis={vi.fn()}
+        onToggleCopy={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /View test idea details/i })).toBeInTheDocument();
+    expect(screen.queryByText(/hypothesis details/i)).not.toBeInTheDocument();
+  });
 });

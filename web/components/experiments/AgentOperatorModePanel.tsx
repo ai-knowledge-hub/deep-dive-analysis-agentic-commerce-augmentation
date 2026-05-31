@@ -29,7 +29,7 @@ export function AgentOperatorModePanel({
       <p className="panel__subheading">Optional orchestrated path</p>
       <p className="panel__step-helper">
         Use governed automation to run approved capabilities on this experiment. The same protocol
-        gates apply (frozen snapshots, baseline-first, approvals).
+        gates apply (saved evidence, baseline-first, approvals).
       </p>
       <div className="panel__meta-strip">
         <div>

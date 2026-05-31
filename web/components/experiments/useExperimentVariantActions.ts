@@ -119,7 +119,7 @@ export function useExperimentVariantActions({
         ? variantForm.label.trim()
         : variantForm.role === "control"
           ? "Control (current copy)"
-          : "Hypothesis (variant)";
+          : "Test idea variant";
       await createExperimentVariant(experimentId, {
         label: normalizedLabel,
         type: variantForm.type.trim() || "copy",
@@ -130,7 +130,7 @@ export function useExperimentVariantActions({
       setVariants(refreshed.variants ?? []);
       await refreshExecutionState(experimentId);
       setVariantForm({
-        label: "Hypothesis (variant)",
+        label: "Test idea variant",
         role: "candidate",
         description: "",
         type: "copy",
@@ -360,7 +360,7 @@ export function useExperimentVariantActions({
         payload.description = description;
       }
       await createExperimentVariant(experimentId, {
-        label: candidate.label?.trim() || "Hypothesis (variant)",
+        label: candidate.label?.trim() || "Test idea variant",
         type: "copy",
         payload,
         user_id: userId,
@@ -416,7 +416,7 @@ export function useExperimentVariantActions({
         payload.description = description;
       }
       const created = await createExperimentVariant(experimentId, {
-        label: candidate.label?.trim() || "Hypothesis (variant)",
+        label: candidate.label?.trim() || "Test idea variant",
         type: "copy",
         payload,
         user_id: userId,

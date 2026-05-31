@@ -24,7 +24,7 @@ export function OutcomeSnapshot({
   return (
     <section className="panel__notice panel__notice--info outcome-snapshot">
       <div className="panel__meta">
-        <strong>Outcome snapshot</strong>
+        <strong>Outcome summary</strong>
         <span className="panel__badge panel__badge--secondary">Unified view</span>
       </div>
       <div className="outcome-snapshot__grid">

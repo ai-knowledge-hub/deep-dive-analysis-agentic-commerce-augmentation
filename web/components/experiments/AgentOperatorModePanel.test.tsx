@@ -23,7 +23,9 @@ describe("AgentOperatorModePanel", () => {
 
     expect(screen.getByText(/running · variants ready/i)).toBeInTheDocument();
     expect(screen.getByText(/auto execute safe/i)).toBeInTheDocument();
+    expect(screen.getByText(/saved evidence, baseline-first, approvals/i)).toBeInTheDocument();
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/auto_execute_safe/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/frozen snapshots/i)).not.toBeInTheDocument();
   });
 });

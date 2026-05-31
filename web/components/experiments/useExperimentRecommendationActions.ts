@@ -108,7 +108,7 @@ export function useExperimentRecommendationActions({
       setSubmitting(true);
       try {
         const response = await createExperimentVariant(selectedExperimentId, {
-          label: recommendation.suggested_label ?? "Hypothesis (next)",
+          label: recommendation.suggested_label ?? "Next test idea",
           type: recommendation.suggested_type ?? "copy",
           payload:
             recommendation.suggested_payload &&

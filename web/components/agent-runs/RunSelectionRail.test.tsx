@@ -31,6 +31,8 @@ describe("RunSelectionRail", () => {
     );
 
     expect(screen.getByText(/running · variants ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/Summary/i)).toBeInTheDocument();
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Snapshot/i)).not.toBeInTheDocument();
   });
 });

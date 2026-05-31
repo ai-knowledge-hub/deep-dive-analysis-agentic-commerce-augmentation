@@ -81,7 +81,7 @@ export function RunSelectionRail({
       <section className="control-section">
         <div className="control-section__header">
           <div>
-            <span className="control-section__eyebrow">Snapshot</span>
+            <span className="control-section__eyebrow">Summary</span>
             <h4 className="control-section__title">Run stats</h4>
           </div>
         </div>
