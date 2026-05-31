@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
 import type { ExperimentRecommendation, NextTestRecommendation } from "../../lib/types";
 
 type Props = {
@@ -53,7 +54,7 @@ export function OrchestratorRecommendationsPanel({
               <div className="panel__meta">
                 <span>{rec.recommendation.reason}</span>
                 <span className="panel__badge panel__badge--secondary">
-                  {rec.recommendation.action}
+                  {formatOperatorIdentifier(rec.recommendation.action)}
                 </span>
               </div>
               <span className="panel__muted">
