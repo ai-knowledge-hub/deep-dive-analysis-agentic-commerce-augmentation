@@ -110,13 +110,13 @@ const DEFAULT_ALLOWED_CAPABILITIES = [
 
 const AGENT_FLOW_STEPS: { id: string; label: string }[] = [
   { id: "battery_ready", label: "Battery ready" },
-  { id: "retrieval_snapshots_ready", label: "Retrieval snapshots ready" },
-  { id: "baseline_scored", label: "Baseline scored" },
-  { id: "hypotheses_ready", label: "Hypotheses ready" },
+  { id: "retrieval_snapshots_ready", label: "Evidence saved" },
+  { id: "baseline_scored", label: "Baseline compared" },
+  { id: "hypotheses_ready", label: "Test ideas ready" },
   { id: "variants_ready", label: "Variants ready" },
   { id: "experiment_run_completed", label: "Experiment run completed" },
   { id: "validation_completed", label: "Validation completed" },
-  { id: "posterior_updated", label: "Posterior updated" },
+  { id: "posterior_updated", label: "Confidence updated" },
 ];
 
 function AgentRunsPageContent() {

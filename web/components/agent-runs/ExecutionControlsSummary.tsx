@@ -1,5 +1,6 @@
 import React from "react";
 import type { AgentRun } from "../../lib/types";
+import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
 
 type FlowStep = {
   id: string;
@@ -17,6 +18,10 @@ export function ExecutionControlsSummary({
   selectedRun,
   flowSteps,
 }: ExecutionControlsSummaryProps) {
+  const currentFlowLabel =
+    flowSteps.find((step) => step.id === selectedRun.state)?.label ??
+    formatOperatorIdentifier(selectedRun.state);
+
   return (
     <section className="agent-run-summary control-section">
       <div className="control-section__header">
@@ -25,7 +30,7 @@ export function ExecutionControlsSummary({
           <h4 className="control-section__title">Execution controls</h4>
         </div>
         <span className="control-chip control-chip--accent">
-          Current: {selectedRun.state ?? "unknown"}
+          Current: {currentFlowLabel}
         </span>
       </div>
       <div className="control-chip-row">
@@ -36,7 +41,7 @@ export function ExecutionControlsSummary({
           Approval: {selectedRun.requires_approval ? "required" : "auto-execute safe"}
         </span>
         <span className="control-chip">
-          Mode: {selectedRun.run_mode || "plan_only"}
+          Mode: {formatOperatorIdentifier(selectedRun.run_mode || "plan_only")}
         </span>
       </div>
       <details className="agent-flow-details">
