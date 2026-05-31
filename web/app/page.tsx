@@ -10,55 +10,57 @@ import { DetailHeader } from "../components/layout/DetailHeader";
 import { listAgentRuns } from "../lib/api";
 import type { AgentRun } from "../lib/types";
 
-type EntryCard = {
+type OperatorStep = {
+  step: string;
   title: string;
   summary: string;
   href: string;
   cta: string;
-  badge?: string;
 };
 
-const PRIMARY_ENTRY_CARDS: EntryCard[] = [
+const OPERATOR_STEPS: OperatorStep[] = [
   {
+    step: "1",
     title: "Inbox",
-    summary: "Start with blocked, failed, and approval-needed execution items.",
+    summary: "See what needs attention before scanning every run.",
     href: "/inbox",
     cta: "Open inbox",
-    badge: "Triage",
   },
   {
+    step: "2",
     title: "Runs",
-    summary: "Inspect active and recent runs with the operator chat beside execution state.",
+    summary: "Supervise the active work and inspect why it is moving.",
     href: "/runs",
     cta: "Open runs",
-    badge: "Primary",
   },
   {
+    step: "3",
     title: "Interventions",
-    summary: "Approve, pause, reject, resume, and manually review high-signal execution paths.",
+    summary: "Approve, reject, pause, or recover only when judgement is needed.",
     href: "/interventions",
     cta: "Open interventions",
-    badge: "Control",
   },
   {
+    step: "4",
     title: "Insights",
-    summary: "Review what changed recently and where operator attention should go next.",
+    summary: "Review what changed and choose the next improvement.",
     href: "/learnings",
     cta: "Open insights",
-    badge: "Review",
   },
 ];
 
-const SECONDARY_ENTRY_CARDS: EntryCard[] = [
+const ADVANCED_LINKS: OperatorStep[] = [
   {
-    title: "Open the lab",
-    summary: "Use the full conversational workspace when you want to run the exploratory, human-led lab flow directly.",
+    step: "A",
+    title: "Lab",
+    summary: "Use the exploratory workspace when you want to drive the workflow directly.",
     href: "/lab",
     cta: "Open lab",
   },
   {
-    title: "Open overview",
-    summary: "Keep the legacy cross-surface dashboard available while the control plane takes shape.",
+    step: "B",
+    title: "Overview",
+    summary: "Open the legacy dashboard only when you need broad historical context.",
     href: "/overview",
     cta: "Open overview",
   },
@@ -186,7 +188,7 @@ export default function HomePage() {
         <div className="detail">
           <DetailHeader
             title="Control Plane"
-            subtitle="The default entry for supervising autonomous execution, handling interventions, and reviewing what changed."
+            subtitle="Start with the next operator decision, then move through the execution loop only when more context is needed."
             onMenu={() => setSidebarOpen(true)}
             actions={
               <button
@@ -202,7 +204,7 @@ export default function HomePage() {
           <ControlPlaneBriefing
             label="Entry"
             title="Operator briefing"
-            subtitle={`${greeting} This surface is now optimized for supervision first, with the lab available when you want to drive the workflow directly.`}
+            subtitle={`${greeting} The control plane keeps the daily path to one loop: triage, supervise, decide, review.`}
             summary={snapshot.recommendedSummary}
             metrics={[
               { label: "Needs attention", value: loadingSnapshot ? "..." : snapshot.attentionCount },
@@ -256,20 +258,19 @@ export default function HomePage() {
             <section className="control-surface">
               <div className="control-section__header">
                 <div>
-                  <span className="control-section__eyebrow">Primary</span>
-                  <h3 className="control-section__title">Primary control plane</h3>
+                  <span className="control-section__eyebrow">Daily loop</span>
+                  <h3 className="control-section__title">Operator path</h3>
+                  <div className="control-section__summary">
+                    Follow this order when you are unsure where to start.
+                  </div>
                 </div>
                 <span className="control-chip control-chip--attention">Default</span>
               </div>
               <div className="control-list">
-                {PRIMARY_ENTRY_CARDS.map((item) => (
+                {OPERATOR_STEPS.map((item) => (
                   <div key={item.title} className="control-list__row">
                     <div className="control-list__title">{item.title}</div>
-                    {item.badge ? (
-                      <div className="control-list__meta">
-                        <span className="control-chip">{item.badge}</span>
-                      </div>
-                    ) : null}
+                    <div className="control-list__meta">Step {item.step}</div>
                     <div className="panel__muted">{item.summary}</div>
                     <div className="detail__actions">
                       <button
@@ -288,28 +289,31 @@ export default function HomePage() {
             <section className="control-surface">
               <div className="control-section__header">
                 <div>
-                  <span className="control-section__eyebrow">Guidance</span>
-                  <h3 className="control-section__title">Suggested operator paths</h3>
+                  <span className="control-section__eyebrow">Judgement</span>
+                  <h3 className="control-section__title">When to leave the loop</h3>
+                  <div className="control-section__summary">
+                    Use these signals to choose the right workspace without learning the internals.
+                  </div>
                 </div>
-                <span className="control-chip">Guided</span>
+                <span className="control-chip">Guide</span>
               </div>
               <div className="control-list">
                 <div className="control-list__row">
-                  <div className="control-list__title">If execution feels unstable</div>
+                  <div className="control-list__title">Something is blocked or failed</div>
                   <div className="panel__muted">
-                    Start in `Inbox`, move into `Interventions`, then inspect the affected run in `Runs`.
+                    Start in Inbox. If a human decision is needed, continue to Interventions.
                   </div>
                 </div>
                 <div className="control-list__row">
-                  <div className="control-list__title">If execution is healthy but opaque</div>
+                  <div className="control-list__title">Work is moving but unclear</div>
                   <div className="panel__muted">
-                    Start in `Runs`, use the operator chat for explanation, then finish in `Insights` to understand what changed.
+                    Open Runs, inspect the selected run, then finish in Insights when the outcome is clear.
                   </div>
                 </div>
                 <div className="control-list__row">
-                  <div className="control-list__title">If you want to drive the system directly</div>
+                  <div className="control-list__title">You want to explore manually</div>
                   <div className="panel__muted">
-                    Open the `Lab` and use the chat-led workspace for exploratory, human-guided operation.
+                    Open Lab when you intentionally want to drive the work yourself.
                   </div>
                 </div>
               </div>
@@ -318,15 +322,19 @@ export default function HomePage() {
             <section className="control-surface">
               <div className="control-section__header">
                 <div>
-                  <span className="control-section__eyebrow">Bridge</span>
-                  <h3 className="control-section__title">Secondary surfaces</h3>
+                  <span className="control-section__eyebrow">Secondary</span>
+                  <h3 className="control-section__title">Advanced workspaces</h3>
+                  <div className="control-section__summary">
+                    Keep these behind the daily loop unless you need deeper context.
+                  </div>
                 </div>
-                <span className="control-chip">Bridge</span>
+                <span className="control-chip">Optional</span>
               </div>
               <div className="control-list">
-                {SECONDARY_ENTRY_CARDS.map((item) => (
+                {ADVANCED_LINKS.map((item) => (
                   <div key={item.title} className="control-list__row">
                     <div className="control-list__title">{item.title}</div>
+                    <div className="control-list__meta">Advanced {item.step}</div>
                     <div className="panel__muted">{item.summary}</div>
                     <div className="detail__actions">
                       <button

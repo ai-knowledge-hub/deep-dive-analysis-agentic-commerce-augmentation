@@ -52,7 +52,8 @@ describe("HomePage", () => {
 
     expect(screen.getByText(/Operator briefing/i)).toBeInTheDocument();
     expect(screen.getByText(/Welcome back, Dessi/i)).toBeInTheDocument();
-    expect(screen.getByText(/Primary control plane/i)).toBeInTheDocument();
+    expect(screen.getByText(/Operator path/i)).toBeInTheDocument();
+    expect(screen.getByText(/When to leave the loop/i)).toBeInTheDocument();
     expect((await screen.findAllByText(/No recent runs found/i))[0]).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Open runs/i }));
