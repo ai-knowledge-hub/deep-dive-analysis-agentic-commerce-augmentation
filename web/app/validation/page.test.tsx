@@ -141,4 +141,21 @@ describe("ValidationPage", () => {
       expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
     });
   });
+
+  it("uses readable provider automation labels", async () => {
+    const user = userEvent.setup();
+    render(<ValidationPage />);
+
+    await screen.findByText(/Synthetic validation signal/i);
+
+    await user.selectOptions(screen.getByLabelText(/^Mode$/i), "provider_openai_mcp");
+
+    expect(await screen.findByText(/Provider automation status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Provider reference:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Setup status: Unknown/i)).toBeInTheDocument();
+    expect(screen.getByText(/Return status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Provider run id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Setup required/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Callback verified/i)).not.toBeInTheDocument();
+  });
 });
