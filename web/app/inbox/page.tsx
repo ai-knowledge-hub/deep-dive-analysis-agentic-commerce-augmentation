@@ -12,7 +12,10 @@ import {
   getAgentRunEvents,
   listAgentRuns,
 } from "../../lib/api";
-import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import {
+  formatOperatorActionName,
+  softenOperatorText,
+} from "../../lib/operatorDisplayLanguage";
 import { buildInterventionsHref, buildRunsHref } from "../../lib/routes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 
@@ -70,7 +73,7 @@ function buildApprovalSummary(run: AgentRun, actions: AgentAction[]): InboxItem 
     urgency: "review",
     title: `${formatRunLabel(run)} needs approval`,
     summary: first?.rationale
-      ? `Next proposed action is ${first.capability_name}. ${first.rationale}`
+      ? `Next proposed action is ${formatOperatorActionName(first.capability_name)}. ${first.rationale}`
       : `There are ${proposed.length} proposed action${proposed.length === 1 ? "" : "s"} waiting for operator review.`,
     statusLabel: `${proposed.length} proposed`,
     proposedCount: proposed.length,
@@ -88,7 +91,7 @@ function buildPolicySummary(run: AgentRun, events: AgentRunEvent[]): InboxItem |
     title: `${formatRunLabel(run)} triggered a policy alert`,
     summary:
       latest.note ||
-      `Policy event recorded for ${latest.capability_name ?? "unknown capability"}.`,
+      `Policy event recorded for ${formatOperatorActionName(latest.capability_name ?? "unknown capability")}.`,
     statusLabel: latest.status || "policy",
     latestEvent: latest,
   };

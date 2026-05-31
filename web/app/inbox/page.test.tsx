@@ -137,6 +137,8 @@ describe("InboxPage", () => {
     expect(
       screen.getByText(/Experiment exp-2 needs approval/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Next proposed action is run variant/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Next proposed action is run_variant/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Experiment exp-3 is running/i)).toBeInTheDocument();
   });
 

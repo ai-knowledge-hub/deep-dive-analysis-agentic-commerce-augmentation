@@ -99,7 +99,7 @@ describe("LearningsPage", () => {
         {
           id: "evt-1",
           status: "failed",
-          note: "Policy blocked publishing without additional review.",
+          capability_name: "publish_copy_revision",
           is_policy_event: true,
           timestamp: "2026-03-18T12:00:00Z",
         },
@@ -121,6 +121,8 @@ describe("LearningsPage", () => {
     expect(screen.getByText(/Start with close validation gaps/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Decision signals/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Execution signals/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recent policy signal on publish copy revision/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Recent policy signal on publish_copy_revision/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Review recent execution drift/i)).toBeInTheDocument();
     expect(getAgentRunEventsMock).toHaveBeenCalledTimes(1);
     expect(getAgentRunEventsMock).toHaveBeenCalledWith(
