@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
+import { formatApprovalSummary } from "./interventionDisplay";
 import { sortByPriorityAndRisk } from "./interventionLogic";
 import type {
   ApprovalItem,
@@ -95,7 +96,7 @@ function buildGuide({
     }) satisfies Candidate),
     ...approvals.map((item) => ({
       title: "Start with approval",
-      summary: softenOperatorText(item.summary),
+      summary: formatApprovalSummary(item),
       chip: "Approval",
       cta: "Approve selected action",
       tone: "attention",

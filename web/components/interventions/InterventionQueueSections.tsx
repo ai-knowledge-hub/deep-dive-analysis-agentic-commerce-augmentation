@@ -3,6 +3,7 @@ import { CompensatingProposalControl } from "../agent/CompensatingProposalContro
 import { compensatingProposalKey } from "../agent/compensatingProposal";
 import { softenOperatorText } from "../../lib/operatorDisplayLanguage";
 import type { AgentCompensatingAction, AgentRun, AgentRunCommandPreflight } from "../../lib/types";
+import { formatActionLabel, formatApprovalSummary } from "./interventionDisplay";
 import { formatEventTime, formatRunLabel } from "./interventionLogic";
 import type {
   ApprovalItem,
@@ -147,9 +148,7 @@ function InterventionMeta({
 }
 
 function ApprovalOutcomeSummary({ item }: { item: ApprovalItem }) {
-  const actionName = softenOperatorText(
-    String(item.action.capability_name ?? "the selected action").replaceAll("_", " "),
-  );
+  const actionName = formatActionLabel(item.action.capability_name);
   return (
     <div className="panel__notice panel__notice--info">
       <div>
@@ -309,10 +308,11 @@ export function ApprovalsSection({ items, busyKey, onDecision, onOpenRun }: Appr
             return (
               <div key={`approval-${item.action.id}`} className="intervention-item">
                 <div className="list__title">
-                  {formatRunLabel(item.run)}: approve {item.action.capability_name}
+                  {formatRunLabel(item.run)}: approve{" "}
+                  {formatActionLabel(item.action.capability_name)}
                 </div>
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
-                <div className="panel__muted">{softenOperatorText(item.summary)}</div>
+                <div className="panel__muted">{formatApprovalSummary(item)}</div>
                 <HarnessPosture item={item} focus="approval" />
                 <div className="control-chip-row">
                   <span className="control-chip">

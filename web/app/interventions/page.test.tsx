@@ -309,12 +309,13 @@ describe("InterventionsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/approve publish_copy_revision/i),
+      screen.getByText(/approve publish copy revision/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/approve publish_copy_revision/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/the run can continue with/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/publish copy revision/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/publish copy revision/i).length).toBeGreaterThan(0);
     expect(
       screen.getByText(/the run stays waiting and needs a safer next action/i),
     ).toBeInTheDocument();
@@ -361,7 +362,7 @@ describe("InterventionsPage", () => {
     const user = userEvent.setup();
     render(<InterventionsPage />);
 
-    await screen.findByText(/approve publish_copy_revision/i);
+    await screen.findByText(/approve publish copy revision/i);
     await user.click(screen.getByRole("button", { name: "Approve" }));
 
     await waitFor(() => {
@@ -457,7 +458,7 @@ describe("InterventionsPage", () => {
 
     expect(await screen.findByText(/Run-scoped view/i)).toBeInTheDocument();
     expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
-    expect(screen.getByText(/approve publish_copy_revision/i)).toBeInTheDocument();
+    expect(screen.getByText(/approve publish copy revision/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/^Experiment exp-fail needs manual recovery$/i),
     ).not.toBeInTheDocument();
