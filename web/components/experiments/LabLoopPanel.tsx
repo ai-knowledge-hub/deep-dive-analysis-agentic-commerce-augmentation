@@ -82,7 +82,7 @@ export function LabLoopPanel({
         {variantCount} variants · {runCount} runs · {metricCount} metrics · {beliefCount} beliefs
       </p>
       <p className="lab-loop__hint">
-        The lab loop turns hypotheses into evidence and updates brand beliefs with every run.
+        The lab loop turns test ideas into evidence and updates brand beliefs with every run.
       </p>
       {labMode === "lab" ? (
         <section className="panel__notice panel__notice--info lab-contract">

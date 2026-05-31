@@ -1,3 +1,5 @@
+import React from "react";
+
 type ExperimentRunSettingsProps = {
   runMode: "simulation" | "retrieval_backed";
   retrievalMaxResults: string;
@@ -61,7 +63,7 @@ export function ExperimentRunSettings({
       </p>
       {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0 ? (
         <p className="panel__muted">
-          Active frozen protocol: snapshot v{currentProtocolSnapshotVersion}
+          Active evidence protocol: v{currentProtocolSnapshotVersion}
         </p>
       ) : null}
       {runVariantDisabledReason ? <p className="panel__muted">{runVariantDisabledReason}</p> : null}

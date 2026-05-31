@@ -1,3 +1,5 @@
+import React from "react";
+
 type OutcomeSnapshotView = {
   runVariantLabel: string;
   runQueryLabel: string;
@@ -43,7 +45,7 @@ export function OutcomeSnapshot({
           <span className="outcome-snapshot__label">Validation state</span>
           <span className="outcome-snapshot__value">{snapshot.validationState}</span>
           <span className="panel__muted">
-            Protocol snapshot:{" "}
+            Evidence protocol:{" "}
             {snapshot.snapshotVersion && snapshot.snapshotVersion > 0
               ? `v${snapshot.snapshotVersion}`
               : "pending"}
