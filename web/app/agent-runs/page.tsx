@@ -1499,6 +1499,10 @@ function AgentRunsPageContent() {
                   <div>
                     <span className="control-section__eyebrow">Queue</span>
                     <h3 className="control-section__title">Action queue</h3>
+                    <div className="control-section__summary">
+                      Review the next proposed action first. Runtime controls and registry detail
+                      stay available when you need them.
+                    </div>
                   </div>
                   <div className="panel__meta agent-queue-controls">
                     {selectedRun?.experiment_id && (
@@ -1524,34 +1528,6 @@ function AgentRunsPageContent() {
                     >
                       Refresh
                     </button>
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => handleRunControl("start")}
-                      disabled={!selectedRunId || loading}
-                    >
-                      Start
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => handleRunControl("pause")}
-                      disabled={!selectedRunId || loading}
-                    >
-                      Pause
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => handleRunControl("step")}
-                      disabled={
-                        !selectedRunId ||
-                        loading ||
-                        (selectedRun?.run_mode || "plan_only") === "plan_only"
-                      }
-                    >
-                      Step
-                    </button>
                   </div>
                 </div>
 
@@ -1561,65 +1537,104 @@ function AgentRunsPageContent() {
 
                 {selectedRun && (
                   <>
-                    <div className="panel__meta-strip panel__meta-strip--flat">
-                      <div>
-                        <strong>Status</strong>: {selectedRun.status ?? "unknown"}
+                    <details className="panel__details agent-runtime-details">
+                      <summary className="panel__details-summary">
+                        Advanced runtime details
+                      </summary>
+                      <p className="panel__muted">
+                        Use this when you need run budgets, manual run controls, external-agent
+                        receipts, or registry/tool contract evidence.
+                      </p>
+                      <div className="panel__actions">
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => handleRunControl("start")}
+                          disabled={!selectedRunId || loading}
+                        >
+                          Start run
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => handleRunControl("pause")}
+                          disabled={!selectedRunId || loading}
+                        >
+                          Pause run
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => handleRunControl("step")}
+                          disabled={
+                            !selectedRunId ||
+                            loading ||
+                            (selectedRun?.run_mode || "plan_only") === "plan_only"
+                          }
+                        >
+                          Step run
+                        </button>
                       </div>
-                      <div>
-                        <strong>State</strong>: {formatRunStateLabel(selectedRun.state)}
+                      <div className="panel__meta-strip panel__meta-strip--flat">
+                        <div>
+                          <strong>Status</strong>: {selectedRun.status ?? "unknown"}
+                        </div>
+                        <div>
+                          <strong>State</strong>: {formatRunStateLabel(selectedRun.state)}
+                        </div>
+                        <div>
+                          <strong>Approval</strong>:{" "}
+                          {selectedRun.requires_approval ? "required" : "auto-execute safe steps"}
+                        </div>
+                        <div>
+                          <strong>Mode</strong>: {formatRunModeLabel(selectedRun.run_mode)}
+                        </div>
+                        <div>
+                          <strong>Budget</strong>: max actions{" "}
+                          {String(
+                            (selectedRun.budgets as Record<string, unknown> | undefined)
+                              ?.max_actions ?? "—",
+                          )}{" "}
+                          · max variant runs{" "}
+                          {String(
+                            (selectedRun.budgets as Record<string, unknown> | undefined)
+                              ?.max_variant_runs ?? "—",
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <strong>Approval</strong>:{" "}
-                        {selectedRun.requires_approval ? "required" : "auto-execute safe steps"}
-                      </div>
-                      <div>
-                        <strong>Mode</strong>: {formatRunModeLabel(selectedRun.run_mode)}
-                      </div>
-                      <div>
-                        <strong>Budget</strong>: max actions{" "}
-                        {String(
-                          (selectedRun.budgets as Record<string, unknown> | undefined)
-                            ?.max_actions ?? "—",
-                        )}{" "}
-                        · max variant runs{" "}
-                        {String(
-                          (selectedRun.budgets as Record<string, unknown> | undefined)
-                            ?.max_variant_runs ?? "—",
-                        )}
-                      </div>
-                    </div>
-                    {selectedRun.principal_type === "external_agent" ? (
-                      <ExternalAgentJobPanel
-                        externalAgentJob={externalAgentJob}
-                        verificationBusy={externalAgentJobVerificationBusy}
-                        loading={loading}
-                        onVerifyReceipt={verifyExternalAgentReceipt}
+                      {selectedRun.principal_type === "external_agent" ? (
+                        <ExternalAgentJobPanel
+                          externalAgentJob={externalAgentJob}
+                          verificationBusy={externalAgentJobVerificationBusy}
+                          loading={loading}
+                          onVerifyReceipt={verifyExternalAgentReceipt}
+                        />
+                      ) : null}
+                      <RegistryPanel
+                        selectedRun={selectedRun}
+                        runtimeRegistry={runtimeRegistry}
+                        activeRuntimeSkills={activeRuntimeSkills}
+                        allowedRuntimeTools={allowedRuntimeTools}
+                        registryReleases={registryReleases}
+                        registryReleaseBusy={registryReleaseBusy}
+                        selectedRegistryRelease={selectedRegistryRelease}
+                        registryAuditEvents={registryAuditEvents}
+                        registryReceiptVerification={registryReceiptVerification}
+                        registryReceiptVerificationBusy={registryReceiptVerificationBusy}
+                        registryBackfillPreview={registryBackfillPreview}
+                        registryBackfillBusy={registryBackfillBusy}
+                        registryBackfillNotice={registryBackfillNotice}
+                        formatDateCompact={formatDateCompact}
+                        summarizeRegistryAuditDiff={summarizeRegistryAuditDiff}
+                        registryAuditDiffRows={registryAuditDiffRows}
+                        approvalReceiptForEvent={approvalReceiptForEvent}
+                        userId={userId}
+                        onLoadRegistryReleaseDetail={loadRegistryReleaseDetail}
+                        onVerifyRegistryApprovalReceipt={verifyRegistryApprovalReceipt}
+                        onRunRegistryBackfill={runRegistryBackfill}
+                        onRegistryChanged={loadRuntimeRegistry}
                       />
-                    ) : null}
-                    <RegistryPanel
-                      selectedRun={selectedRun}
-                      runtimeRegistry={runtimeRegistry}
-                      activeRuntimeSkills={activeRuntimeSkills}
-                      allowedRuntimeTools={allowedRuntimeTools}
-                      registryReleases={registryReleases}
-                      registryReleaseBusy={registryReleaseBusy}
-                      selectedRegistryRelease={selectedRegistryRelease}
-                      registryAuditEvents={registryAuditEvents}
-                      registryReceiptVerification={registryReceiptVerification}
-                      registryReceiptVerificationBusy={registryReceiptVerificationBusy}
-                      registryBackfillPreview={registryBackfillPreview}
-                      registryBackfillBusy={registryBackfillBusy}
-                      registryBackfillNotice={registryBackfillNotice}
-                      formatDateCompact={formatDateCompact}
-                      summarizeRegistryAuditDiff={summarizeRegistryAuditDiff}
-                      registryAuditDiffRows={registryAuditDiffRows}
-                      approvalReceiptForEvent={approvalReceiptForEvent}
-                      userId={userId}
-                      onLoadRegistryReleaseDetail={loadRegistryReleaseDetail}
-                      onVerifyRegistryApprovalReceipt={verifyRegistryApprovalReceipt}
-                      onRunRegistryBackfill={runRegistryBackfill}
-                      onRegistryChanged={loadRuntimeRegistry}
-                    />
+                    </details>
                     <RunActionsPanel
                       actions={actions}
                       selectedAction={selectedAction}
