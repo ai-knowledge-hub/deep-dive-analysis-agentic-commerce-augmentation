@@ -322,6 +322,12 @@ describe("InterventionsPage", () => {
       screen.getByText(/Experiment exp-retr is ready to resume/i),
     ).toBeInTheDocument();
     expect(
+      screen.getByText(/the run continues with the approved work/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/review the run before moving it forward/i),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(/Experiment exp-retr has a retry proposal/i),
     ).toBeInTheDocument();
     expect(
@@ -342,6 +348,12 @@ describe("InterventionsPage", () => {
     expect(screen.getByText(/operator pause/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Experiment exp-acti is executing/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the run stops before more work continues/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the run ends and future work needs a new run/i),
     ).toBeInTheDocument();
   });
 

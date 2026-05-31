@@ -162,6 +162,37 @@ function ApprovalOutcomeSummary({ item }: { item: ApprovalItem }) {
   );
 }
 
+function ResumeOutcomeSummary({ item }: { item: RetryItem }) {
+  const primaryLabel = item.control === "start" ? "Resume" : "Step";
+  const primaryText =
+    item.control === "start"
+      ? "the run continues with the approved work."
+      : "the run moves forward by one supervised step.";
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div>
+        <strong>{primaryLabel}:</strong> {primaryText}
+      </div>
+      <div>
+        <strong>Inspect:</strong> review the run before moving it forward.
+      </div>
+    </div>
+  );
+}
+
+function PauseOutcomeSummary() {
+  return (
+    <div className="panel__notice panel__notice--info">
+      <div>
+        <strong>Pause:</strong> the run stops before more work continues.
+      </div>
+      <div>
+        <strong>Cancel:</strong> the run ends and future work needs a new run.
+      </div>
+    </div>
+  );
+}
+
 export function EscalationsSection({ items, onOpenRun }: EscalationsProps) {
   return (
     <section className="control-surface intervention-section">
@@ -351,6 +382,7 @@ export function RetriesSection({ items, busyKey, onRunControl, onOpenRun }: Retr
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="retry" />
+                <ResumeOutcomeSummary item={item} />
                 <div className="detail__actions">
                   <button
                     type="button"
@@ -403,6 +435,7 @@ export function PausesSection({ items, busyKey, onRunControl, onOpenRun }: Pause
                 <InterventionMeta priority={item.priority} risk={item.risk} run={item.run} />
                 <div className="panel__muted">{softenOperatorText(item.summary)}</div>
                 <HarnessPosture item={item} focus="stop" />
+                <PauseOutcomeSummary />
                 <div className="detail__actions">
                   <button
                     type="button"
