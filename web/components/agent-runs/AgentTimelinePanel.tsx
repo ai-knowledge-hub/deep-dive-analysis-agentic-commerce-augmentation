@@ -136,65 +136,68 @@ export function AgentTimelinePanel({
           {copyLinkNotice.text}
         </div>
       ) : null}
-      <div className="agent-timeline__filters">
-        {(["all", "failed", "policy", "command", "executed"] as TimelineEventFilter[]).map(
-          (filter) => (
-            <button
-              key={filter}
-              type="button"
-              className={`button button--ghost button--sm ${
-                timelineFilter === filter ? "is-active" : ""
-              }`}
-              onClick={() => onTimelineFilterChange(filter)}
-            >
-              {filter === "all" ? "All" : filter === "command" ? "Commands" : titleCase(filter)}
-            </button>
-          ),
-        )}
-        <select
-          aria-label="Timeline status filter"
-          className="input"
-          style={{ minWidth: 170 }}
-          value={timelineStatusFilter}
-          onChange={(event) =>
-            onTimelineStatusFilterChange(event.target.value as TimelineStatusFilter)
-          }
-        >
-          <option value="all">All statuses</option>
-          <option value="proposed">Proposed</option>
-          <option value="approved">Approved</option>
-          <option value="executing">Executing</option>
-          <option value="executed">Executed</option>
-          <option value="failed">Failed</option>
-          <option value="rejected">Rejected</option>
-        </select>
-        <select
-          aria-label="Timeline capability filter"
-          className="input"
-          style={{ minWidth: 220 }}
-          value={timelineCapabilityFilter}
-          onChange={(event) => onTimelineCapabilityFilterChange(event.target.value)}
-        >
-          {timelineCapabilityOptions.map((item) => (
-            <option key={item} value={item}>
-              {item === "all" ? "All capabilities" : item}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Timeline window filter"
-          className="input"
-          style={{ minWidth: 160 }}
-          value={timelineTimeWindow}
-          onChange={(event) =>
-            onTimelineTimeWindowChange(event.target.value as TimelineWindowFilter)
-          }
-        >
-          <option value="all">All time</option>
-          <option value="24h">Last 24h</option>
-          <option value="7d">Last 7d</option>
-        </select>
-      </div>
+      <details className="panel__details agent-timeline__advanced-filters">
+        <summary className="panel__details-summary">More timeline filters</summary>
+        <div className="agent-timeline__filters">
+          {(["all", "failed", "policy", "command", "executed"] as TimelineEventFilter[]).map(
+            (filter) => (
+              <button
+                key={filter}
+                type="button"
+                className={`button button--ghost button--sm ${
+                  timelineFilter === filter ? "is-active" : ""
+                }`}
+                onClick={() => onTimelineFilterChange(filter)}
+              >
+                {filter === "all" ? "All" : filter === "command" ? "Commands" : titleCase(filter)}
+              </button>
+            ),
+          )}
+          <select
+            aria-label="Timeline status filter"
+            className="input"
+            style={{ minWidth: 170 }}
+            value={timelineStatusFilter}
+            onChange={(event) =>
+              onTimelineStatusFilterChange(event.target.value as TimelineStatusFilter)
+            }
+          >
+            <option value="all">All statuses</option>
+            <option value="proposed">Proposed</option>
+            <option value="approved">Approved</option>
+            <option value="executing">Executing</option>
+            <option value="executed">Executed</option>
+            <option value="failed">Failed</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <select
+            aria-label="Timeline capability filter"
+            className="input"
+            style={{ minWidth: 220 }}
+            value={timelineCapabilityFilter}
+            onChange={(event) => onTimelineCapabilityFilterChange(event.target.value)}
+          >
+            {timelineCapabilityOptions.map((item) => (
+              <option key={item} value={item}>
+                {item === "all" ? "All capabilities" : item}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Timeline window filter"
+            className="input"
+            style={{ minWidth: 160 }}
+            value={timelineTimeWindow}
+            onChange={(event) =>
+              onTimelineTimeWindowChange(event.target.value as TimelineWindowFilter)
+            }
+          >
+            <option value="all">All time</option>
+            <option value="24h">Last 24h</option>
+            <option value="7d">Last 7d</option>
+          </select>
+        </div>
+      </details>
       {events.length === 0 ? (
         <p className="panel__muted">No timeline events yet.</p>
       ) : (
@@ -249,17 +252,29 @@ function TimelineEventItem({
       <div className="agent-timeline__meta">
         <span className="agent-timeline__seq">#{event.sequence}</span>
         <span className="agent-timeline__cap">{event.capability}</span>
-        {event.skillId ? (
-          <span className="panel__badge panel__badge--secondary">{event.skillId}</span>
-        ) : null}
-        {event.toolId ? (
-          <span className="panel__badge panel__badge--secondary">{event.toolId}</span>
-        ) : null}
         <span className={`agent-timeline__status is-${event.status}`}>{event.status}</span>
         <span className="agent-timeline__time">
           {event.when ? new Date(event.when).toLocaleString() : "time unavailable"}
         </span>
       </div>
+      {event.skillId || event.toolId || event.effectClass ? (
+        <details className="panel__details agent-timeline__technical">
+          <summary className="panel__details-summary">Technical event detail</summary>
+          <div className="panel__meta">
+            {event.skillId ? (
+              <span className="panel__badge panel__badge--secondary">Skill: {event.skillId}</span>
+            ) : null}
+            {event.toolId ? (
+              <span className="panel__badge panel__badge--secondary">Tool: {event.toolId}</span>
+            ) : null}
+            {event.effectClass ? (
+              <span className="panel__badge panel__badge--secondary">
+                Effect: {event.effectClass}
+              </span>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
       <div className="agent-timeline__actions">
         {event.actionId ? (
           <TimelineButton onClick={onFocusAction}>Focus action</TimelineButton>
