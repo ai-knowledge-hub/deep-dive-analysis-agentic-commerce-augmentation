@@ -98,30 +98,6 @@ export function RunActionsPanel({
 }: Props) {
   return (
     <>
-      <div className="agent-budget-grid">
-        <BudgetCard
-          title="Action budget"
-          value={`${budgetTelemetry.executedActions}/${budgetTelemetry.maxActions ?? "—"}`}
-          pct={budgetTelemetry.actionPct}
-          severity={budgetState.actionSeverity}
-        />
-        <BudgetCard
-          title="Variant run budget"
-          value={`${budgetTelemetry.executedVariantRuns}/${budgetTelemetry.maxVariantRuns ?? "—"}`}
-          pct={budgetTelemetry.variantPct}
-          severity={budgetState.variantSeverity}
-        />
-        <BudgetCard
-          title="Estimated spend"
-          value={`$${budgetTelemetry.totalCostUsd.toFixed(2)}${
-            budgetTelemetry.maxCostUsd != null
-              ? ` / $${budgetTelemetry.maxCostUsd.toFixed(2)}`
-              : ""
-          }`}
-          pct={budgetTelemetry.costPct}
-          severity={budgetState.costSeverity}
-        />
-      </div>
       {budgetState.actionBlocked || budgetState.variantBlocked || budgetState.costBlocked ? (
         <div className="panel__notice panel__notice--warning">
           Budget guardrail active:{" "}
@@ -129,36 +105,63 @@ export function RunActionsPanel({
             ? "max actions reached."
             : budgetState.variantBlocked
               ? "max variant runs reached for run variant."
-              : "max cost reached."}{" "}
+            : "max cost reached."}{" "}
           Proposed risky approvals are disabled until budget changes.
         </div>
       ) : null}
 
-      <div className="control-chip-row">
-        <span className="control-chip">
-          Proposed: {actionCounters.proposed}
-        </span>
-        <span className="control-chip">
-          Approved: {actionCounters.approved}
-        </span>
-        <span className="control-chip">
-          Executing: {actionCounters.executing}
-        </span>
-        <span className="control-chip">
-          Executed: {actionCounters.executed}
-        </span>
-        <span className="control-chip">
-          Failed: {actionCounters.failed}
-        </span>
-      </div>
+      <details className="panel__details agent-action-health">
+        <summary className="panel__details-summary">Action health and budgets</summary>
+        <div className="agent-budget-grid">
+          <BudgetCard
+            title="Action budget"
+            value={`${budgetTelemetry.executedActions}/${budgetTelemetry.maxActions ?? "—"}`}
+            pct={budgetTelemetry.actionPct}
+            severity={budgetState.actionSeverity}
+          />
+          <BudgetCard
+            title="Variant run budget"
+            value={`${budgetTelemetry.executedVariantRuns}/${budgetTelemetry.maxVariantRuns ?? "—"}`}
+            pct={budgetTelemetry.variantPct}
+            severity={budgetState.variantSeverity}
+          />
+          <BudgetCard
+            title="Estimated spend"
+            value={`$${budgetTelemetry.totalCostUsd.toFixed(2)}${
+              budgetTelemetry.maxCostUsd != null
+                ? ` / $${budgetTelemetry.maxCostUsd.toFixed(2)}`
+                : ""
+            }`}
+            pct={budgetTelemetry.costPct}
+            severity={budgetState.costSeverity}
+          />
+        </div>
+        <div className="control-chip-row">
+          <span className="control-chip">
+            Proposed: {actionCounters.proposed}
+          </span>
+          <span className="control-chip">
+            Approved: {actionCounters.approved}
+          </span>
+          <span className="control-chip">
+            Executing: {actionCounters.executing}
+          </span>
+          <span className="control-chip">
+            Executed: {actionCounters.executed}
+          </span>
+          <span className="control-chip">
+            Failed: {actionCounters.failed}
+          </span>
+        </div>
+      </details>
 
       <div className="table">
         <div className="table__header">
           <div className="table__cell">#</div>
-          <div className="table__cell">Capability</div>
+          <div className="table__cell">Action</div>
           <div className="table__cell">Status</div>
-          <div className="table__cell">Rationale</div>
-          <div className="table__cell">Actions</div>
+          <div className="table__cell">Why</div>
+          <div className="table__cell">Decision</div>
         </div>
         {actions.map((action) => {
           const guardrailReasons = getGuardrailReasonsForAction(action);
@@ -172,23 +175,25 @@ export function RunActionsPanel({
               <div className="table__cell" data-label="#">
                 {action.sequence}
               </div>
-              <div className="table__cell" data-label="Capability">
+              <div className="table__cell" data-label="Action">
                 <div className="table__strong">
                   {formatOperatorActionName(action.capability_name)}
                 </div>
-                {action.capability_version ? (
-                  <div className="table__muted">{action.capability_version}</div>
-                ) : null}
                 {action.skill_id || action.tool_id ? (
-                  <div className="table__muted">
-                    {action.skill_id
-                      ? `Skill: ${formatOperatorIdentifier(action.skill_id)}`
-                      : null}
-                    {action.skill_id && action.tool_id ? " · " : null}
-                    {action.tool_id
-                      ? `Tool: ${formatOperatorIdentifier(action.tool_id)}`
-                      : null}
-                  </div>
+                  <details className="panel__details agent-action-technical">
+                    <summary className="panel__details-summary">Technical mapping</summary>
+                    <div className="table__muted">
+                      {action.capability_version ? (
+                        <div>Version: {action.capability_version}</div>
+                      ) : null}
+                      {action.skill_id ? (
+                        <div>Skill: {formatOperatorIdentifier(action.skill_id)}</div>
+                      ) : null}
+                      {action.tool_id ? (
+                        <div>Tool: {formatOperatorIdentifier(action.tool_id)}</div>
+                      ) : null}
+                    </div>
+                  </details>
                 ) : null}
               </div>
               <div className="table__cell" data-label="Status">
@@ -196,11 +201,11 @@ export function RunActionsPanel({
               </div>
               <div
                 className="table__cell table__cell--rationale table__muted"
-                data-label="Rationale"
+                data-label="Why"
               >
                 {action.rationale || (action.error ? `Error: ${action.error}` : "—")}
               </div>
-              <div className="table__cell table__actions" data-label="Actions">
+              <div className="table__cell table__actions" data-label="Decision">
                 {action.status === "proposed" ? (
                   <>
                     <button
@@ -234,7 +239,7 @@ export function RunActionsPanel({
                     }}
                     disabled={loading}
                   >
-                    Copy I/O
+                    Copy payload
                   </button>
                 )}
                 {hasGuardrailBlock ? (
