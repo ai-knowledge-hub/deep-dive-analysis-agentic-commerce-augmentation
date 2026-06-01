@@ -679,6 +679,7 @@ describe("AgentRunsPage timeline presets", () => {
     await screen.findByRole("button", { name: /Policy failures \(24h\)/i });
 
     await userEvent.click(screen.getByRole("button", { name: /Policy failures \(24h\)/i }));
+    await userEvent.click(screen.getByText(/More timeline filters/i));
     await userEvent.selectOptions(
       screen.getByLabelText(/Timeline status filter/i),
       "executed",
