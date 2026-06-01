@@ -496,6 +496,7 @@ describe("OperatorConsoleChat", () => {
       screen.getByLabelText(/Recovery target capability/i),
       "review_validation_readiness",
     );
+    await user.click(screen.getByText(/Advanced recovery routing/i));
     expect(
       screen.getByText(/Recovery template: recovery.review_validation_readiness/i),
     ).toBeInTheDocument();
