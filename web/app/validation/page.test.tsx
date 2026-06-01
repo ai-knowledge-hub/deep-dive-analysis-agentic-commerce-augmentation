@@ -142,7 +142,7 @@ describe("ValidationPage", () => {
     });
   });
 
-  it("uses readable provider automation labels", async () => {
+  it("uses readable provider labels", async () => {
     const user = userEvent.setup();
     render(<ValidationPage />);
 
@@ -150,11 +150,20 @@ describe("ValidationPage", () => {
 
     await user.selectOptions(screen.getByLabelText(/^Mode$/i), "provider_openai_mcp");
 
-    expect(await screen.findByText(/Provider automation status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Provider reference:/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Provider status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Provider receipt:/i)).toBeInTheDocument();
     expect(screen.getByText(/Setup status: Unknown/i)).toBeInTheDocument();
-    expect(screen.getByText(/Return status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.getByText(/Result status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /ChatGPT provider run/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Gemini provider run/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Add result manually/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Provider automation status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider reference/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Provider run id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Return status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider run \(ChatGPT MCP\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider run \(Gemini function\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Manual result entry/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Setup required/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Callback verified/i)).not.toBeInTheDocument();
   });

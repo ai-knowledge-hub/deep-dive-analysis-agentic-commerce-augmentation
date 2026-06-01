@@ -443,7 +443,7 @@ function ValidationPageContent() {
         action: "complete_provider_run" as ValidationNextAction,
         label: "Complete provider run",
         helper:
-          "Finish validation in the provider UI. Result will be saved when callback is received.",
+          "Finish validation in the provider UI. The result will be saved when it returns.",
       };
     }
     if (isManualFallbackMode(mode) && job && !result) {
@@ -451,7 +451,7 @@ function ValidationPageContent() {
         action: "submit_external_result" as ValidationNextAction,
         label: "Submit external result",
         helper:
-          "Paste structured external JSON so the job can be finalized and tracked in the loop.",
+          "Paste the provider result so this validation can be saved and tracked.",
       };
     }
     if (observedLogged === 0) {
@@ -757,10 +757,10 @@ function ValidationPageContent() {
           window.open(providerRun.launch_url, "_blank", "noopener,noreferrer");
           setStatus(
             providerRun.instructions ||
-              "Provider run launched. Complete it in provider UI; callback will store result.",
+              "Provider run launched. Complete it in the provider UI so the result can be saved.",
           );
         } else {
-          setStatus("Provider run initialized. Waiting for callback completion.");
+          setStatus("Provider run initialized. Waiting for the result.");
         }
       } else {
         setStatus("Awaiting validation completion.");
@@ -813,7 +813,13 @@ function ValidationPageContent() {
       setExternalJson("");
       setExternalRaw("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid JSON.");
+      setError(
+        err instanceof SyntaxError
+          ? "Invalid provider result format."
+          : err instanceof Error
+            ? err.message
+            : "Invalid provider result format.",
+      );
     } finally {
       setSubmitting(false);
       window.setTimeout(() => setStatus(null), 4000);
@@ -896,7 +902,7 @@ function ValidationPageContent() {
         return;
       case "submit_external_result":
         if (!externalJson.trim()) {
-          setStatus("Add the structured result in Step 2 before submitting external results.");
+          setStatus("Add the provider result in Step 2 before submitting external results.");
           window.setTimeout(() => setStatus(null), 3000);
           return;
         }
@@ -921,7 +927,7 @@ function ValidationPageContent() {
                     "Provider run opened. Complete it to return scored validation.",
                 );
               } else {
-                setStatus("Provider run is pending callback completion.");
+                setStatus("Provider run is waiting for the result.");
               }
             } catch (err) {
               setError(err instanceof Error ? err.message : "Unable to start provider run.");
@@ -946,7 +952,6 @@ function ValidationPageContent() {
     handleLogObservedValidation,
     handleSubmitExternal,
     job?.id,
-    manualExperimentId,
     router,
     userId,
     validationNextAction.action,
@@ -992,7 +997,7 @@ function ValidationPageContent() {
         <div className="detail detail--validation">
           <DetailHeader
             title="Validation"
-            subtitle="Run in-app validation or collect structured external feedback."
+            subtitle="Run in-app validation or add provider results."
             onMenu={() => setSidebarOpen(true)}
             onBack={() => router.push(validationBackHref)}
             backLabel={runIdParam ? "Back to selected run" : "Back to experiments"}
@@ -1080,7 +1085,7 @@ function ValidationPageContent() {
             <div className="panel__subheading">Step 2 · Run synthetic validation</div>
             <p className="panel__step-helper">
               Create one validation job for the selected item. In-app mode executes immediately;
-              manual entry lets you add a structured result when the provider cannot return it automatically.
+              manual entry lets you save a provider result when automatic return is unavailable.
             </p>
             <p className="panel__muted">
               LLM judge validation for fast screening, consistency checks, and copy-vs-copy comparisons.
@@ -1195,9 +1200,9 @@ function ValidationPageContent() {
                   onChange={(event) => setMode(event.target.value as ModeType)}
                 >
                   <option value="in_app_byok">In-app (BYOK)</option>
-                  <option value="provider_openai_mcp">Provider run (ChatGPT MCP)</option>
-                  <option value="provider_gemini_function">Provider run (Gemini function)</option>
-                  <option value="manual_fallback">Manual result entry</option>
+                  <option value="provider_openai_mcp">ChatGPT provider run</option>
+                  <option value="provider_gemini_function">Gemini provider run</option>
+                  <option value="manual_fallback">Add result manually</option>
                 </select>
               </label>
               <label className="panel__label">
@@ -1234,14 +1239,14 @@ function ValidationPageContent() {
             </div>
             {isProviderIntegrationMode(mode) ? (
               <section className="panel__notice panel__notice--info">
-                <strong>Provider automation status</strong>
+                <strong>Provider status</strong>
                 <p className="panel__muted">
                   {providerLaunchInfo?.instructions ??
                     "Complete one-time provider setup, then run validation in the provider workspace. Results return here when the provider finishes."}
                 </p>
                 <div className="panel__meta panel__meta--stack">
                   <span className="panel__muted">
-                    Provider reference:{" "}
+                    Provider receipt:{" "}
                     {providerLaunchInfo?.provider_run_id ??
                       job?.provider_run_id ??
                       "Not started"}
@@ -1250,7 +1255,7 @@ function ValidationPageContent() {
                     Setup status: {formatSetupStatus(providerLaunchInfo?.setup_required)}
                   </span>
                   <span className="panel__muted">
-                    Return status: {formatReturnStatus(job?.callback_verified)}
+                    Result status: {formatReturnStatus(job?.callback_verified)}
                   </span>
                 </div>
                 <div className="panel__actions">
@@ -1488,7 +1493,7 @@ function ValidationPageContent() {
               support the next experiment decision.
             </p>
             <details className="panel__details">
-              <summary className="panel__details-summary">Open variant comparison</summary>
+              <summary className="panel__details-summary">Compare variants</summary>
               <p className="panel__muted">
                 Latest per-variant lab metrics for the selected experiment.
               </p>
@@ -1543,15 +1548,15 @@ function ValidationPageContent() {
               </div>
               <div className="panel__subheading">Supplement · Paste external result</div>
               <p className="panel__step-helper">
-                Use this only for manual result entry. Submit the structured result to complete the
-                synthetic validation.
+                Use this only when adding a result manually. Submit the provider result to complete
+                the synthetic validation.
               </p>
               <details className="panel__details">
-                <summary className="panel__details-summary">Open external instructions</summary>
+                <summary className="panel__details-summary">Open manual instructions</summary>
                 <pre className="panel__pre">{job.external_instructions}</pre>
                 <div className="panel__grid validation__grid">
                   <label className="panel__label">
-                    <span>Structured result</span>
+                    <span>Provider result</span>
                     <textarea
                       className="panel__textarea"
                       rows={6}
@@ -1645,7 +1650,7 @@ function ValidationPageContent() {
               {result.structured_result ? (
                 <details className="panel__details">
                   <summary className="panel__details-summary">
-                    Open structured validation JSON
+                    View validation data
                   </summary>
                   <pre className="panel__pre">
                     {JSON.stringify(result.structured_result, null, 2)}
