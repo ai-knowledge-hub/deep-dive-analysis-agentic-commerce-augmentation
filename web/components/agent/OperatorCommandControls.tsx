@@ -170,44 +170,47 @@ export function OperatorCommandControls({
           )}
         </select>
       </label>
-      <label className="field">
-        <span className="field__label">Preferred skill</span>
-        <select
-          aria-label="Preferred recovery skill"
-          className="field__input"
-          value={activeRecoverySkill}
-          onChange={(event) => onRecoverySkillChange(event.target.value)}
-          disabled={!run || recoverySkillOptions.length === 0}
-        >
-          {recoverySkillOptions.length === 0 ? (
-            <option value="">Default skill</option>
-          ) : (
-            recoverySkillOptions.map((skill) => (
-              <option key={skill.id} value={skill.id}>
-                {skill.name}
-              </option>
-            ))
-          )}
-        </select>
-      </label>
-      {activeRecoveryTemplate ? (
-        <div className="panel__notice panel__notice--info">
-          <strong>Recovery template: {activeRecoveryTemplate.id}</strong>
-          <p>{activeRecoveryTemplate.summary}</p>
-          {Object.keys(activeRecoveryTemplate.default_inputs ?? {}).length > 0 ? (
-            <p className="panel__muted">
-              Defaults: {JSON.stringify(activeRecoveryTemplate.default_inputs)}
-            </p>
-          ) : null}
-          {activeRecoveryTemplate.operator_notes?.length ? (
-            <ul className="panel__list panel__list--compact">
-              {activeRecoveryTemplate.operator_notes.slice(0, 2).map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+      <details className="panel__details operator-command-advanced">
+        <summary className="panel__details-summary">Advanced recovery routing</summary>
+        <label className="field">
+          <span className="field__label">Preferred skill</span>
+          <select
+            aria-label="Preferred recovery skill"
+            className="field__input"
+            value={activeRecoverySkill}
+            onChange={(event) => onRecoverySkillChange(event.target.value)}
+            disabled={!run || recoverySkillOptions.length === 0}
+          >
+            {recoverySkillOptions.length === 0 ? (
+              <option value="">Default skill</option>
+            ) : (
+              recoverySkillOptions.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        {activeRecoveryTemplate ? (
+          <div className="panel__notice panel__notice--info">
+            <strong>Recovery template: {activeRecoveryTemplate.id}</strong>
+            <p>{activeRecoveryTemplate.summary}</p>
+            {Object.keys(activeRecoveryTemplate.default_inputs ?? {}).length > 0 ? (
+              <p className="panel__muted">
+                Defaults: {JSON.stringify(activeRecoveryTemplate.default_inputs)}
+              </p>
+            ) : null}
+            {activeRecoveryTemplate.operator_notes?.length ? (
+              <ul className="panel__list panel__list--compact">
+                {activeRecoveryTemplate.operator_notes.slice(0, 2).map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </details>
       <button
         type="button"
         className="button button--ghost button--sm"
