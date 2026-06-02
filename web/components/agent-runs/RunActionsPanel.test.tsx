@@ -72,4 +72,40 @@ describe("RunActionsPanel", () => {
     expect(screen.queryByText("Rationale")).not.toBeInTheDocument();
     expect(screen.queryByText("Actions")).not.toBeInTheDocument();
   });
+
+  it("uses action data wording for completed action exports", () => {
+    render(
+      <RunActionsPanel
+        actions={[
+          {
+            id: "action-1",
+            sequence: 1,
+            status: "executed",
+            capability_name: "run_variant",
+            rationale: "Finished the saved test run.",
+            inputs: { variant: "A" },
+            outputs: { metric_id: "metric-1" },
+          },
+        ]}
+        selectedAction={null}
+        actionCounters={{
+          proposed: 0,
+          approved: 0,
+          executing: 0,
+          executed: 1,
+          failed: 0,
+        }}
+        budgetTelemetry={baseBudgetTelemetry}
+        budgetState={baseBudgetState}
+        loading={false}
+        getGuardrailReasonsForAction={() => []}
+        onSelectAction={vi.fn()}
+        onDecision={vi.fn()}
+        formatJsonPreview={() => "{}"}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Copy action data/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Copy payload/i })).not.toBeInTheDocument();
+  });
 });

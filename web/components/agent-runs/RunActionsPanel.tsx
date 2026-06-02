@@ -239,7 +239,7 @@ export function RunActionsPanel({
                     }}
                     disabled={loading}
                   >
-                    Copy payload
+                    Copy action data
                   </button>
                 )}
                 {hasGuardrailBlock ? (

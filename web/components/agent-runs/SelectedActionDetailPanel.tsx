@@ -578,7 +578,7 @@ export function SelectedActionDetailPanel({
         </div>
       </div>
       <p className="panel__muted">
-        Diff compares output payload keys, so operators can audit what changed before approving
+        Diff compares changed result fields so operators can audit what changed before approving
         downstream actions.
       </p>
       <div className="panel__actions">
