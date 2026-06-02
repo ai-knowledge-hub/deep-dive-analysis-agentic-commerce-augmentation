@@ -452,8 +452,8 @@ function ExperimentsPageContent() {
     try {
       JSON.parse(value);
       return null;
-    } catch (error) {
-      return error instanceof Error ? error.message : "Invalid JSON";
+    } catch {
+      return "Advanced data must use a valid object format.";
     }
   }, []);
 
@@ -1116,7 +1116,7 @@ function ExperimentsPageContent() {
       : queries.length === 0
         ? "Generate and save battery queries first."
       : jsonErrors.variantPayload
-        ? "Fix invalid payload JSON."
+        ? "Fix advanced data before adding the variant."
         : null;
   const batteryReadyForRun =
     typeof executionState?.phases?.battery_ready?.done === "boolean"

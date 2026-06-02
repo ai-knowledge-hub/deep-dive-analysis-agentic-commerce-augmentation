@@ -81,7 +81,7 @@ export function ExperimentVariantRunItem({
           </button>
         </div>
       ) : (
-        <span className="panel__muted">No copy payload yet.</span>
+        <span className="panel__muted">No tested copy yet.</span>
       )}
       {copyExpanded && resolvedDescription ? (
         <pre className="panel__pre">{resolvedDescription}</pre>

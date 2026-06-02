@@ -402,7 +402,7 @@ export function VariantCreationPanel({
           open={variantSecondaryActionsOpen}
           onToggle={(event) => setVariantSecondaryActionsOpen(event.currentTarget.open)}
         >
-          <summary className="panel__details-summary">More variant actions</summary>
+          <summary className="panel__details-summary">More variant options</summary>
           <div className="panel__actions">
             {variantSourceMode === "loop_evidence" ? (
               <>
@@ -444,14 +444,14 @@ export function VariantCreationPanel({
               className="panel__action panel__action--ghost"
               onClick={() => setVariantAdvancedOpen((open) => !open)}
             >
-              {variantAdvancedOpen ? "Hide advanced" : "Advanced JSON"}
+              {variantAdvancedOpen ? "Hide advanced setup" : "Advanced setup"}
             </button>
           </div>
         </details>
         {variantAdvancedOpen ? (
           <>
             <label className="panel__label">
-              Type
+              Variant type
               <input
                 className="panel__input"
                 value={variantForm.type}
@@ -465,7 +465,7 @@ export function VariantCreationPanel({
               />
             </label>
             <label className="panel__label">
-              Payload overrides (JSON)
+              Advanced data overrides
               <textarea
                 className="panel__textarea"
                 value={variantForm.payload}
@@ -478,6 +478,9 @@ export function VariantCreationPanel({
                 rows={3}
                 placeholder='{"metadata":{"channel":"web"}}'
               />
+              <span className="panel__muted">
+                Optional. Use only when this test idea needs extra metadata.
+              </span>
             </label>
             {jsonErrorVariantPayload ? (
               <span className="panel__error">{jsonErrorVariantPayload}</span>

@@ -70,4 +70,34 @@ describe("ExperimentVariantRunItem", () => {
     expect(screen.getByRole("button", { name: /View test idea details/i })).toBeInTheDocument();
     expect(screen.queryByText(/hypothesis details/i)).not.toBeInTheDocument();
   });
+
+  it("uses tested copy wording when a variant has no copy details", () => {
+    render(
+      <ExperimentVariantRunItem
+        variant={{
+          id: "variant-1",
+          experiment_id: "exp-1",
+          label: "Homepage benefit copy",
+          type: "copy",
+        }}
+        tested={false}
+        hypothesisLabel={null}
+        hypothesisStatement={null}
+        hypothesisExpanded={false}
+        copyExpanded={false}
+        resolvedDescription={null}
+        metricValues={null}
+        runButtonProminent={false}
+        running={false}
+        canRun
+        renderMetricValue={(value) => String(value)}
+        onToggleHypothesis={vi.fn()}
+        onToggleCopy={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/No tested copy yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No copy payload yet/i)).not.toBeInTheDocument();
+  });
 });
