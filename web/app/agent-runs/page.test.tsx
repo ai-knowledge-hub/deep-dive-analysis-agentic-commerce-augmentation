@@ -1450,7 +1450,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
     expect(
       screen.getAllByText((_, node) =>
-        Boolean(node?.textContent?.includes("Tool: experiment run variant")),
+        Boolean(node?.textContent?.includes("Requested action: experiment run variant")),
       ).length,
     ).toBeGreaterThan(0);
     expect(
@@ -1458,8 +1458,19 @@ describe("AgentRunsPage timeline presets", () => {
         Boolean(node?.textContent?.includes("Skill: optimize product representation")),
       ).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/Latest receipt: external agent job accepted/i)).toBeInTheDocument();
+    expect(screen.getByText(/Latest handoff: external agent job accepted/i)).toBeInTheDocument();
+    expect(screen.getByText(/Handoff needs check/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Handoff records: 1")),
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/external_agent_job_accepted/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/external machine principal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Latest receipt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Idempotency/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Handoff verification is invalid/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Receipt signature/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
@@ -1468,7 +1479,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(
       screen.getByText(/Why: Missing UCP business profile for brand/i),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Verify handoff/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",
       "user-a",
