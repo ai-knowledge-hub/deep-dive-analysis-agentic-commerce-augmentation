@@ -303,7 +303,7 @@ export function SelectedActionDetailPanel({
           Tool contract: {selectedAction.registry_version ?? "unpinned"}
         </span>
         <span className="control-chip">
-          Receipt id:{" "}
+          Release:{" "}
           {selectedAction.registry_fingerprint
             ? selectedAction.registry_fingerprint.slice(0, 12)
             : "unpinned"}
@@ -416,7 +416,7 @@ export function SelectedActionDetailPanel({
       {selectedCapabilitySpec ? (
         <div className="form-grid">
           <label>
-            Owner principal
+            Owner identity
             <input
               value={ownershipForm.owner_principal_id}
               onChange={(event) =>

@@ -136,8 +136,8 @@ function ReceiptVerificationNotice({
       }`}
     >
       {verification.result.valid
-        ? "Receipt verified against signature and registry audit trail."
-        : `Receipt verification failed: ${verification.result.blockers.join(" ")}`}
+        ? "Approval verified against the release audit trail."
+        : `Approval verification failed: ${verification.result.blockers.join(" ")}`}
     </div>
   );
 }
@@ -235,7 +235,7 @@ function RegistryApplyAuditSummary({
           Event: {event?.event_type?.replaceAll("_", " ") ?? "registry update"}
         </span>
         <span className="control-chip">
-          Actor: {String(event?.diff?.actor_principal_id ?? event?.source ?? "signed principal")}
+          Actor: {String(event?.diff?.actor_principal_id ?? event?.source ?? "signed identity")}
         </span>
         <span className="control-chip">
           Release: {registryFingerprint ? registryFingerprint.slice(0, 12) : "pending"}
@@ -424,13 +424,13 @@ export function RegistryPanel({
       if (dryRun) {
         setHarnessEditNotice({
           type: response.preflight?.allowed ? "info" : "error",
-          text: response.preflight?.summary ?? "Harness profile preview complete.",
+          text: response.preflight?.summary ?? "Execution posture preview complete.",
         });
         return;
       }
       setHarnessEditNotice({
         type: "info",
-        text: `Harness profile saved. Registry ${String(
+        text: `Execution posture saved. Registry ${String(
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now active.`,
       });
@@ -444,7 +444,7 @@ export function RegistryPanel({
     } catch (err) {
       setHarnessEditNotice({
         type: "error",
-        text: err instanceof Error ? err.message : "Unable to update harness profile.",
+        text: err instanceof Error ? err.message : "Unable to update execution posture.",
       });
     } finally {
       setHarnessEditBusy(false);
@@ -539,13 +539,13 @@ export function RegistryPanel({
       </p>
       <div className="control-chip-row">
         <span className="control-chip">
-          Principal: {selectedRun.principal_type ?? "human"}
+          Operator: {selectedRun.principal_type ?? "human"}
         </span>
         <span className="control-chip">
           Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
         </span>
         <span className="control-chip">
-          Harness: {activeHarness?.name ?? selectedRun.harness_id ?? "operator supervised"}
+          Posture: {activeHarness?.name ?? selectedRun.harness_id ?? "operator supervised"}
         </span>
         <span className="control-chip">
           Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
@@ -638,7 +638,7 @@ export function RegistryPanel({
       <section className="control-section">
         <div className="control-section__header">
           <div>
-            <span className="control-section__eyebrow">Harness</span>
+            <span className="control-section__eyebrow">Execution</span>
             <h4 className="control-section__title">Execution posture</h4>
           </div>
           <span className="control-chip">
@@ -679,7 +679,7 @@ export function RegistryPanel({
                 className="button button--ghost button--sm"
                 onClick={() => setHarnessEditorOpen((open) => !open)}
               >
-                {harnessEditorOpen ? "Close editor" : "Edit harness posture"}
+                {harnessEditorOpen ? "Close editor" : "Edit execution posture"}
               </button>
             </div>
             {harnessEditorOpen ? (
@@ -838,7 +838,7 @@ export function RegistryPanel({
                   </button>
                 </div>
                 <RegistryChangePreflight
-                  label="Harness posture preflight"
+                  label="Execution posture preflight"
                   preflight={harnessPreflight}
                 />
                 {harnessEditNotice ? (
@@ -862,7 +862,7 @@ export function RegistryPanel({
           </>
         ) : (
           <p className="panel__muted">
-            Harness metadata is not available in the active registry payload yet.
+            Execution posture details are not available in the active release yet.
           </p>
         )}
       </section>
@@ -881,7 +881,7 @@ export function RegistryPanel({
           <>
             <div className="panel__meta-strip panel__meta-strip--flat">
               <div>
-                <strong>Harness</strong>: {formatRegistryValue(activeAgentProfile.default_harness_id)}
+                <strong>Posture</strong>: {formatRegistryValue(activeAgentProfile.default_harness_id)}
               </div>
               <div>
                 <strong>Policy</strong>: {formatRegistryValue(activeAgentProfile.default_policy_profile_id)}
@@ -917,7 +917,7 @@ export function RegistryPanel({
                   />
                 </label>
                 <label className="field">
-                  <span className="field__label">Default harness</span>
+                  <span className="field__label">Default execution posture</span>
                   <select
                     className="panel__input"
                     value={profileHarnessId}
@@ -1114,7 +1114,7 @@ export function RegistryPanel({
                   .map((event) => (
                     <div key={event.id} className="run-event-list__item">
                       <div>
-                        <div className="table__strong">Signed ownership receipt</div>
+                        <div className="table__strong">Ownership approval record</div>
                         <div className="table__muted">
                           {event.id.slice(0, 12)} · {event.registry_fingerprint.slice(0, 12)}
                         </div>
@@ -1125,7 +1125,7 @@ export function RegistryPanel({
                         onClick={() => onVerifyRegistryApprovalReceipt(event)}
                         disabled={registryReceiptVerificationBusy === event.id}
                       >
-                        {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify receipt"}
+                        {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify approval"}
                       </button>
                     </div>
                   ))}
@@ -1197,7 +1197,7 @@ export function RegistryPanel({
                     onClick={() => onVerifyRegistryApprovalReceipt(event)}
                     disabled={registryReceiptVerificationBusy === event.id}
                   >
-                    {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify receipt"}
+                    {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify approval"}
                   </button>
                 ) : null}
               </div>
@@ -1236,7 +1236,7 @@ export function RegistryPanel({
                   {adapter.id} · {adapter.effect_class ?? "unknown"} · planned
                   {adapter.contract_intent ? ` · ${adapter.contract_intent}` : ""}
                   {adapter.receipt_contract?.receipt_type
-                    ? ` · receipt: ${adapter.receipt_contract.receipt_type}`
+                    ? ` · approval: ${adapter.receipt_contract.receipt_type}`
                     : ""}
                 </span>
               ))}

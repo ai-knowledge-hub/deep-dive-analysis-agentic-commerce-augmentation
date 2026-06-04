@@ -1001,7 +1001,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Non-executable protocol intelligence/i)).toBeInTheDocument();
     expect(
       screen.getByText(
-        /protocol.checkout.v1 · external_side_effect · planned · readiness_boundary · receipt: external_write_execution/i,
+        /protocol.checkout.v1 · external_side_effect · planned · readiness_boundary · approval: external_write_execution/i,
       ),
     ).toBeInTheDocument();
     expect(
@@ -1070,8 +1070,8 @@ describe("AgentRunsPage timeline presets", () => {
         registry_fingerprint: "fedcba9876543210",
         registry_status: "active",
       });
-    await userEvent.clear(screen.getByLabelText(/Owner principal/i));
-    await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
+    await userEvent.clear(screen.getByLabelText(/Owner identity/i));
+    await userEvent.type(screen.getByLabelText(/Owner identity/i), "platform.growth");
     await userEvent.clear(screen.getByLabelText(/Steward team/i));
     await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
     await userEvent.click(screen.getByRole("button", { name: /Preview ownership change/i }));
@@ -1097,7 +1097,8 @@ describe("AgentRunsPage timeline presets", () => {
       },
       "user-a",
     );
-    expect(await screen.findByText(/Ownership saved with receipt receipt-/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Ownership saved with approval record receipt-/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Owner principal/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();
@@ -1123,10 +1124,8 @@ describe("AgentRunsPage timeline presets", () => {
     expect(
       screen.getByText(/Tools: \+experiment.run_variant, ~validation.review_readiness/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Receipt: receipt-12345678/i),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    expect(screen.getByText(/Approval record: receipt-12345678/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Verify approval/i }));
     expect(verifyAgentRuntimeRegistryApprovalReceiptMock).toHaveBeenCalledWith({
       approval_receipt: {
         receipt_id: "receipt-12345678",
@@ -1142,7 +1141,9 @@ describe("AgentRunsPage timeline presets", () => {
       audit_event_id: "registry-approval-1",
       require_audit_event: true,
     });
-    expect(await screen.findByText(/Receipt verified against signature/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Approval verified against the release audit trail/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Verify receipt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Signed ownership receipt/i)).not.toBeInTheDocument();
     backfillAgentRuntimeRegistryPinsMock
       .mockResolvedValueOnce({
         client_id: "client-a",
@@ -1175,7 +1176,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Backfill updated 5 records/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
-    expect(screen.getByText(/Receipt id: abcdef123456/i)).toBeInTheDocument();
+    expect(screen.getByText(/Release: abcdef123456/i)).toBeInTheDocument();
     expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();

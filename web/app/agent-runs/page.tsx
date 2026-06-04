@@ -383,7 +383,7 @@ function AgentRunsPageContent() {
           valid_payload: false,
           valid_audit_event: false,
           blockers: [
-            err instanceof Error ? err.message : "Unable to verify registry approval receipt.",
+            err instanceof Error ? err.message : "Unable to verify registry approval.",
           ],
         },
       });
@@ -795,7 +795,7 @@ function AgentRunsPageContent() {
       }
       const receiptId = response.approval_receipt?.receipt_id;
       setOwnershipNotice(
-        `Ownership saved${receiptId ? ` with receipt ${receiptId.slice(0, 8)}` : ""}. Active registry ${String(
+        `Ownership saved${receiptId ? ` with approval record ${receiptId.slice(0, 8)}` : ""}. Active registry ${String(
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now ${response.registry_status ?? "updated"}.`,
       );
