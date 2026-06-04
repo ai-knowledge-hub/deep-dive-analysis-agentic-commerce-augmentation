@@ -289,6 +289,15 @@ export function SelectedActionDetailPanel({
             "Capability summary not yet documented.",
         )}
       </p>
+      <p className="panel__subheading">What it changes</p>
+      <ul className="panel__list panel__list--compact">
+        {sideEffects.map((effect, index) => (
+          <li key={`${effect}-${index}`}>{softenOperatorText(effect)}</li>
+        ))}
+      </ul>
+
+      <details className="agent-action-detail__advanced">
+        <summary>Show governance and artifacts</summary>
       <div className="control-chip-row">
         <span className="control-chip">
           Skill: {formatOperatorIdentifier(selectedAction.skill_id ?? "unmapped")}
@@ -315,13 +324,6 @@ export function SelectedActionDetailPanel({
           Skill version: {selectedAction.skill_version ?? "unpinned"}
         </span>
       </div>
-
-      <p className="panel__subheading">What it changes</p>
-      <ul className="panel__list panel__list--compact">
-        {sideEffects.map((effect, index) => (
-          <li key={`${effect}-${index}`}>{softenOperatorText(effect)}</li>
-        ))}
-      </ul>
 
       {discoverySourceCounts.length ? (
         <>
@@ -586,6 +588,7 @@ export function SelectedActionDetailPanel({
           Open detailed diff
         </button>
       </div>
+      </details>
     </section>
   );
 }

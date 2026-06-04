@@ -533,14 +533,9 @@ export function RegistryPanel({
         </span>
       </div>
       <p className="panel__muted">
-        This is the agent-facing execution contract for the selected run: skills describe
-        reusable workflows, tools are the policy-governed capabilities the runtime can
-        execute.
+        Use this when you need to inspect or adjust how the selected run is allowed to act.
       </p>
       <div className="control-chip-row">
-        <span className="control-chip">
-          Operator: {selectedRun.principal_type ?? "human"}
-        </span>
         <span className="control-chip">
           Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
         </span>
@@ -548,21 +543,7 @@ export function RegistryPanel({
           Posture: {activeHarness?.name ?? selectedRun.harness_id ?? "operator supervised"}
         </span>
         <span className="control-chip">
-          Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
-        </span>
-        <span className="control-chip">
-          Run registry: {selectedRun.registry_version ?? runtimeRegistry?.registry_version ?? "unpinned"}
-        </span>
-        <span className="control-chip">
-          Fingerprint:{" "}
-          {selectedRun.registry_fingerprint
-            ? selectedRun.registry_fingerprint.slice(0, 12)
-            : runtimeRegistry?.registry_fingerprint
-              ? runtimeRegistry.registry_fingerprint.slice(0, 12)
-              : "pending"}
-        </span>
-        <span className="control-chip">
-          Registry source: {runtimeRegistry?.registry_source ?? "pending"}
+          Allowed actions: {allowedRuntimeTools.length}
         </span>
         <span className="control-chip">
           Release status: {runtimeRegistry?.registry_status ?? "pending"}
@@ -580,6 +561,31 @@ export function RegistryPanel({
           </span>
         ) : null}
       </div>
+
+      <details className="registry-panel__subsection">
+        <summary>Show setup and audit controls</summary>
+        <div className="control-chip-row">
+          <span className="control-chip">
+            Operator: {selectedRun.principal_type ?? "human"}
+          </span>
+          <span className="control-chip">
+            Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
+          </span>
+          <span className="control-chip">
+            Run registry: {selectedRun.registry_version ?? runtimeRegistry?.registry_version ?? "unpinned"}
+          </span>
+          <span className="control-chip">
+            Fingerprint:{" "}
+            {selectedRun.registry_fingerprint
+              ? selectedRun.registry_fingerprint.slice(0, 12)
+              : runtimeRegistry?.registry_fingerprint
+                ? runtimeRegistry.registry_fingerprint.slice(0, 12)
+                : "pending"}
+          </span>
+          <span className="control-chip">
+            Registry source: {runtimeRegistry?.registry_source ?? "pending"}
+          </span>
+        </div>
 
       <section className="control-section">
         <div className="control-section__header">
@@ -1305,6 +1311,7 @@ export function RegistryPanel({
           <div className="panel__muted">No allowed actions match this run.</div>
         ) : null}
       </div>
+      </details>
     </section>
   );
 }

@@ -971,6 +971,9 @@ describe("AgentRunsPage timeline presets", () => {
     await userEvent.click(screen.getByText(/Advanced runtime details/i));
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
+    expect(screen.getByText(/Allowed actions: 1/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Registry-write access/i })).not.toBeVisible();
+    await userEvent.click(screen.getByText(/Show setup and audit controls/i));
     expect(
       screen.getByRole("heading", { name: /Registry-write access/i }),
     ).toBeInTheDocument();
@@ -980,15 +983,15 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.queryByText(/Bearer token saved/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Registry-write bearer token/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
+    expect(screen.getByText(/Execute one candidate variant against saved evidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tool contract: agent-runtime-static-v1/)).not.toBeVisible();
+    await userEvent.click(screen.getByText(/Show governance and artifacts/i));
     expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Tool: experiment run variant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Effect: write low risk/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Optimize Product Representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/Execute one candidate variant against saved evidence/i),
-    ).toBeInTheDocument();
     expect(
       screen.getByText(/Compare the metric against control before promotion/i),
     ).toBeInTheDocument();
