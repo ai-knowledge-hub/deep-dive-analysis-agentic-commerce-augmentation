@@ -971,6 +971,14 @@ describe("AgentRunsPage timeline presets", () => {
     await userEvent.click(screen.getByText(/Advanced runtime details/i));
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Registry-write access/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Apply needs access/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Registry-write access key/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Access key/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Bearer token saved/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Registry-write bearer token/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Tool: experiment run variant/i).length).toBeGreaterThan(0);
@@ -1104,11 +1112,12 @@ describe("AgentRunsPage timeline presets", () => {
       screen.getAllByText((_, node) =>
         Boolean(
           node?.textContent?.includes(
-            "Payload contains 1 skills, 1 tools, and 1 policy profiles",
+            "Release contains 1 skills, 1 tools, and 1 policy profiles",
           ),
         ),
       ).length,
     ).toBeGreaterThan(0);
+    expect(screen.queryByText(/Payload contains/i)).not.toBeInTheDocument();
     expect(screen.getByText(/2 audit events are tied to this release/i)).toBeInTheDocument();
     expect(screen.getByText(/Release diff/i)).toBeInTheDocument();
     expect(

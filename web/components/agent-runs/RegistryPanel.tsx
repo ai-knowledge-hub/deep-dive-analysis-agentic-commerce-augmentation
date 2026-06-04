@@ -244,7 +244,7 @@ function RegistryApplyAuditSummary({
       </div>
       <p className="panel__muted">
         This change is recorded in the registry audit trail. Use Registry releases to inspect
-        the full payload and rollback context.
+        the full release detail and recovery context.
       </p>
     </div>
   );
@@ -509,8 +509,8 @@ export function RegistryPanel({
     setRegistryWriteTokenInput("");
     setRegistryWriteTokenNotice(
       getRegistryWriteToken()
-        ? "Registry-write bearer token loaded for this browser tab only."
-        : "Registry-write bearer token cleared.",
+        ? "Registry-write access key loaded for this browser tab only."
+        : "Registry-write access key cleared.",
     );
   }
 
@@ -518,7 +518,7 @@ export function RegistryPanel({
     clearRegistryWriteToken();
     setRegistryWriteTokenSaved(false);
     setRegistryWriteTokenInput("");
-    setRegistryWriteTokenNotice("Registry-write bearer token cleared.");
+    setRegistryWriteTokenNotice("Registry-write access key cleared.");
   }
 
   return (
@@ -588,17 +588,17 @@ export function RegistryPanel({
             <h4 className="control-section__title">Registry-write access</h4>
           </div>
           <span className={registryWriteTokenSaved ? "control-chip" : "control-chip control-chip--attention"}>
-            {registryWriteTokenSaved ? "Bearer token saved" : "Apply locked"}
+            {registryWriteTokenSaved ? "Access key saved" : "Apply needs access"}
           </span>
         </div>
         <p className="panel__muted">
-          Preview runs without elevated access. Confirmed registry changes require a
-          signed bearer token with `registry:write` or `agent_registry:write` scope. The
-          pasted token is kept in memory for this browser tab only and is cleared on reload.
+          Preview changes without elevated access. Applying changes needs a registry-write
+          access key. The key is kept in memory for this browser tab only and is cleared on
+          reload.
         </p>
         <div className="insight-grid insight-grid--two">
           <label className="field">
-            <span className="field__label">Registry-write bearer token</span>
+            <span className="field__label">Registry-write access key</span>
             <input
               className="panel__input"
               type="password"
@@ -606,8 +606,8 @@ export function RegistryPanel({
               onChange={(event) => setRegistryWriteTokenInput(event.target.value)}
               placeholder={
                 registryWriteTokenSaved
-                  ? "Loaded for this tab; paste a new token to replace"
-                  : "Bearer token"
+                  ? "Loaded for this tab; paste a new key to replace"
+                  : "Access key"
               }
             />
           </label>
@@ -816,8 +816,8 @@ export function RegistryPanel({
                   />
                 </label>
                 <p className="panel__muted">
-                  Confirmed apply is protected by registry-write authorization; preview
-                  should be used first to catch policy/run-mode mismatches.
+                  Applying changes needs registry-write access. Preview first to catch
+                  policy/run-mode mismatches.
                 </p>
                 <div className="panel__actions">
                   <button
@@ -1059,7 +1059,7 @@ export function RegistryPanel({
               {selectedRegistryRelease.status}
             </div>
             <p className="panel__muted">
-              Payload contains {selectedRegistryRelease.payload.skills?.length ?? 0} skills,{" "}
+              Release contains {selectedRegistryRelease.payload.skills?.length ?? 0} skills,{" "}
               {selectedRegistryRelease.payload.tools?.length ?? 0} tools, and{" "}
               {selectedRegistryRelease.payload.policy_profiles?.length ?? 0} policy profiles.
             </p>
@@ -1302,7 +1302,7 @@ export function RegistryPanel({
           </div>
         ))}
         {runtimeRegistry && allowedRuntimeTools.length === 0 ? (
-          <div className="panel__muted">No registry tools match this run’s allowed capabilities.</div>
+          <div className="panel__muted">No allowed actions match this run.</div>
         ) : null}
       </div>
     </section>
