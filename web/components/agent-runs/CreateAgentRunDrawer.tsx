@@ -72,14 +72,14 @@ export function CreateAgentRunDrawer({
           </label>
 
           <details className="admin-advanced-defaults">
-            <summary>Use a saved experiment reference</summary>
+            <summary>Use a saved experiment</summary>
             <label className="field">
-              <span className="field__label">Experiment reference</span>
+              <span className="field__label">Saved experiment</span>
               <input
                 className="field__input"
                 value={form.experiment_id}
                 onChange={(event) => onFormChange({ experiment_id: event.target.value.trim() })}
-                placeholder="Paste the saved experiment reference"
+                placeholder="Paste the saved experiment"
               />
             </label>
           </details>

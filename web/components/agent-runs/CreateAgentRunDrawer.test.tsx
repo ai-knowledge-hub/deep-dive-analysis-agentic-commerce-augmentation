@@ -38,8 +38,8 @@ describe("CreateAgentRunDrawer", () => {
     );
 
     expect(screen.getByLabelText(/Run objective/i)).toBeInTheDocument();
-    expect(screen.getByText(/Use a saved experiment reference/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Experiment reference/i)).toBeInTheDocument();
+    expect(screen.getByText(/Use a saved experiment/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Saved experiment/i)).toBeInTheDocument();
     expect(screen.getByText(/Advanced run setup/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Allowed actions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Budget limits/i)).toBeInTheDocument();
@@ -53,7 +53,10 @@ describe("CreateAgentRunDrawer", () => {
     expect(screen.queryByText(/Allowed capabilities/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Manual experiment id/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Override with UUID/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Experiment reference/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Use a saved experiment reference/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/paste experiment uuid/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/saved experiment reference/i)).not.toBeInTheDocument();
   });
 
   it("uses readable experiment options without exposing raw references", () => {
