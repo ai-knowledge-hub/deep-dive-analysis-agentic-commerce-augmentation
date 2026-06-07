@@ -42,19 +42,7 @@ export function ExternalAgentJobPanel({
         <>
           <div className="panel__meta-strip panel__meta-strip--flat">
             <div>
-              <strong>Job</strong>: {externalAgentJob.job.id.slice(0, 8)}
-            </div>
-            <div>
-              <strong>Agent</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
-            </div>
-            <div>
-              <strong>Profile</strong>: {externalAgentJob.job.agent_profile_id ?? "none"}
-            </div>
-            <div>
-              <strong>Retry key</strong>: {externalAgentJob.job.idempotency_key ?? "missing"}
-            </div>
-            <div>
-              <strong>Job status</strong>: {externalAgentJob.job.status ?? "unknown"}
+              <strong>Handoff status</strong>: {externalAgentJob.job.status ?? "unknown"}
             </div>
             <div>
               <strong>Requested action</strong>:{" "}
@@ -70,15 +58,30 @@ export function ExternalAgentJobPanel({
               <strong>Handoff records</strong>: {externalAgentJob.receipts.length}
             </div>
           </div>
+          <details className="agent-action-detail__advanced">
+            <summary>Show handoff details</summary>
+            <div className="panel__meta-strip panel__meta-strip--flat">
+              <div>
+                <strong>Job reference</strong>: {externalAgentJob.job.id}
+              </div>
+              <div>
+                <strong>Agent identity</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
+              </div>
+              <div>
+                <strong>Profile</strong>: {externalAgentJob.job.agent_profile_id ?? "none"}
+              </div>
+              <div>
+                <strong>Retry reference</strong>: {externalAgentJob.job.idempotency_key ?? "missing"}
+              </div>
+            </div>
+          </details>
           {externalAgentJob.latest_receipt ? (
             <div className="panel__notice">
               Latest handoff:{" "}
               {formatOperatorIdentifier(
                 String(externalAgentJob.latest_receipt.receipt_type ?? "external job"),
               )}{" "}
-              ·{" "}
-              {String(externalAgentJob.latest_receipt.status ?? "unknown")} ·{" "}
-              {String(externalAgentJob.latest_receipt.receipt_context_hash ?? "").slice(0, 12)}
+              · {String(externalAgentJob.latest_receipt.status ?? "unknown")}
               <button
                 type="button"
                 className="button button--ghost button--sm"

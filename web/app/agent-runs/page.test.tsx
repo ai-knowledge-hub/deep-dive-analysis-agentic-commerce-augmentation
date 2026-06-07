@@ -1461,8 +1461,13 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
-    expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
-    expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Handoff status: accepted")),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/agent-ext-1/i)).not.toBeVisible();
+    expect(screen.getByText(/retry-safe-key/i)).not.toBeVisible();
     expect(
       screen.getAllByText((_, node) =>
         Boolean(node?.textContent?.includes("Requested action: experiment run variant")),
@@ -1475,6 +1480,15 @@ describe("AgentRunsPage timeline presets", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText(/Latest handoff: external agent job accepted/i)).toBeInTheDocument();
     expect(screen.getByText(/Handoff needs check/i)).toBeInTheDocument();
+    expect(screen.queryByText(/hash-123456789/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Show handoff details/i)).toBeInTheDocument();
+    expect(screen.getByText(/agent-ext-1/i)).not.toBeVisible();
+    expect(screen.getByText(/retry-safe-key/i)).not.toBeVisible();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Job reference: job-ext-123456")),
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.getAllByText((_, node) =>
         Boolean(node?.textContent?.includes("Handoff records: 1")),
