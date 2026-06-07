@@ -63,9 +63,9 @@ function formatDateTime(value?: string | null): string {
 
 function formatRunLabel(run: AgentRun): string {
   if (run.experiment_id) {
-    return `Experiment ${run.experiment_id.slice(0, 8)}`;
+    return "Experiment run";
   }
-  return `Run ${run.id.slice(0, 8)}`;
+  return "Standalone run";
 }
 
 function buildSignal(run: AgentRun, event: AgentRunEvent): LearningSignal {

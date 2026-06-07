@@ -131,15 +131,16 @@ describe("InboxPage", () => {
     expect(screen.getByText("Critical")).toBeInTheDocument();
     expect(screen.getByText("Review")).toBeInTheDocument();
     expect(screen.getByText("Watching")).toBeInTheDocument();
-    expect((await screen.findAllByText(/Experiment exp-1 failed/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Experiment run failed/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Validation provider failed/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Policy blocked promotion/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Experiment exp-2 needs approval/i),
+      screen.getByText(/Experiment run needs approval/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Next proposed action is run variant/i)).toBeInTheDocument();
     expect(screen.queryByText(/Next proposed action is run_variant/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Experiment exp-3 is running/i)).toBeInTheDocument();
+    expect(screen.getByText(/Experiment run is running/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Experiment exp-/i)).not.toBeInTheDocument();
   });
 
   it("surfaces one next action and routes decision work to interventions", async () => {
@@ -147,7 +148,7 @@ describe("InboxPage", () => {
     render(<InboxPage />);
 
     expect(await screen.findByText(/Start with failed work/i)).toBeInTheDocument();
-    expect(screen.getByText(/Experiment exp-1 failed: Validation provider failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Experiment run failed: Validation provider failed/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Review intervention/i }));
 
