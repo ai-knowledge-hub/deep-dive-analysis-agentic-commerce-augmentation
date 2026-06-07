@@ -133,7 +133,7 @@ export function CreateClientOnboardingDrawer({
             <span className="panel__label">Client</span>
             <input
               type="text"
-              placeholder="Client reference"
+              placeholder="Client key"
               value={form.clientId}
               onChange={(event) => onFormChange({ clientId: event.target.value })}
             />
@@ -152,7 +152,7 @@ export function CreateClientOnboardingDrawer({
             <span className="panel__label">Initial brand</span>
             <input
               type="text"
-              placeholder="Brand reference"
+              placeholder="Brand key"
               value={form.brandId}
               onChange={(event) => onFormChange({ brandId: event.target.value })}
             />
@@ -168,13 +168,13 @@ export function CreateClientOnboardingDrawer({
           <section className="admin-drawer-step">
             <p className="panel__subheading">Step 3 · Products</p>
             <p className="panel__step-helper">
-              Add one or more products. Each line should include reference, name, and description.
+              Add one or more products. Each line should include key, name, and description.
             </p>
             <span className="panel__label">Products list</span>
             <textarea
               rows={5}
               placeholder={
-                "product-reference|Product name|Short description\nproduct-reference-2|Product 2|Short description"
+                "product-key|Product name|Short description\nproduct-key-2|Product 2|Short description"
               }
               value={form.productsText}
               onChange={(event) => onFormChange({ productsText: event.target.value })}
