@@ -1436,7 +1436,7 @@ function ValidationPageContent() {
                         observedWinnerVariantId: event.target.value,
                       }))
                     }
-                    placeholder="Paste a saved variant reference if needed"
+                    placeholder="Paste a saved variant if needed"
                   />
                 </label>
                 <label className="panel__label">
