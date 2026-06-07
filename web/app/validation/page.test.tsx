@@ -198,9 +198,10 @@ describe("ValidationPage", () => {
 
     expect(
       await screen.findByRole("option", {
-        name: /Simulation run revision · Ready for review · Ref abcdef12/i,
+        name: /Simulation run revision · Ready for review/i,
       }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Ref abcdef12/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/simulation_run · ready_for_review/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/copy-revision-abcdef123456/i)).not.toBeInTheDocument();
   });

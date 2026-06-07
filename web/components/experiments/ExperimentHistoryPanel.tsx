@@ -69,9 +69,7 @@ export function ExperimentHistoryPanel({
   onDeleteRun,
 }: ExperimentHistoryPanelProps) {
   const formatVariantLabel = (variantId: string) =>
-    variantLabelById.get(variantId) ?? `Variant ${variantId.slice(0, 8)}`;
-  const formatShortReference = (value: string) =>
-    value.replace(/^simulation-run[-_]?/, "").slice(0, 8);
+    variantLabelById.get(variantId) ?? "Selected variant";
 
   return (
     <section className="panel__card panel__card--secondary panel__card--full-row">
@@ -278,7 +276,6 @@ export function ExperimentHistoryPanel({
                           >
                             Open linked simulation
                           </a>
-                          {" · "}Ref: {formatShortReference(run.simulation_run_id)}
                         </span>
                       ) : null}
                       {runGapDetails.get(run.id) ? (

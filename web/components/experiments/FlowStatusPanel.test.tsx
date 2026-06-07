@@ -66,4 +66,37 @@ describe("FlowStatusPanel", () => {
     expect(screen.getByText(/Variant: Homepage benefit copy/i)).toBeInTheDocument();
     expect(screen.queryByText(/variant-raw-123456/i)).not.toBeInTheDocument();
   });
+
+  it("uses a readable fallback when the last run variant label is missing", () => {
+    render(
+      <FlowStatusPanel
+        labMode="manual"
+        currentFlowStep={6}
+        activeFlowSteps={[]}
+        labLoopSteps={[]}
+        lastRun={{
+          id: "run-1",
+          experiment_id: "exp-1",
+          variant_id: "variant-raw-123456",
+          query_id: "query-1",
+          created_at: "2026-05-31T10:00:00Z",
+        }}
+        variantLabelById={new Map()}
+        latestBelief={null}
+        latestBeliefSummary="No beliefs yet"
+        nextFlowAction={{
+          label: "Complete experiment run",
+          helper: "Run the selected variant before validation.",
+        }}
+        showValidationCheckpoint={false}
+        onOpenBeliefsTimeline={vi.fn()}
+        onUseLatestBelief={vi.fn()}
+        onRunNextFlowAction={vi.fn()}
+        onOpenValidation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Variant: Selected variant/i)).toBeInTheDocument();
+    expect(screen.queryByText(/variant-raw-123456/i)).not.toBeInTheDocument();
+  });
 });

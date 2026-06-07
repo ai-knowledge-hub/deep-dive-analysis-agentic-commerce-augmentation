@@ -99,8 +99,7 @@ function formatDisplayToken(value: string | null | undefined, fallback: string):
 function formatCopyRevisionOption(revision: CopyRevision): string {
   const source = formatDisplayToken(revision.source_type, "Copy");
   const status = formatDisplayToken(revision.status, "Draft");
-  const reference = revision.id.replace(/^copy-revision[-_]?/, "").slice(0, 8);
-  return `${source} revision · ${status} · Ref ${reference}`;
+  return `${source} revision · ${status}`;
 }
 
 type ValidationNextAction =
