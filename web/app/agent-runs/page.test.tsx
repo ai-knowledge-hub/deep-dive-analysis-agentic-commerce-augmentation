@@ -906,11 +906,13 @@ describe("AgentRunsPage timeline presets", () => {
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
     expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /Variant: variant-/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Open variant/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
 
-    await userEvent.click(screen.getByRole("button", { name: /Metric: metric-1/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Open metric/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+    expect(screen.queryByRole("button", { name: /Variant: variant-/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Metric: metric-/i })).not.toBeInTheDocument();
 
     getAgentRunEventsMock.mockClear();
 
@@ -919,7 +921,7 @@ describe("AgentRunsPage timeline presets", () => {
     payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
     expect(payload.capability_name).toBe("request_synthetic_validation");
 
-    await userEvent.click(screen.getByRole("button", { name: /Open validation/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Open validation$/i }));
     expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=run-1");
 
     await userEvent.click(screen.getByRole("button", { name: /Open interventions/i }));

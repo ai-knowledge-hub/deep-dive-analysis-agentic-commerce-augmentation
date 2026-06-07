@@ -14,6 +14,8 @@ describe("SelectedActionDetailPanel", () => {
           status: "executed",
           capability_name: "run_variant",
           rationale: "Run the selected variant.",
+          variant_id: "variant-12345678",
+          validation_job_id: "validation-job-12345678",
           inputs: {},
           outputs: { metric_id: "metric-12345678" },
         }}
@@ -47,6 +49,12 @@ describe("SelectedActionDetailPanel", () => {
     );
 
     expect(screen.getByText(/changed result fields/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open variant/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open validation result/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open metric/i })).toBeInTheDocument();
     expect(screen.queryByText(/output payload keys/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Variant: variant/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Validation job:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Metric: metric/i)).not.toBeInTheDocument();
   });
 });

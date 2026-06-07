@@ -529,17 +529,17 @@ export function SelectedActionDetailPanel({
       <div className="panel__actions">
         {selectedAction.variant_id ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenExperimentArtifact}>
-            Variant: {selectedAction.variant_id.slice(0, 8)}
+            Open variant
           </button>
         ) : null}
         {selectedAction.validation_job_id ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenValidationArtifact}>
-            Validation job: {selectedAction.validation_job_id.slice(0, 8)}
+            Open validation result
           </button>
         ) : null}
         {metricId ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenExperimentArtifact}>
-            Metric: {metricId.slice(0, 8)}
+            Open metric
           </button>
         ) : null}
       </div>
