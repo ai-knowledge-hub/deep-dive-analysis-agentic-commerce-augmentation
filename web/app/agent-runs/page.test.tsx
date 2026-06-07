@@ -1105,7 +1105,11 @@ describe("AgentRunsPage timeline presets", () => {
       },
       "user-a",
     );
-    expect(await screen.findByText(/Ownership saved with approval record receipt-/i)).toBeInTheDocument();
+    const ownershipNotice = await screen.findByText(/Ownership saved\. Active registry is active\./i);
+    expect(ownershipNotice).toBeInTheDocument();
+    expect(ownershipNotice).not.toHaveTextContent(/receipt-/i);
+    expect(ownershipNotice).not.toHaveTextContent(/abcdef123456/i);
+    expect(screen.queryByText(/Ownership saved with approval record/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Owner principal/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();

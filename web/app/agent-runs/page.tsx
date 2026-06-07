@@ -793,11 +793,8 @@ function AgentRunsPageContent() {
         );
         return;
       }
-      const receiptId = response.approval_receipt?.receipt_id;
       setOwnershipNotice(
-        `Ownership saved${receiptId ? ` with approval record ${receiptId.slice(0, 8)}` : ""}. Active registry ${String(
-          response.registry_fingerprint ?? "",
-        ).slice(0, 12)} is now ${response.registry_status ?? "updated"}.`,
+        `Ownership saved. Active registry is ${response.registry_status ?? "updated"}.`,
       );
       setOwnershipPreflight(null);
       await loadRuntimeRegistry();
