@@ -431,7 +431,7 @@ export function EvidencePanel({
         </section>
         <div className="evidence-meta-strip">
           <span className="panel__badge panel__badge--secondary">
-            Source session: {sourceSessionId ? sourceSessionId.slice(0, 8) : "unknown"}
+            Evidence source: {sourceSessionId ? "connected chat" : "not linked"}
           </span>
           <span className="panel__badge panel__badge--secondary">
             Refreshed:{" "}

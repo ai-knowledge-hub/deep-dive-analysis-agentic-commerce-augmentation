@@ -46,10 +46,14 @@ describe("EvidencePanel", () => {
         targetProductId="product-1"
         targetProductName="Trail shoe"
         targetProductCopy="Waterproof trail shoe for rough paths."
+        sourceSessionId="session-12345678"
       />,
     );
 
     expect(screen.getByText(/Outcome summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence source: connected chat/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Source session/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/session-12345678/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Outcome snapshot/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Step 2 .* Explanation/i }));

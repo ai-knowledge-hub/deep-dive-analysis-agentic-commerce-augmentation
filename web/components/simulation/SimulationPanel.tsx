@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type {
   SimulationGapReport,
   SimulationOptimizeResponse,
@@ -182,7 +182,7 @@ export function SimulationPanel({
           <span className="simulation__diff-label">Scenario</span>
           {sourceSessionId && (
             <p className="simulation__note">
-              Scenario sourced from session {sourceSessionId.slice(0, 8)}.
+              Scenario filled from connected evidence.
             </p>
           )}
           <textarea
