@@ -21,9 +21,9 @@ type RunSelectionRailProps = {
 
 function formatRunLabel(run: AgentRun): string {
   if (run.experiment_id) {
-    return `Experiment ${String(run.experiment_id).slice(0, 8)}`;
+    return "Experiment run";
   }
-  return `Run ${String(run.id).slice(0, 8)}`;
+  return "Standalone run";
 }
 
 export function RunSelectionRail({

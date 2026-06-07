@@ -645,14 +645,17 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     await waitFor(() => expect(getAgentRunMock).toHaveBeenCalledWith("run-failed", expect.anything(), "user-a"));
-    const rows = await screen.findAllByRole("button", { name: /Experiment exp-/i });
+    const rows = await screen.findAllByRole("button", { name: /Experiment run/i });
 
-    expect(rows[0]).toHaveTextContent(/exp-fail/i);
+    expect(rows[0]).toHaveTextContent(/failed/i);
     expect(rows[0]).toHaveTextContent(/Critical/i);
-    expect(rows[1]).toHaveTextContent(/exp-appr/i);
+    expect(rows[1]).toHaveTextContent(/planned/i);
     expect(rows[1]).toHaveTextContent(/Approval/i);
-    expect(rows[2]).toHaveTextContent(/exp-run/i);
+    expect(rows[2]).toHaveTextContent(/running/i);
     expect(rows[2]).toHaveTextContent(/Watching/i);
+    expect(screen.queryByText(/exp-fail/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exp-appr/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exp-run/i)).not.toBeInTheDocument();
   });
 
   it("applies Commands preset to event query payload", async () => {

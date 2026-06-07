@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RunSelectionRail } from "./RunSelectionRail";
 
 describe("RunSelectionRail", () => {
-  it("uses readable run state labels", () => {
+  it("uses readable run labels and state labels", () => {
     render(
       <RunSelectionRail
         runs={[
@@ -30,8 +30,11 @@ describe("RunSelectionRail", () => {
       />,
     );
 
+    expect(screen.getByText("Experiment run")).toBeInTheDocument();
     expect(screen.getByText(/running · variants ready/i)).toBeInTheDocument();
     expect(screen.getByText(/Summary/i)).toBeInTheDocument();
+    expect(screen.queryByText(/exp-12345678/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/run-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Snapshot/i)).not.toBeInTheDocument();
   });
