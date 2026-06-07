@@ -38,6 +38,8 @@ describe("CreateAgentRunDrawer", () => {
     );
 
     expect(screen.getByLabelText(/Run objective/i)).toBeInTheDocument();
+    expect(screen.getByText(/Use a saved experiment reference/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Experiment reference/i)).toBeInTheDocument();
     expect(screen.getByText(/Advanced run setup/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Allowed actions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Budget limits/i)).toBeInTheDocument();
@@ -49,6 +51,34 @@ describe("CreateAgentRunDrawer", () => {
     expect(screen.queryByText(/Budgets \(JSON\)/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Approval policy \(JSON\)/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Allowed capabilities/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Manual experiment id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Override with UUID/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/paste experiment uuid/i)).not.toBeInTheDocument();
+  });
+
+  it("uses readable experiment options without exposing raw references", () => {
+    render(
+      <CreateAgentRunDrawer
+        open
+        experiments={[
+          {
+            id: "experiment-abcdef123456",
+            name: "Holiday copy test",
+            created_at: "2026-01-02T00:00:00Z",
+            updated_at: "2026-01-03T00:00:00Z",
+          } as never,
+        ]}
+        form={baseForm}
+        loading={false}
+        canCreate
+        onClose={vi.fn()}
+        onFormChange={vi.fn()}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: /Holiday copy test · updated/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /abcdef12/i })).not.toBeInTheDocument();
   });
 
   it("keeps structured run settings editable without changing invalid drafts", () => {

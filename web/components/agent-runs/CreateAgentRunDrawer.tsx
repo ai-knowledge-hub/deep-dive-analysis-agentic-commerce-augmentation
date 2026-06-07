@@ -59,7 +59,7 @@ export function CreateAgentRunDrawer({
               <option value="">None (global agent run)</option>
               {experiments.map((experiment) => (
                 <option key={experiment.id} value={experiment.id}>
-                  {experiment.name || "Untitled"} · {experiment.id.slice(0, 8)} ·{" "}
+                  {experiment.name || "Untitled"} · updated{" "}
                   {formatDateCompact(experiment.updated_at || experiment.created_at)}
                 </option>
               ))}
@@ -72,14 +72,14 @@ export function CreateAgentRunDrawer({
           </label>
 
           <details className="admin-advanced-defaults">
-            <summary>Manual experiment id (advanced)</summary>
+            <summary>Use a saved experiment reference</summary>
             <label className="field">
-              <span className="field__label">Override with UUID</span>
+              <span className="field__label">Experiment reference</span>
               <input
                 className="field__input"
                 value={form.experiment_id}
                 onChange={(event) => onFormChange({ experiment_id: event.target.value.trim() })}
-                placeholder="paste experiment uuid"
+                placeholder="Paste the saved experiment reference"
               />
             </label>
           </details>
