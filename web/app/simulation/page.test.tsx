@@ -147,6 +147,9 @@ describe("SimulationPage", () => {
     render(<SimulationPage />);
 
     expect(await screen.findByText(/Run context preserved/i)).toBeInTheDocument();
+    expect(screen.getByText(/opened from the selected run/i)).toBeInTheDocument();
+    expect(screen.queryByText(/opened from run/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^sim-1$/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Back to validation/i }));
     expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=sim-1");

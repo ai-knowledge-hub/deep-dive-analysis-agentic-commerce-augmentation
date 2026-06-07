@@ -1538,8 +1538,8 @@ function ExperimentsPageContent() {
           <div className="detail__stack">
             {runIdParam ? (
               <section className="panel__notice panel__notice--info">
-                <strong>Run context preserved:</strong> this experiment view was opened from run{" "}
-                <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+                <strong>Run context preserved:</strong> this experiment view was opened from the
+                selected run.
                 <div className="panel__actions">
                   <button
                     type="button"
