@@ -1239,18 +1239,12 @@ function ValidationPageContent() {
             </div>
             {isProviderIntegrationMode(mode) ? (
               <section className="panel__notice panel__notice--info">
-                <strong>Provider status</strong>
+                <strong>External validation status</strong>
                 <p className="panel__muted">
                   {providerLaunchInfo?.instructions ??
                     "Complete one-time provider setup, then run validation in the provider workspace. Results return here when the provider finishes."}
                 </p>
                 <div className="panel__meta panel__meta--stack">
-                  <span className="panel__muted">
-                    Provider receipt:{" "}
-                    {providerLaunchInfo?.provider_run_id ??
-                      job?.provider_run_id ??
-                      "Not started"}
-                  </span>
                   <span className="panel__muted">
                     Setup status: {formatSetupStatus(providerLaunchInfo?.setup_required)}
                   </span>
@@ -1258,6 +1252,15 @@ function ValidationPageContent() {
                     Result status: {formatReturnStatus(job?.callback_verified)}
                   </span>
                 </div>
+                <details className="validation__advanced">
+                  <summary>Show provider handoff details</summary>
+                  <p className="panel__muted">
+                    Handoff reference:{" "}
+                    {providerLaunchInfo?.provider_run_id ??
+                      job?.provider_run_id ??
+                      "Not started"}
+                  </p>
+                </details>
                 <div className="panel__actions">
                   <button
                     type="button"
@@ -1434,7 +1437,7 @@ function ValidationPageContent() {
                         observedWinnerVariantId: event.target.value,
                       }))
                     }
-                    placeholder="Variant ID (if known)"
+                    placeholder="Paste a saved variant reference if needed"
                   />
                 </label>
                 <label className="panel__label">

@@ -150,14 +150,17 @@ describe("ValidationPage", () => {
 
     await user.selectOptions(screen.getByLabelText(/^Mode$/i), "provider_openai_mcp");
 
-    expect(await screen.findByText(/Provider status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Provider receipt:/i)).toBeInTheDocument();
+    expect(await screen.findByText(/External validation status/i)).toBeInTheDocument();
     expect(screen.getByText(/Setup status: Unknown/i)).toBeInTheDocument();
     expect(screen.getByText(/Result status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.getByText(/Handoff reference: Not started/i)).not.toBeVisible();
+    await user.click(screen.getByText(/Show provider handoff details/i));
+    expect(screen.getByText(/Handoff reference: Not started/i)).toBeVisible();
     expect(screen.getByRole("option", { name: /ChatGPT provider run/i })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Gemini provider run/i })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Add result manually/i })).toBeInTheDocument();
     expect(screen.queryByText(/Provider automation status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider receipt/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Provider reference/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Provider run id/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Return status/i)).not.toBeInTheDocument();
