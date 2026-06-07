@@ -47,6 +47,7 @@ describe("ExperimentHistoryPanel", () => {
     );
 
     expect(screen.getByText(/Variant: Homepage benefit copy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Past experiments and runs/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open linked simulation/i })).toBeInTheDocument();
     expect(screen.getByText(/Evidence version: v3/i)).toBeInTheDocument();
     expect(screen.getByText(/Test idea: Price clarity test/i)).toBeInTheDocument();
@@ -54,6 +55,7 @@ describe("ExperimentHistoryPanel", () => {
     expect(screen.queryByText(/variant-raw-123456/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Ref: abcdef12/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/simulation-run-abcdef123456/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reference history/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Snapshot:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Hypothesis:/i)).not.toBeInTheDocument();
   });

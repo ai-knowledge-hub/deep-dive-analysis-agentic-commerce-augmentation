@@ -1371,7 +1371,7 @@ function SimulationPageContent() {
           />
           <section className="panel__card panel__card--secondary">
             <div className="panel__header">
-              <h3>Secondary Records</h3>
+              <h3>Past simulation work</h3>
               <button
                 type="button"
                 className="panel__action panel__action--ghost"
@@ -1380,7 +1380,7 @@ function SimulationPageContent() {
                 {simulationSecondaryOpen ? "Hide secondary" : "Show secondary"}
               </button>
             </div>
-            <p className="panel__subheading">Reference history</p>
+            <p className="panel__subheading">Past runs and lessons</p>
             <p className="panel__step-helper">
               Keep focus on the active simulation flow; expand when you need past runs or lessons.
             </p>

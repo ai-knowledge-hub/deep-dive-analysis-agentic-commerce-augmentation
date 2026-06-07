@@ -89,7 +89,7 @@ export function ExperimentHistoryPanel({
           </button>
         </div>
       </div>
-      <p className="panel__subheading">Reference history</p>
+      <p className="panel__subheading">Past experiments and runs</p>
       <p className="panel__step-helper">
         Review past experiments, runs, and metrics without interrupting the active flow.
       </p>
