@@ -696,7 +696,7 @@ export default function AdminPage() {
         const parts = line.split("|").map((item) => item.trim());
         if (parts.length < 2) {
           throw new Error(
-            "Each product line must be: product-id|product name|short description",
+            "Each product line must be: product reference|product name|short description",
           );
         }
         const hasExplicitId = parts.length >= 3;
@@ -707,7 +707,7 @@ export default function AdminPage() {
         const productDescription = hasExplicitId ? parts[2] : parts[1];
         if (!productId || !productName || !productDescription) {
           throw new Error(
-            "Each product line must include product id/name/description.",
+            "Each product line must include product reference, name, and description.",
           );
         }
         const productResponse = await createAdminProduct(

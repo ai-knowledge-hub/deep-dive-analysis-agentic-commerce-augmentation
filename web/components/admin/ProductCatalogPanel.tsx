@@ -71,7 +71,7 @@ export function ProductCatalogPanel({
               </span>
               <input
                 type="text"
-                placeholder="product-id"
+                placeholder="Product reference"
                 value={productForm.id}
                 onChange={(event) => onProductFormChange({ id: event.target.value })}
                 required
