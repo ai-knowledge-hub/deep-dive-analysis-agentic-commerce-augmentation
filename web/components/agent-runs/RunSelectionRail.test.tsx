@@ -15,12 +15,21 @@ describe("RunSelectionRail", () => {
             status: "running",
             state: "variants_ready",
             requires_approval: false,
+            created_at: "2026-01-02T00:00:00Z",
+          },
+          {
+            id: "run-2",
+            experiment_id: "exp-87654321",
+            status: "running",
+            state: "variants_ready",
+            requires_approval: false,
+            created_at: "2026-01-03T00:00:00Z",
           },
         ]}
         selectedRunId="run-1"
         runCounters={{
-          total: 1,
-          running: 1,
+          total: 2,
+          running: 2,
           planned: 0,
           failed: 0,
           completed: 0,
@@ -30,11 +39,15 @@ describe("RunSelectionRail", () => {
       />,
     );
 
-    expect(screen.getByText("Experiment run")).toBeInTheDocument();
-    expect(screen.getByText(/running · variants ready/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Experiment run · started/i)).toHaveLength(2);
+    expect(screen.getByText(/started 1\/2\/2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/started 1\/3\/2026/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/running · variants ready/i)).toHaveLength(2);
     expect(screen.getByText(/Summary/i)).toBeInTheDocument();
     expect(screen.queryByText(/exp-12345678/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exp-87654321/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/run-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/run-2/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Snapshot/i)).not.toBeInTheDocument();
   });

@@ -190,6 +190,17 @@ describe("ValidationPage", () => {
           base_description: "Base copy",
           candidate_description: "Candidate copy",
           status: "ready_for_review",
+          updated_at: "2026-01-02T00:00:00Z",
+        },
+        {
+          id: "copy-revision-fedcba654321",
+          client_id: "client-a",
+          product_id: "product-1",
+          source_type: "simulation_run",
+          base_description: "Base copy",
+          candidate_description: "Candidate copy 2",
+          status: "ready_for_review",
+          updated_at: "2026-01-03T00:00:00Z",
         },
       ],
     });
@@ -201,12 +212,15 @@ describe("ValidationPage", () => {
     await user.selectOptions(screen.getByLabelText(/Entity type/i), "copy_revision");
 
     expect(
-      await screen.findByRole("option", {
-        name: /Simulation run revision · Ready for review/i,
+      await screen.findAllByRole("option", {
+        name: /Simulation run revision · Ready for review · updated/i,
       }),
-    ).toBeInTheDocument();
+    ).toHaveLength(2);
+    expect(screen.getByRole("option", { name: /updated 1\/2\/2026/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /updated 1\/3\/2026/i })).toBeInTheDocument();
     expect(screen.queryByText(/Ref abcdef12/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/simulation_run · ready_for_review/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/copy-revision-abcdef123456/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/copy-revision-fedcba654321/i)).not.toBeInTheDocument();
   });
 });

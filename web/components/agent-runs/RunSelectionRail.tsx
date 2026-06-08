@@ -1,6 +1,7 @@
 import React from "react";
 import type { AgentRun } from "../../lib/types";
 import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
+import { formatDateCompact } from "./registryAudit";
 import { runAttentionLabel } from "./runAttention";
 
 type RunCounters = {
@@ -20,10 +21,11 @@ type RunSelectionRailProps = {
 };
 
 function formatRunLabel(run: AgentRun): string {
+  const started = run.created_at ? ` · started ${formatDateCompact(run.created_at)}` : "";
   if (run.experiment_id) {
-    return "Experiment run";
+    return `Experiment run${started}`;
   }
-  return "Standalone run";
+  return `Standalone run${started}`;
 }
 
 export function RunSelectionRail({

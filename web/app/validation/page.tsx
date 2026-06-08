@@ -96,10 +96,18 @@ function formatDisplayToken(value: string | null | undefined, fallback: string):
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+function formatOptionDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString();
+}
+
 function formatCopyRevisionOption(revision: CopyRevision): string {
   const source = formatDisplayToken(revision.source_type, "Copy");
   const status = formatDisplayToken(revision.status, "Draft");
-  return `${source} revision · ${status}`;
+  const updated = formatOptionDate(revision.updated_at || revision.created_at);
+  return `${source} revision · ${status}${updated ? ` · updated ${updated}` : ""}`;
 }
 
 type ValidationNextAction =
