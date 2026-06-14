@@ -127,6 +127,7 @@ describe("AgentRunsPage timeline presets", () => {
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
+    Element.prototype.scrollIntoView = vi.fn();
     window.localStorage.clear();
 
     listAgentRunsMock.mockResolvedValue({
@@ -908,6 +909,9 @@ describe("AgentRunsPage timeline presets", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
     expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Selected action detail/i)).toHaveFocus(),
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /Open variant/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");

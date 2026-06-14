@@ -1,6 +1,13 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
@@ -228,6 +235,7 @@ function AgentRunsPageContent() {
   const [timelinePreset, setTimelinePreset] = useState<TimelinePresetId>(initialTimelinePreset);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const selectedActionDetailRef = useRef<HTMLDivElement | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(eventIdParam || null);
   const [copyLinkNotice, setCopyLinkNotice] = useState<{
     type: "info" | "error";
@@ -1243,6 +1251,17 @@ function AgentRunsPageContent() {
     [loadSelected, userId],
   );
 
+  const focusSelectedActionDetail = useCallback((actionId: string) => {
+    setSelectedActionId(actionId);
+    window.setTimeout(() => {
+      selectedActionDetailRef.current?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      });
+      selectedActionDetailRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, []);
+
   const handleRunControl = useCallback(
     async (action: "start" | "pause" | "cancel" | "step") => {
       if (!userId || !selectedRunId) return;
@@ -1397,7 +1416,7 @@ function AgentRunsPageContent() {
             onStart={() => {
               void handleRunControl("start");
             }}
-            onReviewAction={setSelectedActionId}
+            onReviewAction={focusSelectedActionDetail}
           />
 
           <div className="agent-workspace">
@@ -1420,7 +1439,7 @@ function AgentRunsPageContent() {
                 nextRecommendedAction={nextRecommendedAction}
                 onJumpToNextAction={() => {
                   if (nextRecommendedAction.action?.id) {
-                    setSelectedActionId(nextRecommendedAction.action.id);
+                    focusSelectedActionDetail(nextRecommendedAction.action.id);
                   }
                 }}
                 onPreflightCommand={handleOperatorCommandPreflight}
@@ -1458,7 +1477,7 @@ function AgentRunsPageContent() {
                   setTimelineTimeWindow("all");
                   setTimelinePreset("custom");
                   if (nextRecommendedAction.action?.id) {
-                    setSelectedActionId(nextRecommendedAction.action.id);
+                    focusSelectedActionDetail(nextRecommendedAction.action.id);
                   }
                 }}
                 onFocusPolicy={() => {
@@ -1696,39 +1715,45 @@ function AgentRunsPageContent() {
                       }}
                       onCopyEventLink={(event) => void copyEventLink(event)}
                     />
-                    <SelectedActionDetailPanel
-                      selectedAction={selectedAction}
-                      selectedCapabilitySpec={selectedCapabilitySpec}
-                      ownershipForm={ownershipForm}
-                      ownershipPreflight={ownershipPreflight ?? null}
-                      ownershipBusy={ownershipBusy}
-                      ownershipNotice={ownershipNotice}
-                      actionDiffs={actionDiffs}
-                      shortKeyList={shortKeyList}
-                      onOwnershipFormChange={(patch) =>
-                        setOwnershipForm((current) => ({ ...current, ...patch }))
-                      }
-                      onClearOwnershipPreflight={() => setOwnershipPreflight(null)}
-                      onSubmitRegistryOwnership={submitRegistryOwnership}
-                      onOpenExperimentArtifact={() =>
-                        selectedRun?.experiment_id
-                          ? router.push(
-                              buildExperimentHref(selectedRun.experiment_id, {
-                                runId: selectedRun.id,
-                              }),
-                            )
-                          : null
-                      }
-                      onOpenValidationArtifact={() =>
-                        router.push(
-                          buildValidationHref({
-                            experimentId: selectedRun?.experiment_id,
-                            runId: selectedRun?.id,
-                          }),
-                        )
-                      }
-                      onOpenDetailedDiff={() => setDiffDrawerOpen(true)}
-                    />
+                    <div
+                      ref={selectedActionDetailRef}
+                      tabIndex={-1}
+                      aria-label="Selected action detail"
+                    >
+                      <SelectedActionDetailPanel
+                        selectedAction={selectedAction}
+                        selectedCapabilitySpec={selectedCapabilitySpec}
+                        ownershipForm={ownershipForm}
+                        ownershipPreflight={ownershipPreflight ?? null}
+                        ownershipBusy={ownershipBusy}
+                        ownershipNotice={ownershipNotice}
+                        actionDiffs={actionDiffs}
+                        shortKeyList={shortKeyList}
+                        onOwnershipFormChange={(patch) =>
+                          setOwnershipForm((current) => ({ ...current, ...patch }))
+                        }
+                        onClearOwnershipPreflight={() => setOwnershipPreflight(null)}
+                        onSubmitRegistryOwnership={submitRegistryOwnership}
+                        onOpenExperimentArtifact={() =>
+                          selectedRun?.experiment_id
+                            ? router.push(
+                                buildExperimentHref(selectedRun.experiment_id, {
+                                  runId: selectedRun.id,
+                                }),
+                              )
+                            : null
+                        }
+                        onOpenValidationArtifact={() =>
+                          router.push(
+                            buildValidationHref({
+                              experimentId: selectedRun?.experiment_id,
+                              runId: selectedRun?.id,
+                            }),
+                          )
+                        }
+                        onOpenDetailedDiff={() => setDiffDrawerOpen(true)}
+                      />
+                    </div>
                   </>
                 )}
               </section>
