@@ -66,7 +66,9 @@ vi.mock("../../components/layout/DetailHeader", () => ({
 }));
 
 vi.mock("../../components/simulation/SimulationPanel", () => ({
-  SimulationPanel: () => <div>Simulation Panel</div>,
+  SimulationPanel: ({ canRun }: { canRun: boolean }) => (
+    <div>Simulation Panel {canRun ? "ready" : "not ready"}</div>
+  ),
 }));
 
 vi.mock("../../components/simulation/SimulationHistory", () => ({
@@ -114,6 +116,7 @@ describe("SimulationPage", () => {
     getSimulationRunMock.mockReset();
     listConversationSessionsMock.mockReset();
     listExperimentsMock.mockReset();
+    Element.prototype.scrollIntoView = vi.fn();
 
     listSimulationLessonsMock.mockResolvedValue({ lessons: [] });
     listSimulationRunsMock.mockResolvedValue({ runs: [] });
@@ -161,5 +164,21 @@ describe("SimulationPage", () => {
     await waitFor(() => {
       expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=sim-1");
     });
+  });
+
+  it("guides the operator to the simulation workspace when setup is missing", async () => {
+    const user = userEvent.setup();
+    searchParamsValue = "";
+
+    render(<SimulationPage />);
+
+    expect(await screen.findByText(/Simulation Panel not ready/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Define scenario and products/i }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Simulation workspace/i)).toHaveFocus(),
+    );
+    expect(screen.getByText(/Add buyer intent before running simulation/i)).toBeInTheDocument();
   });
 });

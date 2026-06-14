@@ -1,6 +1,13 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
@@ -54,6 +61,19 @@ function filterProductsForBrand(
     }
     return product.source === "catalog";
   });
+}
+
+function simulationSetupGuideNotice(
+  scenario: string,
+  productCount: number,
+): string {
+  if (!scenario.trim()) {
+    return "Add buyer intent before running simulation.";
+  }
+  if (productCount === 0) {
+    return "Add at least one product before running simulation.";
+  }
+  return "Complete simulation setup before running.";
 }
 
 function SimulationPageContent() {
@@ -132,6 +152,8 @@ function SimulationPageContent() {
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [simulationSecondaryOpen, setSimulationSecondaryOpen] = useState(false);
+  const [simulationGuideNotice, setSimulationGuideNotice] = useState<string | null>(null);
+  const simulationWorkspaceRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -677,6 +699,7 @@ function SimulationPageContent() {
   const handleRunSimulation = useCallback(async () => {
     if (!simulationScenario.trim()) return;
     if (simulationProducts.length === 0) return;
+    setSimulationGuideNotice(null);
     setSimulationLoading(true);
     try {
       const response = await runSimulation(
@@ -727,6 +750,7 @@ function SimulationPageContent() {
         );
         setSimulationOptimized(response);
         setSelectedSimulationProductId(targetGap.product_id);
+        setSimulationGuideNotice(null);
       } finally {
         setSimulationLoading(false);
       }
@@ -746,6 +770,7 @@ function SimulationPageContent() {
     try {
       const response = await retestSimulation(simulationRun.run_id, updated, userId);
       setSimulationRetest(response);
+      setSimulationGuideNotice(null);
     } finally {
       setSimulationLoading(false);
     }
@@ -756,6 +781,7 @@ function SimulationPageContent() {
       const response = await getSimulationRun(runId, userId);
       const run = response.run;
       setSimulationRun({ run_id: run.id, result: run.result });
+      setSimulationGuideNotice(null);
       setSimulationOptimized(null);
       setSimulationRetest(run.retest ? { run_id: run.id, result: run.retest } : null);
       const scopedProducts = filterProductsForBrand(run.products ?? [], brandId);
@@ -1078,22 +1104,43 @@ function SimulationPageContent() {
     simulationScenario,
   ]);
 
+  const focusSimulationWorkspace = useCallback(() => {
+    simulationWorkspaceRef.current?.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+    simulationWorkspaceRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const handleRunSimulationNextAction = useCallback(() => {
     switch (simulationNextAction.action) {
       case "define":
+        focusSimulationWorkspace();
+        setSimulationGuideNotice(
+          simulationSetupGuideNotice(simulationScenario, simulationProducts.length),
+        );
+        window.setTimeout(() => setSimulationGuideNotice(null), 3500);
         return;
       case "run":
+        focusSimulationWorkspace();
         void handleRunSimulation();
         return;
       case "select_target":
+        focusSimulationWorkspace();
         if (simulationBestScore?.product_id) {
           setSelectedSimulationProductId(simulationBestScore.product_id);
+          setSimulationGuideNotice(null);
+        } else {
+          setSimulationGuideNotice("Run simulation before selecting a target product.");
+          window.setTimeout(() => setSimulationGuideNotice(null), 3500);
         }
         return;
       case "optimize":
+        focusSimulationWorkspace();
         void handleOptimizeSimulation(selectedSimulationProductId ?? undefined);
         return;
       case "retest":
+        focusSimulationWorkspace();
         void handleRetestSimulation();
         return;
       case "open_experiments":
@@ -1107,10 +1154,13 @@ function SimulationPageContent() {
     handleOptimizeSimulation,
     handleRetestSimulation,
     handleRunSimulation,
+    focusSimulationWorkspace,
     runIdParam,
     selectedSimulationProductId,
     simulationBestScore?.product_id,
     simulationNextAction.action,
+    simulationProducts.length,
+    simulationScenario,
     simulationRun?.run_id,
   ]);
 
@@ -1325,50 +1375,66 @@ function SimulationPageContent() {
               </div>
             </section>
           </section>
-          <SimulationPanel
-            query={simulationScenario}
-            scenarioValue={simulationScenario}
-            onScenarioChange={(value) => {
-              setSimulationScenario(value);
-              setSimulationScenarioDirty(true);
-            }}
-            evidenceSummary={evidenceSummary}
-            optimizationMode={optimizationMode}
-            onOptimizationModeChange={setOptimizationMode}
-            sourceSessionId={simulationSourceSession}
-            productCopy={productCopy}
-            onProductCopyChange={handleProductCopyChange}
-            feedPreview={feedPreview}
-            brandToneSummary={brandToneSummary}
-            toneSuggestion={simulationToneSuggestion}
-            toneValue={simulationTone}
-            toneNotice={simulationToneNotice}
-            onToneChange={setSimulationTone}
-            onToneUseSuggestion={() =>
-              setSimulationTone(simulationToneSuggestion ?? "")
-            }
-            onToneSave={handleSaveTone}
-            onToneClear={handleClearTone}
-            onToneFromBrand={handleToneFromBrand}
-            run={simulationRun}
-            optimized={simulationOptimized}
-            retest={simulationRetest}
-            products={simulationProducts}
-            selectedProductId={selectedSimulationProductId}
-            loading={simulationLoading}
-            canRun={Boolean(simulationScenario.trim() && simulationProducts.length > 0)}
-            canOptimize={Boolean(
-              simulationRun?.result?.gap_analysis?.length &&
-                optimizationMode !== "feed",
-            )}
-            canRetest={Boolean(
-              simulationRun && simulationOptimized && optimizationMode !== "feed",
-            )}
-            onRun={handleRunSimulation}
-            onOptimize={handleOptimizeSimulation}
-            onRetest={handleRetestSimulation}
-            onSelectProduct={setSelectedSimulationProductId}
-          />
+          <section
+            className="panel__notice panel__notice--info"
+            hidden={!simulationGuideNotice}
+          >
+            {simulationGuideNotice}
+          </section>
+          <div
+            ref={simulationWorkspaceRef}
+            tabIndex={-1}
+            aria-label="Simulation workspace"
+          >
+            <SimulationPanel
+              query={simulationScenario}
+              scenarioValue={simulationScenario}
+              onScenarioChange={(value) => {
+                setSimulationScenario(value);
+                setSimulationScenarioDirty(true);
+                setSimulationGuideNotice(null);
+              }}
+              evidenceSummary={evidenceSummary}
+              optimizationMode={optimizationMode}
+              onOptimizationModeChange={setOptimizationMode}
+              sourceSessionId={simulationSourceSession}
+              productCopy={productCopy}
+              onProductCopyChange={handleProductCopyChange}
+              feedPreview={feedPreview}
+              brandToneSummary={brandToneSummary}
+              toneSuggestion={simulationToneSuggestion}
+              toneValue={simulationTone}
+              toneNotice={simulationToneNotice}
+              onToneChange={setSimulationTone}
+              onToneUseSuggestion={() =>
+                setSimulationTone(simulationToneSuggestion ?? "")
+              }
+              onToneSave={handleSaveTone}
+              onToneClear={handleClearTone}
+              onToneFromBrand={handleToneFromBrand}
+              run={simulationRun}
+              optimized={simulationOptimized}
+              retest={simulationRetest}
+              products={simulationProducts}
+              selectedProductId={selectedSimulationProductId}
+              loading={simulationLoading}
+              canRun={Boolean(simulationScenario.trim() && simulationProducts.length > 0)}
+              canOptimize={Boolean(
+                simulationRun?.result?.gap_analysis?.length &&
+                  optimizationMode !== "feed",
+              )}
+              canRetest={Boolean(
+                simulationRun && simulationOptimized && optimizationMode !== "feed",
+              )}
+              onRun={handleRunSimulation}
+              onOptimize={handleOptimizeSimulation}
+              onRetest={handleRetestSimulation}
+              onSelectProduct={(productId) => {
+                setSelectedSimulationProductId(productId);
+                setSimulationGuideNotice(null);
+              }}
+            />
+          </div>
           <section className="panel__card panel__card--secondary">
             <div className="panel__header">
               <h3>Past simulation work</h3>
