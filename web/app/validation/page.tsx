@@ -1049,41 +1049,45 @@ function ValidationPageContent() {
             onOpenExperiments={() => router.push(experimentsHref)}
           />
           <section className="panel__card panel__card--secondary panel__card--compact">
-            <div className="panel__subheading">Step 1 · Configure provider defaults</div>
-            <p className="panel__step-helper">
-              Set the default validation provider once. This applies to both synthetic and observed
-              validation panels.
-            </p>
-            {llmConfigError ? (
-              <div className="panel__notice panel__notice--error">
-                Unable to load provider configuration.
-              </div>
-            ) : (
-              <>
-                <div className="panel__chips">
-                  {providerStatusItems.map((item) => (
-                    <button
-                      key={item.name}
-                      type="button"
-                      className={`panel__chip panel__chip--button ${
-                        item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
-                      }`}
-                      title={item.tooltip}
-                      onClick={() => {
-                        setProvider(item.name);
-                        setManualForm((prev) => ({ ...prev, platform: item.name }));
-                      }}
-                    >
-                      {item.label}:{" "}
-                      {item.isActive ? "active" : item.configured ? "ready" : "missing"}
-                    </button>
-                  ))}
+            <details
+              className="panel__details validation-provider-defaults"
+              open={Boolean(llmConfigError)}
+            >
+              <summary className="panel__details-summary">Provider defaults</summary>
+              <p className="panel__step-helper">
+                Change provider defaults only when this validation needs a different route.
+              </p>
+              {llmConfigError ? (
+                <div className="panel__notice panel__notice--error">
+                  Unable to load provider configuration.
                 </div>
-                <p className="panel__muted">
-                  Selecting a provider here sets the default for both synthetic and observed validation panels.
-                </p>
-              </>
-            )}
+              ) : (
+                <>
+                  <div className="panel__chips">
+                    {providerStatusItems.map((item) => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        className={`panel__chip panel__chip--button ${
+                          item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
+                        }`}
+                        title={item.tooltip}
+                        onClick={() => {
+                          setProvider(item.name);
+                          setManualForm((prev) => ({ ...prev, platform: item.name }));
+                        }}
+                      >
+                        {item.label}:{" "}
+                        {item.isActive ? "active" : item.configured ? "ready" : "missing"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="panel__muted">
+                    Selecting a provider here sets the default for both synthetic and observed validation panels.
+                  </p>
+                </>
+              )}
+            </details>
           </section>
           <section className="panel__card panel__card--primary">
             <div className="panel__header">

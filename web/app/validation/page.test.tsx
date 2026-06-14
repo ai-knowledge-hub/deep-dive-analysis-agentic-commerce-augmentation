@@ -133,6 +133,8 @@ describe("ValidationPage", () => {
 
     expect(await screen.findByText(/Run context preserved/i)).toBeInTheDocument();
     expect(screen.getByText(/opened from the selected run/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Provider defaults$/i)).toBeVisible();
+    expect(screen.getByText(/openai: ready/i)).not.toBeVisible();
     expect(screen.getByPlaceholderText(/Paste a saved variant if needed/i)).toBeInTheDocument();
     expect(
       screen.queryByPlaceholderText(/Paste a saved variant reference if needed/i),
