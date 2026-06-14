@@ -58,11 +58,16 @@ vi.mock("../../components/layout/DetailHeader", () => ({
 
 vi.mock("../../components/validation/ValidationFlowHeader", () => ({
   ValidationFlowHeader: ({
+    nextAction,
+    onRunNextAction,
     onOpenExperiments,
   }: {
+    nextAction: { label: string };
+    onRunNextAction: () => void;
     onOpenExperiments: () => void;
   }) => (
     <div>
+      <button onClick={onRunNextAction}>{nextAction.label}</button>
       <button onClick={onOpenExperiments}>Open Experiments</button>
     </div>
   ),
@@ -125,6 +130,7 @@ describe("ValidationPage", () => {
     listExperimentMetricsMock.mockResolvedValue({ metrics: [] });
     getExperimentValidationSummaryMock.mockResolvedValue({ summary: null });
     getBrandPredictionAccuracyMock.mockResolvedValue({ summary: null });
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   it("preserves run context for back navigation and experiment handoff", async () => {
@@ -149,6 +155,22 @@ describe("ValidationPage", () => {
     await waitFor(() => {
       expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
     });
+  });
+
+  it("focuses the missing item when the header action needs a validation target", async () => {
+    const user = userEvent.setup();
+    searchParamsValue = "";
+
+    render(<ValidationPage />);
+
+    await screen.findByText(/Synthetic validation signal/i);
+
+    await user.click(screen.getByRole("button", { name: /Select a validation item/i }));
+
+    expect(screen.getByLabelText(/^Item$/i)).toHaveFocus();
+    expect(
+      screen.getByText(/Select an item in Step 2 to create a synthetic validation job/i),
+    ).toBeInTheDocument();
   });
 
   it("uses readable provider labels", async () => {

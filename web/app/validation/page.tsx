@@ -1,6 +1,13 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
@@ -216,6 +223,9 @@ function ValidationPageContent() {
   const [providerLaunchInfo, setProviderLaunchInfo] =
     useState<ProviderRunLaunchInfo | null>(null);
   const [queryPrefillApplied, setQueryPrefillApplied] = useState(false);
+  const syntheticSectionRef = useRef<HTMLElement | null>(null);
+  const observedSectionRef = useRef<HTMLElement | null>(null);
+  const externalResultSectionRef = useRef<HTMLElement | null>(null);
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
@@ -895,20 +905,40 @@ function ValidationPageContent() {
     }
   }, [experiments, manualExperimentId, manualForm, userId]);
 
+  const guideToSection = useCallback(
+    (
+      section: React.RefObject<HTMLElement | null>,
+      controlSelector?: string,
+    ) => {
+      section.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+      if (!controlSelector) return;
+      section.current?.querySelector<HTMLElement>(controlSelector)?.focus({
+        preventScroll: true,
+      });
+    },
+    [],
+  );
+
   const handleRunValidationNextAction = useCallback(() => {
     switch (validationNextAction.action) {
       case "configure_provider":
         router.push("/admin");
         return;
       case "select_synthetic_item":
+        guideToSection(syntheticSectionRef, '[name="validation-entity-id"]');
         setStatus("Select an item in Step 2 to create a synthetic validation job.");
         window.setTimeout(() => setStatus(null), 3000);
         return;
       case "create_synthetic":
+        guideToSection(syntheticSectionRef);
         void handleCreateJob();
         return;
       case "submit_external_result":
         if (!externalJson.trim()) {
+          externalResultSectionRef.current
+            ?.querySelector<HTMLDetailsElement>("details")
+            ?.setAttribute("open", "");
+          guideToSection(externalResultSectionRef, '[name="validation-external-result"]');
           setStatus("Add the provider result in Step 2 before submitting external results.");
           window.setTimeout(() => setStatus(null), 3000);
           return;
@@ -916,6 +946,7 @@ function ValidationPageContent() {
         void handleSubmitExternal();
         return;
       case "complete_provider_run":
+        guideToSection(syntheticSectionRef);
         if (job?.id) {
           void (async () => {
             try {
@@ -945,6 +976,12 @@ function ValidationPageContent() {
         }
         return;
       case "log_observed":
+        guideToSection(observedSectionRef, '[name="validation-observed-experiment"]');
+        if (!manualExperimentId) {
+          setManualError("Select an experiment before logging observed reality.");
+          window.setTimeout(() => setManualError(null), 3000);
+          return;
+        }
         void handleLogObservedValidation();
         return;
       case "open_experiments":
@@ -958,7 +995,9 @@ function ValidationPageContent() {
     handleCreateJob,
     handleLogObservedValidation,
     handleSubmitExternal,
+    guideToSection,
     job?.id,
+    manualExperimentId,
     router,
     userId,
     validationNextAction.action,
@@ -1089,9 +1128,13 @@ function ValidationPageContent() {
               )}
             </details>
           </section>
-          <section className="panel__card panel__card--primary">
+          <section
+            ref={syntheticSectionRef}
+            className="panel__card panel__card--primary"
+            aria-labelledby="validation-synthetic-heading"
+          >
             <div className="panel__header">
-              <h3>Synthetic validation signal</h3>
+              <h3 id="validation-synthetic-heading">Synthetic validation signal</h3>
             </div>
             <div className="panel__subheading">Step 2 · Run synthetic validation</div>
             <p className="panel__step-helper">
@@ -1107,6 +1150,7 @@ function ValidationPageContent() {
                 <span>Entity type</span>
                 <select
                   className="panel__input"
+                  name="validation-entity-type"
                   value={entityType}
                   onChange={(event) => {
                     setEntityType(event.target.value as EntityType);
@@ -1125,6 +1169,7 @@ function ValidationPageContent() {
                 <span>Item</span>
                 <select
                   className="panel__input"
+                  name="validation-entity-id"
                   value={selectedEntityId}
                   onChange={(event) => setSelectedEntityId(event.target.value)}
                 >
@@ -1314,9 +1359,13 @@ function ValidationPageContent() {
             ) : null}
           </section>
 
-          <section className="panel__card panel__card--primary">
+          <section
+            ref={observedSectionRef}
+            className="panel__card panel__card--primary"
+            aria-labelledby="validation-observed-heading"
+          >
             <div className="panel__header">
-              <h3>Observed reality signal</h3>
+              <h3 id="validation-observed-heading">Observed reality signal</h3>
             </div>
             <div className="panel__subheading">Step 3 · Log observed reality</div>
             <p className="panel__step-helper">
@@ -1366,6 +1415,7 @@ function ValidationPageContent() {
                   <span>Experiment</span>
                   <select
                     className="panel__input"
+                    name="validation-observed-experiment"
                     value={manualExperimentId}
                     onChange={(event) => setManualExperimentId(event.target.value)}
                   >
@@ -1556,9 +1606,13 @@ function ValidationPageContent() {
           </section>
 
           {isManualFallbackMode(job?.mode) && job?.external_instructions ? (
-            <section className="panel__card panel__card--secondary">
+            <section
+              ref={externalResultSectionRef}
+              className="panel__card panel__card--secondary"
+              aria-labelledby="validation-external-heading"
+            >
               <div className="panel__header">
-                <h3>External validation instructions</h3>
+                <h3 id="validation-external-heading">External validation instructions</h3>
               </div>
               <div className="panel__subheading">Supplement · Paste external result</div>
               <p className="panel__step-helper">
@@ -1573,6 +1627,7 @@ function ValidationPageContent() {
                     <span>Provider result</span>
                     <textarea
                       className="panel__textarea"
+                      name="validation-external-result"
                       rows={6}
                       value={externalJson}
                       onChange={(event) => setExternalJson(event.target.value)}
