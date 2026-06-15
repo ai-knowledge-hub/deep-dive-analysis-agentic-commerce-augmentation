@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { EvidencePanel } from "./EvidencePanel";
 
@@ -63,5 +63,29 @@ describe("EvidencePanel", () => {
     expect(screen.getByText(/Intent and goal signals/i)).toBeInTheDocument();
     expect(screen.queryByText(/Our copy snapshot/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Intent\/Goal signals/i)).not.toBeInTheDocument();
+  });
+
+  it("routes the fresh-evidence action to chat instead of simulation", () => {
+    const onOpenChat = vi.fn();
+    const onOpenSimulation = vi.fn();
+
+    render(
+      <EvidencePanel
+        analysis={{
+          intent: { label: "best trail shoes", confidence: 0.8 },
+          goals: ["clear waterproof protection"],
+          evidence_products: [],
+          profiles: [],
+          alignment_scores: [],
+        }}
+        onOpenChat={onOpenChat}
+        onOpenSimulation={onOpenSimulation}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Open chat for fresh evidence/i }));
+
+    expect(onOpenChat).toHaveBeenCalledTimes(1);
+    expect(onOpenSimulation).not.toHaveBeenCalled();
   });
 });
