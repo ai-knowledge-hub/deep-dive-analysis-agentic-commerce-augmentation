@@ -1,6 +1,6 @@
 "use client";
 
-import React, { type ReactNode } from "react";
+import React, { forwardRef, type ReactNode } from "react";
 
 type Props = {
   labMode: "lab" | "manual";
@@ -12,17 +12,26 @@ type Props = {
   children: ReactNode;
 };
 
-export function ExperimentSetupFlowPanel({
-  labMode,
-  collapsed,
-  hasProduct,
-  protocolSnapshotVersion,
-  hypothesesReady,
-  onCollapsedChange,
-  children,
-}: Props) {
+export const ExperimentSetupFlowPanel = forwardRef<HTMLElement, Props>(
+  function ExperimentSetupFlowPanel(
+    {
+      labMode,
+      collapsed,
+      hasProduct,
+      protocolSnapshotVersion,
+      hypothesesReady,
+      onCollapsedChange,
+      children,
+    },
+    ref,
+  ) {
   return (
-    <section className="panel__card panel__card--primary">
+    <section
+      ref={ref}
+      className="panel__card panel__card--primary"
+      tabIndex={-1}
+      aria-label="Experiment setup"
+    >
       <div className="panel__header">
         <h3>{labMode === "lab" ? "Lab Setup Flow" : "Experiment Setup Flow"}</h3>
         <div className="panel__meta">
@@ -62,4 +71,5 @@ export function ExperimentSetupFlowPanel({
       )}
     </section>
   );
-}
+  },
+);

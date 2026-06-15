@@ -226,6 +226,7 @@ function ExperimentsPageContent() {
     payload: draftPayload,
   });
   const variantsSectionRef = useRef<HTMLElement | null>(null);
+  const setupSectionRef = useRef<HTMLElement | null>(null);
   const runsSectionRef = useRef<HTMLDivElement | null>(null);
   const metricsSectionRef = useRef<HTMLElement | null>(null);
 
@@ -1347,14 +1348,24 @@ function ExperimentsPageContent() {
     }
   }, [handleUseBelief, latestBelief, beliefsRef]);
 
+  const focusSetupSection = useCallback(() => {
+    setSetupFlowCollapsed(false);
+    window.setTimeout(() => {
+      setupSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setupSectionRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, []);
+
   const handleRunNextFlowAction = useCallback(() => {
     switch (nextFlowAction.action) {
       case "expand_setup":
-        setSetupFlowCollapsed(false);
+        focusSetupSection();
         return;
       case "scroll_setup":
-        setSetupFlowCollapsed(false);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        focusSetupSection();
         return;
       case "scroll_variants":
         variantsSectionRef.current?.scrollIntoView({
@@ -1388,6 +1399,7 @@ function ExperimentsPageContent() {
   }, [
     handleGenerateLoopVariants,
     handleRunVariant,
+    focusSetupSection,
     nextFlowAction.action,
     router,
     selectedExperimentId,
@@ -1622,6 +1634,7 @@ function ExperimentsPageContent() {
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
           <ExperimentSetupFlowPanel
+            ref={setupSectionRef}
             labMode={labMode}
             collapsed={setupFlowCollapsed}
             hasProduct={Boolean(productId)}

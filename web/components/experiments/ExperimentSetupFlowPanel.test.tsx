@@ -24,4 +24,25 @@ describe("ExperimentSetupFlowPanel", () => {
     expect(screen.queryByText(/Protocol snapshot/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Hypotheses/i)).not.toBeInTheDocument();
   });
+
+  it("exposes a focus target for setup shortcuts", () => {
+    const ref = React.createRef<HTMLElement>();
+    render(
+      <ExperimentSetupFlowPanel
+        ref={ref}
+        labMode="lab"
+        collapsed
+        hasProduct
+        protocolSnapshotVersion={3}
+        hypothesesReady
+        onCollapsedChange={vi.fn()}
+      >
+        <div>Setup controls</div>
+      </ExperimentSetupFlowPanel>,
+    );
+
+    ref.current?.focus();
+
+    expect(screen.getByLabelText(/Experiment setup/i)).toHaveFocus();
+  });
 });
