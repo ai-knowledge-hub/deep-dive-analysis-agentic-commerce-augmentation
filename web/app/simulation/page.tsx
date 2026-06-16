@@ -76,6 +76,19 @@ function simulationSetupGuideNotice(
   return "Complete simulation setup before running.";
 }
 
+function formatSimulationProductLabel(
+  productId: string | null | undefined,
+  products: SimulationProduct[],
+  currentProductId: string | null | undefined,
+  currentProductName: string | null | undefined,
+): string {
+  if (!productId) return "No product selected";
+  const matchedName = products.find((product) => product.id === productId)?.name;
+  if (matchedName) return matchedName;
+  if (productId === currentProductId && currentProductName) return currentProductName;
+  return "Product not in current list";
+}
+
 function SimulationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1000,12 +1013,23 @@ function SimulationPageContent() {
   }, [selectedSimulationProductId, simulationRun?.result?.scores]);
 
   const simulationSelectedProductLabel = useMemo(() => {
-    if (!selectedSimulationProductId) return "No product selected";
-    return (
-      simulationProducts.find((product) => product.id === selectedSimulationProductId)?.name ??
-      selectedSimulationProductId
+    return formatSimulationProductLabel(
+      selectedSimulationProductId,
+      simulationProducts,
+      productId,
+      productName,
     );
-  }, [selectedSimulationProductId, simulationProducts]);
+  }, [productId, productName, selectedSimulationProductId, simulationProducts]);
+
+  const simulationBestProductLabel = useMemo(() => {
+    if (!simulationBestScore?.product_id) return "No run yet";
+    return formatSimulationProductLabel(
+      simulationBestScore.product_id,
+      simulationProducts,
+      productId,
+      productName,
+    );
+  }, [productId, productName, simulationBestScore?.product_id, simulationProducts]);
 
   const simulationLift = useMemo(() => {
     const targetId = simulationOptimized?.optimized.id;
@@ -1339,7 +1363,7 @@ function SimulationPageContent() {
                 <div className="outcome-snapshot__item">
                   <span className="outcome-snapshot__label">Winner</span>
                   <span className="outcome-snapshot__value">
-                    {simulationBestScore?.product_id ?? "No run yet"}
+                    {simulationBestProductLabel}
                   </span>
                   <span className="panel__muted">
                     Score:{" "}

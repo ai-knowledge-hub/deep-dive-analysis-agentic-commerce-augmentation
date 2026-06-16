@@ -153,6 +153,8 @@ describe("SimulationPage", () => {
     expect(screen.getByText(/opened from the selected run/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Past simulation work/i })).toBeInTheDocument();
     expect(screen.getByText(/Past runs and lessons/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Product 1/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^prod-1$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Reference history/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/opened from run/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^sim-1$/i)).not.toBeInTheDocument();
