@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 
 import { ControlPlaneBriefing } from "../../components/layout/ControlPlaneBriefing";
+import { formatAgentRunLabel } from "../../components/agent-runs/agentRunLabels";
 import { DetailHeader } from "../../components/layout/DetailHeader";
 import { Sidebar } from "../../components/layout/Sidebar";
 import {
@@ -61,13 +62,6 @@ function formatDateTime(value?: string | null): string {
   return parsed.toLocaleString();
 }
 
-function formatRunLabel(run: AgentRun): string {
-  if (run.experiment_id) {
-    return "Experiment run";
-  }
-  return "Standalone run";
-}
-
 function buildSignal(run: AgentRun, event: AgentRunEvent): LearningSignal {
   const status = String(event.status || "").toLowerCase();
   const category = event.is_policy_event
@@ -77,10 +71,10 @@ function buildSignal(run: AgentRun, event: AgentRunEvent): LearningSignal {
       : "execution";
   const title =
     category === "policy"
-      ? `${formatRunLabel(run)} triggered a policy learning`
+      ? `${formatAgentRunLabel(run)} triggered a policy learning`
       : category === "failure"
-        ? `${formatRunLabel(run)} exposed a failure mode`
-        : `${formatRunLabel(run)} completed an execution step`;
+        ? `${formatAgentRunLabel(run)} exposed a failure mode`
+        : `${formatAgentRunLabel(run)} completed an execution step`;
   const summary =
     event.note ||
     `Recent ${category} signal on ${formatOperatorActionName(event.capability_name ?? "the active workflow")}.`;

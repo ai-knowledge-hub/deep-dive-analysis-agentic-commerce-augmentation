@@ -15,6 +15,7 @@ describe("RunSelectionRail", () => {
             status: "running",
             state: "variants_ready",
             requires_approval: false,
+            objective: { objective: "checkout_confidence" },
             created_at: "2026-01-02T00:00:00Z",
           },
           {
@@ -39,8 +40,9 @@ describe("RunSelectionRail", () => {
       />,
     );
 
-    expect(screen.getAllByText(/Experiment run · started/i)).toHaveLength(2);
-    expect(screen.getByText(/started 1\/2\/2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Experiment run · checkout confidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/Experiment run · started 1\/3\/2026/i)).toBeInTheDocument();
+    expect(screen.queryByText(/started 1\/2\/2026/i)).not.toBeInTheDocument();
     expect(screen.getByText(/started 1\/3\/2026/i)).toBeInTheDocument();
     expect(screen.getAllByText(/running · variants ready/i)).toHaveLength(2);
     expect(screen.getByText(/Summary/i)).toBeInTheDocument();

@@ -1,7 +1,7 @@
 import React from "react";
 import type { AgentRun } from "../../lib/types";
 import { formatOperatorIdentifier } from "../../lib/operatorDisplayLanguage";
-import { formatDateCompact } from "./registryAudit";
+import { formatAgentRunLabel } from "./agentRunLabels";
 import { runAttentionLabel } from "./runAttention";
 
 type RunCounters = {
@@ -19,14 +19,6 @@ type RunSelectionRailProps = {
   runCounters: RunCounters;
   onSelectRun: (runId: string) => void;
 };
-
-function formatRunLabel(run: AgentRun): string {
-  const started = run.created_at ? ` · started ${formatDateCompact(run.created_at)}` : "";
-  if (run.experiment_id) {
-    return `Experiment run${started}`;
-  }
-  return `Standalone run${started}`;
-}
 
 export function RunSelectionRail({
   runs,
@@ -59,7 +51,7 @@ export function RunSelectionRail({
                 onClick={() => onSelectRun(run.id)}
               >
                 <div className="control-data-row__main">
-                  <div className="control-data-row__title">{formatRunLabel(run)}</div>
+                  <div className="control-data-row__title">{formatAgentRunLabel(run)}</div>
                   <div className="control-data-row__meta">
                     {run.status ?? "unknown"} · {formatOperatorIdentifier(run.state)}
                   </div>
