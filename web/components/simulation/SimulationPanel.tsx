@@ -73,6 +73,17 @@ function renderGap(gap: SimulationGapReport | null) {
   );
 }
 
+function formatSimulationProductName(
+  productId: string | null | undefined,
+  products: SimulationProduct[],
+): string {
+  if (!productId) return "—";
+  return (
+    products.find((product) => product.id === productId)?.name ??
+    "Product not in current list"
+  );
+}
+
 export function SimulationPanel({
   query,
   scenarioValue,
@@ -446,7 +457,7 @@ export function SimulationPanel({
                     <div key={score.product_id} className="simulation__score">
                       <div className="simulation__score-header">
                         <span className="simulation__score-id">
-                          {score.product_id}
+                          {formatSimulationProductName(score.product_id, products)}
                         </span>
                         <span className="simulation__score-value">
                           {(score.score * 100).toFixed(0)}%
@@ -661,11 +672,11 @@ export function SimulationPanel({
           <span className="simulation__diff-label">Lift summary</span>
           <div className="simulation__lift-row">
             <span>Winner before</span>
-            <span>{winnerId ?? "—"}</span>
+            <span>{formatSimulationProductName(winnerId, products)}</span>
           </div>
           <div className="simulation__lift-row">
             <span>Winner after</span>
-            <span>{retest?.result?.winner_id ?? "—"}</span>
+            <span>{formatSimulationProductName(retest?.result?.winner_id, products)}</span>
           </div>
           <div className="simulation__lift-row">
             <span>Optimized lift</span>
