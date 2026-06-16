@@ -1359,6 +1359,14 @@ function ExperimentsPageContent() {
     }, 0);
   }, []);
 
+  const focusVariantsSection = useCallback(() => {
+    variantsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    variantsSectionRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const handleRunNextFlowAction = useCallback(() => {
     switch (nextFlowAction.action) {
       case "expand_setup":
@@ -1368,29 +1376,20 @@ function ExperimentsPageContent() {
         focusSetupSection();
         return;
       case "scroll_variants":
-        variantsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        focusVariantsSection();
         return;
       case "run_first_variant":
         if (variants[0]?.id) {
           void handleRunVariant(variants[0].id);
           return;
         }
-        variantsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        focusVariantsSection();
         return;
       case "open_validation":
         router.push(validationHref);
         return;
       case "generate_next_variant":
-        variantsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        focusVariantsSection();
         void handleGenerateLoopVariants();
         return;
       default:
@@ -1400,6 +1399,7 @@ function ExperimentsPageContent() {
     handleGenerateLoopVariants,
     handleRunVariant,
     focusSetupSection,
+    focusVariantsSection,
     nextFlowAction.action,
     router,
     selectedExperimentId,
@@ -1896,11 +1896,7 @@ function ExperimentsPageContent() {
             onToggleHistory={() => setHistoryCollapsed((open) => !open)}
             onSelectExperiment={setSelectedExperimentId}
             onSaveExperimentDraft={handleSaveExperimentDraft}
-            onScrollVariants={() =>
-              variantsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
+            onScrollVariants={focusVariantsSection}
             onScrollRuns={() =>
               runsSectionRef.current?.scrollIntoView({
                 behavior: "smooth",
@@ -1936,12 +1932,7 @@ function ExperimentsPageContent() {
             hasValidationSignals={hasValidationSignals}
             validationSummary={validationSummary}
             onOpenValidation={() => router.push(validationHref)}
-            onBackToVariants={() =>
-              variantsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              })
-            }
+            onBackToVariants={focusVariantsSection}
           />
 
           <ExperimentBeliefUnlockPanel
