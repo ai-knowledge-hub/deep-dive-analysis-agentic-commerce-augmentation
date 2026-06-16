@@ -1021,6 +1021,14 @@ function SimulationPageContent() {
     );
   }, [productId, productName, selectedSimulationProductId, simulationProducts]);
 
+  const simulationProductLabels = useMemo(() => {
+    const labels = Object.fromEntries(
+      simulationProducts.map((product) => [product.id, product.name]),
+    );
+    if (productId && productName) labels[productId] = productName;
+    return labels;
+  }, [productId, productName, simulationProducts]);
+
   const simulationBestProductLabel = useMemo(() => {
     if (!simulationBestScore?.product_id) return "No run yet";
     return formatSimulationProductLabel(
@@ -1484,6 +1492,7 @@ function SimulationPageContent() {
                 <SimulationHistory
                   runs={simulationRuns}
                   activeRunId={simulationRun?.run_id}
+                  productLabels={simulationProductLabels}
                   onSelect={handleSelectSimulationRun}
                   onAttach={handleAttachRun}
                   attachLabel={productName}
