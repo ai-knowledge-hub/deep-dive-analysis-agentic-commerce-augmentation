@@ -144,4 +144,41 @@ describe("ExperimentHistoryPanel", () => {
     expect(screen.getByText(/Test idea configured/i)).toBeInTheDocument();
     expect(screen.queryByText(/Hypothesis configured/i)).not.toBeInTheDocument();
   });
+
+  it("exposes a focus target for run history shortcuts", () => {
+    const runsSectionRef = createRef<HTMLDivElement>();
+    render(
+      <ExperimentHistoryPanel
+        experiments={[]}
+        runs={[]}
+        metricsCount={0}
+        variantCount={0}
+        historyCollapsed={false}
+        selectedExperimentId={null}
+        experimentSnapshots={{}}
+        batteries={[]}
+        savingExperimentId={null}
+        queryMap={new Map()}
+        variantLabelById={new Map()}
+        runGapDetails={new Map()}
+        hypothesisLabelById={new Map()}
+        hypothesisStatementById={new Map()}
+        expandedHypothesisId={null}
+        runsSectionRef={runsSectionRef}
+        formatTimestamp={(value) => value ?? "Not set"}
+        onToggleHistory={vi.fn()}
+        onSelectExperiment={vi.fn()}
+        onSaveExperimentDraft={vi.fn()}
+        onScrollVariants={vi.fn()}
+        onScrollRuns={vi.fn()}
+        onScrollMetrics={vi.fn()}
+        onToggleHypothesis={vi.fn()}
+        onDeleteRun={vi.fn()}
+      />,
+    );
+
+    runsSectionRef.current?.focus();
+
+    expect(screen.getByLabelText(/Experiment runs/i)).toHaveFocus();
+  });
 });

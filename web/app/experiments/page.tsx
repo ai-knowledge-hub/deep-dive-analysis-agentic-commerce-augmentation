@@ -1367,6 +1367,22 @@ function ExperimentsPageContent() {
     variantsSectionRef.current?.focus({ preventScroll: true });
   }, []);
 
+  const focusRunsSection = useCallback(() => {
+    runsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    runsSectionRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const focusMetricsSection = useCallback(() => {
+    metricsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    metricsSectionRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const handleRunNextFlowAction = useCallback(() => {
     switch (nextFlowAction.action) {
       case "expand_setup":
@@ -1897,16 +1913,8 @@ function ExperimentsPageContent() {
             onSelectExperiment={setSelectedExperimentId}
             onSaveExperimentDraft={handleSaveExperimentDraft}
             onScrollVariants={focusVariantsSection}
-            onScrollRuns={() =>
-              runsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-            onScrollMetrics={() =>
-              metricsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
+            onScrollRuns={focusRunsSection}
+            onScrollMetrics={focusMetricsSection}
             onToggleHypothesis={setExpandedHypothesisId}
             onDeleteRun={(runId) => {
               void handleDeleteExperimentRun(runId);

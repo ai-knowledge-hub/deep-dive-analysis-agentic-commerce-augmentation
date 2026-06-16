@@ -208,7 +208,12 @@ export function ExperimentHistoryPanel({
               </ul>
             )}
           </div>
-          <div className="panel__column" ref={runsSectionRef}>
+          <div
+            ref={runsSectionRef}
+            className="panel__column"
+            tabIndex={-1}
+            aria-label="Experiment runs"
+          >
             <div className="panel__meta">
               <h4 className="panel__subtitle">Runs</h4>
               {runs.length > 0 ? <span className="panel__badge">{runs.length}</span> : null}

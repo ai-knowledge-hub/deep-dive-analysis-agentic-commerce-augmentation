@@ -37,7 +37,12 @@ export const ExperimentMetricsPanel = forwardRef<HTMLElement, Props>(
     ref,
   ) {
     return (
-      <section className="panel__card panel__card--secondary" ref={ref}>
+      <section
+        ref={ref}
+        className="panel__card panel__card--secondary"
+        tabIndex={-1}
+        aria-label="Experiment metrics"
+      >
         <div className="panel__header">
           <h3>Metrics</h3>
           <div className="panel__meta">
