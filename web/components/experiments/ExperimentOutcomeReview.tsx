@@ -15,6 +15,13 @@ type ExperimentOutcomeReviewProps = {
   renderMetricValue: (value: unknown, fallback?: string) => string;
 };
 
+function formatDecisionValue(
+  value: unknown,
+  renderMetricValue: (value: unknown, fallback?: string) => string,
+) {
+  return renderMetricValue(value, "-").replace(/[._-]+/g, " ");
+}
+
 export function ExperimentOutcomeReview({
   latestMetric,
   experimentGapSummary,
@@ -29,16 +36,20 @@ export function ExperimentOutcomeReview({
             <li>Total runs: {renderMetricValue(latestMetric.total_runs, "-")}</li>
             <li>Wins: {renderMetricValue(latestMetric.wins, "-")}</li>
             <li>Win rate: {renderMetricValue(latestMetric.win_rate, "-")}</li>
-            <li>Win rate (keyword): {renderMetricValue(latestMetric.win_rate_keyword, "-")}</li>
-            <li>Win rate (robust): {renderMetricValue(latestMetric.win_rate_robust, "-")}</li>
-            <li>Avg score: {renderMetricValue(latestMetric.avg_score, "-")}</li>
             <li>
-              Judge consensus win rate:{" "}
-              {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
+              Keyword-match wins: {renderMetricValue(latestMetric.win_rate_keyword, "-")}
             </li>
-            <li>Evidence version: {renderMetricValue(latestMetric.snapshot_version, "-")}</li>
+            <li>Reliable wins: {renderMetricValue(latestMetric.win_rate_robust, "-")}</li>
+            <li>Average score: {renderMetricValue(latestMetric.avg_score, "-")}</li>
+            <li>
+              Judge agreement: {renderMetricValue(latestMetric.judge_consensus_win_rate, "-")}
+            </li>
+            <li>Evidence set: {renderMetricValue(latestMetric.snapshot_version, "-")}</li>
             <li>Confidence: {renderMetricValue(latestMetric.posterior, "-")}</li>
-            <li>Decision action: {renderMetricValue(latestMetric.decision_action, "-")}</li>
+            <li>
+              Recommended decision:{" "}
+              {formatDecisionValue(latestMetric.decision_action, renderMetricValue)}
+            </li>
           </ul>
         ) : (
           <p className="panel__muted">Run a variant to generate metrics.</p>

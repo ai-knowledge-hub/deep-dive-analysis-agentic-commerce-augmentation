@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ExperimentOutcomeReview } from "./ExperimentOutcomeReview";
 
 describe("ExperimentOutcomeReview", () => {
-  it("uses readable confidence and evidence labels", () => {
+  it("uses readable outcome metric labels", () => {
     render(
       <ExperimentOutcomeReview
         latestMetric={{
@@ -18,16 +18,24 @@ describe("ExperimentOutcomeReview", () => {
           judge_consensus_win_rate: 0.7,
           snapshot_version: 4,
           posterior: 0.81,
-          decision_action: "continue",
+          decision_action: "continue_experiment",
         }}
         experimentGapSummary={null}
         renderMetricValue={(value) => String(value)}
       />,
     );
 
-    expect(screen.getByText(/Evidence version: 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence set: 4/i)).toBeInTheDocument();
     expect(screen.getByText(/Confidence: 0.81/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Snapshot version/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Keyword-match wins: 0.5/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reliable wins: 0.6/i)).toBeInTheDocument();
+    expect(screen.getByText(/Judge agreement: 0.7/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recommended decision: continue experiment/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Win rate \(keyword\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Win rate \(robust\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Judge consensus/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Decision action/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evidence version/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Posterior/i)).not.toBeInTheDocument();
   });
 });
