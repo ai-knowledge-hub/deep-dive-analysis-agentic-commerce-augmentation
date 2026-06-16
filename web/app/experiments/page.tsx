@@ -868,7 +868,7 @@ function ExperimentsPageContent() {
     });
     return map;
   }, [metrics]);
-  const beliefsRef = useRef<HTMLDivElement | null>(null);
+  const beliefsRef = useRef<HTMLElement | null>(null);
 
   const labLoopSteps = useMemo(() => {
     const hypothesisReady = Boolean(
@@ -1332,21 +1332,22 @@ function ExperimentsPageContent() {
     return result;
   }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
 
+  const focusBeliefsSection = useCallback(() => {
+    beliefsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    beliefsRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const handleOpenBeliefsTimeline = useCallback(() => {
     setBeliefsViewMode("timeline");
-    if (beliefsRef.current) {
-      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [beliefsRef]);
+    focusBeliefsSection();
+  }, [focusBeliefsSection]);
 
   const handleUseLatestBelief = useCallback(() => {
     if (!latestBelief) return;
     handleUseBelief(latestBelief);
     setBeliefsViewMode("list");
-    if (beliefsRef.current) {
-      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [handleUseBelief, latestBelief, beliefsRef]);
+    focusBeliefsSection();
+  }, [focusBeliefsSection, handleUseBelief, latestBelief]);
 
   const focusSetupSection = useCallback(() => {
     setSetupFlowCollapsed(false);

@@ -16,7 +16,7 @@ type Props = {
   onUseBelief: (belief: BrandBelief) => void;
 };
 
-export const ExperimentBeliefUnlockPanel = forwardRef<HTMLDivElement, Props>(
+export const ExperimentBeliefUnlockPanel = forwardRef<HTMLElement, Props>(
   function ExperimentBeliefUnlockPanel(
     { brandId, clientId, userId, validationSummary, viewMode, onViewModeChange, onUseBelief },
     ref,
@@ -25,7 +25,7 @@ export const ExperimentBeliefUnlockPanel = forwardRef<HTMLDivElement, Props>(
 
     if (validationSummary?.unlock_ready) {
       return (
-        <div ref={ref}>
+        <section ref={ref} tabIndex={-1} aria-label="Experiment insights">
           <BrandBeliefs
             brandId={brandId}
             clientId={clientId}
@@ -35,14 +35,14 @@ export const ExperimentBeliefUnlockPanel = forwardRef<HTMLDivElement, Props>(
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
           />
-        </div>
+        </section>
       );
     }
 
     const progress = Math.round((validationSummary?.progress ?? 0) * 100);
 
     return (
-      <section className="panel__card">
+      <section ref={ref} className="panel__card" tabIndex={-1} aria-label="Experiment insights">
         <div className="panel__header">
           <h3>Pattern Insights (Locked)</h3>
           <span className="panel__badge panel__badge--secondary">Locked</span>
