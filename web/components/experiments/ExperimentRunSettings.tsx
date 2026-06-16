@@ -63,7 +63,7 @@ export function ExperimentRunSettings({
       </p>
       {currentProtocolSnapshotVersion && currentProtocolSnapshotVersion > 0 ? (
         <p className="panel__muted">
-          Active evidence protocol: v{currentProtocolSnapshotVersion}
+          Active evidence set: v{currentProtocolSnapshotVersion}
         </p>
       ) : null}
       {runVariantDisabledReason ? <p className="panel__muted">{runVariantDisabledReason}</p> : null}

@@ -46,7 +46,7 @@ export const ExperimentSetupFlowPanel = forwardRef<HTMLElement, Props>(
       </div>
       <div className="panel__meta">
         <span className="panel__badge panel__badge--secondary">
-          Evidence protocol: {protocolSnapshotVersion && protocolSnapshotVersion > 0
+          Evidence set: {protocolSnapshotVersion && protocolSnapshotVersion > 0
             ? `v${protocolSnapshotVersion}`
             : "pending"}
         </span>

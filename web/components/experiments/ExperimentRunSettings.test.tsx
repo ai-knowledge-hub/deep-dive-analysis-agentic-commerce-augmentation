@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ExperimentRunSettings } from "./ExperimentRunSettings";
 
 describe("ExperimentRunSettings", () => {
-  it("uses readable evidence protocol wording", () => {
+  it("uses readable evidence set wording", () => {
     render(
       <ExperimentRunSettings
         runMode="simulation"
@@ -17,7 +17,8 @@ describe("ExperimentRunSettings", () => {
       />,
     );
 
-    expect(screen.getByText(/Active evidence protocol: v4/i)).toBeInTheDocument();
+    expect(screen.getByText(/Active evidence set: v4/i)).toBeInTheDocument();
+    expect(screen.queryByText(/evidence protocol/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/snapshot v4/i)).not.toBeInTheDocument();
   });
 });

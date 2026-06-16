@@ -100,7 +100,7 @@ export function VariantRunPanel({
     <>
       <p className="panel__subheading">Step 5 · Run experiment across battery queries</p>
       <p className="panel__step-helper">
-        Retrieval-backed runs use the active evidence protocol to keep variant comparisons fair.
+        Retrieval-backed runs use the active evidence set to keep variant comparisons fair.
       </p>
       <ExperimentRunSettings
         runMode={runMode}

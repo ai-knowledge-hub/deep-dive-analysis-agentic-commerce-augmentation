@@ -19,8 +19,9 @@ describe("ExperimentSetupFlowPanel", () => {
       </ExperimentSetupFlowPanel>,
     );
 
-    expect(screen.getByText(/Evidence protocol:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence set:/i)).toBeInTheDocument();
     expect(screen.getByText(/Test ideas: ready/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Evidence protocol/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Protocol snapshot/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Hypotheses/i)).not.toBeInTheDocument();
   });
