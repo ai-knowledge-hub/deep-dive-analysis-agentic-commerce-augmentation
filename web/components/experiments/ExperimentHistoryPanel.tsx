@@ -235,7 +235,7 @@ export function ExperimentHistoryPanel({
                         Variant: {formatVariantLabel(run.variant_id)}
                       </span>
                       {typeof run.snapshot_version === "number" ? (
-                        <span className="history-panel__meta">Evidence version: v{run.snapshot_version}</span>
+                        <span className="history-panel__meta">Evidence set: v{run.snapshot_version}</span>
                       ) : null}
                       {run.hypothesis_id ? (
                         <span className="history-panel__meta">

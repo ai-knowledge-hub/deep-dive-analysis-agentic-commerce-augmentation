@@ -45,7 +45,7 @@ export function OutcomeSnapshot({
           <span className="outcome-snapshot__label">Validation state</span>
           <span className="outcome-snapshot__value">{snapshot.validationState}</span>
           <span className="panel__muted">
-            Evidence protocol:{" "}
+            Evidence set:{" "}
             {snapshot.snapshotVersion && snapshot.snapshotVersion > 0
               ? `v${snapshot.snapshotVersion}`
               : "pending"}
