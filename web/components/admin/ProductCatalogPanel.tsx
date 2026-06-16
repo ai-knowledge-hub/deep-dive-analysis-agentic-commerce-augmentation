@@ -1,6 +1,6 @@
 "use client";
 
-import React, { type ReactNode } from "react";
+import React, { forwardRef, type ReactNode } from "react";
 import type { AdminProduct } from "../../lib/types";
 
 export type ProductCatalogForm = {
@@ -23,20 +23,23 @@ type Props = {
   children?: ReactNode;
 };
 
-export function ProductCatalogPanel({
-  activeBrandId,
-  selectedBrandName,
-  products,
-  showCreateProduct,
-  productForm,
-  canCreateProduct,
-  onShowCreateProductChange,
-  onProductFormChange,
-  onCreateProduct,
-  children,
-}: Props) {
+export const ProductCatalogPanel = forwardRef<HTMLDetailsElement, Props>(function ProductCatalogPanel(
+  {
+    activeBrandId,
+    selectedBrandName,
+    products,
+    showCreateProduct,
+    productForm,
+    canCreateProduct,
+    onShowCreateProductChange,
+    onProductFormChange,
+    onCreateProduct,
+    children,
+  },
+  ref,
+) {
   return (
-    <details>
+    <details ref={ref} tabIndex={-1} aria-label="Product catalog">
       <summary>Product catalog</summary>
       {activeBrandId ? (
         <>
@@ -113,4 +116,4 @@ export function ProductCatalogPanel({
       )}
     </details>
   );
-}
+});

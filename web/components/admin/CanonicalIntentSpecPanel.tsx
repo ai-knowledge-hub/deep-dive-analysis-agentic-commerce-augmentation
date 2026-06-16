@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { forwardRef } from "react";
 
 type Props = {
   canOpenIntentEditor: boolean;
@@ -10,15 +10,19 @@ type Props = {
   onOpenIntentEditor: () => void;
 };
 
-export function CanonicalIntentSpecPanel({
-  canOpenIntentEditor,
-  intentSpecSaved,
-  intentSpecAutofillStatus,
-  intentSpecError,
-  onOpenIntentEditor,
-}: Props) {
+export const CanonicalIntentSpecPanel = forwardRef<HTMLDetailsElement, Props>(
+  function CanonicalIntentSpecPanel(
+    {
+      canOpenIntentEditor,
+      intentSpecSaved,
+      intentSpecAutofillStatus,
+      intentSpecError,
+      onOpenIntentEditor,
+    },
+    ref,
+  ) {
   return (
-    <details>
+    <details ref={ref} tabIndex={-1} aria-label="Canonical intent spec">
       <summary>Canonical intent spec</summary>
       <p className="panel__meta">
         Capture objective product context used by bottom-up query generation.
@@ -41,4 +45,4 @@ export function CanonicalIntentSpecPanel({
       {intentSpecError ? <p className="panel__error">{intentSpecError}</p> : null}
     </details>
   );
-}
+});
