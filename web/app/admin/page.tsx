@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
@@ -137,6 +137,9 @@ export default function AdminPage() {
   const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [isHistoryClosing, setHistoryClosing] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const brandSetupRef = useRef<HTMLDetailsElement | null>(null);
+  const productCatalogRef = useRef<HTMLDetailsElement | null>(null);
+  const intentSpecRef = useRef<HTMLDetailsElement | null>(null);
 
   const [clients, setClients] = useState<AdminClient[]>([]);
   const [brands, setBrands] = useState<AdminBrand[]>([]);
@@ -696,7 +699,7 @@ export default function AdminPage() {
         const parts = line.split("|").map((item) => item.trim());
         if (parts.length < 2) {
           throw new Error(
-            "Each product line must be: product-id|product name|short description",
+            "Each product line must be: product key|product name|short description",
           );
         }
         const hasExplicitId = parts.length >= 3;
@@ -707,7 +710,7 @@ export default function AdminPage() {
         const productDescription = hasExplicitId ? parts[2] : parts[1];
         if (!productId || !productName || !productDescription) {
           throw new Error(
-            "Each product line must include product id/name/description.",
+            "Each product line must include product key, name, and description.",
           );
         }
         const productResponse = await createAdminProduct(
@@ -1113,6 +1116,25 @@ export default function AdminPage() {
     userId,
   ]);
 
+  const focusOnboardingPanel = useCallback(
+    (ref: RefObject<HTMLDetailsElement | null>) => {
+      window.setTimeout(() => {
+        const panel = ref.current;
+        panel?.setAttribute("open", "");
+        panel?.scrollIntoView({ behavior: "smooth", block: "start" });
+        panel?.focus({ preventScroll: true });
+      }, 0);
+    },
+    [],
+  );
+
+  const openOnboardingPanel = useCallback(
+    (ref: RefObject<HTMLDetailsElement | null>) => {
+      ref.current?.setAttribute("open", "");
+    },
+    [],
+  );
+
   const handleRunOnboardingNextAction = useCallback(() => {
     switch (onboardingNextAction.action) {
       case "client":
@@ -1122,17 +1144,20 @@ export default function AdminPage() {
         return;
       case "brand":
         setShowCreateBrand(true);
+        focusOnboardingPanel(brandSetupRef);
         return;
       case "product":
         setShowCreateProduct(true);
+        focusOnboardingPanel(productCatalogRef);
         return;
       case "intent":
+        openOnboardingPanel(intentSpecRef);
         setIntentDrawerOpen(true);
         return;
       default:
         return;
     }
-  }, [onboardingNextAction.action]);
+  }, [focusOnboardingPanel, onboardingNextAction.action, openOnboardingPanel]);
 
   useEffect(() => {
     if (!userId || !activeClientId) {
@@ -1271,6 +1296,7 @@ export default function AdminPage() {
                   onAddClientUser={handleAddClientUser}
                 />
                 <BrandSetupPanel
+                  ref={brandSetupRef}
                   activeClientId={activeClientId}
                   selectedClientName={selectedClient?.name}
                   brands={brands}
@@ -1284,6 +1310,7 @@ export default function AdminPage() {
                   onCreateBrand={handleCreateBrand}
                 />
                 <ProductCatalogPanel
+                  ref={productCatalogRef}
                   activeBrandId={activeBrandId}
                   selectedBrandName={selectedBrand?.name}
                   products={products}
@@ -1310,6 +1337,7 @@ export default function AdminPage() {
                   />
                 </ProductCatalogPanel>
                 <CanonicalIntentSpecPanel
+                  ref={intentSpecRef}
                   canOpenIntentEditor={Boolean(selectedProduct)}
                   intentSpecSaved={intentSpecSaved}
                   intentSpecAutofillStatus={intentSpecAutofillStatus}

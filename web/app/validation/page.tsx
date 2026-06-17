@@ -1,6 +1,13 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUser } from "../../lib/auth";
 import type {
@@ -96,11 +103,18 @@ function formatDisplayToken(value: string | null | undefined, fallback: string):
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+function formatOptionDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString();
+}
+
 function formatCopyRevisionOption(revision: CopyRevision): string {
   const source = formatDisplayToken(revision.source_type, "Copy");
   const status = formatDisplayToken(revision.status, "Draft");
-  const reference = revision.id.replace(/^copy-revision[-_]?/, "").slice(0, 8);
-  return `${source} revision · ${status} · Ref ${reference}`;
+  const updated = formatOptionDate(revision.updated_at || revision.created_at);
+  return `${source} revision · ${status}${updated ? ` · updated ${updated}` : ""}`;
 }
 
 type ValidationNextAction =
@@ -209,6 +223,9 @@ function ValidationPageContent() {
   const [providerLaunchInfo, setProviderLaunchInfo] =
     useState<ProviderRunLaunchInfo | null>(null);
   const [queryPrefillApplied, setQueryPrefillApplied] = useState(false);
+  const syntheticSectionRef = useRef<HTMLElement | null>(null);
+  const observedSectionRef = useRef<HTMLElement | null>(null);
+  const externalResultSectionRef = useRef<HTMLElement | null>(null);
   const experimentIdParam = searchParams.get("experiment_id")?.trim() || "";
   const runIdParam = searchParams.get("run_id")?.trim() || "";
 
@@ -443,7 +460,7 @@ function ValidationPageContent() {
         action: "complete_provider_run" as ValidationNextAction,
         label: "Complete provider run",
         helper:
-          "Finish validation in the provider UI. Result will be saved when callback is received.",
+          "Finish validation in the provider UI. The result will be saved when it returns.",
       };
     }
     if (isManualFallbackMode(mode) && job && !result) {
@@ -451,7 +468,7 @@ function ValidationPageContent() {
         action: "submit_external_result" as ValidationNextAction,
         label: "Submit external result",
         helper:
-          "Paste structured external JSON so the job can be finalized and tracked in the loop.",
+          "Paste the provider result so this validation can be saved and tracked.",
       };
     }
     if (observedLogged === 0) {
@@ -711,11 +728,11 @@ function ValidationPageContent() {
     if (!userId || !selectedEntityId) return;
     setSubmitting(true);
     setError(null);
-    setStatus("Preparing validation payload...");
+    setStatus("Preparing validation request...");
     try {
       const inputPayload = await buildPayload();
       if (!inputPayload) {
-        setError("Missing payload data.");
+        setError("Missing validation details.");
         return;
       }
       const response = await createValidationJob(
@@ -757,10 +774,10 @@ function ValidationPageContent() {
           window.open(providerRun.launch_url, "_blank", "noopener,noreferrer");
           setStatus(
             providerRun.instructions ||
-              "Provider run launched. Complete it in provider UI; callback will store result.",
+              "Provider run launched. Complete it in the provider UI so the result can be saved.",
           );
         } else {
-          setStatus("Provider run initialized. Waiting for callback completion.");
+          setStatus("Provider run initialized. Waiting for the result.");
         }
       } else {
         setStatus("Awaiting validation completion.");
@@ -813,7 +830,13 @@ function ValidationPageContent() {
       setExternalJson("");
       setExternalRaw("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid JSON.");
+      setError(
+        err instanceof SyntaxError
+          ? "Invalid provider result format."
+          : err instanceof Error
+            ? err.message
+            : "Invalid provider result format.",
+      );
     } finally {
       setSubmitting(false);
       window.setTimeout(() => setStatus(null), 4000);
@@ -882,27 +905,48 @@ function ValidationPageContent() {
     }
   }, [experiments, manualExperimentId, manualForm, userId]);
 
+  const guideToSection = useCallback(
+    (
+      section: React.RefObject<HTMLElement | null>,
+      controlSelector?: string,
+    ) => {
+      section.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+      if (!controlSelector) return;
+      section.current?.querySelector<HTMLElement>(controlSelector)?.focus({
+        preventScroll: true,
+      });
+    },
+    [],
+  );
+
   const handleRunValidationNextAction = useCallback(() => {
     switch (validationNextAction.action) {
       case "configure_provider":
         router.push("/admin");
         return;
       case "select_synthetic_item":
+        guideToSection(syntheticSectionRef, '[name="validation-entity-id"]');
         setStatus("Select an item in Step 2 to create a synthetic validation job.");
         window.setTimeout(() => setStatus(null), 3000);
         return;
       case "create_synthetic":
+        guideToSection(syntheticSectionRef);
         void handleCreateJob();
         return;
       case "submit_external_result":
         if (!externalJson.trim()) {
-          setStatus("Add the structured result in Step 2 before submitting external results.");
+          externalResultSectionRef.current
+            ?.querySelector<HTMLDetailsElement>("details")
+            ?.setAttribute("open", "");
+          guideToSection(externalResultSectionRef, '[name="validation-external-result"]');
+          setStatus("Add the provider result in Step 2 before submitting external results.");
           window.setTimeout(() => setStatus(null), 3000);
           return;
         }
         void handleSubmitExternal();
         return;
       case "complete_provider_run":
+        guideToSection(syntheticSectionRef);
         if (job?.id) {
           void (async () => {
             try {
@@ -921,7 +965,7 @@ function ValidationPageContent() {
                     "Provider run opened. Complete it to return scored validation.",
                 );
               } else {
-                setStatus("Provider run is pending callback completion.");
+                setStatus("Provider run is waiting for the result.");
               }
             } catch (err) {
               setError(err instanceof Error ? err.message : "Unable to start provider run.");
@@ -932,6 +976,12 @@ function ValidationPageContent() {
         }
         return;
       case "log_observed":
+        guideToSection(observedSectionRef, '[name="validation-observed-experiment"]');
+        if (!manualExperimentId) {
+          setManualError("Select an experiment before logging observed reality.");
+          window.setTimeout(() => setManualError(null), 3000);
+          return;
+        }
         void handleLogObservedValidation();
         return;
       case "open_experiments":
@@ -945,6 +995,7 @@ function ValidationPageContent() {
     handleCreateJob,
     handleLogObservedValidation,
     handleSubmitExternal,
+    guideToSection,
     job?.id,
     manualExperimentId,
     router,
@@ -992,15 +1043,15 @@ function ValidationPageContent() {
         <div className="detail detail--validation">
           <DetailHeader
             title="Validation"
-            subtitle="Run in-app validation or collect structured external feedback."
+            subtitle="Run in-app validation or add provider results."
             onMenu={() => setSidebarOpen(true)}
             onBack={() => router.push(validationBackHref)}
             backLabel={runIdParam ? "Back to selected run" : "Back to experiments"}
           />
           {runIdParam ? (
             <section className="panel__notice panel__notice--info">
-              <strong>Run context preserved:</strong> this validation view was opened from run{" "}
-              <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+              <strong>Run context preserved:</strong> this validation view was opened from the
+              selected run.
               <div className="panel__actions">
                 <button
                   type="button"
@@ -1037,50 +1088,58 @@ function ValidationPageContent() {
             onOpenExperiments={() => router.push(experimentsHref)}
           />
           <section className="panel__card panel__card--secondary panel__card--compact">
-            <div className="panel__subheading">Step 1 · Configure provider defaults</div>
-            <p className="panel__step-helper">
-              Set the default validation provider once. This applies to both synthetic and observed
-              validation panels.
-            </p>
-            {llmConfigError ? (
-              <div className="panel__notice panel__notice--error">
-                Unable to load provider configuration.
-              </div>
-            ) : (
-              <>
-                <div className="panel__chips">
-                  {providerStatusItems.map((item) => (
-                    <button
-                      key={item.name}
-                      type="button"
-                      className={`panel__chip panel__chip--button ${
-                        item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
-                      }`}
-                      title={item.tooltip}
-                      onClick={() => {
-                        setProvider(item.name);
-                        setManualForm((prev) => ({ ...prev, platform: item.name }));
-                      }}
-                    >
-                      {item.label}:{" "}
-                      {item.isActive ? "active" : item.configured ? "ready" : "missing"}
-                    </button>
-                  ))}
+            <details
+              className="panel__details validation-provider-defaults"
+              open={Boolean(llmConfigError)}
+            >
+              <summary className="panel__details-summary">Provider defaults</summary>
+              <p className="panel__step-helper">
+                Change provider defaults only when this validation needs a different route.
+              </p>
+              {llmConfigError ? (
+                <div className="panel__notice panel__notice--error">
+                  Unable to load provider configuration.
                 </div>
-                <p className="panel__muted">
-                  Selecting a provider here sets the default for both synthetic and observed validation panels.
-                </p>
-              </>
-            )}
+              ) : (
+                <>
+                  <div className="panel__chips">
+                    {providerStatusItems.map((item) => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        className={`panel__chip panel__chip--button ${
+                          item.isActive ? "is-ready" : item.configured ? "is-ready" : "is-missing"
+                        }`}
+                        title={item.tooltip}
+                        onClick={() => {
+                          setProvider(item.name);
+                          setManualForm((prev) => ({ ...prev, platform: item.name }));
+                        }}
+                      >
+                        {item.label}:{" "}
+                        {item.isActive ? "active" : item.configured ? "ready" : "missing"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="panel__muted">
+                    Selecting a provider here sets the default for both synthetic and observed validation panels.
+                  </p>
+                </>
+              )}
+            </details>
           </section>
-          <section className="panel__card panel__card--primary">
+          <section
+            ref={syntheticSectionRef}
+            className="panel__card panel__card--primary"
+            aria-labelledby="validation-synthetic-heading"
+          >
             <div className="panel__header">
-              <h3>Synthetic validation signal</h3>
+              <h3 id="validation-synthetic-heading">Synthetic validation signal</h3>
             </div>
             <div className="panel__subheading">Step 2 · Run synthetic validation</div>
             <p className="panel__step-helper">
               Create one validation job for the selected item. In-app mode executes immediately;
-              manual entry lets you add a structured result when the provider cannot return it automatically.
+              manual entry lets you save a provider result when automatic return is unavailable.
             </p>
             <p className="panel__muted">
               LLM judge validation for fast screening, consistency checks, and copy-vs-copy comparisons.
@@ -1091,6 +1150,7 @@ function ValidationPageContent() {
                 <span>Entity type</span>
                 <select
                   className="panel__input"
+                  name="validation-entity-type"
                   value={entityType}
                   onChange={(event) => {
                     setEntityType(event.target.value as EntityType);
@@ -1109,6 +1169,7 @@ function ValidationPageContent() {
                 <span>Item</span>
                 <select
                   className="panel__input"
+                  name="validation-entity-id"
                   value={selectedEntityId}
                   onChange={(event) => setSelectedEntityId(event.target.value)}
                 >
@@ -1195,9 +1256,9 @@ function ValidationPageContent() {
                   onChange={(event) => setMode(event.target.value as ModeType)}
                 >
                   <option value="in_app_byok">In-app (BYOK)</option>
-                  <option value="provider_openai_mcp">Provider run (ChatGPT MCP)</option>
-                  <option value="provider_gemini_function">Provider run (Gemini function)</option>
-                  <option value="manual_fallback">Manual result entry</option>
+                  <option value="provider_openai_mcp">ChatGPT provider run</option>
+                  <option value="provider_gemini_function">Gemini provider run</option>
+                  <option value="manual_fallback">Add result manually</option>
                 </select>
               </label>
               <label className="panel__label">
@@ -1234,25 +1295,28 @@ function ValidationPageContent() {
             </div>
             {isProviderIntegrationMode(mode) ? (
               <section className="panel__notice panel__notice--info">
-                <strong>Provider automation status</strong>
+                <strong>External validation status</strong>
                 <p className="panel__muted">
                   {providerLaunchInfo?.instructions ??
                     "Complete one-time provider setup, then run validation in the provider workspace. Results return here when the provider finishes."}
                 </p>
                 <div className="panel__meta panel__meta--stack">
                   <span className="panel__muted">
-                    Provider reference:{" "}
-                    {providerLaunchInfo?.provider_run_id ??
-                      job?.provider_run_id ??
-                      "Not started"}
-                  </span>
-                  <span className="panel__muted">
                     Setup status: {formatSetupStatus(providerLaunchInfo?.setup_required)}
                   </span>
                   <span className="panel__muted">
-                    Return status: {formatReturnStatus(job?.callback_verified)}
+                    Result status: {formatReturnStatus(job?.callback_verified)}
                   </span>
                 </div>
+                <details className="validation__advanced">
+                  <summary>Show provider handoff details</summary>
+                  <p className="panel__muted">
+                    Handoff reference:{" "}
+                    {providerLaunchInfo?.provider_run_id ??
+                      job?.provider_run_id ??
+                      "Not started"}
+                  </p>
+                </details>
                 <div className="panel__actions">
                   <button
                     type="button"
@@ -1295,9 +1359,13 @@ function ValidationPageContent() {
             ) : null}
           </section>
 
-          <section className="panel__card panel__card--primary">
+          <section
+            ref={observedSectionRef}
+            className="panel__card panel__card--primary"
+            aria-labelledby="validation-observed-heading"
+          >
             <div className="panel__header">
-              <h3>Observed reality signal</h3>
+              <h3 id="validation-observed-heading">Observed reality signal</h3>
             </div>
             <div className="panel__subheading">Step 3 · Log observed reality</div>
             <p className="panel__step-helper">
@@ -1347,6 +1415,7 @@ function ValidationPageContent() {
                   <span>Experiment</span>
                   <select
                     className="panel__input"
+                    name="validation-observed-experiment"
                     value={manualExperimentId}
                     onChange={(event) => setManualExperimentId(event.target.value)}
                   >
@@ -1429,7 +1498,7 @@ function ValidationPageContent() {
                         observedWinnerVariantId: event.target.value,
                       }))
                     }
-                    placeholder="Variant ID (if known)"
+                    placeholder="Paste a saved variant if needed"
                   />
                 </label>
                 <label className="panel__label">
@@ -1488,7 +1557,7 @@ function ValidationPageContent() {
               support the next experiment decision.
             </p>
             <details className="panel__details">
-              <summary className="panel__details-summary">Open variant comparison</summary>
+              <summary className="panel__details-summary">Compare variants</summary>
               <p className="panel__muted">
                 Latest per-variant lab metrics for the selected experiment.
               </p>
@@ -1537,23 +1606,28 @@ function ValidationPageContent() {
           </section>
 
           {isManualFallbackMode(job?.mode) && job?.external_instructions ? (
-            <section className="panel__card panel__card--secondary">
+            <section
+              ref={externalResultSectionRef}
+              className="panel__card panel__card--secondary"
+              aria-labelledby="validation-external-heading"
+            >
               <div className="panel__header">
-                <h3>External validation instructions</h3>
+                <h3 id="validation-external-heading">External validation instructions</h3>
               </div>
               <div className="panel__subheading">Supplement · Paste external result</div>
               <p className="panel__step-helper">
-                Use this only for manual result entry. Submit the structured result to complete the
-                synthetic validation.
+                Use this only when adding a result manually. Submit the provider result to complete
+                the synthetic validation.
               </p>
               <details className="panel__details">
-                <summary className="panel__details-summary">Open external instructions</summary>
+                <summary className="panel__details-summary">Open manual instructions</summary>
                 <pre className="panel__pre">{job.external_instructions}</pre>
                 <div className="panel__grid validation__grid">
                   <label className="panel__label">
-                    <span>Structured result</span>
+                    <span>Provider result</span>
                     <textarea
                       className="panel__textarea"
+                      name="validation-external-result"
                       rows={6}
                       value={externalJson}
                       onChange={(event) => setExternalJson(event.target.value)}
@@ -1567,7 +1641,7 @@ function ValidationPageContent() {
                       rows={6}
                       value={externalRaw}
                       onChange={(event) => setExternalRaw(event.target.value)}
-                      placeholder="Paste raw provider output"
+                      placeholder="Paste provider response"
                     />
                   </label>
                 </div>
@@ -1645,7 +1719,7 @@ function ValidationPageContent() {
               {result.structured_result ? (
                 <details className="panel__details">
                   <summary className="panel__details-summary">
-                    Open structured validation JSON
+                    View validation data
                   </summary>
                   <pre className="panel__pre">
                     {JSON.stringify(result.structured_result, null, 2)}

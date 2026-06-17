@@ -282,7 +282,7 @@ export function OperatorConsoleChat({
           .join(" ");
       case "blocked_action":
         if (!selectedAction) {
-          return "No action is selected. Click an action in the queue and I’ll explain its rationale, guardrails, and linked artifacts.";
+          return "No action is selected. Click an action in the queue and I’ll explain its rationale, guardrails, and linked work.";
         }
         if (String(selectedAction.status || "").toLowerCase() !== "proposed") {
           return [

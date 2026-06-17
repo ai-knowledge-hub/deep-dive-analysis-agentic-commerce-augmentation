@@ -24,7 +24,12 @@ export const VariantsIterationPanel = forwardRef<HTMLElement, Props>(
     ref,
   ) {
     return (
-      <section className="panel__card panel__card--primary panel__card--full-row" ref={ref}>
+      <section
+        ref={ref}
+        className="panel__card panel__card--primary panel__card--full-row"
+        tabIndex={-1}
+        aria-label="Variants and iteration"
+      >
         <div className="panel__header">
           <h3>{labMode === "lab" ? "Variants and Iteration" : "Variants"}</h3>
           <div className="panel__meta">

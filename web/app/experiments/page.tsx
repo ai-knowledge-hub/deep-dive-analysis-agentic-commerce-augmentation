@@ -226,6 +226,7 @@ function ExperimentsPageContent() {
     payload: draftPayload,
   });
   const variantsSectionRef = useRef<HTMLElement | null>(null);
+  const setupSectionRef = useRef<HTMLElement | null>(null);
   const runsSectionRef = useRef<HTMLDivElement | null>(null);
   const metricsSectionRef = useRef<HTMLElement | null>(null);
 
@@ -452,8 +453,8 @@ function ExperimentsPageContent() {
     try {
       JSON.parse(value);
       return null;
-    } catch (error) {
-      return error instanceof Error ? error.message : "Invalid JSON";
+    } catch {
+      return "Advanced data must use a valid object format.";
     }
   }, []);
 
@@ -867,7 +868,7 @@ function ExperimentsPageContent() {
     });
     return map;
   }, [metrics]);
-  const beliefsRef = useRef<HTMLDivElement | null>(null);
+  const beliefsRef = useRef<HTMLElement | null>(null);
 
   const labLoopSteps = useMemo(() => {
     const hypothesisReady = Boolean(
@@ -1116,7 +1117,7 @@ function ExperimentsPageContent() {
       : queries.length === 0
         ? "Generate and save battery queries first."
       : jsonErrors.variantPayload
-        ? "Fix invalid payload JSON."
+        ? "Fix advanced data before adding the variant."
         : null;
   const batteryReadyForRun =
     typeof executionState?.phases?.battery_ready?.done === "boolean"
@@ -1331,55 +1332,81 @@ function ExperimentsPageContent() {
     return result;
   }, [productId, runs, selectedExperiment?.product_id, simulationDetails]);
 
+  const focusBeliefsSection = useCallback(() => {
+    beliefsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    beliefsRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const handleOpenBeliefsTimeline = useCallback(() => {
     setBeliefsViewMode("timeline");
-    if (beliefsRef.current) {
-      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [beliefsRef]);
+    focusBeliefsSection();
+  }, [focusBeliefsSection]);
 
   const handleUseLatestBelief = useCallback(() => {
     if (!latestBelief) return;
     handleUseBelief(latestBelief);
     setBeliefsViewMode("list");
-    if (beliefsRef.current) {
-      beliefsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [handleUseBelief, latestBelief, beliefsRef]);
+    focusBeliefsSection();
+  }, [focusBeliefsSection, handleUseBelief, latestBelief]);
+
+  const focusSetupSection = useCallback(() => {
+    setSetupFlowCollapsed(false);
+    window.setTimeout(() => {
+      setupSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setupSectionRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, []);
+
+  const focusVariantsSection = useCallback(() => {
+    variantsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    variantsSectionRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const focusRunsSection = useCallback(() => {
+    runsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    runsSectionRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const focusMetricsSection = useCallback(() => {
+    metricsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    metricsSectionRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const handleRunNextFlowAction = useCallback(() => {
     switch (nextFlowAction.action) {
       case "expand_setup":
-        setSetupFlowCollapsed(false);
+        focusSetupSection();
         return;
       case "scroll_setup":
-        setSetupFlowCollapsed(false);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        focusSetupSection();
         return;
       case "scroll_variants":
-        variantsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        focusVariantsSection();
         return;
       case "run_first_variant":
         if (variants[0]?.id) {
           void handleRunVariant(variants[0].id);
           return;
         }
-        variantsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        focusVariantsSection();
         return;
       case "open_validation":
         router.push(validationHref);
         return;
       case "generate_next_variant":
-        variantsSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        focusVariantsSection();
         void handleGenerateLoopVariants();
         return;
       default:
@@ -1388,6 +1415,8 @@ function ExperimentsPageContent() {
   }, [
     handleGenerateLoopVariants,
     handleRunVariant,
+    focusSetupSection,
+    focusVariantsSection,
     nextFlowAction.action,
     router,
     selectedExperimentId,
@@ -1538,8 +1567,8 @@ function ExperimentsPageContent() {
           <div className="detail__stack">
             {runIdParam ? (
               <section className="panel__notice panel__notice--info">
-                <strong>Run context preserved:</strong> this experiment view was opened from run{" "}
-                <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+                <strong>Run context preserved:</strong> this experiment view was opened from the
+                selected run.
                 <div className="panel__actions">
                   <button
                     type="button"
@@ -1622,6 +1651,7 @@ function ExperimentsPageContent() {
             <div className="panel__notice panel__notice--error">{formError}</div>
           ) : null}
           <ExperimentSetupFlowPanel
+            ref={setupSectionRef}
             labMode={labMode}
             collapsed={setupFlowCollapsed}
             hasProduct={Boolean(productId)}
@@ -1883,21 +1913,9 @@ function ExperimentsPageContent() {
             onToggleHistory={() => setHistoryCollapsed((open) => !open)}
             onSelectExperiment={setSelectedExperimentId}
             onSaveExperimentDraft={handleSaveExperimentDraft}
-            onScrollVariants={() =>
-              variantsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-            onScrollRuns={() =>
-              runsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-            onScrollMetrics={() =>
-              metricsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
+            onScrollVariants={focusVariantsSection}
+            onScrollRuns={focusRunsSection}
+            onScrollMetrics={focusMetricsSection}
             onToggleHypothesis={setExpandedHypothesisId}
             onDeleteRun={(runId) => {
               void handleDeleteExperimentRun(runId);
@@ -1923,12 +1941,7 @@ function ExperimentsPageContent() {
             hasValidationSignals={hasValidationSignals}
             validationSummary={validationSummary}
             onOpenValidation={() => router.push(validationHref)}
-            onBackToVariants={() =>
-              variantsSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              })
-            }
+            onBackToVariants={focusVariantsSection}
           />
 
           <ExperimentBeliefUnlockPanel

@@ -289,6 +289,15 @@ export function SelectedActionDetailPanel({
             "Capability summary not yet documented.",
         )}
       </p>
+      <p className="panel__subheading">What it changes</p>
+      <ul className="panel__list panel__list--compact">
+        {sideEffects.map((effect, index) => (
+          <li key={`${effect}-${index}`}>{softenOperatorText(effect)}</li>
+        ))}
+      </ul>
+
+      <details className="agent-action-detail__advanced">
+        <summary>Show governance and linked work</summary>
       <div className="control-chip-row">
         <span className="control-chip">
           Skill: {formatOperatorIdentifier(selectedAction.skill_id ?? "unmapped")}
@@ -303,7 +312,7 @@ export function SelectedActionDetailPanel({
           Tool contract: {selectedAction.registry_version ?? "unpinned"}
         </span>
         <span className="control-chip">
-          Receipt id:{" "}
+          Release:{" "}
           {selectedAction.registry_fingerprint
             ? selectedAction.registry_fingerprint.slice(0, 12)
             : "unpinned"}
@@ -315,13 +324,6 @@ export function SelectedActionDetailPanel({
           Skill version: {selectedAction.skill_version ?? "unpinned"}
         </span>
       </div>
-
-      <p className="panel__subheading">What it changes</p>
-      <ul className="panel__list panel__list--compact">
-        {sideEffects.map((effect, index) => (
-          <li key={`${effect}-${index}`}>{softenOperatorText(effect)}</li>
-        ))}
-      </ul>
 
       {discoverySourceCounts.length ? (
         <>
@@ -416,7 +418,7 @@ export function SelectedActionDetailPanel({
       {selectedCapabilitySpec ? (
         <div className="form-grid">
           <label>
-            Owner principal
+            Owner identity
             <input
               value={ownershipForm.owner_principal_id}
               onChange={(event) =>
@@ -523,26 +525,26 @@ export function SelectedActionDetailPanel({
           : "—"}
       </p>
 
-      <p className="panel__subheading">Linked artifacts</p>
+      <p className="panel__subheading">Linked work</p>
       <div className="panel__actions">
         {selectedAction.variant_id ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenExperimentArtifact}>
-            Variant: {selectedAction.variant_id.slice(0, 8)}
+            Open variant
           </button>
         ) : null}
         {selectedAction.validation_job_id ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenValidationArtifact}>
-            Validation job: {selectedAction.validation_job_id.slice(0, 8)}
+            Open validation result
           </button>
         ) : null}
         {metricId ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenExperimentArtifact}>
-            Metric: {metricId.slice(0, 8)}
+            Open metric
           </button>
         ) : null}
       </div>
 
-      <p className="panel__subheading">Artifact diff preview</p>
+      <p className="panel__subheading">Change preview</p>
       <div className="agent-diff-grid">
         <div className="agent-diff-card">
           <div className="agent-diff-card__title">
@@ -561,7 +563,7 @@ export function SelectedActionDetailPanel({
         </div>
         <div className="agent-diff-card">
           <div className="agent-diff-card__title">
-            vs previous same capability
+            vs previous similar action
             {actionDiffs?.previousSameCapability
               ? ` #${actionDiffs.previousSameCapability.sequence}`
               : ""}
@@ -578,14 +580,15 @@ export function SelectedActionDetailPanel({
         </div>
       </div>
       <p className="panel__muted">
-        Diff compares output payload keys, so operators can audit what changed before approving
+        Diff compares changed result fields so operators can audit what changed before approving
         downstream actions.
       </p>
       <div className="panel__actions">
         <button type="button" className="button button--ghost button--sm" onClick={onOpenDetailedDiff}>
-          Open detailed diff
+          Open change details
         </button>
       </div>
+      </details>
     </section>
   );
 }

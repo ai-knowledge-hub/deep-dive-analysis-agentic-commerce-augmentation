@@ -28,36 +28,24 @@ export function ExternalAgentJobPanel({
         </div>
         <span className={`control-chip ${receiptChipClass(externalAgentJob)}`}>
           {externalAgentJob?.verification?.valid
-            ? "Receipt verified"
+            ? "Handoff verified"
             : externalAgentJob?.latest_receipt
-              ? "Receipt unverified"
-              : "No receipt"}
+              ? "Handoff needs check"
+              : "No handoff"}
         </span>
       </div>
       <p className="panel__muted">
-        This run was submitted by an external machine principal. Operator controls act on the
-        linked run; the machine-facing job contract remains scoped to the creating principal.
+        This run was submitted by an external agent. Operator controls act on the linked run while
+        the agent handoff remains scoped to the submitting identity.
       </p>
       {externalAgentJob ? (
         <>
           <div className="panel__meta-strip panel__meta-strip--flat">
             <div>
-              <strong>Job</strong>: {externalAgentJob.job.id.slice(0, 8)}
+              <strong>Handoff status</strong>: {externalAgentJob.job.status ?? "unknown"}
             </div>
             <div>
-              <strong>Principal</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
-            </div>
-            <div>
-              <strong>Profile</strong>: {externalAgentJob.job.agent_profile_id ?? "none"}
-            </div>
-            <div>
-              <strong>Idempotency</strong>: {externalAgentJob.job.idempotency_key ?? "missing"}
-            </div>
-            <div>
-              <strong>Job status</strong>: {externalAgentJob.job.status ?? "unknown"}
-            </div>
-            <div>
-              <strong>Tool</strong>:{" "}
+              <strong>Requested action</strong>:{" "}
               {formatOperatorIdentifier(externalAgentJob.job.requested_tool_id ?? "workflow")}
             </div>
             <div>
@@ -67,38 +55,53 @@ export function ExternalAgentJobPanel({
               )}
             </div>
             <div>
-              <strong>Receipts</strong>: {externalAgentJob.receipts.length}
+              <strong>Handoff records</strong>: {externalAgentJob.receipts.length}
             </div>
           </div>
+          <details className="agent-action-detail__advanced">
+            <summary>Show handoff details</summary>
+            <div className="panel__meta-strip panel__meta-strip--flat">
+              <div>
+                <strong>Job reference</strong>: {externalAgentJob.job.id}
+              </div>
+              <div>
+                <strong>Submitting agent</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
+              </div>
+              <div>
+                <strong>Profile</strong>: {externalAgentJob.job.agent_profile_id ?? "none"}
+              </div>
+              <div>
+                <strong>Retry reference</strong>: {externalAgentJob.job.idempotency_key ?? "missing"}
+              </div>
+            </div>
+          </details>
           {externalAgentJob.latest_receipt ? (
             <div className="panel__notice">
-              Latest receipt:{" "}
+              Latest handoff:{" "}
               {formatOperatorIdentifier(
                 String(externalAgentJob.latest_receipt.receipt_type ?? "external job"),
               )}{" "}
-              ·{" "}
-              {String(externalAgentJob.latest_receipt.status ?? "unknown")} ·{" "}
-              {String(externalAgentJob.latest_receipt.receipt_context_hash ?? "").slice(0, 12)}
+              · {String(externalAgentJob.latest_receipt.status ?? "unknown")}
               <button
                 type="button"
                 className="button button--ghost button--sm"
                 onClick={onVerifyReceipt}
                 disabled={verificationBusy || loading}
               >
-                {verificationBusy ? "Verifying" : "Verify receipt"}
+                {verificationBusy ? "Verifying" : "Verify handoff"}
               </button>
             </div>
           ) : (
             <div className="panel__notice panel__notice--warning">
-              No stored receipt is available yet. Ask the external agent to refresh its job receipt
-              when an auditable checkpoint is needed.
+              No handoff record is available yet. Ask the external agent to refresh the job when an
+              auditable checkpoint is needed.
             </div>
           )}
           {externalAgentJob.verification?.blockers?.length ? (
             <ul className="panel__list panel__list--compact">
               {externalAgentJob.verification.blockers.map((blocker) => (
                 <li key={blocker} className="agent-guardrail-reason">
-                  {blocker}
+                  {formatHandoffText(blocker)}
                 </li>
               ))}
             </ul>
@@ -146,7 +149,7 @@ export function ExternalAgentJobPanel({
         </>
       ) : (
         <div className="panel__notice panel__notice--warning">
-          No external-agent job record is linked to this run yet.
+          No external agent handoff is linked to this run yet.
         </div>
       )}
     </section>
@@ -157,6 +160,12 @@ function receiptChipClass(externalAgentJob: ExternalAgentJobOperatorDetail | nul
   if (externalAgentJob?.verification?.valid) return "control-chip--success";
   if (externalAgentJob?.latest_receipt) return "control-chip--attention";
   return "";
+}
+
+function formatHandoffText(value: string): string {
+  return value
+    .replace(/\breceipt signature\b/gi, "handoff verification")
+    .replace(/\breceipt\b/gi, "handoff record");
 }
 
 function latestProtocolSummary(externalAgentJob: ExternalAgentJobOperatorDetail | null) {

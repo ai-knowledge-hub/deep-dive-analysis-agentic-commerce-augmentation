@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { forwardRef } from "react";
 import type { AdminBrand } from "../../lib/types";
 
 export type BrandSetupForm = {
@@ -20,19 +20,22 @@ type Props = {
   onCreateBrand: () => void;
 };
 
-export function BrandSetupPanel({
-  activeClientId,
-  selectedClientName,
-  brands,
-  showCreateBrand,
-  brandForm,
-  canCreateBrand,
-  onShowCreateBrandChange,
-  onBrandFormChange,
-  onCreateBrand,
-}: Props) {
+export const BrandSetupPanel = forwardRef<HTMLDetailsElement, Props>(function BrandSetupPanel(
+  {
+    activeClientId,
+    selectedClientName,
+    brands,
+    showCreateBrand,
+    brandForm,
+    canCreateBrand,
+    onShowCreateBrandChange,
+    onBrandFormChange,
+    onCreateBrand,
+  },
+  ref,
+) {
   return (
-    <details>
+    <details ref={ref} tabIndex={-1} aria-label="Brand setup">
       <summary>Brand setup</summary>
       {activeClientId ? (
         <>
@@ -95,4 +98,4 @@ export function BrandSetupPanel({
       )}
     </details>
   );
-}
+});

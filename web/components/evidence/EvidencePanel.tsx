@@ -19,6 +19,7 @@ type Props = {
   targetProductUrl?: string;
   sourceSessionId?: string;
   refreshedAt?: string;
+  onOpenChat?: () => void;
   onOpenSimulation?: () => void;
   onOpenExperiments?: () => void;
   usePageScroll?: boolean;
@@ -33,6 +34,7 @@ export function EvidencePanel({
   targetProductUrl,
   sourceSessionId,
   refreshedAt,
+  onOpenChat,
   onOpenSimulation,
   onOpenExperiments,
   usePageScroll = false,
@@ -317,9 +319,9 @@ export function EvidencePanel({
   const nextEvidenceAction = (() => {
     if (evidenceProducts.length === 0) {
       return {
-        label: "Load latest evidence from chat",
+        label: "Open chat for fresh evidence",
         helper: "Run a fresh chat query so evidence products can be analyzed.",
-        action: "refresh" as const,
+        action: "open_chat" as const,
       };
     }
     if (!matchedProduct) {
@@ -375,16 +377,19 @@ export function EvidencePanel({
               type="button"
               className="panel__action panel__action--prominent"
               onClick={() => {
-                if (nextEvidenceAction.action === "open_experiments") {
-                  onOpenExperiments?.();
-                  return;
-                }
-                onOpenSimulation?.();
+                const handlers = {
+                  open_chat: onOpenChat,
+                  open_simulation: onOpenSimulation,
+                  open_experiments: onOpenExperiments,
+                };
+                handlers[nextEvidenceAction.action]?.();
               }}
               disabled={
-                nextEvidenceAction.action === "open_experiments"
-                  ? !onOpenExperiments
-                  : !onOpenSimulation
+                nextEvidenceAction.action === "open_chat"
+                  ? !onOpenChat
+                  : nextEvidenceAction.action === "open_experiments"
+                    ? !onOpenExperiments
+                    : !onOpenSimulation
               }
             >
               {nextEvidenceAction.label}
@@ -431,7 +436,7 @@ export function EvidencePanel({
         </section>
         <div className="evidence-meta-strip">
           <span className="panel__badge panel__badge--secondary">
-            Source session: {sourceSessionId ? sourceSessionId.slice(0, 8) : "unknown"}
+            Evidence source: {sourceSessionId ? "connected chat" : "not linked"}
           </span>
           <span className="panel__badge panel__badge--secondary">
             Refreshed:{" "}

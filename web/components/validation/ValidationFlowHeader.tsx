@@ -1,3 +1,5 @@
+import React from "react";
+
 type ValidationStep = {
   id: number;
   label: string;
@@ -88,7 +90,7 @@ export function ValidationFlowHeader({
       <div className="panel__separator" />
       <section className="panel__notice panel__notice--info outcome-snapshot">
         <div className="panel__meta">
-          <strong>Validation outcome snapshot</strong>
+          <strong>Validation outcome summary</strong>
           <span className="panel__badge panel__badge--secondary">Unified view</span>
         </div>
         <div className="outcome-snapshot__grid">

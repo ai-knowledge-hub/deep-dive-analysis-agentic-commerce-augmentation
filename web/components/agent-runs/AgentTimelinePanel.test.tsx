@@ -52,8 +52,12 @@ describe("AgentTimelinePanel", () => {
 
     expect(screen.getByRole("button", { name: /All activity/i })).toBeInTheDocument();
     expect(screen.getByText(/More timeline filters/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Timeline action filter/i)).toBeInTheDocument();
+    expect(screen.getByText(/All actions/i)).toBeInTheDocument();
     expect(screen.getByText(/Technical event detail/i)).toBeInTheDocument();
     expect(screen.getByText(/run variant/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Timeline capability filter/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/All capabilities/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^experiment\.run_variant$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^optimize-product-representation$/i)).not.toBeInTheDocument();
   });

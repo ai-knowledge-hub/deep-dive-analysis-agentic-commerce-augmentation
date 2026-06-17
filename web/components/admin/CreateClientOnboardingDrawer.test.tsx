@@ -86,8 +86,16 @@ describe("CreateClientOnboardingDrawer", () => {
     const onSubmit = vi.fn();
     renderDrawer({ canSubmit: true, onFormChange, onSubmit });
 
-    await userEvent.type(screen.getByPlaceholderText("client-id"), "client-a");
+    await userEvent.type(screen.getByPlaceholderText("Client key"), "client-a");
     expect(onFormChange).toHaveBeenCalledWith({ clientId: "c" });
+    expect(screen.getByPlaceholderText("Brand key")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/product-key\\|Product name/i)).toBeInTheDocument();
+    expect(screen.getByText(/Each line should include key, name, and description/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("client-id")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("brand-id")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/product-id/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/reference/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/include reference, name, and description/i)).not.toBeInTheDocument();
 
     const categorySelect = screen.getAllByRole("combobox")[0];
     await userEvent.selectOptions(categorySelect, "running_shoes");

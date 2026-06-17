@@ -47,15 +47,60 @@ describe("ExperimentHistoryPanel", () => {
     );
 
     expect(screen.getByText(/Variant: Homepage benefit copy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Past experiments and runs/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open linked simulation/i })).toBeInTheDocument();
-    expect(screen.getByText(/Ref: abcdef12/i)).toBeInTheDocument();
-    expect(screen.getByText(/Evidence version: v3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence set: v3/i)).toBeInTheDocument();
     expect(screen.getByText(/Test idea: Price clarity test/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /View test idea details/i })).toBeInTheDocument();
     expect(screen.queryByText(/variant-raw-123456/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ref: abcdef12/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/simulation-run-abcdef123456/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reference history/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Snapshot:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evidence version/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Hypothesis:/i)).not.toBeInTheDocument();
+  });
+
+  it("uses a readable fallback when the variant label is missing", () => {
+    render(
+      <ExperimentHistoryPanel
+        experiments={[]}
+        runs={[
+          {
+            id: "run-1",
+            experiment_id: "exp-1",
+            variant_id: "variant-raw-123456",
+            query_id: "query-1",
+          },
+        ]}
+        metricsCount={0}
+        variantCount={1}
+        historyCollapsed={false}
+        selectedExperimentId={null}
+        experimentSnapshots={{}}
+        batteries={[]}
+        savingExperimentId={null}
+        queryMap={new Map([["query-1", "Best trail shoes"]])}
+        variantLabelById={new Map()}
+        runGapDetails={new Map()}
+        hypothesisLabelById={new Map()}
+        hypothesisStatementById={new Map()}
+        expandedHypothesisId={null}
+        runsSectionRef={createRef<HTMLDivElement>()}
+        formatTimestamp={(value) => value ?? "Not set"}
+        onToggleHistory={vi.fn()}
+        onSelectExperiment={vi.fn()}
+        onSaveExperimentDraft={vi.fn()}
+        onScrollVariants={vi.fn()}
+        onScrollRuns={vi.fn()}
+        onScrollMetrics={vi.fn()}
+        onToggleHypothesis={vi.fn()}
+        onDeleteRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Variant: Selected variant/i)).toBeInTheDocument();
+    expect(screen.queryByText(/variant-raw-123456/i)).not.toBeInTheDocument();
   });
 
   it("uses test idea wording for experiment history status", () => {
@@ -99,5 +144,42 @@ describe("ExperimentHistoryPanel", () => {
 
     expect(screen.getByText(/Test idea configured/i)).toBeInTheDocument();
     expect(screen.queryByText(/Hypothesis configured/i)).not.toBeInTheDocument();
+  });
+
+  it("exposes a focus target for run history shortcuts", () => {
+    const runsSectionRef = createRef<HTMLDivElement>();
+    render(
+      <ExperimentHistoryPanel
+        experiments={[]}
+        runs={[]}
+        metricsCount={0}
+        variantCount={0}
+        historyCollapsed={false}
+        selectedExperimentId={null}
+        experimentSnapshots={{}}
+        batteries={[]}
+        savingExperimentId={null}
+        queryMap={new Map()}
+        variantLabelById={new Map()}
+        runGapDetails={new Map()}
+        hypothesisLabelById={new Map()}
+        hypothesisStatementById={new Map()}
+        expandedHypothesisId={null}
+        runsSectionRef={runsSectionRef}
+        formatTimestamp={(value) => value ?? "Not set"}
+        onToggleHistory={vi.fn()}
+        onSelectExperiment={vi.fn()}
+        onSaveExperimentDraft={vi.fn()}
+        onScrollVariants={vi.fn()}
+        onScrollRuns={vi.fn()}
+        onScrollMetrics={vi.fn()}
+        onToggleHypothesis={vi.fn()}
+        onDeleteRun={vi.fn()}
+      />,
+    );
+
+    runsSectionRef.current?.focus();
+
+    expect(screen.getByLabelText(/Experiment runs/i)).toHaveFocus();
   });
 });

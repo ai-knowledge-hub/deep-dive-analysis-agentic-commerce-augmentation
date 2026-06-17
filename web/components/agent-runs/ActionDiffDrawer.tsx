@@ -108,7 +108,7 @@ export function ActionDiffDrawer({
       <div className="drawer__overlay" onClick={onClose} />
       <div className="drawer__panel">
         <div className="drawer__header">
-          <h2 className="drawer__title">Artifact diff details</h2>
+          <h2 className="drawer__title">Change details</h2>
           <button className="drawer__close" onClick={onClose}>
             x
           </button>
@@ -138,7 +138,7 @@ export function ActionDiffDrawer({
             />
           </div>
 
-          <p className="panel__subheading">Output changes vs previous same capability</p>
+          <p className="panel__subheading">Output changes vs previous similar action</p>
           <div className="agent-diff-detail-grid">
             <DiffJsonCell
               title="Added"
@@ -165,13 +165,13 @@ export function ActionDiffDrawer({
               formatJsonPreview={formatJsonPreview}
             />
             <DiffJsonCell
-              title="vs previous same capability"
+              title="vs previous similar action"
               value={diff.inputsVsPreviousCapability.changed}
               formatJsonPreview={formatJsonPreview}
             />
           </div>
 
-          <p className="panel__subheading">Snapshot payloads</p>
+          <p className="panel__subheading">Run inputs and outputs</p>
           <div className="agent-diff-detail-grid">
             <DiffJsonCell
               title="Current inputs"
@@ -189,7 +189,7 @@ export function ActionDiffDrawer({
               formatJsonPreview={formatJsonPreview}
             />
             <DiffJsonCell
-              title="Previous same-capability outputs"
+              title="Previous similar-action outputs"
               value={diff.previousCapabilityOutputs}
               formatJsonPreview={formatJsonPreview}
             />
@@ -222,7 +222,7 @@ export function ActionDiffDrawer({
           ) : null}
           {diff.copyDiffVsPreviousCapability.length > 0 ? (
             <div className="agent-copy-diff-block">
-              <strong>vs previous same capability</strong>
+              <strong>vs previous similar action</strong>
               {diff.copyDiffVsPreviousCapability.map((entry) => (
                 <CopyDiffLines
                   key={`cap-${entry.key}`}

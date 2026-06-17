@@ -493,7 +493,7 @@ describe("OperatorConsoleChat", () => {
     });
 
     await user.selectOptions(
-      screen.getByLabelText(/Recovery target capability/i),
+      screen.getByLabelText(/Recovery target action/i),
       "review_validation_readiness",
     );
     await user.click(screen.getByText(/Advanced recovery routing/i));
@@ -582,7 +582,7 @@ describe("OperatorConsoleChat", () => {
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
   });
 
-  it("adds artifact-specific guidance to command outcomes", async () => {
+  it("adds linked-work guidance to command outcomes", async () => {
     const user = userEvent.setup();
     const onIssueCommand = vi.fn().mockResolvedValue({
       command: {
@@ -661,6 +661,8 @@ describe("OperatorConsoleChat", () => {
     expect(screen.getByText(/Open validation job job-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Recovery guidance: Low-risk writes/i)).toBeInTheDocument();
     expect(screen.getByText(/Recovery action: Ask policy/i)).toBeInTheDocument();
+    expect(screen.queryByText(/output payload/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/generated artifacts/i)).not.toBeInTheDocument();
   });
 
   it("preflights and confirms step and cancel commands", async () => {

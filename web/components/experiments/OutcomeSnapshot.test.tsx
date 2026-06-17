@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OutcomeSnapshot } from "./OutcomeSnapshot";
 
 describe("OutcomeSnapshot", () => {
-  it("uses readable evidence protocol wording", () => {
+  it("uses readable evidence set wording", () => {
     render(
       <OutcomeSnapshot
         snapshot={{
@@ -22,8 +22,9 @@ describe("OutcomeSnapshot", () => {
       />,
     );
 
-    expect(screen.getByText(/Evidence protocol:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence set:/i)).toBeInTheDocument();
     expect(screen.getByText(/Outcome summary/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Evidence protocol/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Protocol snapshot/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Outcome snapshot/i)).not.toBeInTheDocument();
   });

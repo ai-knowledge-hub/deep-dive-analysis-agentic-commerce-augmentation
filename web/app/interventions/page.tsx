@@ -356,8 +356,7 @@ function InterventionsPageContent() {
 
           {runIdParam ? (
             <section className="panel__notice panel__notice--info">
-              <strong>Run-scoped view:</strong> showing intervention items for run{" "}
-              <span className="panel__badge panel__badge--secondary">{runIdParam.slice(0, 8)}</span>.
+              <strong>Run-scoped view:</strong> showing intervention items for the selected run.
               <div className="panel__actions">
                 <button
                   type="button"

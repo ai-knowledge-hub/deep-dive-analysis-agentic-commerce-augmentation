@@ -84,6 +84,7 @@ describe("LearningsPage", () => {
           experiment_id: "exp-1",
           status: "failed",
           state: "validation_completed",
+          objective: { objective: "policy_sensitive_checkout" },
         },
         {
           id: "run-2",
@@ -121,6 +122,10 @@ describe("LearningsPage", () => {
     expect(screen.getByText(/Start with close validation gaps/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Decision signals/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Execution signals/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Experiment run · policy sensitive checkout triggered a policy learning/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Experiment exp-/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Recent policy signal on publish copy revision/i)).toBeInTheDocument();
     expect(screen.queryByText(/Recent policy signal on publish_copy_revision/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Review recent execution drift/i)).toBeInTheDocument();

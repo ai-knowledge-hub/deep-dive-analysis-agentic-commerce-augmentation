@@ -52,7 +52,7 @@ export function FlowStatusPanel({
   onOpenValidation,
 }: FlowStatusPanelProps) {
   const lastRunVariantLabel = lastRun?.variant_id
-    ? variantLabelById?.get(lastRun.variant_id) ?? `Variant ${lastRun.variant_id.slice(0, 8)}`
+    ? variantLabelById?.get(lastRun.variant_id) ?? "Selected variant"
     : null;
 
   return (

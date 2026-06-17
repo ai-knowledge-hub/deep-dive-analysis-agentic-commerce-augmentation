@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type {
   SimulationGapReport,
   SimulationOptimizeResponse,
@@ -70,6 +70,17 @@ function renderGap(gap: SimulationGapReport | null) {
         </div>
       )}
     </div>
+  );
+}
+
+function formatSimulationProductName(
+  productId: string | null | undefined,
+  products: SimulationProduct[],
+): string {
+  if (!productId) return "—";
+  return (
+    products.find((product) => product.id === productId)?.name ??
+    "Product not in current list"
   );
 }
 
@@ -182,7 +193,7 @@ export function SimulationPanel({
           <span className="simulation__diff-label">Scenario</span>
           {sourceSessionId && (
             <p className="simulation__note">
-              Scenario sourced from session {sourceSessionId.slice(0, 8)}.
+              Scenario filled from connected evidence.
             </p>
           )}
           <textarea
@@ -257,7 +268,7 @@ export function SimulationPanel({
             </>
           ) : (
             <p className="simulation__intro-text">
-              No evidence snapshot yet. Run a chat query to ground the scenario.
+              No evidence summary yet. Run a chat query to ground the scenario.
             </p>
           )}
         </div>
@@ -400,19 +411,19 @@ export function SimulationPanel({
             <div className="simulation__feed-card">
               <div className="simulation__feed-title">ACP feed</div>
               <pre className="simulation__feed-code">
-                {feedPreview?.acp ?? "No ACP feed snapshot yet."}
+                {feedPreview?.acp ?? "No ACP feed preview yet."}
               </pre>
             </div>
             <div className="simulation__feed-card">
               <div className="simulation__feed-title">UCP feed</div>
               <pre className="simulation__feed-code">
-                {feedPreview?.ucp ?? "No UCP feed snapshot yet."}
+                {feedPreview?.ucp ?? "No UCP feed preview yet."}
               </pre>
             </div>
           </div>
           <p className="simulation__intro-text">
-            These are demo snapshots for the POC. In production they map to live
-            ACP/UCP payloads.
+            These previews show the current feed shape. In production they map to live
+            ACP/UCP fields.
           </p>
         </div>
       )}
@@ -446,7 +457,7 @@ export function SimulationPanel({
                     <div key={score.product_id} className="simulation__score">
                       <div className="simulation__score-header">
                         <span className="simulation__score-id">
-                          {score.product_id}
+                          {formatSimulationProductName(score.product_id, products)}
                         </span>
                         <span className="simulation__score-value">
                           {(score.score * 100).toFixed(0)}%
@@ -472,7 +483,7 @@ export function SimulationPanel({
         onToggle={(event) => setSecondaryInsightsOpen(event.currentTarget.open)}
       >
         <summary className="panel__details-summary">
-          Secondary insights (gap/protocol/feed/lessons)
+          Secondary insights (gaps, feeds, lessons)
         </summary>
         {renderGap(primaryGap)}
 
@@ -661,11 +672,11 @@ export function SimulationPanel({
           <span className="simulation__diff-label">Lift summary</span>
           <div className="simulation__lift-row">
             <span>Winner before</span>
-            <span>{winnerId ?? "—"}</span>
+            <span>{formatSimulationProductName(winnerId, products)}</span>
           </div>
           <div className="simulation__lift-row">
             <span>Winner after</span>
-            <span>{retest?.result?.winner_id ?? "—"}</span>
+            <span>{formatSimulationProductName(retest?.result?.winner_id, products)}</span>
           </div>
           <div className="simulation__lift-row">
             <span>Optimized lift</span>

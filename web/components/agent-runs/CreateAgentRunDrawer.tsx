@@ -59,7 +59,7 @@ export function CreateAgentRunDrawer({
               <option value="">None (global agent run)</option>
               {experiments.map((experiment) => (
                 <option key={experiment.id} value={experiment.id}>
-                  {experiment.name || "Untitled"} · {experiment.id.slice(0, 8)} ·{" "}
+                  {experiment.name || "Untitled"} · updated{" "}
                   {formatDateCompact(experiment.updated_at || experiment.created_at)}
                 </option>
               ))}
@@ -72,14 +72,14 @@ export function CreateAgentRunDrawer({
           </label>
 
           <details className="admin-advanced-defaults">
-            <summary>Manual experiment id (advanced)</summary>
+            <summary>Use a saved experiment</summary>
             <label className="field">
-              <span className="field__label">Override with UUID</span>
+              <span className="field__label">Saved experiment</span>
               <input
                 className="field__input"
                 value={form.experiment_id}
                 onChange={(event) => onFormChange({ experiment_id: event.target.value.trim() })}
-                placeholder="paste experiment uuid"
+                placeholder="Paste the saved experiment"
               />
             </label>
           </details>
@@ -110,41 +110,49 @@ export function CreateAgentRunDrawer({
             </select>
           </label>
 
-          <label className="field">
-            <span className="field__label">Allowed capabilities</span>
-            <textarea
-              className="field__input field__textarea"
-              value={form.allowed_capabilities.join("\n")}
-              onChange={(event) =>
-                onFormChange({
-                  allowed_capabilities: event.target.value
-                    .split("\n")
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                })
-              }
-              rows={7}
-            />
-          </label>
-
           <JsonTextArea
-            label="Objective (JSON)"
+            label="Run objective"
+            helper="What this run should optimize. The default is tuned for confidence-weighted test planning."
             value={form.objective}
             rows={8}
             onChange={(objective) => onFormChange({ objective })}
           />
-          <JsonTextArea
-            label="Budgets (JSON)"
-            value={form.budgets}
-            rows={6}
-            onChange={(budgets) => onFormChange({ budgets })}
-          />
-          <JsonTextArea
-            label="Approval policy (JSON)"
-            value={form.approval_policy}
-            rows={6}
-            onChange={(approval_policy) => onFormChange({ approval_policy })}
-          />
+          <details className="admin-advanced-defaults">
+            <summary>Advanced run setup</summary>
+            <p className="panel__muted">
+              Optional controls for allowed actions, budget limits, and approval rules.
+            </p>
+            <label className="field">
+              <span className="field__label">Allowed actions</span>
+              <textarea
+                className="field__input field__textarea"
+                value={form.allowed_capabilities.join("\n")}
+                onChange={(event) =>
+                  onFormChange({
+                    allowed_capabilities: event.target.value
+                      .split("\n")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+                rows={7}
+              />
+            </label>
+            <JsonTextArea
+              label="Budget limits"
+              helper="Caps that prevent a run from spending or testing more than intended."
+              value={form.budgets}
+              rows={6}
+              onChange={(budgets) => onFormChange({ budgets })}
+            />
+            <JsonTextArea
+              label="Approval rules"
+              helper="Actions that must wait for a human decision before the run continues."
+              value={form.approval_policy}
+              rows={6}
+              onChange={(approval_policy) => onFormChange({ approval_policy })}
+            />
+          </details>
         </div>
         <div className="drawer__footer">
           <button className="button button--ghost" onClick={onClose}>
@@ -161,11 +169,13 @@ export function CreateAgentRunDrawer({
 
 function JsonTextArea({
   label,
+  helper,
   value,
   rows,
   onChange,
 }: {
   label: string;
+  helper?: string;
   value: Record<string, unknown>;
   rows: number;
   onChange: (value: Record<string, unknown>) => void;
@@ -181,11 +191,12 @@ function JsonTextArea({
             const parsed = JSON.parse(event.target.value || "{}");
             onChange(parsed);
           } catch {
-            // Keep last valid JSON until the operator finishes editing.
+            // Keep last valid structured value until the operator finishes editing.
           }
         }}
         rows={rows}
       />
+      {helper ? <span className="panel__muted">{helper}</span> : null}
     </label>
   );
 }

@@ -441,6 +441,7 @@ export default function EvidencePage() {
             targetProductUrl={targetCopyUrl ?? undefined}
             sourceSessionId={evidenceSourceSessionId ?? undefined}
             refreshedAt={evidenceRefreshedAt ?? undefined}
+            onOpenChat={() => router.push("/lab")}
             onOpenSimulation={() => router.push("/simulation")}
             onOpenExperiments={() => router.push("/experiments")}
             usePageScroll

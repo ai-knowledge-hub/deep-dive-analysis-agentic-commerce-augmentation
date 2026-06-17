@@ -127,6 +127,7 @@ describe("AgentRunsPage timeline presets", () => {
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
+    Element.prototype.scrollIntoView = vi.fn();
     window.localStorage.clear();
 
     listAgentRunsMock.mockResolvedValue({
@@ -645,14 +646,17 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     await waitFor(() => expect(getAgentRunMock).toHaveBeenCalledWith("run-failed", expect.anything(), "user-a"));
-    const rows = await screen.findAllByRole("button", { name: /Experiment exp-/i });
+    const rows = await screen.findAllByRole("button", { name: /Experiment run/i });
 
-    expect(rows[0]).toHaveTextContent(/exp-fail/i);
+    expect(rows[0]).toHaveTextContent(/failed/i);
     expect(rows[0]).toHaveTextContent(/Critical/i);
-    expect(rows[1]).toHaveTextContent(/exp-appr/i);
+    expect(rows[1]).toHaveTextContent(/planned/i);
     expect(rows[1]).toHaveTextContent(/Approval/i);
-    expect(rows[2]).toHaveTextContent(/exp-run/i);
+    expect(rows[2]).toHaveTextContent(/running/i);
     expect(rows[2]).toHaveTextContent(/Watching/i);
+    expect(screen.queryByText(/exp-fail/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exp-appr/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exp-run/i)).not.toBeInTheDocument();
   });
 
   it("applies Commands preset to event query payload", async () => {
@@ -905,12 +909,17 @@ describe("AgentRunsPage timeline presets", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
     expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Selected action detail/i)).toHaveFocus(),
+    );
 
-    await userEvent.click(screen.getByRole("button", { name: /Variant: variant-/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Open variant/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
 
-    await userEvent.click(screen.getByRole("button", { name: /Metric: metric-1/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Open metric/i }));
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+    expect(screen.queryByRole("button", { name: /Variant: variant-/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Metric: metric-/i })).not.toBeInTheDocument();
 
     getAgentRunEventsMock.mockClear();
 
@@ -919,7 +928,7 @@ describe("AgentRunsPage timeline presets", () => {
     payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
     expect(payload.capability_name).toBe("request_synthetic_validation");
 
-    await userEvent.click(screen.getByRole("button", { name: /Open validation/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Open validation$/i }));
     expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=run-1");
 
     await userEvent.click(screen.getByRole("button", { name: /Open interventions/i }));
@@ -971,16 +980,27 @@ describe("AgentRunsPage timeline presets", () => {
     await userEvent.click(screen.getByText(/Advanced runtime details/i));
 
     expect(await screen.findByText(/Skills and tools/i)).toBeInTheDocument();
+    expect(screen.getByText(/Allowed actions: 1/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Registry-write access/i })).not.toBeVisible();
+    await userEvent.click(screen.getByText(/Show setup and audit controls/i));
+    expect(
+      screen.getByRole("heading", { name: /Registry-write access/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Apply needs access/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Registry-write access key/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Access key/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Bearer token saved/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Registry-write bearer token/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
+    expect(screen.getByText(/Execute one candidate variant against saved evidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tool contract: agent-runtime-static-v1/)).not.toBeVisible();
+    await userEvent.click(screen.getByText(/Show governance and linked work/i));
     expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Tool: experiment run variant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Effect: write low risk/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Optimize Product Representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/experiment.run_variant/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/write_low_risk/i).length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/Execute one candidate variant against saved evidence/i),
-    ).toBeInTheDocument();
     expect(
       screen.getByText(/Compare the metric against control before promotion/i),
     ).toBeInTheDocument();
@@ -993,7 +1013,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Non-executable protocol intelligence/i)).toBeInTheDocument();
     expect(
       screen.getByText(
-        /protocol.checkout.v1 · external_side_effect · planned · readiness_boundary · receipt: external_write_execution/i,
+        /protocol.checkout.v1 · external_side_effect · planned · readiness_boundary · approval: external_write_execution/i,
       ),
     ).toBeInTheDocument();
     expect(
@@ -1062,8 +1082,8 @@ describe("AgentRunsPage timeline presets", () => {
         registry_fingerprint: "fedcba9876543210",
         registry_status: "active",
       });
-    await userEvent.clear(screen.getByLabelText(/Owner principal/i));
-    await userEvent.type(screen.getByLabelText(/Owner principal/i), "platform.growth");
+    await userEvent.clear(screen.getByLabelText(/Owner identity/i));
+    await userEvent.type(screen.getByLabelText(/Owner identity/i), "platform.growth");
     await userEvent.clear(screen.getByLabelText(/Steward team/i));
     await userEvent.type(screen.getByLabelText(/Steward team/i), "growth-ops");
     await userEvent.click(screen.getByRole("button", { name: /Preview ownership change/i }));
@@ -1089,7 +1109,12 @@ describe("AgentRunsPage timeline presets", () => {
       },
       "user-a",
     );
-    expect(await screen.findByText(/Ownership saved with receipt receipt-/i)).toBeInTheDocument();
+    const ownershipNotice = await screen.findByText(/Ownership saved\. Active registry is active\./i);
+    expect(ownershipNotice).toBeInTheDocument();
+    expect(ownershipNotice).not.toHaveTextContent(/receipt-/i);
+    expect(ownershipNotice).not.toHaveTextContent(/abcdef123456/i);
+    expect(screen.queryByText(/Ownership saved with approval record/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Owner principal/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Registry releases/i)).toBeInTheDocument();
     expect(screen.getByText(/3 skills · 12 tools · 12 capabilities/i)).toBeInTheDocument();
     expect(screen.getByText(/Backfilled 2 runs · 3 actions/i)).toBeInTheDocument();
@@ -1104,20 +1129,19 @@ describe("AgentRunsPage timeline presets", () => {
       screen.getAllByText((_, node) =>
         Boolean(
           node?.textContent?.includes(
-            "Payload contains 1 skills, 1 tools, and 1 policy profiles",
+            "Release contains 1 skills, 1 tools, and 1 policy profiles",
           ),
         ),
       ).length,
     ).toBeGreaterThan(0);
+    expect(screen.queryByText(/Payload contains/i)).not.toBeInTheDocument();
     expect(screen.getByText(/2 audit events are tied to this release/i)).toBeInTheDocument();
     expect(screen.getByText(/Release diff/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Tools: \+experiment.run_variant, ~validation.review_readiness/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Receipt: receipt-12345678/i),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    expect(screen.getByText(/Approval record: receipt-12345678/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Verify approval/i }));
     expect(verifyAgentRuntimeRegistryApprovalReceiptMock).toHaveBeenCalledWith({
       approval_receipt: {
         receipt_id: "receipt-12345678",
@@ -1133,7 +1157,9 @@ describe("AgentRunsPage timeline presets", () => {
       audit_event_id: "registry-approval-1",
       require_audit_event: true,
     });
-    expect(await screen.findByText(/Receipt verified against signature/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Approval verified against the release audit trail/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Verify receipt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Signed ownership receipt/i)).not.toBeInTheDocument();
     backfillAgentRuntimeRegistryPinsMock
       .mockResolvedValueOnce({
         client_id: "client-a",
@@ -1166,7 +1192,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(await screen.findByText(/Backfill updated 5 records/i)).toBeInTheDocument();
     expect(screen.getByText(/Registry release trail/i)).toBeInTheDocument();
     expect(screen.getByText(/tools: \+1 -0 ~0/i)).toBeInTheDocument();
-    expect(screen.getByText(/Receipt id: abcdef123456/i)).toBeInTheDocument();
+    expect(screen.getByText(/Release: abcdef123456/i)).toBeInTheDocument();
     expect(screen.getByText(/Tool version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Skill version: v1/i)).toBeInTheDocument();
     expect(screen.getByText(/Owner: platform\.commerce-optimization/i)).toBeInTheDocument();
@@ -1446,11 +1472,16 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     expect(await screen.findByText(/Job supervision/i)).toBeInTheDocument();
-    expect(screen.getByText(/agent-ext-1/i)).toBeInTheDocument();
-    expect(screen.getByText(/retry-safe-key/i)).toBeInTheDocument();
     expect(
       screen.getAllByText((_, node) =>
-        Boolean(node?.textContent?.includes("Tool: experiment run variant")),
+        Boolean(node?.textContent?.includes("Handoff status: accepted")),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/agent-ext-1/i)).not.toBeVisible();
+    expect(screen.getByText(/retry-safe-key/i)).not.toBeVisible();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Requested action: experiment run variant")),
       ).length,
     ).toBeGreaterThan(0);
     expect(
@@ -1458,8 +1489,28 @@ describe("AgentRunsPage timeline presets", () => {
         Boolean(node?.textContent?.includes("Skill: optimize product representation")),
       ).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/Latest receipt: external agent job accepted/i)).toBeInTheDocument();
+    expect(screen.getByText(/Latest handoff: external agent job accepted/i)).toBeInTheDocument();
+    expect(screen.getByText(/Handoff needs check/i)).toBeInTheDocument();
+    expect(screen.queryByText(/hash-123456789/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Show handoff details/i)).toBeInTheDocument();
+    expect(screen.getByText(/agent-ext-1/i)).not.toBeVisible();
+    expect(screen.getByText(/retry-safe-key/i)).not.toBeVisible();
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Job reference: job-ext-123456")),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, node) =>
+        Boolean(node?.textContent?.includes("Handoff records: 1")),
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/external_agent_job_accepted/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/external machine principal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Latest receipt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Idempotency/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Handoff verification is invalid/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Receipt signature/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Protocol activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Status: Needs review/i)).toBeInTheDocument();
     expect(screen.getByText(/Score: 0\/100/i)).toBeInTheDocument();
@@ -1468,7 +1519,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(
       screen.getByText(/Why: Missing UCP business profile for brand/i),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Verify receipt/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Verify handoff/i }));
     expect(verifyExternalAgentJobReceiptForRunMock).toHaveBeenCalledWith(
       "run-ext-1",
       "user-a",

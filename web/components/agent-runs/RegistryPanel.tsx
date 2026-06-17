@@ -136,8 +136,8 @@ function ReceiptVerificationNotice({
       }`}
     >
       {verification.result.valid
-        ? "Receipt verified against signature and registry audit trail."
-        : `Receipt verification failed: ${verification.result.blockers.join(" ")}`}
+        ? "Approval verified against the release audit trail."
+        : `Approval verification failed: ${verification.result.blockers.join(" ")}`}
     </div>
   );
 }
@@ -235,7 +235,7 @@ function RegistryApplyAuditSummary({
           Event: {event?.event_type?.replaceAll("_", " ") ?? "registry update"}
         </span>
         <span className="control-chip">
-          Actor: {String(event?.diff?.actor_principal_id ?? event?.source ?? "signed principal")}
+          Actor: {String(event?.diff?.actor_principal_id ?? event?.source ?? "signed identity")}
         </span>
         <span className="control-chip">
           Release: {registryFingerprint ? registryFingerprint.slice(0, 12) : "pending"}
@@ -244,7 +244,7 @@ function RegistryApplyAuditSummary({
       </div>
       <p className="panel__muted">
         This change is recorded in the registry audit trail. Use Registry releases to inspect
-        the full payload and rollback context.
+        the full release detail and recovery context.
       </p>
     </div>
   );
@@ -424,13 +424,13 @@ export function RegistryPanel({
       if (dryRun) {
         setHarnessEditNotice({
           type: response.preflight?.allowed ? "info" : "error",
-          text: response.preflight?.summary ?? "Harness profile preview complete.",
+          text: response.preflight?.summary ?? "Execution posture preview complete.",
         });
         return;
       }
       setHarnessEditNotice({
         type: "info",
-        text: `Harness profile saved. Registry ${String(
+        text: `Execution posture saved. Registry ${String(
           response.registry_fingerprint ?? "",
         ).slice(0, 12)} is now active.`,
       });
@@ -444,7 +444,7 @@ export function RegistryPanel({
     } catch (err) {
       setHarnessEditNotice({
         type: "error",
-        text: err instanceof Error ? err.message : "Unable to update harness profile.",
+        text: err instanceof Error ? err.message : "Unable to update execution posture.",
       });
     } finally {
       setHarnessEditBusy(false);
@@ -509,8 +509,8 @@ export function RegistryPanel({
     setRegistryWriteTokenInput("");
     setRegistryWriteTokenNotice(
       getRegistryWriteToken()
-        ? "Registry-write bearer token loaded for this browser tab only."
-        : "Registry-write bearer token cleared.",
+        ? "Registry-write access key loaded for this browser tab only."
+        : "Registry-write access key cleared.",
     );
   }
 
@@ -518,7 +518,7 @@ export function RegistryPanel({
     clearRegistryWriteToken();
     setRegistryWriteTokenSaved(false);
     setRegistryWriteTokenInput("");
-    setRegistryWriteTokenNotice("Registry-write bearer token cleared.");
+    setRegistryWriteTokenNotice("Registry-write access key cleared.");
   }
 
   return (
@@ -533,36 +533,17 @@ export function RegistryPanel({
         </span>
       </div>
       <p className="panel__muted">
-        This is the agent-facing execution contract for the selected run: skills describe
-        reusable workflows, tools are the policy-governed capabilities the runtime can
-        execute.
+        Use this when you need to inspect or adjust how the selected run is allowed to act.
       </p>
       <div className="control-chip-row">
-        <span className="control-chip">
-          Principal: {selectedRun.principal_type ?? "human"}
-        </span>
         <span className="control-chip">
           Policy: {selectedRun.policy_profile_id ?? "human_approval_required"}
         </span>
         <span className="control-chip">
-          Harness: {activeHarness?.name ?? selectedRun.harness_id ?? "operator supervised"}
+          Posture: {activeHarness?.name ?? selectedRun.harness_id ?? "operator supervised"}
         </span>
         <span className="control-chip">
-          Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
-        </span>
-        <span className="control-chip">
-          Run registry: {selectedRun.registry_version ?? runtimeRegistry?.registry_version ?? "unpinned"}
-        </span>
-        <span className="control-chip">
-          Fingerprint:{" "}
-          {selectedRun.registry_fingerprint
-            ? selectedRun.registry_fingerprint.slice(0, 12)
-            : runtimeRegistry?.registry_fingerprint
-              ? runtimeRegistry.registry_fingerprint.slice(0, 12)
-              : "pending"}
-        </span>
-        <span className="control-chip">
-          Registry source: {runtimeRegistry?.registry_source ?? "pending"}
+          Allowed actions: {allowedRuntimeTools.length}
         </span>
         <span className="control-chip">
           Release status: {runtimeRegistry?.registry_status ?? "pending"}
@@ -581,6 +562,31 @@ export function RegistryPanel({
         ) : null}
       </div>
 
+      <details className="registry-panel__subsection">
+        <summary>Show setup and audit controls</summary>
+        <div className="control-chip-row">
+          <span className="control-chip">
+            Operator: {selectedRun.principal_type ?? "human"}
+          </span>
+          <span className="control-chip">
+            Trace: {selectedRun.trace_id ? String(selectedRun.trace_id).slice(0, 14) : "pending"}
+          </span>
+          <span className="control-chip">
+            Run registry: {selectedRun.registry_version ?? runtimeRegistry?.registry_version ?? "unpinned"}
+          </span>
+          <span className="control-chip">
+            Fingerprint:{" "}
+            {selectedRun.registry_fingerprint
+              ? selectedRun.registry_fingerprint.slice(0, 12)
+              : runtimeRegistry?.registry_fingerprint
+                ? runtimeRegistry.registry_fingerprint.slice(0, 12)
+                : "pending"}
+          </span>
+          <span className="control-chip">
+            Registry source: {runtimeRegistry?.registry_source ?? "pending"}
+          </span>
+        </div>
+
       <section className="control-section">
         <div className="control-section__header">
           <div>
@@ -588,17 +594,17 @@ export function RegistryPanel({
             <h4 className="control-section__title">Registry-write access</h4>
           </div>
           <span className={registryWriteTokenSaved ? "control-chip" : "control-chip control-chip--attention"}>
-            {registryWriteTokenSaved ? "Bearer token saved" : "Apply locked"}
+            {registryWriteTokenSaved ? "Access key saved" : "Apply needs access"}
           </span>
         </div>
         <p className="panel__muted">
-          Preview runs without elevated access. Confirmed registry changes require a
-          signed bearer token with `registry:write` or `agent_registry:write` scope. The
-          pasted token is kept in memory for this browser tab only and is cleared on reload.
+          Preview changes without elevated access. Applying changes needs a registry-write
+          access key. The key is kept in memory for this browser tab only and is cleared on
+          reload.
         </p>
         <div className="insight-grid insight-grid--two">
           <label className="field">
-            <span className="field__label">Registry-write bearer token</span>
+            <span className="field__label">Registry-write access key</span>
             <input
               className="panel__input"
               type="password"
@@ -606,8 +612,8 @@ export function RegistryPanel({
               onChange={(event) => setRegistryWriteTokenInput(event.target.value)}
               placeholder={
                 registryWriteTokenSaved
-                  ? "Loaded for this tab; paste a new token to replace"
-                  : "Bearer token"
+                  ? "Loaded for this tab; paste a new key to replace"
+                  : "Access key"
               }
             />
           </label>
@@ -638,7 +644,7 @@ export function RegistryPanel({
       <section className="control-section">
         <div className="control-section__header">
           <div>
-            <span className="control-section__eyebrow">Harness</span>
+            <span className="control-section__eyebrow">Execution</span>
             <h4 className="control-section__title">Execution posture</h4>
           </div>
           <span className="control-chip">
@@ -679,7 +685,7 @@ export function RegistryPanel({
                 className="button button--ghost button--sm"
                 onClick={() => setHarnessEditorOpen((open) => !open)}
               >
-                {harnessEditorOpen ? "Close editor" : "Edit harness posture"}
+                {harnessEditorOpen ? "Close editor" : "Edit execution posture"}
               </button>
             </div>
             {harnessEditorOpen ? (
@@ -816,8 +822,8 @@ export function RegistryPanel({
                   />
                 </label>
                 <p className="panel__muted">
-                  Confirmed apply is protected by registry-write authorization; preview
-                  should be used first to catch policy/run-mode mismatches.
+                  Applying changes needs registry-write access. Preview first to catch
+                  policy/run-mode mismatches.
                 </p>
                 <div className="panel__actions">
                   <button
@@ -838,7 +844,7 @@ export function RegistryPanel({
                   </button>
                 </div>
                 <RegistryChangePreflight
-                  label="Harness posture preflight"
+                  label="Execution posture preflight"
                   preflight={harnessPreflight}
                 />
                 {harnessEditNotice ? (
@@ -862,7 +868,7 @@ export function RegistryPanel({
           </>
         ) : (
           <p className="panel__muted">
-            Harness metadata is not available in the active registry payload yet.
+            Execution posture details are not available in the active release yet.
           </p>
         )}
       </section>
@@ -881,7 +887,7 @@ export function RegistryPanel({
           <>
             <div className="panel__meta-strip panel__meta-strip--flat">
               <div>
-                <strong>Harness</strong>: {formatRegistryValue(activeAgentProfile.default_harness_id)}
+                <strong>Posture</strong>: {formatRegistryValue(activeAgentProfile.default_harness_id)}
               </div>
               <div>
                 <strong>Policy</strong>: {formatRegistryValue(activeAgentProfile.default_policy_profile_id)}
@@ -917,7 +923,7 @@ export function RegistryPanel({
                   />
                 </label>
                 <label className="field">
-                  <span className="field__label">Default harness</span>
+                  <span className="field__label">Default execution posture</span>
                   <select
                     className="panel__input"
                     value={profileHarnessId}
@@ -1059,7 +1065,7 @@ export function RegistryPanel({
               {selectedRegistryRelease.status}
             </div>
             <p className="panel__muted">
-              Payload contains {selectedRegistryRelease.payload.skills?.length ?? 0} skills,{" "}
+              Release contains {selectedRegistryRelease.payload.skills?.length ?? 0} skills,{" "}
               {selectedRegistryRelease.payload.tools?.length ?? 0} tools, and{" "}
               {selectedRegistryRelease.payload.policy_profiles?.length ?? 0} policy profiles.
             </p>
@@ -1114,7 +1120,7 @@ export function RegistryPanel({
                   .map((event) => (
                     <div key={event.id} className="run-event-list__item">
                       <div>
-                        <div className="table__strong">Signed ownership receipt</div>
+                        <div className="table__strong">Ownership approval record</div>
                         <div className="table__muted">
                           {event.id.slice(0, 12)} · {event.registry_fingerprint.slice(0, 12)}
                         </div>
@@ -1125,7 +1131,7 @@ export function RegistryPanel({
                         onClick={() => onVerifyRegistryApprovalReceipt(event)}
                         disabled={registryReceiptVerificationBusy === event.id}
                       >
-                        {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify receipt"}
+                        {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify approval"}
                       </button>
                     </div>
                   ))}
@@ -1197,7 +1203,7 @@ export function RegistryPanel({
                     onClick={() => onVerifyRegistryApprovalReceipt(event)}
                     disabled={registryReceiptVerificationBusy === event.id}
                   >
-                    {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify receipt"}
+                    {registryReceiptVerificationBusy === event.id ? "Verifying" : "Verify approval"}
                   </button>
                 ) : null}
               </div>
@@ -1236,7 +1242,7 @@ export function RegistryPanel({
                   {adapter.id} · {adapter.effect_class ?? "unknown"} · planned
                   {adapter.contract_intent ? ` · ${adapter.contract_intent}` : ""}
                   {adapter.receipt_contract?.receipt_type
-                    ? ` · receipt: ${adapter.receipt_contract.receipt_type}`
+                    ? ` · approval: ${adapter.receipt_contract.receipt_type}`
                     : ""}
                 </span>
               ))}
@@ -1302,9 +1308,10 @@ export function RegistryPanel({
           </div>
         ))}
         {runtimeRegistry && allowedRuntimeTools.length === 0 ? (
-          <div className="panel__muted">No registry tools match this run’s allowed capabilities.</div>
+          <div className="panel__muted">No allowed actions match this run.</div>
         ) : null}
       </div>
+      </details>
     </section>
   );
 }

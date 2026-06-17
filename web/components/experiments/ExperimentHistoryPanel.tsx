@@ -69,9 +69,7 @@ export function ExperimentHistoryPanel({
   onDeleteRun,
 }: ExperimentHistoryPanelProps) {
   const formatVariantLabel = (variantId: string) =>
-    variantLabelById.get(variantId) ?? `Variant ${variantId.slice(0, 8)}`;
-  const formatShortReference = (value: string) =>
-    value.replace(/^simulation-run[-_]?/, "").slice(0, 8);
+    variantLabelById.get(variantId) ?? "Selected variant";
 
   return (
     <section className="panel__card panel__card--secondary panel__card--full-row">
@@ -91,7 +89,7 @@ export function ExperimentHistoryPanel({
           </button>
         </div>
       </div>
-      <p className="panel__subheading">Reference history</p>
+      <p className="panel__subheading">Past experiments and runs</p>
       <p className="panel__step-helper">
         Review past experiments, runs, and metrics without interrupting the active flow.
       </p>
@@ -210,7 +208,12 @@ export function ExperimentHistoryPanel({
               </ul>
             )}
           </div>
-          <div className="panel__column" ref={runsSectionRef}>
+          <div
+            ref={runsSectionRef}
+            className="panel__column"
+            tabIndex={-1}
+            aria-label="Experiment runs"
+          >
             <div className="panel__meta">
               <h4 className="panel__subtitle">Runs</h4>
               {runs.length > 0 ? <span className="panel__badge">{runs.length}</span> : null}
@@ -232,7 +235,7 @@ export function ExperimentHistoryPanel({
                         Variant: {formatVariantLabel(run.variant_id)}
                       </span>
                       {typeof run.snapshot_version === "number" ? (
-                        <span className="history-panel__meta">Evidence version: v{run.snapshot_version}</span>
+                        <span className="history-panel__meta">Evidence set: v{run.snapshot_version}</span>
                       ) : null}
                       {run.hypothesis_id ? (
                         <span className="history-panel__meta">
@@ -278,7 +281,6 @@ export function ExperimentHistoryPanel({
                           >
                             Open linked simulation
                           </a>
-                          {" · "}Ref: {formatShortReference(run.simulation_run_id)}
                         </span>
                       ) : null}
                       {runGapDetails.get(run.id) ? (

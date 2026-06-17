@@ -476,6 +476,9 @@ describe("InterventionsPage", () => {
     render(<InterventionsPage />);
 
     expect(await screen.findByText(/Run-scoped view/i)).toBeInTheDocument();
+    expect(screen.getByText(/for the selected run/i)).toBeInTheDocument();
+    expect(screen.queryByText(/for run/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^run-2$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Start with approval/i)).toBeInTheDocument();
     expect(screen.getByText(/approve publish copy revision/i)).toBeInTheDocument();
     expect(

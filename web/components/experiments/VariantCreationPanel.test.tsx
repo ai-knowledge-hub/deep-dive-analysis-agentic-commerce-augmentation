@@ -108,4 +108,30 @@ describe("VariantCreationPanel", () => {
       expect.objectContaining({ label: "Test idea variant" }),
     );
   });
+
+  it("keeps advanced variant setup in operator language", () => {
+    render(
+      <VariantCreationPanel
+        {...baseProps}
+        variantSourceMode="manual"
+        recommendedVariantSource="manual"
+        simulationRevisions={[]}
+        variantSecondaryActionsOpen
+        variantAdvancedOpen
+        jsonErrorVariantPayload="Advanced data must use a valid object format."
+      />,
+    );
+
+    expect(screen.getByText(/More variant options/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hide advanced setup/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Variant type/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Advanced data overrides/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Optional\. Use only when this test idea needs extra metadata\./i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Advanced data must use a valid object format\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/Advanced JSON/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Payload overrides/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Invalid JSON/i)).not.toBeInTheDocument();
+  });
 });

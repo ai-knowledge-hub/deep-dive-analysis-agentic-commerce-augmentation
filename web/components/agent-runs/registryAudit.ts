@@ -13,7 +13,7 @@ export function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): stri
   if (event.event_type === "registry_ownership_approved") {
     const receipt = event.diff.approval_receipt;
     const toolId = String(event.diff.tool_id || receipt?.tool_id || "registry tool");
-    return `Ownership approval receipt for ${toolId}`;
+    return `Ownership approval record for ${toolId}`;
   }
   if (event.event_type === "registry_pin_backfill_applied") {
     const runs = event.diff.runs?.updated ?? 0;
@@ -21,7 +21,7 @@ export function summarizeRegistryAuditDiff(event: AgentRegistryAuditEvent): stri
     return `Backfilled ${runs} runs · ${actions} actions`;
   }
   if (event.event_type === "registry_harness_profile_updated") {
-    return `Harness profile update · ${changedFieldCount(event)} fields changed`;
+    return `Execution posture update · ${changedFieldCount(event)} fields changed`;
   }
   if (event.event_type === "registry_agent_profile_default_updated") {
     return `Agent profile default update · ${changedFieldCount(event)} fields changed`;
@@ -52,8 +52,8 @@ export function registryAuditDiffRows(event: AgentRegistryAuditEvent): RegistryA
     return [
       { label: "Tool", value: toolId },
       {
-        label: "Receipt",
-        value: String(receipt?.receipt_id || "unsigned receipt metadata unavailable"),
+        label: "Approval record",
+        value: String(receipt?.receipt_id || "approval metadata unavailable"),
       },
       {
         label: "Actor",

@@ -58,11 +58,16 @@ vi.mock("../../components/layout/DetailHeader", () => ({
 
 vi.mock("../../components/validation/ValidationFlowHeader", () => ({
   ValidationFlowHeader: ({
+    nextAction,
+    onRunNextAction,
     onOpenExperiments,
   }: {
+    nextAction: { label: string };
+    onRunNextAction: () => void;
     onOpenExperiments: () => void;
   }) => (
     <div>
+      <button onClick={onRunNextAction}>{nextAction.label}</button>
       <button onClick={onOpenExperiments}>Open Experiments</button>
     </div>
   ),
@@ -125,6 +130,7 @@ describe("ValidationPage", () => {
     listExperimentMetricsMock.mockResolvedValue({ metrics: [] });
     getExperimentValidationSummaryMock.mockResolvedValue({ summary: null });
     getBrandPredictionAccuracyMock.mockResolvedValue({ summary: null });
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   it("preserves run context for back navigation and experiment handoff", async () => {
@@ -132,6 +138,15 @@ describe("ValidationPage", () => {
     render(<ValidationPage />);
 
     expect(await screen.findByText(/Run context preserved/i)).toBeInTheDocument();
+    expect(screen.getByText(/opened from the selected run/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Provider defaults$/i)).toBeVisible();
+    expect(screen.getByText(/openai: ready/i)).not.toBeVisible();
+    expect(screen.getByPlaceholderText(/Paste a saved variant if needed/i)).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(/Paste a saved variant reference if needed/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/opened from run/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^run-1$/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Back to selected run/i }));
     expect(pushMock).toHaveBeenCalledWith("/runs?experiment_id=exp-1&run_id=run-1");
@@ -142,7 +157,23 @@ describe("ValidationPage", () => {
     });
   });
 
-  it("uses readable provider automation labels", async () => {
+  it("focuses the missing item when the header action needs a validation target", async () => {
+    const user = userEvent.setup();
+    searchParamsValue = "";
+
+    render(<ValidationPage />);
+
+    await screen.findByText(/Synthetic validation signal/i);
+
+    await user.click(screen.getByRole("button", { name: /Select a validation item/i }));
+
+    expect(screen.getByLabelText(/^Item$/i)).toHaveFocus();
+    expect(
+      screen.getByText(/Select an item in Step 2 to create a synthetic validation job/i),
+    ).toBeInTheDocument();
+  });
+
+  it("uses readable provider labels", async () => {
     const user = userEvent.setup();
     render(<ValidationPage />);
 
@@ -150,11 +181,23 @@ describe("ValidationPage", () => {
 
     await user.selectOptions(screen.getByLabelText(/^Mode$/i), "provider_openai_mcp");
 
-    expect(await screen.findByText(/Provider automation status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Provider reference:/i)).toBeInTheDocument();
+    expect(await screen.findByText(/External validation status/i)).toBeInTheDocument();
     expect(screen.getByText(/Setup status: Unknown/i)).toBeInTheDocument();
-    expect(screen.getByText(/Return status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.getByText(/Result status: Waiting for result/i)).toBeInTheDocument();
+    expect(screen.getByText(/Handoff reference: Not started/i)).not.toBeVisible();
+    await user.click(screen.getByText(/Show provider handoff details/i));
+    expect(screen.getByText(/Handoff reference: Not started/i)).toBeVisible();
+    expect(screen.getByRole("option", { name: /ChatGPT provider run/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Gemini provider run/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Add result manually/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Provider automation status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider receipt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider reference/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Provider run id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Return status/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider run \(ChatGPT MCP\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider run \(Gemini function\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Manual result entry/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Setup required/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Callback verified/i)).not.toBeInTheDocument();
   });
@@ -171,6 +214,17 @@ describe("ValidationPage", () => {
           base_description: "Base copy",
           candidate_description: "Candidate copy",
           status: "ready_for_review",
+          updated_at: "2026-01-02T00:00:00Z",
+        },
+        {
+          id: "copy-revision-fedcba654321",
+          client_id: "client-a",
+          product_id: "product-1",
+          source_type: "simulation_run",
+          base_description: "Base copy",
+          candidate_description: "Candidate copy 2",
+          status: "ready_for_review",
+          updated_at: "2026-01-03T00:00:00Z",
         },
       ],
     });
@@ -182,11 +236,15 @@ describe("ValidationPage", () => {
     await user.selectOptions(screen.getByLabelText(/Entity type/i), "copy_revision");
 
     expect(
-      await screen.findByRole("option", {
-        name: /Simulation run revision · Ready for review · Ref abcdef12/i,
+      await screen.findAllByRole("option", {
+        name: /Simulation run revision · Ready for review · updated/i,
       }),
-    ).toBeInTheDocument();
+    ).toHaveLength(2);
+    expect(screen.getByRole("option", { name: /updated 1\/2\/2026/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /updated 1\/3\/2026/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Ref abcdef12/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/simulation_run · ready_for_review/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/copy-revision-abcdef123456/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/copy-revision-fedcba654321/i)).not.toBeInTheDocument();
   });
 });
