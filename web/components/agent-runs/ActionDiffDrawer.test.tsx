@@ -40,7 +40,9 @@ describe("ActionDiffDrawer", () => {
 
     expect(screen.getByRole("heading", { name: /Change details/i })).toBeInTheDocument();
     expect(screen.getByText(/Run inputs and outputs/i)).toBeInTheDocument();
+    expect(screen.getByText(/Output changes vs previous similar action/i)).toBeInTheDocument();
     expect(screen.queryByText(/Artifact diff details/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Snapshot payloads/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/previous same capability/i)).not.toBeInTheDocument();
   });
 });

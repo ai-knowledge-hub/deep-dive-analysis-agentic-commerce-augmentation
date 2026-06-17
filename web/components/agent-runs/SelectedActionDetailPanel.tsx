@@ -563,7 +563,7 @@ export function SelectedActionDetailPanel({
         </div>
         <div className="agent-diff-card">
           <div className="agent-diff-card__title">
-            vs previous same capability
+            vs previous similar action
             {actionDiffs?.previousSameCapability
               ? ` #${actionDiffs.previousSameCapability.sequence}`
               : ""}

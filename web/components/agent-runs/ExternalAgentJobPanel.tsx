@@ -65,7 +65,7 @@ export function ExternalAgentJobPanel({
                 <strong>Job reference</strong>: {externalAgentJob.job.id}
               </div>
               <div>
-                <strong>Agent identity</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
+                <strong>Submitting agent</strong>: {externalAgentJob.job.principal_id ?? "unknown"}
               </div>
               <div>
                 <strong>Profile</strong>: {externalAgentJob.job.agent_profile_id ?? "none"}

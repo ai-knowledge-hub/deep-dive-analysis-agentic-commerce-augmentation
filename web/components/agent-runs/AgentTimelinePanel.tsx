@@ -171,7 +171,7 @@ export function AgentTimelinePanel({
             <option value="rejected">Rejected</option>
           </select>
           <select
-            aria-label="Timeline capability filter"
+            aria-label="Timeline action filter"
             className="input"
             style={{ minWidth: 220 }}
             value={timelineCapabilityFilter}
@@ -179,7 +179,7 @@ export function AgentTimelinePanel({
           >
             {timelineCapabilityOptions.map((item) => (
               <option key={item} value={item}>
-                {item === "all" ? "All capabilities" : item}
+                {item === "all" ? "All actions" : item}
               </option>
             ))}
           </select>

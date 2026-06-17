@@ -728,11 +728,11 @@ function ValidationPageContent() {
     if (!userId || !selectedEntityId) return;
     setSubmitting(true);
     setError(null);
-    setStatus("Preparing validation payload...");
+    setStatus("Preparing validation request...");
     try {
       const inputPayload = await buildPayload();
       if (!inputPayload) {
-        setError("Missing payload data.");
+        setError("Missing validation details.");
         return;
       }
       const response = await createValidationJob(
@@ -1641,7 +1641,7 @@ function ValidationPageContent() {
                       rows={6}
                       value={externalRaw}
                       onChange={(event) => setExternalRaw(event.target.value)}
-                      placeholder="Paste raw provider output"
+                      placeholder="Paste provider response"
                     />
                   </label>
                 </div>
