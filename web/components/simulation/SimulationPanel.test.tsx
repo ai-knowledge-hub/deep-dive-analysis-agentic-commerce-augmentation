@@ -31,6 +31,25 @@ describe("SimulationPanel", () => {
     expect(screen.queryByText(/session-12345678/i)).not.toBeInTheDocument();
   });
 
+  it("uses readable evidence and feed preview wording", () => {
+    render(
+      <SimulationPanel
+        {...baseProps}
+        optimizationMode="feed"
+      />,
+    );
+
+    expect(screen.getByText(/No evidence summary yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No ACP feed preview yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No UCP feed preview yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/current feed shape/i)).toBeInTheDocument();
+    expect(screen.getByText(/Secondary insights \(gaps, feeds, lessons\)/i)).toBeInTheDocument();
+    expect(screen.queryByText(/evidence snapshot/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/feed snapshot/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ACP\/UCP payloads/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gap\/protocol\/feed\/lessons/i)).not.toBeInTheDocument();
+  });
+
   it("shows product names in score details instead of raw product ids", async () => {
     const user = userEvent.setup();
     render(

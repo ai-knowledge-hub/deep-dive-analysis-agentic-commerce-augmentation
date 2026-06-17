@@ -268,7 +268,7 @@ export function SimulationPanel({
             </>
           ) : (
             <p className="simulation__intro-text">
-              No evidence snapshot yet. Run a chat query to ground the scenario.
+              No evidence summary yet. Run a chat query to ground the scenario.
             </p>
           )}
         </div>
@@ -411,19 +411,19 @@ export function SimulationPanel({
             <div className="simulation__feed-card">
               <div className="simulation__feed-title">ACP feed</div>
               <pre className="simulation__feed-code">
-                {feedPreview?.acp ?? "No ACP feed snapshot yet."}
+                {feedPreview?.acp ?? "No ACP feed preview yet."}
               </pre>
             </div>
             <div className="simulation__feed-card">
               <div className="simulation__feed-title">UCP feed</div>
               <pre className="simulation__feed-code">
-                {feedPreview?.ucp ?? "No UCP feed snapshot yet."}
+                {feedPreview?.ucp ?? "No UCP feed preview yet."}
               </pre>
             </div>
           </div>
           <p className="simulation__intro-text">
-            These are demo snapshots for the POC. In production they map to live
-            ACP/UCP payloads.
+            These previews show the current feed shape. In production they map to live
+            ACP/UCP fields.
           </p>
         </div>
       )}
@@ -483,7 +483,7 @@ export function SimulationPanel({
         onToggle={(event) => setSecondaryInsightsOpen(event.currentTarget.open)}
       >
         <summary className="panel__details-summary">
-          Secondary insights (gap/protocol/feed/lessons)
+          Secondary insights (gaps, feeds, lessons)
         </summary>
         {renderGap(primaryGap)}
 
