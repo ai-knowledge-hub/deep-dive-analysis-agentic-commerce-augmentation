@@ -25,7 +25,7 @@ Current product direction:
   See `docs/operator-experience.md`.
 - **Usability simplification gate**: primary product surfaces use operator language first and hide internal mechanisms behind explanation, audit, admin, or lab affordances.
   See `docs/usability-simplification-gate.md`.
-- **Next build track**: external-agent job APIs, harness profiles, protocol/fallback execution adapters, and deeper control-plane UX simplification.
+- **Next build track**: run the control-plane user-testing pass, then continue with external-agent job APIs, harness profiles, protocol/fallback execution adapters, and targeted UX fixes from testing.
   See the `Next Development Tracks` section in `docs/agentification-checkpoint.md`.
 
 ---
@@ -395,9 +395,13 @@ Current planning references:
 - `docs/codebase-cleanup-and-modularisation-plan.md`
 - `docs/agentic-layer.md`
 - `docs/operator-experience.md`
-- `docs/chat-led-operator-console-spec.md`
+- `docs/user-testing-plan.md`
 - `docs/ui-control-plane-simplification-plan.md`
 - `docs/ui-style-direction.md`
+
+Reference specs:
+
+- `docs/chat-led-operator-console-spec.md`
 
 Historical or candidate-historical docs are still retained, but should not be treated
 as the current implementation plan without checking the checkpoint first.

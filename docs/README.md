@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: current
-Last updated: 2026-05-06
+Last updated: 2026-06-17
 
 Use this index to avoid treating historical planning notes as active product or architecture guidance.
 
@@ -15,8 +15,8 @@ Use this index to avoid treating historical planning notes as active product or 
 - `agentic-layer.md`: current runtime implementation notes.
 - `operator-experience.md`: current operator/user guide for the agentic control plane.
 - `usability-simplification-gate.md`: product-language and progressive-disclosure gate for hiding internal complexity.
+- `user-testing-plan.md`: practical usability testing plan for validating the control-plane loop before the next major platform slice.
 - `ux-flow-schema.md`: compact schema of UX modes, routing, and operator/agent flow.
-- `chat-led-operator-console-spec.md`: reference spec for chat-led control-plane interaction.
 - `ui-control-plane-simplification-plan.md`: current UI simplification roadmap.
 - `ui-style-direction.md`: visual style rules for the flattened control-plane UI.
 
@@ -25,6 +25,7 @@ Use this index to avoid treating historical planning notes as active product or 
 - `app-architecture.md`: backend/frontend architecture overview.
 - `architecture-learning-loop.md`: learning-loop design reference.
 - `external-integrations.md`: integration notes.
+- `chat-led-operator-console-spec.md`: reference spec for chat-led control-plane interaction; use `operator-experience.md` and `agentification-checkpoint.md` for current implementation direction.
 - `deployment.md`: deployment and environment guidance.
 - `terminology.md`: glossary and naming conventions.
 - `debug/incidents-fixed.md`: fixed incidents log.
