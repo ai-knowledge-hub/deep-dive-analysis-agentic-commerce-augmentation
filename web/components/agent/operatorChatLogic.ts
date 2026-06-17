@@ -91,7 +91,7 @@ function buildArtifactGuidance(action: AgentAction): string[] {
     guidance.push(`Failure note: ${action.error}`);
   }
   if (guidance.length === 0 && Object.keys(outputs ?? {}).length > 0) {
-    guidance.push("Inspect the action output payload for generated artifacts and decision details.");
+    guidance.push("Inspect the action results for linked work and decision details.");
   }
   return guidance;
 }
