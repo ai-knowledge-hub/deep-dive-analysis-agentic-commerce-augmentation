@@ -108,7 +108,7 @@ export function ActionDiffDrawer({
       <div className="drawer__overlay" onClick={onClose} />
       <div className="drawer__panel">
         <div className="drawer__header">
-          <h2 className="drawer__title">Artifact diff details</h2>
+          <h2 className="drawer__title">Change details</h2>
           <button className="drawer__close" onClick={onClose}>
             x
           </button>
@@ -171,7 +171,7 @@ export function ActionDiffDrawer({
             />
           </div>
 
-          <p className="panel__subheading">Snapshot payloads</p>
+          <p className="panel__subheading">Run inputs and outputs</p>
           <div className="agent-diff-detail-grid">
             <DiffJsonCell
               title="Current inputs"

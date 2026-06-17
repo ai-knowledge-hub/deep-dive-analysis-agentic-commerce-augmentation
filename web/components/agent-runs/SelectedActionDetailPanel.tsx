@@ -297,7 +297,7 @@ export function SelectedActionDetailPanel({
       </ul>
 
       <details className="agent-action-detail__advanced">
-        <summary>Show governance and artifacts</summary>
+        <summary>Show governance and linked work</summary>
       <div className="control-chip-row">
         <span className="control-chip">
           Skill: {formatOperatorIdentifier(selectedAction.skill_id ?? "unmapped")}
@@ -525,7 +525,7 @@ export function SelectedActionDetailPanel({
           : "—"}
       </p>
 
-      <p className="panel__subheading">Linked artifacts</p>
+      <p className="panel__subheading">Linked work</p>
       <div className="panel__actions">
         {selectedAction.variant_id ? (
           <button type="button" className="button button--ghost button--sm" onClick={onOpenExperimentArtifact}>
@@ -544,7 +544,7 @@ export function SelectedActionDetailPanel({
         ) : null}
       </div>
 
-      <p className="panel__subheading">Artifact diff preview</p>
+      <p className="panel__subheading">Change preview</p>
       <div className="agent-diff-grid">
         <div className="agent-diff-card">
           <div className="agent-diff-card__title">
@@ -585,7 +585,7 @@ export function SelectedActionDetailPanel({
       </p>
       <div className="panel__actions">
         <button type="button" className="button button--ghost button--sm" onClick={onOpenDetailedDiff}>
-          Open detailed diff
+          Open change details
         </button>
       </div>
       </details>

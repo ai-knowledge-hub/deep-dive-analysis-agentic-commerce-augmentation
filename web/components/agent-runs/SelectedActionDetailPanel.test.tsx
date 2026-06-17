@@ -49,9 +49,14 @@ describe("SelectedActionDetailPanel", () => {
     );
 
     expect(screen.getByText(/changed result fields/i)).toBeInTheDocument();
+    expect(screen.getByText("Linked work")).toBeInTheDocument();
+    expect(screen.getByText(/Change preview/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open change details/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open variant/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open validation result/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open metric/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Linked artifacts/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Artifact diff preview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/output payload keys/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Variant: variant/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Validation job:/i)).not.toBeInTheDocument();

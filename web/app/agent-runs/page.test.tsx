@@ -994,7 +994,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.getByText(/Action: run variant/i)).toBeInTheDocument();
     expect(screen.getByText(/Execute one candidate variant against saved evidence/i)).toBeInTheDocument();
     expect(screen.getByText(/Tool contract: agent-runtime-static-v1/)).not.toBeVisible();
-    await userEvent.click(screen.getByText(/Show governance and artifacts/i));
+    await userEvent.click(screen.getByText(/Show governance and linked work/i));
     expect(screen.getAllByText(/Skill: optimize product representation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Tool: experiment run variant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Effect: write low risk/i)).toBeInTheDocument();
