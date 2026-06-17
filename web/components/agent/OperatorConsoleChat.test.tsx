@@ -493,7 +493,7 @@ describe("OperatorConsoleChat", () => {
     });
 
     await user.selectOptions(
-      screen.getByLabelText(/Recovery target capability/i),
+      screen.getByLabelText(/Recovery target action/i),
       "review_validation_readiness",
     );
     await user.click(screen.getByText(/Advanced recovery routing/i));

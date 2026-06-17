@@ -40,8 +40,33 @@ describe("OperatorCommandControls", () => {
     expect(screen.getByRole("button", { name: /Retry selected/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Recovery action/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Change plan/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Recovery target action/i)).toBeInTheDocument();
     expect(screen.getByText(/Advanced recovery routing/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Preferred recovery skill/i)).not.toBeNull();
     expect(screen.queryByText(/Recovery template:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Suggested inputs:/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Recovery target capability/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Defaults:/i)).not.toBeInTheDocument();
+  });
+
+  it("uses readable empty recovery action wording", () => {
+    render(
+      <OperatorCommandControls
+        run={{ id: "run-1", status: "failed", state: "failed" }}
+        selectedAction={null}
+        recoveryCapabilities={[]}
+        activeRecoveryCapability=""
+        recoverySkillOptions={[]}
+        activeRecoverySkill=""
+        activeRecoveryTemplate={null}
+        recoverySkillMetadata={{}}
+        onRecoveryCapabilityChange={vi.fn()}
+        onRecoverySkillChange={vi.fn()}
+        onIssueCommand={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/No recovery actions available/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No allowed capabilities/i)).not.toBeInTheDocument();
   });
 });

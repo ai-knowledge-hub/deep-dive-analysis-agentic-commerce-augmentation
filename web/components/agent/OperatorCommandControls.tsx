@@ -153,14 +153,14 @@ export function OperatorCommandControls({
       <label className="field">
         <span className="field__label">Recovery target</span>
         <select
-          aria-label="Recovery target capability"
+          aria-label="Recovery target action"
           className="field__input"
           value={activeRecoveryCapability}
           onChange={(event) => onRecoveryCapabilityChange(event.target.value)}
           disabled={!run || recoveryCapabilities.length === 0}
         >
           {recoveryCapabilities.length === 0 ? (
-            <option value="">No allowed capabilities</option>
+            <option value="">No recovery actions available</option>
           ) : (
             recoveryCapabilities.map((capability) => (
               <option key={capability} value={capability}>
@@ -198,7 +198,7 @@ export function OperatorCommandControls({
             <p>{activeRecoveryTemplate.summary}</p>
             {Object.keys(activeRecoveryTemplate.default_inputs ?? {}).length > 0 ? (
               <p className="panel__muted">
-                Defaults: {JSON.stringify(activeRecoveryTemplate.default_inputs)}
+                Suggested inputs: {JSON.stringify(activeRecoveryTemplate.default_inputs)}
               </p>
             ) : null}
             {activeRecoveryTemplate.operator_notes?.length ? (
