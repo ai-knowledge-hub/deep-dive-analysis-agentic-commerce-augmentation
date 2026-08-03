@@ -1,6 +1,6 @@
 # Platform Modernisation Plan v2
 
-Status: canonical execution plan  
+Status: canonical execution plan
 Last updated: 2026-08-03
 
 ## Purpose
