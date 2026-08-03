@@ -1,10 +1,29 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EvidencePanel } from "./EvidencePanel";
 
+const originalConsoleError = console.error;
+
 describe("EvidencePanel", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation((message, ...args) => {
+      if (
+        typeof message === "string" &&
+        message.includes("non-boolean attribute") &&
+        args.some((value) => String(value) === "jsx")
+      ) {
+        return;
+      }
+      originalConsoleError(message, ...args);
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("uses readable empty-state wording", () => {
     render(<EvidencePanel analysis={null} />);
 
@@ -17,7 +36,7 @@ describe("EvidencePanel", () => {
     render(
       <EvidencePanel
         analysis={{
-          intent: { label: "best trail shoes", confidence: 0.8 },
+          intent: { primary_goal: "best trail shoes", confidence: 0.8 },
           goals: ["clear waterproof protection"],
           evidence_products: [
             {
@@ -72,7 +91,7 @@ describe("EvidencePanel", () => {
     render(
       <EvidencePanel
         analysis={{
-          intent: { label: "best trail shoes", confidence: 0.8 },
+          intent: { primary_goal: "best trail shoes", confidence: 0.8 },
           goals: ["clear waterproof protection"],
           evidence_products: [],
           profiles: [],

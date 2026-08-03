@@ -5,6 +5,18 @@ import { buildCommandOutcome } from "./operatorChatLogic";
 describe("operatorChatLogic", () => {
   it("uses linked-work wording for generic action results", () => {
     const outcome = buildCommandOutcome("step", {
+      command: {
+        id: "command-1",
+        run_id: "run-1",
+        sequence: 1,
+        event_type: "operator_command_step",
+        status: "executed",
+      },
+      run: {
+        id: "run-1",
+        client_id: "client-1",
+        status: "running",
+      },
       action: {
         id: "action-1",
         agent_run_id: "run-1",

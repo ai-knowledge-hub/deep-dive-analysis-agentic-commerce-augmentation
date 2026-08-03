@@ -18,6 +18,7 @@ describe("ExternalAgentJobPanel", () => {
           },
           run: {
             id: "run-1",
+            client_id: "client-1",
             status: "running",
             state: "variants_ready",
           },

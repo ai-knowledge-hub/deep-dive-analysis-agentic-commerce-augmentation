@@ -63,10 +63,13 @@ describe("SimulationPanel", () => {
           run_id: "sim-1",
           result: {
             winner_id: "prod-1",
+            goals: [],
             scores: [
               { product_id: "prod-1", score: 0.82 },
               { product_id: "prod-2", score: 0.64 },
             ],
+            gap_analysis: [],
+            profiles: [],
           },
         }}
       />,
@@ -93,25 +96,41 @@ describe("SimulationPanel", () => {
           run_id: "sim-1",
           result: {
             winner_id: "prod-1",
+            goals: [],
             scores: [{ product_id: "prod-1", score: 0.7 }],
+            gap_analysis: [],
+            profiles: [],
           },
         }}
         optimized={{
           run_id: "sim-1",
           optimized: {
             id: "prod-1",
+            name: "Everyday Pack",
             before: "Original copy",
             after: "Improved copy",
+          },
+          gap: {
+            product_id: "prod-1",
+            goal: "daily carry",
+            score: 0.7,
+            matched_signals: [],
+            missing_signals: [],
+            severity: "low",
+            summary: "No material gap.",
           },
         }}
         retest={{
           run_id: "sim-1",
           result: {
             winner_id: "prod-2",
+            goals: [],
             scores: [
               { product_id: "prod-1", score: 0.75 },
               { product_id: "prod-2", score: 0.8 },
             ],
+            gap_analysis: [],
+            profiles: [],
           },
         }}
       />,

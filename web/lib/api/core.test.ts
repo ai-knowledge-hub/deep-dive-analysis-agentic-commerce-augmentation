@@ -38,6 +38,7 @@ describe("registry write auth helpers", () => {
   });
 
   it("preserves JSON headers when registry-write auth is supplied", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     setRegistryWriteToken("token-abc");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

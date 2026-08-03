@@ -109,6 +109,8 @@ describe("ExperimentHistoryPanel", () => {
         experiments={[
           {
             id: "experiment-1",
+            client_id: "client-1",
+            product_id: "product-1",
             name: "Homepage copy test",
             status: "draft",
             hypothesis: { if: "price clarity improves trust" },

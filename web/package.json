@@ -7,10 +7,12 @@
     "build": "pnpm exec next build",
     "start": "pnpm exec next start",
     "lint": "pnpm exec next lint",
+    "typecheck": "pnpm exec tsc --noEmit --pretty false",
     "complexity-check": "node ../scripts/checks/web_complexity_check.mjs",
     "ui-language-check": "node ../scripts/checks/ui_language_check.mjs",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm ui-language-check && pnpm complexity-check && pnpm build",
     "test:e2e": "NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm run build && NEXT_PUBLIC_AUTH_MODE=mock NEXT_PUBLIC_ALLOW_MOCK_AUTH_IN_PRODUCTION=true pnpm exec playwright test",
     "web:dev": "pnpm run dev",
     "api:dev": "uvicorn api.main:app --reload"

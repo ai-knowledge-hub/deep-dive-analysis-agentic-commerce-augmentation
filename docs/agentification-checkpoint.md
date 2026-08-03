@@ -2,6 +2,10 @@
 
 Status date: 2026-06-17
 
+> This remains the detailed implementation snapshot for the first agentification
+> pass. The canonical forward execution plan is now
+> `docs/platform-modernisation-plan-v2.md`.
+
 This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
 
 ## Product Direction

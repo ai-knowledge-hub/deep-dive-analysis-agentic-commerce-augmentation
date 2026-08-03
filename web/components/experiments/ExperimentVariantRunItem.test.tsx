@@ -81,7 +81,7 @@ describe("ExperimentVariantRunItem", () => {
           type: "copy",
         }}
         tested={false}
-        hypothesisLabel={null}
+        hypothesisLabel=""
         hypothesisStatement={null}
         hypothesisExpanded={false}
         copyExpanded={false}

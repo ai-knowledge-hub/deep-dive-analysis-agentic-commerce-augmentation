@@ -11,6 +11,7 @@ describe("RunSelectionRail", () => {
         runs={[
           {
             id: "run-1",
+            client_id: "client-1",
             experiment_id: "exp-12345678",
             status: "running",
             state: "variants_ready",
@@ -20,6 +21,7 @@ describe("RunSelectionRail", () => {
           },
           {
             id: "run-2",
+            client_id: "client-1",
             experiment_id: "exp-87654321",
             status: "running",
             state: "variants_ready",
