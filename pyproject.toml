@@ -18,7 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.12.0",
+    "ruff==0.16.1",
     "pytest>=9.0.0",
     "uvicorn[standard]>=0.23.0",
 ]
@@ -27,6 +27,7 @@ dev = [
 managed = true
 
 [tool.ruff]
+required-version = "==0.16.1"
 respect-gitignore = true
 exclude = [
     ".git",
@@ -43,3 +44,8 @@ exclude = [
     "tmp",
     "db",
 ]
+
+[tool.ruff.lint]
+# Keep the pre-0.16 lint contract explicit. Ruff 0.16 expanded its implicit
+# defaults substantially; broader rule adoption should happen intentionally.
+select = ["E4", "E7", "E9", "F"]

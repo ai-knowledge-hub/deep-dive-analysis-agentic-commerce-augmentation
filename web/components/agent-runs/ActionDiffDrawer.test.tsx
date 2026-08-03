@@ -24,6 +24,7 @@ describe("ActionDiffDrawer", () => {
         open
         selectedAction={{
           id: "action-1",
+          agent_run_id: "run-1",
           sequence: 3,
           status: "executed",
           capability_name: "run_variant",

@@ -1,7 +1,7 @@
 # Operator Experience Guide
 
 Status: current
-Last updated: 2026-05-06
+Last updated: 2026-06-17
 
 This is the current user-facing product guide for the agentic commerce control plane. It replaces the older human-led lab guide as the default way to understand the web app.
 
@@ -35,6 +35,12 @@ Inbox -> Runs -> Interventions -> Insights -> Lab only when deeper exploration i
 
 The usability gate for this loop is documented in `docs/usability-simplification-gate.md`.
 Primary screens should show goals, recommendations, review decisions, risks, outcomes, and next actions before exposing implementation mechanisms.
+
+The June 2026 language cleanup completed the first broad pass at this gate:
+primary operator surfaces now prefer product terms such as evidence set,
+outcome summary, linked work, recovery action, and change details over internal
+runtime terms. Advanced/admin and lab surfaces may still expose implementation
+detail when the operator intentionally opens them.
 
 ### `/`
 
@@ -198,5 +204,9 @@ Admin surface:
 The older complete user guide and app workflow documents live under `docs/history/`. They are retained for context and rationale, but they describe the older lab-first product shape and should not be used as the current operator guide.
 
 Use this document, `docs/agentification-checkpoint.md`, and `docs/ui-control-plane-simplification-plan.md` for current UX direction.
+
+Before the next major backend/platform slice, use `docs/user-testing-plan.md`
+to validate whether new operators can complete the primary loop without
+understanding internal runtime mechanics.
 
 For a product-to-runtime map of the agents, skills, and tools behind the main platform verbs, use `docs/agent-capability-map.md`.

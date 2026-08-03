@@ -10,6 +10,7 @@ describe("SelectedActionDetailPanel", () => {
       <SelectedActionDetailPanel
         selectedAction={{
           id: "action-1",
+          agent_run_id: "run-1",
           sequence: 2,
           status: "executed",
           capability_name: "run_variant",

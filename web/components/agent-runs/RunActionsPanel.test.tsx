@@ -32,6 +32,7 @@ describe("RunActionsPanel", () => {
         actions={[
           {
             id: "action-1",
+            agent_run_id: "run-1",
             sequence: 1,
             status: "proposed",
             capability_name: "run_variant",
@@ -79,6 +80,7 @@ describe("RunActionsPanel", () => {
         actions={[
           {
             id: "action-1",
+            agent_run_id: "run-1",
             sequence: 1,
             status: "executed",
             capability_name: "run_variant",

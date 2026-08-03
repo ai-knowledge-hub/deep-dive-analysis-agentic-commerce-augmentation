@@ -365,11 +365,15 @@ Deliver:
 - compact run summaries
 - clearer state badges and failure surfaces
 
-Status: in progress. `Inbox` now groups recent work by `Critical`, `Review`,
-and `Watching` urgency, `Insights` starts with recommended operator follow-ups
-and separates decision signals from general execution signals, and `Runs`
-orders the run selector by operator attention so failed and approval-needed
-execution contexts surface first.
+Status: implemented for the first control-plane usability pass. `Inbox` now
+groups recent work by `Critical`, `Review`, and `Watching` urgency, `Insights`
+starts with recommended operator follow-ups and separates decision signals from
+general execution signals, `Runs` orders the run selector by operator
+attention, and the primary surfaces have had a broad operator-language cleanup.
+
+Next validation step: run the user-testing plan in
+`docs/user-testing-plan.md` before adding another large platform capability
+slice.
 
 ## Concrete First Implementation Slice
 

@@ -10,6 +10,7 @@ describe("ExecutionControlsSummary", () => {
       <ExecutionControlsSummary
         selectedRun={{
           id: "run-1",
+          client_id: "client-1",
           experiment_id: "exp-1",
           status: "running",
           state: "retrieval_snapshots_ready",

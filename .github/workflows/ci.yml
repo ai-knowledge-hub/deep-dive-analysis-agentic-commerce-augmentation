@@ -38,7 +38,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
+          pip install ruff==0.16.1
       - name: Lint
         run: make lint
       - name: Architecture Check
@@ -67,7 +67,5 @@ jobs:
           corepack prepare pnpm@10.15.1 --activate
       - name: Install frontend dependencies
         run: cd web && pnpm install --frozen-lockfile
-      - name: Frontend Complexity Check
-        run: make web-complexity-check
-      - name: Frontend UI Language Check
-        run: make web-ui-language-check
+      - name: Frontend Verification
+        run: make web-verify

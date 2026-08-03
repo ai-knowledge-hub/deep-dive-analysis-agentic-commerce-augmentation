@@ -52,6 +52,18 @@ web-ui-language-check:
 web-test:
 	cd web && pnpm test
 
+.PHONY: web-typecheck
+web-typecheck:
+	cd web && pnpm typecheck
+
+.PHONY: web-build
+web-build:
+	cd web && pnpm build
+
+.PHONY: web-verify
+web-verify:
+	cd web && pnpm verify
+
 .PHONY: lint
 lint:
 	@if [ -n "$(RUFF)" ] && [ -x "$(RUFF)" ]; then \

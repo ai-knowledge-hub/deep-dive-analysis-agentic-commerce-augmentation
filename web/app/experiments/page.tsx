@@ -523,7 +523,7 @@ function ExperimentsPageContent() {
         // ignore delete errors
       }
     },
-    [clientId, userId],
+    [clientId, setSimulationRuns, userId],
   );
 
   const handleDeleteExperiment = useCallback(
@@ -541,7 +541,7 @@ function ExperimentsPageContent() {
         // ignore delete errors
       }
     },
-    [clientId, userId],
+    [clientId, setExperiments, userId],
   );
 
   const handleDeleteExperimentRun = useCallback(
@@ -554,7 +554,7 @@ function ExperimentsPageContent() {
         // ignore delete errors
       }
     },
-    [selectedExperimentId, userId],
+    [selectedExperimentId, setRuns, userId],
   );
 
   const confirmDeleteSession = useCallback(async () => {
@@ -565,7 +565,7 @@ function ExperimentsPageContent() {
     } finally {
       setDeleteTargetId(null);
     }
-  }, [deleteTargetId, userId]);
+  }, [deleteTargetId, setSessions, userId]);
 
   const handleBulkDeleteSessions = useCallback(
     async (sessionIds: string[]) => {
@@ -582,7 +582,7 @@ function ExperimentsPageContent() {
       setSessions((current) => current.filter((item) => !sessionIds.includes(item.id)));
       setDeleteTargetId(null);
     },
-    [userId],
+    [setSessions, userId],
   );
 
   const handleBulkDeleteSimulations = useCallback(
@@ -599,7 +599,7 @@ function ExperimentsPageContent() {
       );
       setSimulationRuns((current) => current.filter((run) => !runIds.includes(run.id)));
     },
-    [clientId, userId],
+    [clientId, setSimulationRuns, userId],
   );
 
   const handleBulkDeleteExperiments = useCallback(
@@ -621,7 +621,7 @@ function ExperimentsPageContent() {
         current && experimentIds.includes(current) ? null : current,
       );
     },
-    [clientId, userId],
+    [clientId, setExperiments, userId],
   );
 
   const handleRunVariant = useCallback(
@@ -641,7 +641,14 @@ function ExperimentsPageContent() {
         setRunningVariantId(null);
       }
     },
-    [refreshExecutionState, runExperimentWithSelectedMode, selectedExperimentId, userId],
+    [
+      refreshExecutionState,
+      runExperimentWithSelectedMode,
+      selectedExperimentId,
+      setMetrics,
+      setRuns,
+      userId,
+    ],
   );
 
   const handleScheduleSave = useCallback(async () => {
@@ -669,6 +676,7 @@ function ExperimentsPageContent() {
     scheduleForm.enabled,
     scheduleForm.intervalMinutes,
     selectedExperimentId,
+    setExperiments,
     userId,
   ]);
 
@@ -693,7 +701,15 @@ function ExperimentsPageContent() {
     } catch (error) {
       setScheduleStatus("Backfill failed.");
     }
-  }, [productId, refreshExecutionState, selectedExperimentId, userId]);
+  }, [
+    productId,
+    refreshExecutionState,
+    selectedExperimentId,
+    setExperiments,
+    setMetrics,
+    setRuns,
+    userId,
+  ]);
 
   const ensureExperimentContext = useCallback(async (): Promise<string | null> => {
     const batteryId = experimentForm.batteryId;
@@ -747,6 +763,7 @@ function ExperimentsPageContent() {
     refreshExecutionState,
     selectedBattery?.name,
     selectedExperimentId,
+    setExperiments,
     userId,
   ]);
 
@@ -836,7 +853,7 @@ function ExperimentsPageContent() {
         setSavingExperimentId(null);
       }
     },
-    [productId, userId],
+    [productId, setExperiments, userId],
   );
 
   const handleUseBelief = useCallback((belief: BrandBelief) => {
@@ -1419,7 +1436,6 @@ function ExperimentsPageContent() {
     focusVariantsSection,
     nextFlowAction.action,
     router,
-    selectedExperimentId,
     validationHref,
     variants,
   ]);

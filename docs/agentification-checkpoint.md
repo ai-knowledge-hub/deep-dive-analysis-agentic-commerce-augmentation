@@ -1,6 +1,10 @@
 # Agentification Checkpoint
 
-Status date: 2026-05-06
+Status date: 2026-06-17
+
+> This remains the detailed implementation snapshot for the first agentification
+> pass. The canonical forward execution plan is now
+> `docs/platform-modernisation-plan-v2.md`.
 
 This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
 
@@ -85,8 +89,9 @@ Use these docs together:
 - `docs/agent-first-modular-architecture-v1.md`: target architecture
 - `docs/agent-capability-map.md`: narrative-to-agent/tool capability map
 - `docs/external-agent-job-contracts.md`: machine-facing external-agent job API contract
-- `docs/chat-led-operator-console-spec.md`: target human control-plane UX
+- `docs/chat-led-operator-console-spec.md`: reference spec for chat-led control-plane UX; the active operator guide is `docs/operator-experience.md`
 - `docs/operator-experience.md`: current operator/user guide
+- `docs/user-testing-plan.md`: current usability validation plan
 - `docs/ui-control-plane-simplification-plan.md`: UI simplification roadmap
 - `docs/agentic-layer.md`: runtime implementation notes
 
@@ -185,16 +190,31 @@ Next steps:
 
 ### 6. Control-Plane UX Cleanup
 
-Current state: control-plane pages exist and the primary loop now uses a flatter supervision style. Lab remains available as an advanced bench.
+Current state: control-plane pages exist, the primary loop uses a flatter supervision style, and the first broad operator-language cleanup is complete. Primary surfaces now prefer operator words before implementation words, including clearer labels for evidence, outcomes, linked work, recovery actions, validation requests, and change details. Lab remains available as an advanced bench, and advanced/admin surfaces may still expose implementation terms when the operator intentionally drills into them.
 
 Next steps:
 
-- Continue reducing older lab/admin route density where it creates real user confusion.
-- Keep Inbox/Runs as the default path and Lab as an advanced workspace.
-- Reduce duplicate dashboards and avoid reintroducing card-heavy layouts.
-- Make all risky actions visible through Interventions.
+- Run the usability testing plan before another large platform capability slice.
+- Use findings to decide whether remaining density is blocking the primary loop or only visible in advanced/admin workflows.
+- Continue keeping Inbox/Runs as the default path and Lab as an advanced workspace.
+- Continue routing risky work through Interventions.
 
 ## Completed Recent Build Slices
+
+### Control-Plane UX Language Cleanup
+
+Completed:
+
+- Primary operator surfaces were cleaned up to reduce implementation-heavy language.
+- Labels now consistently prefer product/operator wording such as `Evidence set`, `Evidence summary`, `Outcome summary`, `Linked work`, `Change details`, `Recovery action`, and `Validation request`.
+- Agent Runs, Interventions, Validation, Simulation, Experiments, and Operator Chat now hide more runtime concepts behind advanced/admin/lab affordances.
+- Focused frontend regression tests now guard against reintroducing raw IDs, payload/snapshot/artifact wording, and low-level action labels in primary workflows.
+- `make web-ui-language-check` remains the automated gate for primary-surface wording.
+
+Follow-up:
+
+- Validate the cleaned-up primary loop through `docs/user-testing-plan.md`.
+- Fix any usability blockers found in testing before expanding the platform surface again.
 
 ### Registry Hardening v1
 
@@ -275,6 +295,17 @@ Completed:
 - Backend tests cover harness defaulting, persisted agent-profile defaults, guarded profile edits, mismatch rejection, registry exposure, external-agent job inheritance, checkpoint retry defaulting, and fallback recovery selection.
 
 ## What Is Left To Build
+
+### Priority 0: User Testing And Usability Validation
+
+Goal: validate the simplified control-plane loop before adding another large platform surface.
+
+Build:
+
+- Run the task plan in `docs/user-testing-plan.md`.
+- Fix all `P0` and `P1` findings before the next major backend/platform slice.
+- Batch repeated `P2` findings into one focused UX cleanup PR.
+- Keep Lab/admin findings separate unless they block the primary operator loop.
 
 ### Priority 1: External Agent Job API Contracts
 

@@ -8,9 +8,10 @@ describe("OperatorCommandControls", () => {
   it("keeps recovery commands primary and routes skill/template detail behind advanced controls", () => {
     render(
       <OperatorCommandControls
-        run={{ id: "run-1", status: "failed", state: "failed" }}
+        run={{ id: "run-1", client_id: "client-1", status: "failed", state: "failed" }}
         selectedAction={{
           id: "action-1",
+          agent_run_id: "run-1",
           sequence: 1,
           status: "failed",
           capability_name: "run_variant",
@@ -21,6 +22,10 @@ describe("OperatorCommandControls", () => {
           {
             id: "request-validation-and-ingest-result",
             name: "Request Validation And Ingest Result",
+            description: "Request validation and ingest the result.",
+            version: "v1",
+            tool_ids: ["validation.request_synthetic"],
+            risk_class: "external_side_effect",
           },
         ]}
         activeRecoverySkill="request-validation-and-ingest-result"
@@ -52,7 +57,7 @@ describe("OperatorCommandControls", () => {
   it("uses readable empty recovery action wording", () => {
     render(
       <OperatorCommandControls
-        run={{ id: "run-1", status: "failed", state: "failed" }}
+        run={{ id: "run-1", client_id: "client-1", status: "failed", state: "failed" }}
         selectedAction={null}
         recoveryCapabilities={[]}
         activeRecoveryCapability=""
