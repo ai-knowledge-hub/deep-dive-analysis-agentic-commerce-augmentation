@@ -1,0 +1,381 @@
+# ADR 0001: Workflow, Task, and Delegation Schema
+
+Status: accepted for the Phase 1 contract; persistence implementation deferred
+Date: 2026-08-06
+Owners: platform architecture and agent runtime
+
+## Context
+
+The current runtime persists `agent_runs`, ordered `agent_actions`, and
+append-only `agent_events`. It supports policy checks, approvals, locks,
+heartbeats, retries, receipts, registry pins, and operator commands. It does
+not yet represent a dynamic workflow graph, independently retryable tasks,
+task attempts, joins, checkpoints, or bounded agent assignments.
+
+`agent_runs.root_run_id` and `agent_runs.parent_run_id` express lineage but do
+not provide delegation semantics. `agent_actions.sequence` creates a fixed
+queue, but it cannot represent dependencies, fan-out, joins, or runtime graph
+revision. Status changes are also distributed across services.
+
+Phase 1 needs a logical schema that defines these concepts before the platform
+selects an internal, LangGraph-style, or Temporal-style execution engine. This
+ADR defines the portable contract. It does not add database tables or choose a
+workflow framework.
+
+The workflow lifecycle is governed by
+`domain/workflow/lifecycle.py`. The schema below must not permit adapters to
+bypass that transition contract.
+
+## Decision
+
+Adopt a framework-neutral, event-sourced workflow model with relational
+projections. The canonical execution hierarchy is:
+
+```text
+workflow
+  -> immutable graph revision
+  -> task
+  -> task attempt
+  -> optional agent assignment
+  -> typed result and governed action references
+```
+
+The following distinctions are mandatory:
+
+- A **workflow** owns the objective, lifecycle, graph revisions, policy pins,
+  and aggregate budgets.
+- A **task** is a schedulable unit of work in a workflow graph.
+- A **task attempt** is one leased execution of a task. Retries append attempts
+  rather than overwriting execution history.
+- An **agent assignment** is a bounded delegation of one task with attenuated
+  authority, isolated context, and an explicit result contract.
+- An **action** remains a governed effect. A task may propose or execute an
+  action, but task status never substitutes for action approval or receipt
+  state.
+- A **workflow event** is the append-only source of lifecycle truth.
+  Relational rows are query and scheduling projections rebuilt from events.
+
+## Aggregate and identity rules
+
+Every durable record carries `tenant_id`. Identifiers are opaque strings; the
+logical contract does not require UUID, ULID, or database-generated keys.
+
+Every workflow carries:
+
+- `root_workflow_id` for the top-level objective
+- `parent_workflow_id` when a child workflow is explicitly created
+- `principal_id` for the authority under which it operates
+- `trace_id` for cross-service correlation
+- `registry_version` and `registry_fingerprint` for reproducibility
+- `policy_profile_id`, `harness_id`, and `agent_profile_id` pins
+- a tenant-scoped `idempotency_key` and immutable request hash
+
+Child workflows and assignments cannot change tenant or root workflow. A
+delegated principal cannot gain authority through hierarchy creation.
+
+## Logical records
+
+The types below are logical contracts. Concrete SQL types and payload-storage
+thresholds are deferred to the persistence decision.
+
+### `workflow_runs`
+
+| Field | Contract |
+| --- | --- |
+| `id` | Stable workflow identity. |
+| `tenant_id` | Mandatory isolation boundary. |
+| `root_workflow_id` | Self for roots; inherited by descendants. |
+| `parent_workflow_id` | Nullable direct parent. |
+| `objective` | Typed objective payload or immutable payload reference. |
+| `objective_hash` | Canonical hash used for replay and idempotency. |
+| `status` | Value from the domain `WorkflowStatus` contract. |
+| `active_revision` | Current immutable graph revision number. |
+| `principal_id` | Principal whose authority governs execution. |
+| `agent_profile_id` | Optional pinned operating profile. |
+| `harness_id` | Pinned execution-loop policy. |
+| `policy_profile_id` | Pinned effect and approval policy. |
+| `registry_version` | Pinned registry version. |
+| `registry_fingerprint` | Pinned registry content hash. |
+| `budget_envelope` | Time, cost, token, action, depth, and concurrency limits. |
+| `idempotency_key` | Unique with tenant and principal. |
+| `request_hash` | Detects conflicting reuse of an idempotency key. |
+| `trace_id` | End-to-end correlation identifier. |
+| `conversation_id` | Optional reference only; conversation is not execution state. |
+| `version` | Optimistic concurrency version. |
+| `created_at`, `updated_at`, `terminal_at` | Lifecycle timestamps. |
+
+Required uniqueness:
+
+- `(tenant_id, principal_id, idempotency_key)`
+- `(tenant_id, id)`
+
+### `workflow_revisions`
+
+A workflow graph is never edited in place. Planning or bounded replanning
+appends a revision.
+
+| Field | Contract |
+| --- | --- |
+| `workflow_id`, `tenant_id` | Owning aggregate. |
+| `revision` | Monotonic integer unique within the workflow. |
+| `parent_revision` | Previous revision, if any. |
+| `reason` | Initial plan, operator change, recovery, or bounded replan. |
+| `planner_contract_version` | Planner input/output contract pin. |
+| `graph_hash` | Canonical hash of tasks, edges, joins, and controllers. |
+| `created_by_principal_id` | Human or agent responsible for the revision. |
+| `created_event_id` | Event that committed the revision. |
+| `created_at` | Commit timestamp. |
+
+Tasks already executing retain their original revision. New scheduling reads
+the active revision. A revision cannot remove evidence of previously scheduled
+or completed work.
+
+### `workflow_tasks`
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id` | Stable task identity and scope. |
+| `introduced_in_revision` | First graph revision containing the task. |
+| `task_key` | Planner-stable key unique within a workflow. |
+| `parent_task_id` | Optional decomposition lineage. |
+| `task_type` | Typed handler or coordinator contract identifier. |
+| `status` | Task lifecycle value defined by the later task-state contract. |
+| `effect_class` | `read`, `recommend`, or governed write class. |
+| `skill_id`, `skill_version` | Optional skill contract pin. |
+| `tool_id`, `tool_version` | Optional tool contract pin. |
+| `input_ref`, `input_hash` | Immutable task input or reference. |
+| `result_schema_id`, `result_schema_version` | Required output contract. |
+| `approval_requirement` | Policy-derived requirement reference, not approval state. |
+| `retry_policy` | Maximum attempts, backoff, and retryable error classes. |
+| `timeout_policy` | Schedule-to-start and execution limits. |
+| `priority` | Scheduler hint within tenant quotas. |
+| `not_before`, `deadline_at` | Optional scheduling boundaries. |
+| `version` | Optimistic concurrency version. |
+| `created_at`, `updated_at`, `terminal_at` | Lifecycle timestamps. |
+
+Tasks are not reused across workflows. Replanning may supersede an unstarted
+task, but cannot delete it or rewrite its attempts.
+
+### `workflow_edges`
+
+| Field | Contract |
+| --- | --- |
+| `tenant_id`, `workflow_id`, `revision` | Graph scope. |
+| `from_task_id`, `to_task_id` | Dependency direction. |
+| `condition` | Typed predicate over predecessor terminal results. |
+| `join_group_id` | Groups incoming edges for one join decision. |
+| `join_policy` | `all`, `any`, or `quorum`. |
+| `quorum` | Required only for a quorum join. |
+
+Ordinary graph revisions are acyclic. A cycle is valid only through a named,
+budgeted controller task whose contract defines iteration limits, stopping
+conditions, and the checkpoint boundary.
+
+### `task_attempts`
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id`, `task_id` | Attempt identity and scope. |
+| `attempt_number` | Monotonic and unique per task. |
+| `status` | Append-only attempt lifecycle projection. |
+| `worker_id` | Worker that owns the current or historical lease. |
+| `lease_token_hash` | Hash of the active lease token; never expose the token. |
+| `lease_acquired_at`, `lease_expires_at`, `heartbeat_at` | Lease evidence. |
+| `input_hash` | Must match the task input used for this attempt. |
+| `result_id` | Typed result reference after success. |
+| `action_id` | Optional governed action produced or executed. |
+| `receipt_id` | Optional committed-effect receipt. |
+| `error_code`, `error_detail_ref` | Normalized failure information. |
+| `started_at`, `finished_at` | Attempt timing. |
+
+Only one unexpired attempt lease may exist per task. A retry creates the next
+attempt number. A committed receipt prevents redelivery from repeating the
+effect even when an attempt result event is delivered more than once.
+
+### `agent_assignments`
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id`, `task_id` | Assignment identity and scope. |
+| `parent_assignment_id` | Optional delegation lineage. |
+| `assigner_principal_id` | Authority that delegated the task. |
+| `assignee_principal_id` | Internal or external worker principal. |
+| `agent_profile_id` | Versioned specialist role/profile. |
+| `status` | Proposed, accepted, running, returned, failed, expired, or revoked. |
+| `delegation_depth` | Root assignment is zero; bounded by workflow budget. |
+| `authority_envelope` | Allowed skills, tools, effects, resources, and scopes. |
+| `authority_hash` | Canonical envelope hash for audit and replay. |
+| `context_capsule_ref`, `context_capsule_hash` | Isolated, immutable task context. |
+| `budget_envelope` | Assignment-local subset of remaining workflow budget. |
+| `result_schema_id`, `result_schema_version` | Required return contract. |
+| `expires_at`, `created_at`, `updated_at` | Assignment lifetime. |
+
+An assignment is valid only when:
+
+- its authority set is a subset of its parent assignment or workflow authority
+- its budget is no greater than the remaining parent budget
+- its delegation depth is below the workflow maximum
+- its context capsule contains data allowed for the assignee and tenant
+- its result schema is known before execution
+
+Assignments do not write shared workflow, belief, or memory state directly.
+They return isolated results for coordinator validation.
+
+### `task_results`
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id`, `task_id`, `attempt_id` | Provenance chain. |
+| `assignment_id` | Nullable assignment that produced the result. |
+| `schema_id`, `schema_version` | Typed result contract. |
+| `payload_ref`, `payload_hash` | Immutable result or content-addressed reference. |
+| `provenance` | Tool, model, source, registry, and evidence references. |
+| `validation_status` | Pending, accepted, or rejected by the coordinator. |
+| `validated_by`, `validated_at` | Coordinator validation evidence. |
+| `created_at` | Result timestamp. |
+
+Accepted results may become inputs to later tasks. Rejected results remain in
+the audit history and cannot mutate shared state.
+
+### `workflow_checkpoints`
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id` | Checkpoint identity and scope. |
+| `event_sequence` | Last event included in the checkpoint. |
+| `graph_revision` | Active revision at the checkpoint. |
+| `projection_ref`, `projection_hash` | Rebuildable execution projection. |
+| `committed_receipt_ids` | Effects that must never be repeated. |
+| `safe_resume` | Whether scheduling may resume from this boundary. |
+| `created_at` | Checkpoint timestamp. |
+
+A checkpoint accelerates recovery but is not the source of truth. Replay starts
+from the checkpoint only after verifying its hash, event cursor, and receipts.
+
+### `workflow_events`
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id` | Event identity and aggregate scope. |
+| `sequence` | Gap-free, monotonic sequence within a workflow. |
+| `event_type`, `event_version` | Versioned event taxonomy. |
+| `entity_type`, `entity_id` | Workflow, revision, task, attempt, assignment, or result. |
+| `causation_id`, `correlation_id`, `trace_id` | Causal and operational lineage. |
+| `principal_id` | Actor responsible for the event. |
+| `idempotency_key` | Dedupe key for the producing command. |
+| `payload`, `payload_hash` | Immutable event data. |
+| `occurred_at`, `recorded_at` | Domain and storage timestamps. |
+
+The unique constraints are `(tenant_id, workflow_id, sequence)` and
+`(tenant_id, workflow_id, idempotency_key)` when an idempotency key is present.
+Events are never updated or deleted by runtime code.
+
+## State separation contract
+
+Execution, conversation, belief, and memory are separate aggregates:
+
+| State | Owned here | Permitted relationship |
+| --- | --- | --- |
+| Workflow execution | Yes | Canonical workflow/task/attempt events and projections. |
+| Conversation | No | Store only `conversation_id` and command/artifact references. |
+| Belief | No | Tasks consume a versioned prior and propose evidence/posterior updates. |
+| Memory | No | Tasks propose candidates; memory policy validates promotion separately. |
+
+Workflow replay must not depend on the current mutable conversation, belief,
+or memory projection. Inputs record the exact versions or immutable hashes used
+at execution time.
+
+## Safety and concurrency invariants
+
+1. All writes are tenant-scoped, including reads used before a write.
+2. Workflow transitions pass through the domain lifecycle contract.
+3. Graph revisions and events are append-only.
+4. Scheduler claims use compare-and-swap or equivalent transactional leases.
+5. Only one live lease exists per task; stale workers cannot commit results.
+6. External and internal committed effects require a dedupe key and receipt.
+7. Approval is an independent lifecycle; task readiness cannot imply approval.
+8. Child authority and budgets are strict subsets of parent authority and
+   remaining budgets.
+9. Parallel workers return results; a coordinator validates before shared-state
+   mutation.
+10. Every controller loop has explicit iteration, time, cost, token, and action
+    bounds.
+11. Terminal workflow and task outcomes are immutable.
+12. Projection versions are optimistic-concurrency guarded and rebuildable from
+    events.
+
+## Compatibility with the current runtime
+
+The migration must preserve current APIs while the new kernel is introduced:
+
+| Current model | Target relationship |
+| --- | --- |
+| `agent_runs` | Compatibility projection over one `workflow_run`. |
+| `agent_runs.root_run_id` / `parent_run_id` | Seed workflow hierarchy only; they do not grant delegation authority. |
+| `agent_actions` | Governed action records linked from tasks/attempts, not replaced by task rows. |
+| `agent_actions.sequence` | Initial linear graph ordering during the compatibility phase. |
+| `agent_events` | Existing control-plane projection fed from versioned workflow events. |
+| run locks and heartbeats | Evolve into workflow scheduler and task-attempt leases. |
+| registry/tool/skill pins | Copied to workflow and task contracts. |
+| approval and compensating guidance | Remain attached to governed actions and independent approval records. |
+
+The first vertical spike should represent an existing sequential run as a
+workflow with one immutable revision and one task per ordered action. It should
+dual-project events to the existing control-plane read model. No current API is
+removed until chat and control-plane parity are proven.
+
+## Framework portability requirements
+
+Any internal kernel, LangGraph-style adapter, or Temporal-style adapter must
+demonstrate that it can:
+
+- preserve the domain lifecycle and event sequence
+- persist immutable graph revisions and runtime-created tasks
+- enforce tenant-scoped idempotency and authority attenuation
+- expose task attempts and leases without hiding retry history
+- represent `all`, `any`, and `quorum` joins deterministically
+- checkpoint and recover without replaying committed effects
+- project existing agent-run APIs and control-plane views
+- export complete event and result history without proprietary serialization
+
+Framework-native state may optimize execution, but it cannot become the only
+copy of domain events, receipts, approvals, or authority decisions.
+
+## Consequences
+
+Positive:
+
+- Dynamic planning and bounded parallelism share one explicit model.
+- Retry and recovery history becomes inspectable instead of overwriting state.
+- Delegation has enforceable authority, budget, context, and result boundaries.
+- Existing action governance remains intact.
+- Framework evaluation can use repository-specific acceptance criteria.
+
+Costs:
+
+- Dual projections are required during migration.
+- Events, attempts, results, and checkpoints increase storage volume.
+- Scheduler and coordinator transactions require stronger concurrency semantics
+  than the current single-process SQLite path.
+- Schema and event-version migration tooling becomes a platform responsibility.
+
+## Deferred decisions
+
+This ADR intentionally does not decide:
+
+- internal kernel versus LangGraph-style versus Temporal-style execution
+- SQLite-constrained beta versus PostgreSQL and durable queue topology
+- physical JSON versus blob/object payload storage thresholds
+- the full task, attempt, assignment, approval, and result transition matrices
+- event transport and outbox implementation
+- exact identifier format
+
+Those decisions require the Phase 1 vertical spike, STPA controls, and measured
+recovery/concurrency behavior.
+
+## Validation criteria
+
+Slice 2 is complete when reviewers can trace every target concept to a logical
+record, every current runtime primitive to a compatibility path, and every
+delegated execution to an authority, budget, context, result, and provenance
+boundary—without relying on a particular workflow framework.

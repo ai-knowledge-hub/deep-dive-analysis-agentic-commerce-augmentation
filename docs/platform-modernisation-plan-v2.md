@@ -364,6 +364,10 @@ Progress:
 - Slice 1 now has a framework-independent domain workflow lifecycle contract,
   including an exhaustive executable transition matrix and terminal-state
   invariants.
+- Slice 2 now has an accepted logical schema ADR for workflows, immutable graph
+  revisions, tasks, attempts, delegation, results, checkpoints, events, and the
+  compatibility path from the current agent runtime. Framework and persistence
+  choices remain intentionally deferred.
 
 No dynamic planner, subagent, or chat redesign should land before these three
 artifacts agree on state, authority, effects, and failure semantics.

@@ -22,6 +22,8 @@ Use this index to avoid treating historical planning notes as active product or 
 - `ux-flow-schema.md`: compact schema of UX modes, routing, and operator/agent flow.
 - `ui-control-plane-simplification-plan.md`: current UI simplification roadmap.
 - `ui-style-direction.md`: visual style rules for the flattened control-plane UI.
+- `decisions/README.md`: architecture decision record index, including the
+  framework-neutral workflow, task, and delegation schema contract.
 
 ## Reference Docs
 
