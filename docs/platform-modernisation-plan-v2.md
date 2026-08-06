@@ -359,5 +359,11 @@ Phase 1 begins with three small, reviewable changes:
 3. Produce the first STPA control structure and unsafe-control-action table for
    `plan -> approve -> execute -> observe -> update belief`.
 
+Progress:
+
+- Slice 1 now has a framework-independent domain workflow lifecycle contract,
+  including an exhaustive executable transition matrix and terminal-state
+  invariants.
+
 No dynamic planner, subagent, or chat redesign should land before these three
 artifacts agree on state, authority, effects, and failure semantics.
