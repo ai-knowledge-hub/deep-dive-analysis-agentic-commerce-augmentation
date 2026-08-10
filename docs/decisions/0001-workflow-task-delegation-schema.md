@@ -47,8 +47,8 @@ The following distinctions are mandatory:
 - A **task** is a schedulable unit of work in a workflow graph.
 - A **task attempt** is one leased execution of a task. Retries append attempts
   rather than overwriting execution history.
-- An **agent assignment** is a bounded delegation of one task with attenuated
-  authority, isolated context, and an explicit result contract.
+- An **agent assignment** is a bounded delegation of one task with
+  non-expanding authority, isolated context, and an explicit result contract.
 - An **action** remains a governed effect. A task may propose or execute an
   action, but task status never substitutes for action approval or receipt
   state.
@@ -75,9 +75,11 @@ Child workflows and assignments cannot change tenant or root workflow. A
 delegated principal cannot gain authority through hierarchy creation. A root
 workflow envelope is the intersection of principal scopes, agent-profile
 allowlists, harness limits, policy limits, and registry-declared tool/effect
-constraints. A child workflow envelope must be a subset of its parent workflow
-envelope and, when created by an assignment, that assignment envelope. The
-canonical hashes make both checks replayable.
+constraints. A child workflow envelope must be a subset-or-equal set of its
+parent workflow envelope and, when created by an assignment, that assignment
+envelope. Its budget must be component-wise no greater than the parent's
+unreserved remaining budget. The canonical hashes make the authority checks
+replayable.
 
 ## Logical records
 
@@ -235,17 +237,25 @@ effect even when an attempt result event is delivered more than once.
 | `authority_envelope` | Allowed skills, tools, effects, resources, and scopes. |
 | `authority_hash` | Canonical envelope hash for audit and replay. |
 | `context_capsule_ref`, `context_capsule_hash` | Isolated, immutable task context. |
-| `budget_envelope` | Assignment-local subset of remaining workflow budget. |
+| `budget_envelope` | Assignment-local limits, component-wise no greater than unreserved remaining parent budget. |
 | `result_schema_id`, `result_schema_version` | Required return contract. |
 | `expires_at`, `created_at`, `updated_at` | Assignment lifetime. |
 
 An assignment is valid only when:
 
-- its authority set is a subset of its parent assignment or workflow authority
-- its budget is no greater than the remaining parent budget
+- its authority is subset-or-equal to its parent assignment or workflow authority
+- each budget dimension is no greater than the unreserved remaining parent budget
 - its delegation depth is below the workflow maximum
 - its context capsule contains data allowed for the assignee and tenant
 - its result schema is known before execution
+
+Equality is legal for both authority and budget. An adapter may narrow either
+envelope, but must not require artificial narrowing when a task needs the
+parent's already-minimal authority or all remaining budget. Accepting an
+assignment atomically reserves its budget against the parent; allocating the
+entire remainder therefore leaves no capacity for sibling assignments rather
+than allowing oversubscription. This contract uses **non-expansion**, not
+strict-set attenuation, as the portable safety rule.
 
 Assignments do not write shared workflow, belief, or memory state directly.
 They return isolated results for coordinator validation.
@@ -351,8 +361,8 @@ at execution time.
 7. External and internal committed effects require a dedupe key and receipt.
 8. Commands deduplicate independently and may atomically emit multiple events.
 9. Approval is an independent lifecycle; task readiness cannot imply approval.
-10. Child authority and budgets are strict subsets of parent authority and
-   remaining budgets.
+10. Child authority is subset-or-equal to parent authority, and every child
+    budget dimension is no greater than unreserved remaining parent budget.
 11. Parallel workers return results; a coordinator validates before shared-state
    mutation.
 12. Every controller loop has explicit iteration, time, cost, token, and action
@@ -390,7 +400,7 @@ demonstrate that it can:
 
 - preserve the domain lifecycle and event sequence
 - persist immutable graph revisions and runtime-created tasks
-- enforce tenant-scoped idempotency and authority attenuation
+- enforce tenant-scoped idempotency and authority non-expansion
 - expose task attempts and leases without hiding retry history
 - represent `all`, `any`, and `quorum` joins deterministically
 - checkpoint and recover without replaying committed effects

@@ -291,7 +291,8 @@ Deliverables:
 
 - versioned specialist role templates
 - isolated context capsules and result schemas
-- authority attenuation, tool allowlists, budgets, and delegation depth
+- authority non-expansion, optional narrowing, tool allowlists, budgets, and
+  delegation depth
 - dynamic fan-out and deterministic join policies
 - coordinator validation before shared-state mutation
 - read/recommend parallelism before write-capable delegation
