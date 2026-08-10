@@ -65,13 +65,19 @@ Every workflow carries:
 - `root_workflow_id` for the top-level objective
 - `parent_workflow_id` when a child workflow is explicitly created
 - `principal_id` for the authority under which it operates
+- an immutable `authority_envelope` and canonical `authority_hash`
 - `trace_id` for cross-service correlation
 - `registry_version` and `registry_fingerprint` for reproducibility
 - `policy_profile_id`, `harness_id`, and `agent_profile_id` pins
 - a tenant-scoped `idempotency_key` and immutable request hash
 
 Child workflows and assignments cannot change tenant or root workflow. A
-delegated principal cannot gain authority through hierarchy creation.
+delegated principal cannot gain authority through hierarchy creation. A root
+workflow envelope is the intersection of principal scopes, agent-profile
+allowlists, harness limits, policy limits, and registry-declared tool/effect
+constraints. A child workflow envelope must be a subset of its parent workflow
+envelope and, when created by an assignment, that assignment envelope. The
+canonical hashes make both checks replayable.
 
 ## Logical records
 
@@ -91,6 +97,8 @@ thresholds are deferred to the persistence decision.
 | `status` | Value from the domain `WorkflowStatus` contract. |
 | `active_revision` | Current immutable graph revision number. |
 | `principal_id` | Principal whose authority governs execution. |
+| `authority_envelope` | Immutable skills, tools, effects, resources, scopes, and delegation limits. |
+| `authority_hash` | Canonical hash of the authority envelope. |
 | `agent_profile_id` | Optional pinned operating profile. |
 | `harness_id` | Pinned execution-loop policy. |
 | `policy_profile_id` | Pinned effect and approval policy. |
@@ -155,6 +163,27 @@ or completed work.
 
 Tasks are not reused across workflows. Replanning may supersede an unstarted
 task, but cannot delete it or rewrite its attempts.
+
+### `workflow_revision_tasks`
+
+Each revision stores a complete task-membership snapshot. The scheduler derives
+the active task set only from rows for `workflow_runs.active_revision`; it does
+not infer membership from task creation time.
+
+| Field | Contract |
+| --- | --- |
+| `tenant_id`, `workflow_id`, `revision`, `task_id` | Revision-scoped membership identity. |
+| `disposition` | `active`, `removed`, or `superseded`. |
+| `superseded_by_task_id` | Required when disposition is `superseded`. |
+| `reason` | Planner, operator, policy, or recovery explanation for a change. |
+| `recorded_event_id` | Event that committed this membership decision. |
+
+Every task known to the workflow has one membership row in every later
+revision. Retained tasks remain `active`; newly added tasks enter as `active`;
+removed unstarted tasks are `removed`; replacement records use `superseded`
+and point to the new task. Started or terminal tasks cannot be removed or
+superseded, and remain present for dependency and provenance evaluation. The
+unique key is `(tenant_id, workflow_id, revision, task_id)`.
 
 ### `workflow_edges`
 
@@ -252,6 +281,29 @@ the audit history and cannot mutate shared state.
 A checkpoint accelerates recovery but is not the source of truth. Replay starts
 from the checkpoint only after verifying its hash, event cursor, and receipts.
 
+### `workflow_commands`
+
+Command deduplication is separate from event identity. One accepted command may
+atomically append several ordered events.
+
+| Field | Contract |
+| --- | --- |
+| `id`, `tenant_id`, `workflow_id` | Command identity and aggregate scope. |
+| `command_type`, `command_version` | Versioned command contract. |
+| `principal_id` | Actor requesting the command. |
+| `idempotency_key`, `request_hash` | Dedupe key and canonical request fingerprint. |
+| `expected_workflow_version` | Optimistic concurrency precondition. |
+| `status` | Received, committed, rejected, or failed. |
+| `first_event_sequence`, `last_event_sequence` | Inclusive committed event range. |
+| `result_ref`, `error_code` | Stable replay response or normalized rejection. |
+| `received_at`, `completed_at` | Command processing timestamps. |
+
+The unique command constraint is
+`(tenant_id, workflow_id, idempotency_key)`. Reusing a key with the same request
+hash returns the recorded result; reusing it with a different hash is rejected.
+The command record and all resulting workflow events commit in one transaction
+or through an equivalent atomic durable-execution boundary.
+
 ### `workflow_events`
 
 | Field | Contract |
@@ -262,13 +314,16 @@ from the checkpoint only after verifying its hash, event cursor, and receipts.
 | `entity_type`, `entity_id` | Workflow, revision, task, attempt, assignment, or result. |
 | `causation_id`, `correlation_id`, `trace_id` | Causal and operational lineage. |
 | `principal_id` | Actor responsible for the event. |
-| `idempotency_key` | Dedupe key for the producing command. |
+| `command_id` | Producing command; several events may share it. |
+| `event_index` | Zero-based event order within the producing command. |
 | `payload`, `payload_hash` | Immutable event data. |
 | `occurred_at`, `recorded_at` | Domain and storage timestamps. |
 
 The unique constraints are `(tenant_id, workflow_id, sequence)` and
-`(tenant_id, workflow_id, idempotency_key)` when an idempotency key is present.
-Events are never updated or deleted by runtime code.
+`(tenant_id, workflow_id, command_id, event_index)`. Command idempotency lives
+in `workflow_commands`, so a command can commit a revision, its task membership,
+and a lifecycle transition as separate events. Events are never updated or
+deleted by runtime code.
 
 ## State separation contract
 
@@ -289,19 +344,21 @@ at execution time.
 
 1. All writes are tenant-scoped, including reads used before a write.
 2. Workflow transitions pass through the domain lifecycle contract.
-3. Graph revisions and events are append-only.
-4. Scheduler claims use compare-and-swap or equivalent transactional leases.
-5. Only one live lease exists per task; stale workers cannot commit results.
-6. External and internal committed effects require a dedupe key and receipt.
-7. Approval is an independent lifecycle; task readiness cannot imply approval.
-8. Child authority and budgets are strict subsets of parent authority and
+3. Graph revisions, revision membership, and events are append-only.
+4. Scheduling uses the complete membership snapshot for the active revision.
+5. Scheduler claims use compare-and-swap or equivalent transactional leases.
+6. Only one live lease exists per task; stale workers cannot commit results.
+7. External and internal committed effects require a dedupe key and receipt.
+8. Commands deduplicate independently and may atomically emit multiple events.
+9. Approval is an independent lifecycle; task readiness cannot imply approval.
+10. Child authority and budgets are strict subsets of parent authority and
    remaining budgets.
-9. Parallel workers return results; a coordinator validates before shared-state
+11. Parallel workers return results; a coordinator validates before shared-state
    mutation.
-10. Every controller loop has explicit iteration, time, cost, token, and action
+12. Every controller loop has explicit iteration, time, cost, token, and action
     bounds.
-11. Terminal workflow and task outcomes are immutable.
-12. Projection versions are optimistic-concurrency guarded and rebuildable from
+13. Terminal workflow and task outcomes are immutable.
+14. Projection versions are optimistic-concurrency guarded and rebuildable from
     events.
 
 ## Compatibility with the current runtime
@@ -312,9 +369,11 @@ The migration must preserve current APIs while the new kernel is introduced:
 | --- | --- |
 | `agent_runs` | Compatibility projection over one `workflow_run`. |
 | `agent_runs.root_run_id` / `parent_run_id` | Seed workflow hierarchy only; they do not grant delegation authority. |
+| principal, profile, harness, policy, and registry limits | Intersect into the immutable workflow authority envelope. |
 | `agent_actions` | Governed action records linked from tasks/attempts, not replaced by task rows. |
 | `agent_actions.sequence` | Initial linear graph ordering during the compatibility phase. |
 | `agent_events` | Existing control-plane projection fed from versioned workflow events. |
+| operator and machine commands | Populate command-deduplication records before emitting workflow events. |
 | run locks and heartbeats | Evolve into workflow scheduler and task-attempt leases. |
 | registry/tool/skill pins | Copied to workflow and task contracts. |
 | approval and compensating guidance | Remain attached to governed actions and independent approval records. |

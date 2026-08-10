@@ -51,6 +51,7 @@ _ALLOWED_WORKFLOW_TRANSITIONS: Final[
         WorkflowStatus.PLANNED: frozenset(
             {
                 WorkflowStatus.PLANNING,
+                WorkflowStatus.PAUSED,
                 WorkflowStatus.RUNNING,
                 WorkflowStatus.CANCELED,
             }

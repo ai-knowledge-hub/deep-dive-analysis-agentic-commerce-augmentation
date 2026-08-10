@@ -22,6 +22,7 @@ EXPECTED_TRANSITIONS = {
     },
     WorkflowStatus.PLANNED: {
         WorkflowStatus.PLANNING,
+        WorkflowStatus.PAUSED,
         WorkflowStatus.RUNNING,
         WorkflowStatus.CANCELED,
     },
@@ -92,3 +93,15 @@ def test_terminal_statuses_are_explicit_and_have_no_outgoing_transitions() -> No
         WorkflowStatus.CANCELED,
     }
     assert all(not allowed_workflow_transitions(status) for status in TERMINAL_WORKFLOW_STATUSES)
+
+
+def test_planned_workflow_can_pause_before_execution() -> None:
+    transition = require_workflow_transition(
+        WorkflowStatus.PLANNED,
+        WorkflowStatus.PAUSED,
+    )
+
+    assert transition == WorkflowTransition(
+        source=WorkflowStatus.PLANNED,
+        target=WorkflowStatus.PAUSED,
+    )
