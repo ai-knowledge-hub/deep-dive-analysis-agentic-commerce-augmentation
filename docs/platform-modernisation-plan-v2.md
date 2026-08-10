@@ -291,7 +291,8 @@ Deliverables:
 
 - versioned specialist role templates
 - isolated context capsules and result schemas
-- authority attenuation, tool allowlists, budgets, and delegation depth
+- authority non-expansion, optional narrowing, tool allowlists, budgets, and
+  delegation depth
 - dynamic fan-out and deterministic join policies
 - coordinator validation before shared-state mutation
 - read/recommend parallelism before write-capable delegation
@@ -358,6 +359,16 @@ Phase 1 begins with three small, reviewable changes:
 2. Add the workflow/task/delegation schema ADR without choosing a framework.
 3. Produce the first STPA control structure and unsafe-control-action table for
    `plan -> approve -> execute -> observe -> update belief`.
+
+Progress:
+
+- Slice 1 now has a framework-independent domain workflow lifecycle contract,
+  including an exhaustive executable transition matrix and terminal-state
+  invariants.
+- Slice 2 now has an accepted logical schema ADR for workflows, immutable graph
+  revisions, tasks, attempts, delegation, results, checkpoints, events, and the
+  compatibility path from the current agent runtime. Framework and persistence
+  choices remain intentionally deferred.
 
 No dynamic planner, subagent, or chat redesign should land before these three
 artifacts agree on state, authority, effects, and failure semantics.
