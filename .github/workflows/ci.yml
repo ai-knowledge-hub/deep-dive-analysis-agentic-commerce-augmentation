@@ -47,6 +47,8 @@ jobs:
         run: make bloat-check
       - name: Script Entrypoint Check
         run: make script-entrypoint-check
+      - name: Safety Traceability Check
+        run: make safety-traceability-check
       - name: Tests
         env:
           CATALOG_SOURCE: mock

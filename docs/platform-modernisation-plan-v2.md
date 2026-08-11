@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-08-03
+Last updated: 2026-08-10
 
 ## Purpose
 
@@ -64,6 +64,7 @@ make lint
 make arch-check
 make bloat-check
 make script-entrypoint-check
+make safety-traceability-check
 make test
 ```
 
@@ -369,6 +370,17 @@ Progress:
   revisions, tasks, attempts, delegation, results, checkpoints, events, and the
   compatibility path from the current agent runtime. Framework and persistence
   choices remain intentionally deferred.
+- Slice 3 now has a first STPA control structure and machine-checked
+  traceability catalog for planning, approval, delegation, execution,
+  observation, belief or memory updates, and supplemental harness promotion.
+  All seven control actions are covered across the four unsafe-control-action
+  categories and map to constraints, controls, feedback, and verification.
+
+Focused research on OpenAI, Claude Code, recursive language and agent harness
+papers, and the local Hermes and Prime Agent implementations is recorded in
+`docs/research/agent-harness-orchestration-notes-v1.md`. It informs the safety
+contract without widening beta scope: recursive subagent spawning and automatic
+harness self-promotion remain excluded.
 
 No dynamic planner, subagent, or chat redesign should land before these three
 artifacts agree on state, authority, effects, and failure semantics.
