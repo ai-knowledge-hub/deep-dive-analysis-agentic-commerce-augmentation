@@ -17,6 +17,8 @@ Run:
 make safety-traceability-check
 ```
 
-The gate rejects duplicate or unresolved identifiers, missing STPA categories,
-unmapped unsafe control actions, planned controls without ownership, and
-implemented controls without executable verification references.
+The gate pins the complete required schema-v1 identifier set and rejects silent
+coverage deletion, duplicate or unresolved identifiers, missing STPA
+categories, unmapped hazards or unsafe control actions, and planned controls
+without ownership. Implemented controls require exact pytest node identifiers,
+and the gate executes those nodes before passing.

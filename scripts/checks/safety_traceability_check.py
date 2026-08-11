@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -55,6 +56,24 @@ REFERENCE_RULES = {
 }
 
 
+def _numbered_ids(prefix: str, count: int) -> frozenset[str]:
+    return frozenset(f"{prefix}-{number:02d}" for number in range(1, count + 1))
+
+
+SCHEMA_REQUIRED_IDS = {
+    "1.0": {
+        "losses": _numbered_ids("L", 6),
+        "hazards": _numbered_ids("H", 10),
+        "control_actions": _numbered_ids("CA", 7),
+        "constraints": _numbered_ids("SC", 14),
+        "controls": _numbered_ids("CTRL", 16),
+        "feedback_requirements": _numbered_ids("FB", 11),
+        "verification_tests": _numbered_ids("VT", 16),
+        "unsafe_control_actions": _numbered_ids("UCA", 28),
+    }
+}
+
+
 def load_catalog(path: Path = DEFAULT_CATALOG) -> dict[str, Any]:
     """Load the JSON-compatible YAML catalog without a YAML dependency."""
 
@@ -88,6 +107,24 @@ def _reference_values(record: dict[str, Any], field: str) -> list[str]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str) and item]
     return []
+
+
+def _validate_required_scope(
+    schema_version: Any,
+    records: dict[str, list[dict[str, Any]]],
+    errors: list[str],
+) -> None:
+    requirements = SCHEMA_REQUIRED_IDS.get(schema_version)
+    if requirements is None:
+        return
+    for section, required_ids in requirements.items():
+        actual_ids = {record["id"] for record in records[section]}
+        missing = sorted(required_ids - actual_ids)
+        if missing:
+            errors.append(
+                f"{section}: schema {schema_version} missing required ids: "
+                f"{', '.join(missing)}"
+            )
 
 
 def _validate_references(
@@ -127,15 +164,25 @@ def _validate_uca_coverage(
         if not isinstance(uca.get("context"), str) or not uca["context"].strip():
             errors.append(f"{uca['id']}: context must not be empty")
 
+        mapped_hazards = set(_reference_values(uca, "hazard_ids"))
         mapped_constraints = set(_reference_values(uca, "constraint_ids"))
         mapped_verifications = set(_reference_values(uca, "verification_ids"))
+        constraint_hazards: set[str] = set()
         control_constraints: set[str] = set()
         control_verifications: set[str] = set()
+        for constraint_id in mapped_constraints:
+            constraint = indexes["constraints"].get(constraint_id)
+            if constraint:
+                constraint_hazards.update(_reference_values(constraint, "hazard_ids"))
         for control_id in _reference_values(uca, "control_ids"):
             control = indexes["controls"].get(control_id)
             if control:
                 control_constraints.update(_reference_values(control, "constraint_ids"))
                 control_verifications.update(_reference_values(control, "verification_ids"))
+        for hazard_id in sorted(mapped_hazards - constraint_hazards):
+            errors.append(
+                f"{uca['id']}: hazard {hazard_id} is not covered by a mapped constraint"
+            )
         for constraint_id in sorted(mapped_constraints - control_constraints):
             errors.append(
                 f"{uca['id']}: constraint {constraint_id} is not covered by a mapped control"
@@ -155,6 +202,38 @@ def _validate_uca_coverage(
             errors.append(f"{action_id}: duplicate UCA categories {', '.join(duplicates)}")
 
 
+def _validate_test_node_ref(
+    verification_id: str,
+    test_ref: str,
+    root: Path | None,
+    errors: list[str],
+) -> None:
+    node_parts = test_ref.split("::")
+    relative_path = Path(node_parts[0])
+    selector_parts = node_parts[1:]
+    is_test_path = (
+        not relative_path.is_absolute()
+        and len(relative_path.parts) >= 2
+        and relative_path.parts[0] == "tests"
+        and ".." not in relative_path.parts
+        and relative_path.suffix == ".py"
+        and relative_path.name.startswith("test_")
+    )
+    has_test_selector = (
+        bool(selector_parts)
+        and all(selector_parts)
+        and selector_parts[-1].split("[", 1)[0].startswith("test_")
+    )
+    if not is_test_path or not has_test_selector:
+        errors.append(
+            f"{verification_id}: test_ref must be a pytest node under tests/: "
+            f"{test_ref}"
+        )
+        return
+    if root is not None and not (root / relative_path).is_file():
+        errors.append(f"{verification_id}: test_ref file does not exist: {relative_path}")
+
+
 def _validate_statuses(
     records: dict[str, list[dict[str, Any]]],
     indexes: dict[str, dict[str, dict[str, Any]]],
@@ -167,8 +246,8 @@ def _validate_statuses(
             test_ref = verification.get("test_ref")
             if not isinstance(test_ref, str) or not test_ref.strip():
                 errors.append(f"{verification['id']}: implemented verification needs test_ref")
-            elif root is not None and not (root / test_ref).is_file():
-                errors.append(f"{verification['id']}: test_ref does not exist: {test_ref}")
+            else:
+                _validate_test_node_ref(verification["id"], test_ref, root, errors)
         elif status == "planned":
             for field in ("owner", "target_phase"):
                 if not isinstance(verification.get(field), str) or not verification[field].strip():
@@ -202,10 +281,12 @@ def validate_catalog(catalog: dict[str, Any], *, root: Path | None = None) -> li
     """Return every traceability violation in deterministic order."""
 
     errors: list[str] = []
-    if catalog.get("schema_version") != "1.0":
+    schema_version = catalog.get("schema_version")
+    if schema_version != "1.0":
         errors.append("schema_version: expected '1.0'")
 
     records = {section: _records(catalog, section, errors) for section in SECTIONS}
+    _validate_required_scope(schema_version, records, errors)
     indexes = {
         section: {record["id"]: record for record in section_records}
         for section, section_records in records.items()
@@ -220,6 +301,41 @@ def validate_catalog(catalog: dict[str, Any], *, root: Path | None = None) -> li
     _validate_uca_coverage(records, indexes, errors)
     _validate_statuses(records, indexes, root, errors)
     return sorted(set(errors))
+
+
+def run_implemented_verifications(
+    catalog: dict[str, Any],
+    *,
+    root: Path = ROOT,
+) -> list[str]:
+    """Execute every pytest node that certifies an implemented verification."""
+
+    test_nodes = sorted(
+        verification["test_ref"]
+        for verification in catalog.get("verification_tests", [])
+        if isinstance(verification, dict)
+        and verification.get("status") == "implemented"
+        and isinstance(verification.get("test_ref"), str)
+    )
+    if not test_nodes:
+        return ["implemented verification execution found no pytest nodes"]
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", *test_nodes],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode == 0:
+        return []
+    output = "\n".join(
+        line for line in (completed.stdout + completed.stderr).splitlines() if line.strip()
+    )
+    return [
+        "implemented verification pytest execution failed "
+        f"with exit code {completed.returncode}: {output}"
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -239,11 +355,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
 
+    execution_errors = run_implemented_verifications(catalog, root=ROOT)
+    if execution_errors:
+        print("Safety traceability check failed:", file=sys.stderr)
+        for error in execution_errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+
     print(
         "Safety traceability check passed: "
         f"{len(catalog['control_actions'])} control actions, "
         f"{len(catalog['unsafe_control_actions'])} unsafe control actions, "
-        f"{len(catalog['controls'])} controls."
+        f"{len(catalog['controls'])} controls, "
+        "implemented verification nodes executed."
     )
     return 0
 
