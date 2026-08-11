@@ -79,7 +79,17 @@
     {"id": "FB-11", "description": "Tenant quota, queue pressure, worker health, isolation status, dependency health, and cascading-failure indicators.", "controller": "orchestrator and operations", "source": "runtime telemetry", "hazard_ids": ["H-03", "H-06", "H-07", "H-10"]}
   ],
   "verification_tests": [
-    {"id": "VT-01", "description": "Workflow transition matrix and terminal-state invariants execute exhaustively.", "status": "implemented", "test_ref": "tests/modules/test_workflow_lifecycle.py::test_terminal_statuses_are_explicit_and_have_no_outgoing_transitions"},
+    {
+      "id": "VT-01",
+      "description": "Workflow transition matrix and terminal-state invariants execute exhaustively.",
+      "status": "implemented",
+      "test_refs": [
+        "tests/modules/test_workflow_lifecycle.py::test_allowed_transitions_match_the_complete_contract",
+        "tests/modules/test_workflow_lifecycle.py::test_every_declared_transition_is_executable",
+        "tests/modules/test_workflow_lifecycle.py::test_every_undeclared_transition_is_rejected",
+        "tests/modules/test_workflow_lifecycle.py::test_terminal_statuses_are_explicit_and_have_no_outgoing_transitions"
+      ]
+    },
     {"id": "VT-02", "description": "Replanning, active revision membership, optimistic commands, and joins remain deterministic under concurrency.", "status": "planned", "owner": "workflow-kernel", "target_phase": "Phase 3"},
     {"id": "VT-03", "description": "Stale, expired, revoked, wrong-payload, wrong-evidence, wrong-authority, and wrong-revision approvals cannot execute.", "status": "planned", "owner": "policy-runtime", "target_phase": "Phase 2-3"},
     {"id": "VT-04", "description": "Parallel and recursive admission cannot expand authority or oversubscribe any parent budget dimension.", "status": "planned", "owner": "workflow-kernel", "target_phase": "Phase 4"},

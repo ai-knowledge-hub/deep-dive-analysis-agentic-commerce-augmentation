@@ -243,10 +243,26 @@ def _validate_statuses(
     for verification in records["verification_tests"]:
         status = verification.get("status")
         if status == "implemented":
-            test_ref = verification.get("test_ref")
-            if not isinstance(test_ref, str) or not test_ref.strip():
-                errors.append(f"{verification['id']}: implemented verification needs test_ref")
-            else:
+            test_refs = verification.get("test_refs")
+            if not isinstance(test_refs, list) or not test_refs:
+                errors.append(
+                    f"{verification['id']}: implemented verification needs "
+                    "non-empty test_refs"
+                )
+                continue
+            valid_test_refs = [
+                test_ref
+                for test_ref in test_refs
+                if isinstance(test_ref, str) and test_ref.strip()
+            ]
+            if len(valid_test_refs) != len(test_refs):
+                errors.append(
+                    f"{verification['id']}: test_refs must contain only "
+                    "non-empty strings"
+                )
+            if len(set(valid_test_refs)) != len(valid_test_refs):
+                errors.append(f"{verification['id']}: test_refs must be unique")
+            for test_ref in valid_test_refs:
                 _validate_test_node_ref(verification["id"], test_ref, root, errors)
         elif status == "planned":
             for field in ("owner", "target_phase"):
@@ -311,11 +327,15 @@ def run_implemented_verifications(
     """Execute every pytest node that certifies an implemented verification."""
 
     test_nodes = sorted(
-        verification["test_ref"]
-        for verification in catalog.get("verification_tests", [])
-        if isinstance(verification, dict)
-        and verification.get("status") == "implemented"
-        and isinstance(verification.get("test_ref"), str)
+        {
+            test_ref
+            for verification in catalog.get("verification_tests", [])
+            if isinstance(verification, dict)
+            and verification.get("status") == "implemented"
+            and isinstance(verification.get("test_refs"), list)
+            for test_ref in verification["test_refs"]
+            if isinstance(test_ref, str)
+        }
     )
     if not test_nodes:
         return ["implemented verification execution found no pytest nodes"]

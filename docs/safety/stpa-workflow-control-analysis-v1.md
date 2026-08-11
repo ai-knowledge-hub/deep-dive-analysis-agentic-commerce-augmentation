@@ -231,8 +231,8 @@ make safety-traceability-check
 
 Catalog statuses mean:
 
-- `implemented`: the control exists in the repository and is linked to an
-  exact pytest node that the traceability gate executes
+- `implemented`: the control exists in the repository and is linked to one or
+  more exact pytest nodes that the traceability gate executes
 - `planned`: the control is not yet relied upon and carries an owner and target
   phase
 

@@ -5,6 +5,14 @@ from copy import deepcopy
 from scripts.checks import safety_traceability_check
 
 
+EXPECTED_LIFECYCLE_TEST_REFS = [
+    "tests/modules/test_workflow_lifecycle.py::test_allowed_transitions_match_the_complete_contract",
+    "tests/modules/test_workflow_lifecycle.py::test_every_declared_transition_is_executable",
+    "tests/modules/test_workflow_lifecycle.py::test_every_undeclared_transition_is_rejected",
+    "tests/modules/test_workflow_lifecycle.py::test_terminal_statuses_are_explicit_and_have_no_outgoing_transitions",
+]
+
+
 def _catalog() -> dict:
     return safety_traceability_check.load_catalog()
 
@@ -134,7 +142,7 @@ def test_implemented_control_requires_an_implemented_verification() -> None:
 
 def test_implemented_verification_rejects_an_existing_non_test_file() -> None:
     catalog = deepcopy(_catalog())
-    catalog["verification_tests"][0]["test_ref"] = "README.md"
+    catalog["verification_tests"][0]["test_refs"] = ["README.md"]
 
     errors = safety_traceability_check.validate_catalog(
         catalog,
@@ -146,9 +154,9 @@ def test_implemented_verification_rejects_an_existing_non_test_file() -> None:
 
 def test_implemented_verification_requires_an_existing_test_file() -> None:
     catalog = deepcopy(_catalog())
-    catalog["verification_tests"][0]["test_ref"] = (
+    catalog["verification_tests"][0]["test_refs"] = [
         "tests/test_does_not_exist.py::test_verification"
-    )
+    ]
 
     errors = safety_traceability_check.validate_catalog(
         catalog,
@@ -158,7 +166,22 @@ def test_implemented_verification_requires_an_existing_test_file() -> None:
     assert "VT-01: test_ref file does not exist: tests/test_does_not_exist.py" in errors
 
 
-def test_canonical_implemented_verification_node_executes() -> None:
+def test_implemented_verification_requires_at_least_one_test_node() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["verification_tests"][0]["test_refs"] = []
+
+    errors = safety_traceability_check.validate_catalog(catalog)
+
+    assert "VT-01: implemented verification needs non-empty test_refs" in errors
+
+
+def test_vt_01_declares_the_complete_lifecycle_verification() -> None:
+    verification = _catalog()["verification_tests"][0]
+
+    assert verification["test_refs"] == EXPECTED_LIFECYCLE_TEST_REFS
+
+
+def test_canonical_implemented_verification_nodes_execute() -> None:
     errors = safety_traceability_check.run_implemented_verifications(
         _catalog(),
         root=safety_traceability_check.ROOT,
@@ -169,9 +192,9 @@ def test_canonical_implemented_verification_node_executes() -> None:
 
 def test_uncollected_pytest_node_cannot_certify_a_verification() -> None:
     catalog = deepcopy(_catalog())
-    catalog["verification_tests"][0]["test_ref"] = (
+    catalog["verification_tests"][0]["test_refs"] = [
         "tests/modules/test_workflow_lifecycle.py::test_does_not_exist"
-    )
+    ]
 
     errors = safety_traceability_check.run_implemented_verifications(
         catalog,
