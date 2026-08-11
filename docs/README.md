@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: current
-Last updated: 2026-08-03
+Last updated: 2026-08-10
 
 Use this index to avoid treating historical planning notes as active product or architecture guidance.
 
@@ -24,6 +24,14 @@ Use this index to avoid treating historical planning notes as active product or 
 - `ui-style-direction.md`: visual style rules for the flattened control-plane UI.
 - `decisions/README.md`: architecture decision record index, including the
   framework-neutral workflow, task, and delegation schema contract.
+- `safety/stpa-workflow-control-analysis-v1.md`: STPA control structure,
+  hazards, causal scenarios, and safety constraints for the first governed
+  workflow loop.
+- `safety/safety-controls-v1.yaml`: machine-checked loss, hazard, unsafe control
+  action, constraint, control, feedback, and verification traceability.
+- `research/agent-harness-orchestration-notes-v1.md`: focused research input on
+  recursive context, parallel and long-running subagents, goals, and continual
+  harness state, with explicit beta boundaries.
 
 ## Reference Docs
 

@@ -99,6 +99,14 @@ script-entrypoint-check:
 		$(PYTHON) -m scripts.checks.script_entrypoints_check; \
 	fi
 
+.PHONY: safety-traceability-check
+safety-traceability-check:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.checks.safety_traceability_check; \
+	else \
+		$(PYTHON) -m scripts.checks.safety_traceability_check; \
+	fi
+
 .PHONY: format
 format:
 	@if [ -n "$(RUFF)" ] && [ -x "$(RUFF)" ]; then \
