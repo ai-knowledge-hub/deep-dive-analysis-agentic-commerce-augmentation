@@ -49,6 +49,8 @@ jobs:
         run: make script-entrypoint-check
       - name: Safety Traceability Check
         run: make safety-traceability-check
+      - name: Security Traceability Check
+        run: make security-traceability-check
       - name: Tests
         env:
           CATALOG_SOURCE: mock

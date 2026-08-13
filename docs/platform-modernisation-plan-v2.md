@@ -354,12 +354,15 @@ stable contracts.
 
 ## Immediate Next Slice
 
-Phase 1 begins with three small, reviewable changes:
+Phase 1 established its first contract baseline through four small, reviewable
+changes:
 
 1. Add a domain-level workflow lifecycle contract and transition tests.
 2. Add the workflow/task/delegation schema ADR without choosing a framework.
 3. Produce the first STPA control structure and unsafe-control-action table for
    `plan -> approve -> execute -> observe -> update belief`.
+4. Establish an executable adversarial threat model across the complete
+   objective-to-belief-or-memory workflow.
 
 Progress:
 
@@ -375,6 +378,12 @@ Progress:
   observation, belief or memory updates, and supplemental harness promotion.
   All seven control actions are covered across the four unsafe-control-action
   categories and map to constraints, controls, feedback, and verification.
+- Slice 4 now has an executable agent-workflow security threat model spanning
+  the full governed loop. Its versioned catalog pins assets, trust boundaries,
+  17 threat scenarios, preventative and detective controls, exact verification
+  contracts, and explicitly owned gaps. Security threats cross-resolve to STPA
+  hazards and constraints, and CI executes tests claimed by implemented
+  controls.
 
 Focused research on OpenAI, Claude Code, recursive language and agent harness
 papers, and the local Hermes and Prime Agent implementations is recorded in
@@ -382,5 +391,6 @@ papers, and the local Hermes and Prime Agent implementations is recorded in
 contract without widening beta scope: recursive subagent spawning and automatic
 harness self-promotion remain excluded.
 
-No dynamic planner, subagent, or chat redesign should land before these three
-artifacts agree on state, authority, effects, and failure semantics.
+No dynamic planner, subagent, or chat redesign should land unless the lifecycle,
+schema, safety, and security contracts agree on state, authority, effects,
+trust boundaries, and failure semantics.

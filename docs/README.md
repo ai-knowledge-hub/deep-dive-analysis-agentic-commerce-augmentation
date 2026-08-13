@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: current
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Use this index to avoid treating historical planning notes as active product or architecture guidance.
 
@@ -29,6 +29,11 @@ Use this index to avoid treating historical planning notes as active product or 
   workflow loop.
 - `safety/safety-controls-v1.yaml`: machine-checked loss, hazard, unsafe control
   action, constraint, control, feedback, and verification traceability.
+- `security/agent-workflow-threat-model-v1.md`: adversarial threat model for the
+  governed workflow, worker, tool, belief, memory, and harness lifecycle.
+- `security/security-controls-v1.yaml`: machine-checked assets, trust
+  boundaries, threats, controls, detections, verifications, and owned gaps,
+  cross-resolved against the STPA safety model.
 - `research/agent-harness-orchestration-notes-v1.md`: focused research input on
   recursive context, parallel and long-running subagents, goals, and continual
   harness state, with explicit beta boundaries.

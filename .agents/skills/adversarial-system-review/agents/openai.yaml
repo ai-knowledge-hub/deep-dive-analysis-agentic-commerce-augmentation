@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adversarial System Review"
+  short_description: "Review changes across agent system boundaries"
+  default_prompt: "Use $adversarial-system-review to review this change across workflow invariants, safety and security contracts, and adversarial failure scenarios."
