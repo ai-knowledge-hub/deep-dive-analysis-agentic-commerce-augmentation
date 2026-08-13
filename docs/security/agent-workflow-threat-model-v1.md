@@ -238,9 +238,11 @@ test cannot certify a control.
 `planned` means a named owner, target phase, verification contract, and GAP
 record exist. `blocked` means the capability must not be exposed. A critical
 active unresolved threat requires a structured `blocking_decision`. Its
-capability-exclusion IDs resolve through a pinned release-gate map to the exact
-planned controls and owned gaps required before exposure. Free text such as
-“ship anyway” cannot satisfy the gate.
+capability-exclusion IDs are pinned per critical threat by the schema-v1
+contract, then resolve through a separate release-gate map to the exact planned
+controls and owned gaps required before exposure. A threat cannot weaken its
+boundary by deleting an exclusion and its derived controls together. Free text
+such as “ship anyway” cannot satisfy the gate.
 
 `mitigated` is reserved for threats with no open gap mapping and structured
 closure evidence: an approver, an ISO closure date, implemented mapped controls,
@@ -282,8 +284,9 @@ make security-traceability-check
 The command validates exact pinned v1 scope, global ID uniqueness, all local and
 STPA references, complete threat coverage of assets, trust boundaries, controls,
 detections, verifications, and gaps, hazard-to-constraint coverage, reciprocal
-gap ownership, structured critical-threat release restrictions, evidence-backed
-mitigation closure, planned ownership, and executable implemented verifications.
+gap ownership for every planned threat control, independently pinned
+critical-threat release restrictions, evidence-backed mitigation closure,
+planned ownership, and executable implemented verifications.
 
 Schema changes require a new version and an explicit migration decision. IDs
 cannot be silently added to or deleted from schema v1 to make the gate pass.

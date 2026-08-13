@@ -62,6 +62,22 @@ CAPABILITY_RELEASE_GATES = {
     "unreviewed_memory_promotion": frozenset({"SEC-11"}),
     "write_capable_dynamic_child_delegation": frozenset({"SEC-06", "SEC-16"}),
 }
+SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS = {
+    "1.0": {
+        "THR-01": frozenset(
+            {"automatic_global_harness_promotion", "unreviewed_memory_promotion"}
+        ),
+        "THR-02": frozenset({"write_capable_dynamic_child_delegation"}),
+        "THR-04": frozenset({"public_durable_workflow_and_peer_messages"}),
+        "THR-05": frozenset({"parallel_multi_tenant_worker_execution"}),
+        "THR-10": frozenset(
+            {"expanded_connectors_without_secret_egress_ssrf_controls"}
+        ),
+        "THR-16": frozenset(
+            {"expanded_production_telemetry_and_parallel_context_logging"}
+        ),
+    }
+}
 REFERENCE_RULES = {
     "threats": {
         "asset_ids": "assets",
@@ -237,6 +253,7 @@ def _validate_blocking_decision(
     threat: dict[str, Any],
     indexes: dict[str, dict[str, dict[str, Any]]],
     gap_ids: set[str],
+    required_exclusion_ids: frozenset[str],
     errors: list[str],
 ) -> None:
     decision = threat.get("blocking_decision")
@@ -280,6 +297,11 @@ def _validate_blocking_decision(
         errors.append(
             f"{threat['id']}: blocking_decision references unknown capability "
             f"exclusion {exclusion_id}"
+        )
+    if set(exclusion_ids) != required_exclusion_ids:
+        errors.append(
+            f"{threat['id']}: blocking_decision capability_exclusion_ids must "
+            "exactly match the schema-v1 threat release boundary"
         )
 
     raw_required_control_ids = decision.get("required_control_ids")
@@ -420,6 +442,7 @@ def _validate_threats(
     records: dict[str, list[dict[str, Any]]],
     indexes: dict[str, dict[str, dict[str, Any]]],
     safety_catalog: dict[str, Any],
+    schema_version: Any,
     errors: list[str],
 ) -> None:
     hazards, constraints = _safety_indexes(safety_catalog, errors)
@@ -469,12 +492,32 @@ def _validate_threats(
             errors.append(
                 f"{threat['id']}: only a mitigated threat may declare closure"
             )
-        if (
+        required_exclusion_ids = SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS.get(
+            schema_version, {}
+        ).get(threat["id"])
+        is_unresolved_critical_exposure = (
             threat.get("severity") == "critical"
             and threat.get("exposure") == "active"
             and status != "mitigated"
-        ):
-            _validate_blocking_decision(threat, indexes, gap_ids, errors)
+        )
+        if required_exclusion_ids is not None and status != "mitigated":
+            if not is_unresolved_critical_exposure:
+                errors.append(
+                    f"{threat['id']}: schema {schema_version} release-gated threat "
+                    "must remain critical and active until mitigated"
+                )
+            _validate_blocking_decision(
+                threat,
+                indexes,
+                gap_ids,
+                required_exclusion_ids,
+                errors,
+            )
+        elif is_unresolved_critical_exposure:
+            errors.append(
+                f"{threat['id']}: schema {schema_version} has no pinned "
+                "critical-threat capability exclusions"
+            )
 
         for field, (section, _label) in THREAT_COVERAGE_FIELDS.items():
             coverage[section].update(_reference_values(threat, field))
@@ -533,6 +576,23 @@ def _validate_threats(
             ):
                 errors.append(
                     f"{threat['id']}: gap {gap_id} covers no mapped control"
+                )
+
+        for control_id in sorted(mapped_controls):
+            control = indexes["controls"].get(control_id)
+            if not control or control.get("status") != "planned":
+                continue
+            mutually_linked = any(
+                gap_id in _reference_values(control, "gap_ids")
+                and (gap := indexes["implementation_gaps"].get(gap_id)) is not None
+                and threat["id"] in _reference_values(gap, "threat_ids")
+                and control_id in _reference_values(gap, "control_ids")
+                for gap_id in gap_ids
+            )
+            if not mutually_linked:
+                errors.append(
+                    f"{threat['id']}: planned control {control_id} needs a "
+                    "mutually linked threat gap"
                 )
 
     for section, label in THREAT_COVERAGE_FIELDS.values():
@@ -701,7 +761,7 @@ def validate_catalog(
 
     _validate_descriptions(records, errors)
     _validate_references(records, indexes, errors)
-    _validate_threats(records, indexes, safety_catalog, errors)
+    _validate_threats(records, indexes, safety_catalog, schema_version, errors)
     _validate_statuses(records, indexes, root, errors)
     return sorted(set(errors))
 

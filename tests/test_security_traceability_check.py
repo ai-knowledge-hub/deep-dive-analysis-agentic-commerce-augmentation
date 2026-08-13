@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
 from scripts.checks import security_traceability_check
 
 
@@ -16,6 +18,17 @@ EXPECTED_POLICY_TEST_REFS = [
     "tests/test_agent_runs_api.py::test_create_agent_run_enforces_harness_effect_class_boundaries",
     "tests/test_agent_runs_api.py::test_harness_memory_policy_blocks_learning_mutation_plans",
 ]
+EXPECTED_CRITICAL_THREAT_EXCLUSIONS = {
+    "THR-01": {
+        "automatic_global_harness_promotion",
+        "unreviewed_memory_promotion",
+    },
+    "THR-02": {"write_capable_dynamic_child_delegation"},
+    "THR-04": {"public_durable_workflow_and_peer_messages"},
+    "THR-05": {"parallel_multi_tenant_worker_execution"},
+    "THR-10": {"expanded_connectors_without_secret_egress_ssrf_controls"},
+    "THR-16": {"expanded_production_telemetry_and_parallel_context_logging"},
+}
 
 
 def _catalog() -> dict:
@@ -291,6 +304,90 @@ def test_release_decision_requires_exact_capability_gate_controls() -> None:
     assert (
         "THR-01: blocking_decision required_control_ids must exactly match its "
         "capability release gates" in errors
+    )
+
+
+def test_schema_v1_pins_each_critical_threat_release_boundary() -> None:
+    assert security_traceability_check.SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS[
+        "1.0"
+    ] == {
+        threat_id: frozenset(exclusion_ids)
+        for threat_id, exclusion_ids in EXPECTED_CRITICAL_THREAT_EXCLUSIONS.items()
+    }
+
+
+@pytest.mark.parametrize(
+    ("threat_id", "removed_exclusion_id", "removed_control_id"),
+    [
+        ("THR-01", "unreviewed_memory_promotion", "SEC-11"),
+        ("THR-02", "write_capable_dynamic_child_delegation", "SEC-06"),
+        ("THR-04", "public_durable_workflow_and_peer_messages", "SEC-07"),
+        ("THR-05", "parallel_multi_tenant_worker_execution", "SEC-09"),
+        (
+            "THR-10",
+            "expanded_connectors_without_secret_egress_ssrf_controls",
+            "SEC-14",
+        ),
+        (
+            "THR-16",
+            "expanded_production_telemetry_and_parallel_context_logging",
+            "SEC-18",
+        ),
+    ],
+)
+def test_critical_threat_rejects_coordinated_capability_exclusion_downgrade(
+    threat_id: str,
+    removed_exclusion_id: str,
+    removed_control_id: str,
+) -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == threat_id)
+    decision = threat["blocking_decision"]
+    decision["capability_exclusion_ids"].remove(removed_exclusion_id)
+    decision["required_control_ids"].remove(removed_control_id)
+
+    errors = _validate(catalog)
+
+    assert (
+        f"{threat_id}: blocking_decision capability_exclusion_ids must exactly "
+        "match the schema-v1 threat release boundary" in errors
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "downgraded_value"),
+    [("severity", "high"), ("exposure", "planned")],
+)
+def test_release_gated_threat_cannot_downgrade_its_critical_exposure(
+    field: str,
+    downgraded_value: str,
+) -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-01")
+    threat[field] = downgraded_value
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-01: schema 1.0 release-gated threat must remain critical and active "
+        "until mitigated" in errors
+    )
+
+
+def test_each_planned_threat_control_requires_a_mutually_linked_gap() -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-13")
+    gap = next(
+        item for item in catalog["implementation_gaps"] if item["id"] == "GAP-03"
+    )
+    threat["gap_ids"].remove("GAP-03")
+    gap["threat_ids"].remove("THR-13")
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-13: planned control SEC-08 needs a mutually linked threat gap"
+        in errors
     )
 
 
