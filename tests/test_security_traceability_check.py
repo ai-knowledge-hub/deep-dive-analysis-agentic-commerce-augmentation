@@ -5,6 +5,19 @@ from copy import deepcopy
 from scripts.checks import security_traceability_check
 
 
+EXPECTED_POLICY_TEST_REFS = [
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_capability_not_in_allow_list",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_missing_required_input",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_actions_budget",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_variant_runs_budget",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_cost_budget",
+    "tests/modules/test_agent_policy_enforcer.py::test_observe_policy_rejects_side_effecting_tool",
+    "tests/modules/test_agent_policy_enforcer.py::test_safe_auto_policy_rejects_external_side_effect_execution",
+    "tests/test_agent_runs_api.py::test_create_agent_run_enforces_harness_effect_class_boundaries",
+    "tests/test_agent_runs_api.py::test_harness_memory_policy_blocks_learning_mutation_plans",
+]
+
+
 def _catalog() -> dict:
     return security_traceability_check.load_catalog()
 
@@ -21,6 +34,16 @@ def _validate(catalog: dict, *, root=None) -> list[str]:
         _safety_catalog(),
         root=root,
     )
+
+
+def _mark_threat_mitigated(catalog: dict, threat_id: str) -> dict:
+    threat = next(threat for threat in catalog["threats"] if threat["id"] == threat_id)
+    for gap in catalog["implementation_gaps"]:
+        if threat_id in gap["threat_ids"]:
+            gap["threat_ids"].remove(threat_id)
+    threat["status"] = "mitigated"
+    threat["gap_ids"] = []
+    return threat
 
 
 def test_canonical_security_catalog_is_fully_traceable() -> None:
@@ -57,6 +80,17 @@ def test_schema_v1_rejects_silent_threat_and_gap_deletion() -> None:
 
     assert "threats: schema 1.0 missing required ids: THR-17" in errors
     assert "implementation_gaps: schema 1.0 missing required ids: GAP-15" in errors
+
+
+def test_schema_v1_rejects_unversioned_scope_additions() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["assets"].append(
+        {"id": "ASSET-99", "description": "Unversioned security scope."}
+    )
+
+    errors = _validate(catalog)
+
+    assert "assets: schema 1.0 has unexpected ids: ASSET-99" in errors
 
 
 def test_catalog_ids_are_globally_unique() -> None:
@@ -111,6 +145,28 @@ def test_every_trust_boundary_requires_a_mapped_threat() -> None:
     assert "TB-07: trust boundary has no mapped threat" in errors
 
 
+def test_assets_controls_and_detections_require_threat_coverage() -> None:
+    catalog = deepcopy(_catalog())
+    for threat in catalog["threats"]:
+        threat["asset_ids"] = [
+            identifier for identifier in threat["asset_ids"] if identifier != "ASSET-10"
+        ]
+        threat["control_ids"] = [
+            identifier for identifier in threat["control_ids"] if identifier != "SEC-15"
+        ]
+        threat["detection_ids"] = [
+            identifier
+            for identifier in threat["detection_ids"]
+            if identifier != "SDET-09"
+        ]
+
+    errors = _validate(catalog)
+
+    assert "ASSET-10: asset has no mapped threat" in errors
+    assert "SEC-15: security control has no mapped threat" in errors
+    assert "SDET-09: detection requirement has no mapped threat" in errors
+
+
 def test_stpa_references_must_resolve_against_safety_catalog() -> None:
     catalog = deepcopy(_catalog())
     catalog["threats"][0]["stpa_hazard_ids"] = ["H-404"]
@@ -154,6 +210,49 @@ def test_unresolved_threat_requires_an_owned_gap() -> None:
     assert "THR-01: unresolved threat needs gap_ids" in errors
 
 
+def test_mitigated_threat_accepts_executable_closure_without_gaps() -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, "THR-04")
+    threat["control_ids"] = ["SEC-03", "SEC-04", "SEC-05"]
+    threat["verification_ids"] = ["SVT-03", "SVT-04", "SVT-05"]
+    threat["closure"] = {
+        "approved_by": "security-review-board",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": ["SEC-03", "SEC-04", "SEC-05"],
+        "verification_ids": ["SVT-03", "SVT-04", "SVT-05"],
+    }
+
+    assert _validate(catalog) == []
+
+
+def test_mitigated_threat_requires_executable_closure_evidence() -> None:
+    catalog = deepcopy(_catalog())
+    _mark_threat_mitigated(catalog, "THR-04")
+
+    errors = _validate(catalog)
+
+    assert "THR-04: mitigated threat needs closure evidence" in errors
+
+
+def test_mitigation_closure_cannot_certify_only_a_subset_of_mapped_controls() -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, "THR-04")
+    threat["closure"] = {
+        "approved_by": "security-review-board",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": ["SEC-03", "SEC-04", "SEC-05"],
+        "verification_ids": ["SVT-03", "SVT-04", "SVT-05"],
+    }
+
+    errors = _validate(catalog)
+
+    assert "THR-04: closure controls must exactly match mapped controls" in errors
+    assert (
+        "THR-04: closure verifications must exactly match mapped verifications"
+        in errors
+    )
+
+
 def test_gap_relationships_must_be_bidirectional() -> None:
     catalog = deepcopy(_catalog())
     catalog["implementation_gaps"][0]["threat_ids"].remove("THR-02")
@@ -169,7 +268,30 @@ def test_critical_active_threat_requires_an_explicit_blocking_decision() -> None
 
     errors = _validate(catalog)
 
-    assert "THR-01: blocking_decision must not be empty" in errors
+    assert "THR-01: blocking_decision must be an object" in errors
+
+
+def test_critical_active_threat_rejects_free_text_release_decision() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["threats"][0]["blocking_decision"] = "ship anyway"
+
+    errors = _validate(catalog)
+
+    assert "THR-01: blocking_decision must be an object" in errors
+
+
+def test_release_decision_requires_exact_capability_gate_controls() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["threats"][0]["blocking_decision"]["required_control_ids"] = [
+        "SEC-11"
+    ]
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-01: blocking_decision required_control_ids must exactly match its "
+        "capability release gates" in errors
+    )
 
 
 def test_planned_control_and_verification_require_owner_and_phase() -> None:
@@ -192,6 +314,14 @@ def test_implemented_control_requires_an_implemented_verification() -> None:
     assert (
         "SEC-01: implemented control needs an implemented verification" in errors
     )
+
+
+def test_svt_02_certifies_the_complete_policy_control() -> None:
+    verification = next(
+        item for item in _catalog()["verification_tests"] if item["id"] == "SVT-02"
+    )
+
+    assert verification["test_refs"] == EXPECTED_POLICY_TEST_REFS
 
 
 def test_implemented_verification_rejects_non_test_and_missing_files() -> None:

@@ -1,7 +1,7 @@
 # Agent-Workflow Security Threat Model v1
 
-Status: accepted Phase 1 baseline  
-Last updated: 2026-08-11  
+Status: accepted Phase 1 baseline
+Last updated: 2026-08-13
 Normative catalog: `security-controls-v1.yaml`
 
 ## Decision
@@ -237,8 +237,15 @@ test cannot certify a control.
 
 `planned` means a named owner, target phase, verification contract, and GAP
 record exist. `blocked` means the capability must not be exposed. A critical
-active threat requires a `blocking_decision` that states the safe beta boundary;
-the validator rejects the catalog without it.
+active unresolved threat requires a structured `blocking_decision`. Its
+capability-exclusion IDs resolve through a pinned release-gate map to the exact
+planned controls and owned gaps required before exposure. Free text such as
+“ship anyway” cannot satisfy the gate.
+
+`mitigated` is reserved for threats with no open gap mapping and structured
+closure evidence: an approver, an ISO closure date, implemented mapped controls,
+and implemented mapped verification IDs linked by those controls. The gate
+executes the tests behind those verification IDs.
 
 The initial implemented controls cover authenticated scoped principals,
 host-side capability and effect policy, external-job idempotency, single-use
@@ -272,10 +279,11 @@ Run:
 make security-traceability-check
 ```
 
-The command validates pinned v1 scope, global ID uniqueness, all local and STPA
-references, trust-boundary coverage, hazard-to-constraint coverage, control and
-verification traceability, reciprocal gap ownership, critical-threat blocking
-decisions, planned ownership, and executable implemented verifications.
+The command validates exact pinned v1 scope, global ID uniqueness, all local and
+STPA references, complete threat coverage of assets, trust boundaries, controls,
+detections, verifications, and gaps, hazard-to-constraint coverage, reciprocal
+gap ownership, structured critical-threat release restrictions, evidence-backed
+mitigation closure, planned ownership, and executable implemented verifications.
 
 Schema changes require a new version and an explicit migration decision. IDs
-cannot be silently deleted from schema v1 to make the gate pass.
+cannot be silently added to or deleted from schema v1 to make the gate pass.

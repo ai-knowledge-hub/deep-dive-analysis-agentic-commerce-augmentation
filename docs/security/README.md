@@ -1,7 +1,7 @@
 # Security Analysis
 
-Status: current  
-Last updated: 2026-08-11
+Status: current
+Last updated: 2026-08-13
 
 The Phase 1 agent-workflow security baseline has two synchronized artifacts:
 
@@ -18,7 +18,8 @@ Run:
 make security-traceability-check
 ```
 
-The gate pins the complete schema-v1 ID set; resolves local and STPA safety
-references; rejects missing boundary, threat, control, detection, verification,
-or gap coverage; and executes the exact pytest nodes claimed by implemented
-security verifications.
+The gate pins the exact schema-v1 ID set; resolves local and STPA safety
+references; rejects missing asset, boundary, control, detection, verification,
+or gap coverage; enforces structured beta capability exclusions for exposed
+critical threats; requires executable closure evidence for mitigated threats;
+and executes the exact pytest nodes claimed by implemented verifications.
