@@ -413,6 +413,22 @@ def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
     assert "Unsupported allowed_capabilities: not_real" in response.json()["detail"]
 
 
+def test_create_agent_run_rejects_beta_blocked_production_capability(
+    client: TestClient,
+):
+    response = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["publish_copy_revision"],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "autonomous_production_publishing" in response.json()["detail"]
+
+
 def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
     base = {"client_id": CLIENT_ID, "user_id": USER_ID, "allowed_capabilities": ["run_variant"]}
     bad_run_mode = client.post(

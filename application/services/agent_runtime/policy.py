@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from application.services.agent_runtime.registry import CapabilitySpec, validate_inputs
+from application.services.agent_runtime.release_policy import (
+    BetaReleaseGateError,
+    assert_beta_capability_available,
+)
 
 
 class PolicyError(ValueError):
@@ -29,6 +33,7 @@ class PolicyEnforcer:
         inputs: Mapping[str, Any],
     ) -> None:
         self._assert_capability_allowed(run=run, capability_name=spec.name)
+        self._assert_beta_release_gate(spec=spec)
         self._assert_effect_class_allowed(
             run=run,
             action=action,
@@ -72,6 +77,16 @@ class PolicyEnforcer:
             raise PolicyError(
                 f"Capability '{capability_name}' is not allowed for this run"
             )
+
+    def _assert_beta_release_gate(self, *, spec: CapabilitySpec) -> None:
+        try:
+            assert_beta_capability_available(
+                spec.name,
+                tool_id=spec.tool_id,
+                effect_class=spec.effect_class,
+            )
+        except BetaReleaseGateError as exc:
+            raise PolicyError(str(exc)) from exc
 
     def _assert_effect_class_allowed(
         self,

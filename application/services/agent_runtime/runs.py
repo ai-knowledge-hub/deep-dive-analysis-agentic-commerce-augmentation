@@ -23,19 +23,18 @@ from application.services.agent_runtime.harness_posture import (
     validate_harness_memory_policy,
     validate_harness_runtime_posture,
 )
+from application.services.agent_runtime.plan_validation import (
+    AgentRunPlanError,
+    validate_plan_capabilities,
+)
 from application.services.agent_runtime.registry import (
     default_harness_id_for_agent_profile,
-    get_capability_spec,
     get_harness_profile,
     harness_profile_supported,
     policy_profile_supported,
     run_mode_supported,
     version_context_for_capability,
 )
-
-
-class AgentRunPlanError(ValueError):
-    pass
 
 def create_agent_run_with_initial_plan(
     *,
@@ -64,7 +63,7 @@ def create_agent_run_with_initial_plan(
     agent_profile_defaults: Optional[Dict[str, Any]] = None,
     preferred_skill_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    _validate_plan_capabilities(allowed_capabilities or [], objective=objective or {})
+    validate_plan_capabilities(allowed_capabilities or [], objective=objective or {})
     profile_defaults = dict(agent_profile_defaults or {})
     resolved_harness_id = (
         harness_id
@@ -148,28 +147,6 @@ def create_agent_run_with_initial_plan(
         harness_profile=harness_profile,
     )
     return run
-
-
-def _validate_plan_capabilities(
-    allowed_capabilities: List[str], *, objective: Dict[str, Any]
-) -> None:
-    requested = [
-        str(capability).strip()
-        for capability in allowed_capabilities
-        if str(capability).strip()
-    ]
-    unsupported = [item for item in requested if not get_capability_spec(item)]
-    if unsupported:
-        raise AgentRunPlanError(
-            "Unsupported allowed_capabilities: " + ", ".join(unsupported)
-        )
-    if requested and not build_initial_plan(
-        experiment_id=None,
-        allowed_capabilities=requested,
-        capability_versions={},
-        objective=objective,
-    ):
-        raise AgentRunPlanError("allowed_capabilities did not produce any initial plan actions")
 
 
 def _harness_profile_from_registry_payload(

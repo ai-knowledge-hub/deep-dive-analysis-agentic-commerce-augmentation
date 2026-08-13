@@ -245,9 +245,22 @@ boundary by deleting an exclusion and its derived controls together. Free text
 such as “ship anyway” cannot satisfy the gate.
 
 `mitigated` is reserved for threats with no open gap mapping and structured
-closure evidence: an approver, an ISO closure date, implemented mapped controls,
-and implemented mapped verification IDs linked by those controls. The gate
-executes the tests behind those verification IDs.
+closure evidence. For release-gated critical threats, schema v1 independently
+pins the minimum control and verification sets, accepts only the named
+`security-review-board` authority, and retains the original blocking decision.
+Changing the mutable threat mappings, closure evidence, or status therefore
+cannot narrow the release boundary. Closed gap records remain as historical
+evidence while their active threat and control links are removed. The gate
+executes the tests behind every implemented verification ID.
+
+The executable registry is governed by `agent-runtime-beta-v1`. Every runtime
+capability has an explicit disposition and pinned tool and effect-class
+metadata. `promote_variant_prod` and `publish_copy_revision` map to the
+`autonomous_production_publishing` release gate and are rejected both when a
+run is admitted and immediately before an effect can execute. The security
+catalog repeats those concrete capability, tool, and effect identifiers and
+the traceability check rejects drift in either direction. Adding a registry
+capability without an explicit beta disposition also fails the gate.
 
 The initial implemented controls cover authenticated scoped principals,
 host-side capability and effect policy, external-job idempotency, single-use
@@ -283,10 +296,11 @@ make security-traceability-check
 
 The command validates exact pinned v1 scope, global ID uniqueness, all local and
 STPA references, complete threat coverage of assets, trust boundaries, controls,
-detections, verifications, and gaps, hazard-to-constraint coverage, reciprocal
-gap ownership for every planned threat control, independently pinned
-critical-threat release restrictions, evidence-backed mitigation closure,
-planned ownership, and executable implemented verifications.
+detections, verifications, and open gaps, hazard-to-constraint coverage,
+reciprocal gap ownership for every planned threat control, independently pinned
+critical-threat release and closure restrictions, executable-registry release
+policy alignment, evidence-backed mitigation closure, planned ownership, and
+executable implemented verifications.
 
 Schema changes require a new version and an explicit migration decision. IDs
 cannot be silently added to or deleted from schema v1 to make the gate pass.

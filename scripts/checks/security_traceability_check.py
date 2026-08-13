@@ -11,6 +11,19 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from application.services.agent_runtime.registry import list_capability_specs
+from application.services.agent_runtime.release_policy import (
+    release_dispositions_for_gate,
+    validate_registry_release_policy,
+)
+from scripts.checks.security_contract_v1 import (
+    BLOCKING_DISPOSITION,
+    CAPABILITY_RELEASE_GATES,
+    SCHEMA_CLOSURE_APPROVER_IDS,
+    SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS,
+    SCHEMA_REQUIRED_MITIGATION_CLOSURES,
+)
+
 
 def _repo_root() -> Path:
     current = Path(__file__).resolve()
@@ -44,40 +57,7 @@ THREAT_STATUSES = {"mitigated", "partially_mitigated", "planned", "blocked"}
 EXPOSURES = {"active", "planned", "excluded"}
 RISK_LEVELS = {"low", "medium", "high", "critical"}
 CONTROL_KINDS = {"preventive", "detective", "both"}
-BLOCKING_DISPOSITION = "excluded_until_required_controls_implemented"
-CAPABILITY_RELEASE_GATES = {
-    "automatic_global_harness_promotion": frozenset({"SEC-12"}),
-    "expanded_connectors_without_secret_egress_ssrf_controls": frozenset(
-        {"SEC-13", "SEC-14", "SEC-19"}
-    ),
-    "expanded_production_telemetry_and_parallel_context_logging": frozenset(
-        {"SEC-09", "SEC-13", "SEC-18", "SEC-19"}
-    ),
-    "parallel_multi_tenant_worker_execution": frozenset(
-        {"SEC-09", "SEC-16", "SEC-19", "SEC-20"}
-    ),
-    "public_durable_workflow_and_peer_messages": frozenset(
-        {"SEC-07", "SEC-08", "SEC-18", "SEC-20"}
-    ),
-    "unreviewed_memory_promotion": frozenset({"SEC-11"}),
-    "write_capable_dynamic_child_delegation": frozenset({"SEC-06", "SEC-16"}),
-}
-SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS = {
-    "1.0": {
-        "THR-01": frozenset(
-            {"automatic_global_harness_promotion", "unreviewed_memory_promotion"}
-        ),
-        "THR-02": frozenset({"write_capable_dynamic_child_delegation"}),
-        "THR-04": frozenset({"public_durable_workflow_and_peer_messages"}),
-        "THR-05": frozenset({"parallel_multi_tenant_worker_execution"}),
-        "THR-10": frozenset(
-            {"expanded_connectors_without_secret_egress_ssrf_controls"}
-        ),
-        "THR-16": frozenset(
-            {"expanded_production_telemetry_and_parallel_context_logging"}
-        ),
-    }
-}
+GAP_STATUSES = {"open", "closed"}
 REFERENCE_RULES = {
     "threats": {
         "asset_ids": "assets",
@@ -254,6 +234,8 @@ def _validate_blocking_decision(
     indexes: dict[str, dict[str, dict[str, Any]]],
     gap_ids: set[str],
     required_exclusion_ids: frozenset[str],
+    *,
+    unresolved: bool,
     errors: list[str],
 ) -> None:
     decision = threat.get("blocking_decision")
@@ -331,6 +313,80 @@ def _validate_blocking_decision(
             "match its capability release gates"
         )
 
+    raw_runtime_exclusions = decision.get("runtime_capability_exclusions")
+    if not isinstance(raw_runtime_exclusions, list):
+        errors.append(
+            f"{threat['id']}: blocking_decision runtime_capability_exclusions "
+            "must be a list"
+        )
+        raw_runtime_exclusions = []
+    actual_runtime_exclusions: set[tuple[str, str, str, str]] = set()
+    for index, record in enumerate(raw_runtime_exclusions):
+        if not isinstance(record, dict):
+            errors.append(
+                f"{threat['id']}: runtime_capability_exclusions[{index}] must "
+                "be an object"
+            )
+            continue
+        values = tuple(
+            str(record.get(field) or "").strip()
+            for field in (
+                "release_gate_id",
+                "capability_id",
+                "tool_id",
+                "effect_class",
+            )
+        )
+        if not all(values):
+            errors.append(
+                f"{threat['id']}: runtime_capability_exclusions[{index}] needs "
+                "release_gate_id, capability_id, tool_id, and effect_class"
+            )
+            continue
+        if values in actual_runtime_exclusions:
+            errors.append(
+                f"{threat['id']}: runtime_capability_exclusions must be unique"
+            )
+        actual_runtime_exclusions.add(values)
+
+    expected_runtime_exclusions = {
+        (
+            str(disposition.release_gate_id),
+            disposition.capability_id,
+            disposition.tool_id,
+            disposition.effect_class,
+        )
+        for exclusion_id in required_exclusion_ids
+        for disposition in release_dispositions_for_gate(exclusion_id)
+    }
+    if actual_runtime_exclusions != expected_runtime_exclusions:
+        errors.append(
+            f"{threat['id']}: blocking_decision runtime_capability_exclusions "
+            "must exactly match the executable beta release policy"
+        )
+
+    registry_specs = {spec.name: spec for spec in list_capability_specs()}
+    for release_gate_id, capability_id, tool_id, effect_class in sorted(
+        actual_runtime_exclusions
+    ):
+        if release_gate_id not in required_exclusion_ids:
+            errors.append(
+                f"{threat['id']}: runtime capability {capability_id} references "
+                f"unmapped release gate {release_gate_id}"
+            )
+        spec = registry_specs.get(capability_id)
+        if spec is None:
+            errors.append(
+                f"{threat['id']}: runtime capability {capability_id} is not in "
+                "the executable registry"
+            )
+            continue
+        if spec.tool_id != tool_id or spec.effect_class != effect_class:
+            errors.append(
+                f"{threat['id']}: runtime capability {capability_id} metadata "
+                "does not match the executable registry"
+            )
+
     mapped_controls = set(_reference_values(threat, "control_ids"))
     if not required_control_ids.issubset(mapped_controls):
         missing = sorted(required_control_ids - mapped_controls)
@@ -346,11 +402,20 @@ def _validate_blocking_decision(
                 f"{control_id}"
             )
             continue
-        if control.get("status") != "planned":
+        control_status = control.get("status")
+        allowed_statuses = {"planned", "implemented"} if unresolved else {"implemented"}
+        if control_status not in allowed_statuses:
             errors.append(
-                f"{threat['id']}: release-gate control {control_id} must be planned"
+                f"{threat['id']}: release-gate control {control_id} must be "
+                + (
+                    "planned or implemented"
+                    if unresolved
+                    else "implemented"
+                )
             )
-        if not gap_ids.intersection(_reference_values(control, "gap_ids")):
+        if control_status == "planned" and not gap_ids.intersection(
+            _reference_values(control, "gap_ids")
+        ):
             errors.append(
                 f"{threat['id']}: release-gate control {control_id} has no mapped "
                 "threat gap"
@@ -360,6 +425,7 @@ def _validate_blocking_decision(
 def _validate_mitigation_closure(
     threat: dict[str, Any],
     indexes: dict[str, dict[str, dict[str, Any]]],
+    schema_version: Any,
     errors: list[str],
 ) -> None:
     closure = threat.get("closure")
@@ -369,6 +435,13 @@ def _validate_mitigation_closure(
     for field in ("approved_by", "closed_at"):
         if not isinstance(closure.get(field), str) or not closure[field].strip():
             errors.append(f"{threat['id']}: closure needs {field}")
+    approved_by = str(closure.get("approved_by") or "").strip()
+    allowed_approvers = SCHEMA_CLOSURE_APPROVER_IDS.get(schema_version, frozenset())
+    if approved_by and approved_by not in allowed_approvers:
+        errors.append(
+            f"{threat['id']}: closure approved_by is not an authorized "
+            f"schema {schema_version} security authority"
+        )
     closed_at = closure.get("closed_at")
     if isinstance(closed_at, str) and closed_at:
         try:
@@ -393,6 +466,23 @@ def _validate_mitigation_closure(
         errors.append(f"{threat['id']}: closure needs implemented_control_ids")
     if not closure_verifications:
         errors.append(f"{threat['id']}: closure needs verification_ids")
+
+    required_closure = SCHEMA_REQUIRED_MITIGATION_CLOSURES.get(
+        schema_version, {}
+    ).get(threat["id"])
+    if required_closure is not None:
+        required_controls = set(required_closure["control_ids"])
+        required_verifications = set(required_closure["verification_ids"])
+        if closure_controls != required_controls:
+            errors.append(
+                f"{threat['id']}: closure controls must exactly match the "
+                f"schema {schema_version} minimum closure controls"
+            )
+        if closure_verifications != required_verifications:
+            errors.append(
+                f"{threat['id']}: closure verifications must exactly match the "
+                f"schema {schema_version} minimum closure verifications"
+            )
 
     mapped_controls = set(_reference_values(threat, "control_ids"))
     mapped_verifications = set(_reference_values(threat, "verification_ids"))
@@ -487,7 +577,12 @@ def _validate_threats(
         if status == "mitigated":
             if gap_ids:
                 errors.append(f"{threat['id']}: mitigated threat must not have gaps")
-            _validate_mitigation_closure(threat, indexes, errors)
+            _validate_mitigation_closure(
+                threat,
+                indexes,
+                schema_version,
+                errors,
+            )
         elif threat.get("closure") is not None:
             errors.append(
                 f"{threat['id']}: only a mitigated threat may declare closure"
@@ -500,8 +595,9 @@ def _validate_threats(
             and threat.get("exposure") == "active"
             and status != "mitigated"
         )
-        if required_exclusion_ids is not None and status != "mitigated":
-            if not is_unresolved_critical_exposure:
+        if required_exclusion_ids is not None:
+            unresolved = status != "mitigated"
+            if unresolved and not is_unresolved_critical_exposure:
                 errors.append(
                     f"{threat['id']}: schema {schema_version} release-gated threat "
                     "must remain critical and active until mitigated"
@@ -511,7 +607,8 @@ def _validate_threats(
                 indexes,
                 gap_ids,
                 required_exclusion_ids,
-                errors,
+                unresolved=unresolved,
+                errors=errors,
             )
         elif is_unresolved_critical_exposure:
             errors.append(
@@ -597,6 +694,11 @@ def _validate_threats(
 
     for section, label in THREAT_COVERAGE_FIELDS.values():
         for identifier in sorted(set(indexes[section]) - coverage[section]):
+            if (
+                section == "implementation_gaps"
+                and indexes[section][identifier].get("status") == "closed"
+            ):
+                continue
             errors.append(f"{identifier}: {label} has no mapped threat")
 
 
@@ -711,19 +813,50 @@ def _validate_statuses(
         _require_text(
             gap, ("description", "owner", "target_phase", "status"), errors
         )
-        if gap.get("status") != "open":
-            errors.append(f"{gap['id']}: schema v1 implementation gap must be open")
+        gap_status = gap.get("status")
+        if gap_status not in GAP_STATUSES:
+            errors.append(
+                f"{gap['id']}: schema v1 implementation gap status must be open "
+                "or closed"
+            )
         for control_id in _reference_values(gap, "control_ids"):
             control = indexes["controls"].get(control_id)
-            if control and gap["id"] not in _reference_values(control, "gap_ids"):
+            if (
+                gap_status == "open"
+                and control
+                and gap["id"] not in _reference_values(control, "gap_ids")
+            ):
                 errors.append(
                     f"{gap['id']}: control {control_id} does not link back to gap"
                 )
+            if gap_status == "closed" and control:
+                if control.get("status") != "implemented":
+                    errors.append(
+                        f"{gap['id']}: closed gap control {control_id} must be "
+                        "implemented"
+                    )
+                if gap["id"] in _reference_values(control, "gap_ids"):
+                    errors.append(
+                        f"{gap['id']}: closed gap remains active on control "
+                        f"{control_id}"
+                    )
         for threat_id in _reference_values(gap, "threat_ids"):
             threat = indexes["threats"].get(threat_id)
-            if threat and gap["id"] not in _reference_values(threat, "gap_ids"):
+            if (
+                gap_status == "open"
+                and threat
+                and gap["id"] not in _reference_values(threat, "gap_ids")
+            ):
                 errors.append(
                     f"{gap['id']}: threat {threat_id} does not link back to gap"
+                )
+            if (
+                gap_status == "closed"
+                and threat
+                and gap["id"] in _reference_values(threat, "gap_ids")
+            ):
+                errors.append(
+                    f"{gap['id']}: closed gap remains active on threat {threat_id}"
                 )
 
 
@@ -761,6 +894,7 @@ def validate_catalog(
 
     _validate_descriptions(records, errors)
     _validate_references(records, indexes, errors)
+    errors.extend(validate_registry_release_policy(list_capability_specs()))
     _validate_threats(records, indexes, safety_catalog, schema_version, errors)
     _validate_statuses(records, indexes, root, errors)
     return sorted(set(errors))

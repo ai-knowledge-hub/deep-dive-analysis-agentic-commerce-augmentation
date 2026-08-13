@@ -30,6 +30,7 @@ from application.services.agent_runtime.registry.non_executable import (
 from application.services.agent_runtime.registry.profile_defaults import (
     normalize_agent_profile_defaults,
 )
+from application.services.agent_runtime.release_policy import beta_release_policy_payload
 
 def registry_contract_payload(
     ownership_by_tool: Mapping[str, Mapping[str, Any]]
@@ -86,6 +87,7 @@ def registry_contract_payload(
         "skill_selection_by_tool": skill_selection_by_tool,
         "recovery_templates": list_recovery_templates(),
         "policy_profiles": list_policy_profiles(),
+        "beta_release_policy": beta_release_policy_payload(),
         "harness_profiles": _normalize_harness_profiles(harness_profiles),
         "agent_profile_defaults": normalize_agent_profile_defaults(agent_profile_defaults),
     }

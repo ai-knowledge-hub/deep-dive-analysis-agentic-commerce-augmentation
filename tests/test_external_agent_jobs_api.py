@@ -590,16 +590,16 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
         headers=_headers(missing_capability_tool_scope),
         json={
             "idempotency_key": "job-capability-tool-scope",
-            "allowed_capabilities": ["publish_copy_revision"],
+            "allowed_capabilities": ["promote_variant_lab"],
         },
     )
     assert no_tool_scope.status_code == 403
-    assert "copy.publish_revision" in no_tool_scope.json()["detail"]["message"]
+    assert "promotion.promote_lab" in no_tool_scope.json()["detail"]["message"]
 
     missing_capability_skill_scope = _token(
         scopes=[
             "external_agent_jobs:write",
-            "tool:copy.publish_revision",
+            "tool:promotion.promote_lab",
             "skill:optimize-product-representation",
         ]
     )
@@ -608,7 +608,7 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
         headers=_headers(missing_capability_skill_scope),
         json={
             "idempotency_key": "job-capability-skill-scope",
-            "allowed_capabilities": ["publish_copy_revision"],
+            "allowed_capabilities": ["promote_variant_lab"],
         },
     )
     assert no_skill_scope.status_code == 403
@@ -617,7 +617,7 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
     authorized = _token(
         scopes=[
             "external_agent_jobs:write",
-            "tool:copy.publish_revision",
+            "tool:promotion.promote_lab",
             "skill:promote-and-publish-approved-copy",
         ]
     )
@@ -626,11 +626,11 @@ def test_external_agent_job_checks_scopes_for_allowed_capabilities(
         headers=_headers(authorized),
         json={
             "idempotency_key": "job-capability-authorized",
-            "allowed_capabilities": ["publish_copy_revision"],
+            "allowed_capabilities": ["promote_variant_lab"],
         },
     )
     assert created.status_code == 200
-    assert created.json()["run"]["allowed_capabilities"] == ["publish_copy_revision"]
+    assert created.json()["run"]["allowed_capabilities"] == ["promote_variant_lab"]
 
 
 def test_external_agent_job_requires_scope_for_requested_workflow_skill(

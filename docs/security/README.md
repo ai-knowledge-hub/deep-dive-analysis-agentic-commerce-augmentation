@@ -20,6 +20,9 @@ make security-traceability-check
 
 The gate pins the exact schema-v1 ID set; resolves local and STPA safety
 references; rejects missing asset, boundary, control, detection, verification,
-or gap coverage; enforces structured beta capability exclusions for exposed
-critical threats; requires executable closure evidence for mitigated threats;
-and executes the exact pytest nodes claimed by implemented verifications.
+or open-gap coverage; enforces structured beta capability exclusions for
+exposed critical threats; pins minimum closure evidence and approval authority;
+cross-checks concrete blocked capability, tool, and effect identifiers against
+the exhaustive executable registry policy; and executes the exact pytest nodes
+claimed by implemented verifications. Runtime admission and pre-effect policy
+both enforce unresolved executable release gates.

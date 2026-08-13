@@ -8,13 +8,17 @@ from scripts.checks import security_traceability_check
 
 
 EXPECTED_POLICY_TEST_REFS = [
+    "tests/modules/test_agent_policy_enforcer.py::test_beta_release_policy_classifies_every_runtime_capability",
     "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_capability_not_in_allow_list",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_beta_blocked_capability_before_execution",
     "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_missing_required_input",
     "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_actions_budget",
     "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_variant_runs_budget",
     "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_cost_budget",
     "tests/modules/test_agent_policy_enforcer.py::test_observe_policy_rejects_side_effecting_tool",
     "tests/modules/test_agent_policy_enforcer.py::test_safe_auto_policy_rejects_external_side_effect_execution",
+    "tests/modules/test_agent_runtime_service.py::test_step_once_rechecks_beta_release_gate_before_capability_effect",
+    "tests/test_agent_runs_api.py::test_create_agent_run_rejects_beta_blocked_production_capability",
     "tests/test_agent_runs_api.py::test_create_agent_run_enforces_harness_effect_class_boundaries",
     "tests/test_agent_runs_api.py::test_harness_memory_policy_blocks_learning_mutation_plans",
 ]
@@ -23,7 +27,10 @@ EXPECTED_CRITICAL_THREAT_EXCLUSIONS = {
         "automatic_global_harness_promotion",
         "unreviewed_memory_promotion",
     },
-    "THR-02": {"write_capable_dynamic_child_delegation"},
+    "THR-02": {
+        "autonomous_production_publishing",
+        "write_capable_dynamic_child_delegation",
+    },
     "THR-04": {"public_durable_workflow_and_peer_messages"},
     "THR-05": {"parallel_multi_tenant_worker_execution"},
     "THR-10": {"expanded_connectors_without_secret_egress_ssrf_controls"},
@@ -57,6 +64,50 @@ def _mark_threat_mitigated(catalog: dict, threat_id: str) -> dict:
     threat["status"] = "mitigated"
     threat["gap_ids"] = []
     return threat
+
+
+def _implement_threat_contract(catalog: dict, threat: dict) -> None:
+    executable_test_ref = (
+        "tests/modules/test_agent_policy_enforcer.py::"
+        "test_policy_rejects_capability_not_in_allow_list"
+    )
+    controls = {item["id"]: item for item in catalog["controls"]}
+    verifications = {item["id"]: item for item in catalog["verification_tests"]}
+    closed_gap_ids: set[str] = set()
+    for control_id in threat["control_ids"]:
+        control = controls[control_id]
+        closed_gap_ids.update(control["gap_ids"])
+        control["status"] = "implemented"
+        control["gap_ids"] = []
+        for verification_id in control["verification_ids"]:
+            verification = verifications[verification_id]
+            verification["status"] = "implemented"
+            verification["test_refs"] = [executable_test_ref]
+    for gap in catalog["implementation_gaps"]:
+        if gap["id"] not in closed_gap_ids:
+            continue
+        gap["status"] = "closed"
+        for mapped_threat in catalog["threats"]:
+            mapped_threat["gap_ids"] = [
+                gap_id
+                for gap_id in mapped_threat["gap_ids"]
+                if gap_id != gap["id"]
+            ]
+    for mapped_threat in catalog["threats"]:
+        if mapped_threat["gap_ids"] or mapped_threat["id"] == threat["id"]:
+            continue
+        if not all(
+            controls[control_id]["status"] == "implemented"
+            for control_id in mapped_threat["control_ids"]
+        ):
+            continue
+        mapped_threat["status"] = "mitigated"
+        mapped_threat["closure"] = {
+            "approved_by": "security-review-board",
+            "closed_at": "2026-08-13",
+            "implemented_control_ids": list(mapped_threat["control_ids"]),
+            "verification_ids": list(mapped_threat["verification_ids"]),
+        }
 
 
 def test_canonical_security_catalog_is_fully_traceable() -> None:
@@ -226,13 +277,12 @@ def test_unresolved_threat_requires_an_owned_gap() -> None:
 def test_mitigated_threat_accepts_executable_closure_without_gaps() -> None:
     catalog = deepcopy(_catalog())
     threat = _mark_threat_mitigated(catalog, "THR-04")
-    threat["control_ids"] = ["SEC-03", "SEC-04", "SEC-05"]
-    threat["verification_ids"] = ["SVT-03", "SVT-04", "SVT-05"]
+    _implement_threat_contract(catalog, threat)
     threat["closure"] = {
         "approved_by": "security-review-board",
         "closed_at": "2026-08-13",
-        "implemented_control_ids": ["SEC-03", "SEC-04", "SEC-05"],
-        "verification_ids": ["SVT-03", "SVT-04", "SVT-05"],
+        "implemented_control_ids": list(threat["control_ids"]),
+        "verification_ids": list(threat["verification_ids"]),
     }
 
     assert _validate(catalog) == []
@@ -263,6 +313,49 @@ def test_mitigation_closure_cannot_certify_only_a_subset_of_mapped_controls() ->
     assert (
         "THR-04: closure verifications must exactly match mapped verifications"
         in errors
+    )
+
+
+def test_critical_threat_cannot_self_certify_a_narrowed_mitigation() -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, "THR-01")
+    threat.pop("blocking_decision")
+    threat["control_ids"] = ["SEC-02"]
+    threat["verification_ids"] = ["SVT-02"]
+    threat["closure"] = {
+        "approved_by": "arbitrary-reviewer",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": ["SEC-02"],
+        "verification_ids": ["SVT-02"],
+    }
+
+    errors = _validate(catalog)
+
+    assert "THR-01: blocking_decision must be an object" in errors
+    assert (
+        "THR-01: closure controls must exactly match the schema 1.0 minimum "
+        "closure controls" in errors
+    )
+    assert (
+        "THR-01: closure verifications must exactly match the schema 1.0 "
+        "minimum closure verifications" in errors
+    )
+    assert (
+        "THR-01: closure approved_by is not an authorized schema 1.0 security "
+        "authority" in errors
+    )
+
+
+def test_runtime_capability_exclusion_must_match_executable_release_policy() -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-02")
+    threat["blocking_decision"]["runtime_capability_exclusions"] = []
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-02: blocking_decision runtime_capability_exclusions must exactly "
+        "match the executable beta release policy" in errors
     )
 
 

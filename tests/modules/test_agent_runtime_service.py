@@ -228,6 +228,41 @@ def test_step_once_rejects_safe_auto_external_side_effect(tmp_path, monkeypatch)
     assert failed_action["status"] == "failed"
 
 
+def test_step_once_rechecks_beta_release_gate_before_capability_effect(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "agent-runtime-beta-release-gate.db"
+    set_database_path(db_path)
+    init_db()
+    deps = default_deps()
+    run = _create_base_run(
+        deps=deps,
+        run_mode="auto_execute_safe",
+        allowed_capabilities=["promote_variant_prod"],
+    )
+    action = _add_approved_action(
+        deps=deps,
+        run_id=run["id"],
+        capability_name="promote_variant_prod",
+    )
+
+    def _unexpected_execute_capability(**kwargs):
+        raise AssertionError("release gate should block before capability execution")
+
+    monkeypatch.setattr(
+        "application.services.agent_runtime.runtime.execute_capability",
+        _unexpected_execute_capability,
+    )
+
+    runtime = AgentRuntimeService(deps=deps)
+    with pytest.raises(AgentRuntimeError, match="autonomous_production_publishing"):
+        runtime.step_once(run_id=run["id"], user_id="user-a")
+
+    failed_action = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert failed_action is not None
+    assert failed_action["status"] == "failed"
+
+
 def test_step_once_pauses_when_harness_policy_block_is_met(tmp_path, monkeypatch):
     db_path = tmp_path / "agent-runtime-stop-policy-block.db"
     set_database_path(db_path)
