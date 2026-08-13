@@ -72,6 +72,10 @@ Read all applicable sections of
 [review-dimensions.md](references/review-dimensions.md). Select dimensions from
 the discovered surface rather than mechanically applying every question.
 
+Use the companion `agentic-commerce-test-design` skill when a finding depends
+on missing executable evidence, when reviewing added or changed tests, and when
+constructing coordinated mutations, schedule probes, or fault injections.
+
 For each stateful or external operation, place authorization, approval, budget
 reservation, lease acquisition, validation, effect, commit, acknowledgement,
 projection, and cleanup on a timeline. Interrupt or interleave immediately

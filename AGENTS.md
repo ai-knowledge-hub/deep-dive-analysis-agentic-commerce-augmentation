@@ -25,6 +25,13 @@ contracts in the canonical modernisation plan.
   harness evolution, security-sensitive changes, concurrency, migrations, and
   cross-boundary contracts. It reconstructs system reach, invariants, failure
   interleavings, and risks beyond the ticket and edited files.
+- Use `.agents/skills/agentic-commerce-test-design/SKILL.md` when designing,
+  implementing, or reviewing tests for architecture-sensitive changes,
+  security or safety controls, workflow lifecycle and persistence, authority,
+  approval, delegation, effects, tenancy, agents and tools, belief, memory,
+  harness evolution, concurrency, migrations, recovery, and cross-boundary
+  contracts. It derives invariant-driven tests from the platform's canonical
+  contracts and challenges suites with coordinated semantic mutations.
 
 ## Verification
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agentic Commerce Test Design"
+  short_description: "Design adversarial tests for platform invariants"
+  default_prompt: "Use $agentic-commerce-test-design to derive platform invariants and build an adversarial test portfolio for this change."
