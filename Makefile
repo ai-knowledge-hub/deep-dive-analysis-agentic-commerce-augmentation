@@ -107,6 +107,14 @@ safety-traceability-check:
 		$(PYTHON) -m scripts.checks.safety_traceability_check; \
 	fi
 
+.PHONY: security-traceability-check
+security-traceability-check:
+	@if [ -x ./.venv/bin/python ]; then \
+		./.venv/bin/python -m scripts.checks.security_traceability_check; \
+	else \
+		$(PYTHON) -m scripts.checks.security_traceability_check; \
+	fi
+
 .PHONY: format
 format:
 	@if [ -n "$(RUFF)" ] && [ -x "$(RUFF)" ]; then \
