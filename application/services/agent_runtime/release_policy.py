@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Iterable, Mapping, Protocol
 
+from domain.security.contract_v1 import REQUIRED_BLOCKED_CAPABILITIES
+
 
 BETA_RELEASE_POLICY_ID = "agent-runtime-beta-v1"
 
@@ -101,17 +103,14 @@ _BETA_CAPABILITY_DISPOSITIONS = {
             "recommend",
         ),
         _allowed("promote_variant_lab", "promotion.promote_lab", "write_high_risk"),
-        _blocked(
-            "promote_variant_prod",
-            "promotion.promote_prod",
-            "write_high_risk",
-            "autonomous_production_publishing",
-        ),
-        _blocked(
-            "publish_copy_revision",
-            "copy.publish_revision",
-            "write_high_risk",
-            "autonomous_production_publishing",
+        *(
+            _blocked(
+                requirement.capability_id,
+                requirement.tool_id,
+                requirement.effect_class,
+                requirement.release_gate_id,
+            )
+            for requirement in REQUIRED_BLOCKED_CAPABILITIES.values()
         ),
     )
 }
@@ -172,6 +171,25 @@ def validate_registry_release_policy(
                 f"{disposition.effect_class!r} does not match registry "
                 f"{spec.effect_class!r}"
             )
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        disposition = _BETA_CAPABILITY_DISPOSITIONS.get(capability_id)
+        expected = (
+            requirement.tool_id,
+            requirement.effect_class,
+            "blocked",
+            requirement.release_gate_id,
+        )
+        actual_disposition = (
+            disposition.tool_id,
+            disposition.effect_class,
+            disposition.status,
+            disposition.release_gate_id,
+        ) if disposition is not None else None
+        if actual_disposition != expected:
+            errors.append(
+                f"{capability_id}: beta release disposition must exactly match "
+                "the immutable v1 blocked-capability contract"
+            )
     return errors
 
 
@@ -182,6 +200,22 @@ def assert_beta_capability_available(
     effect_class: str | None = None,
 ) -> None:
     normalized = str(capability_id or "").strip()
+    required_block = REQUIRED_BLOCKED_CAPABILITIES.get(normalized)
+    if required_block is not None:
+        if (
+            tool_id is not None
+            and tool_id != required_block.tool_id
+            or effect_class is not None
+            and effect_class != required_block.effect_class
+        ):
+            raise BetaReleaseGateError(
+                f"Capability '{normalized}' registry metadata drifted from "
+                f"{BETA_RELEASE_POLICY_ID}"
+            )
+        raise BetaReleaseGateError(
+            f"Capability '{normalized}' is blocked by beta release gate "
+            f"'{required_block.release_gate_id}'"
+        )
     disposition = _BETA_CAPABILITY_DISPOSITIONS.get(normalized)
     if disposition is None:
         raise BetaReleaseGateError(

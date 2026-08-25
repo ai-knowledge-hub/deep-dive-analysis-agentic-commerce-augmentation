@@ -8,12 +8,48 @@ from application.services.agent_runtime.registry import (
     list_capability_specs,
 )
 from application.services.agent_runtime.release_policy import (
+    BetaReleaseGateError,
+    CapabilityReleaseDisposition,
+    assert_beta_capability_available,
     validate_registry_release_policy,
 )
+from application.services.agent_runtime import release_policy
+from domain.security.contract_v1 import REQUIRED_BLOCKED_CAPABILITIES
 
 
 def test_beta_release_policy_classifies_every_runtime_capability():
     assert validate_registry_release_policy(list_capability_specs()) == []
+
+
+def test_beta_release_policy_rejects_coordinated_disposition_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        monkeypatch.setitem(
+            release_policy._BETA_CAPABILITY_DISPOSITIONS,
+            capability_id,
+            CapabilityReleaseDisposition(
+                capability_id=capability_id,
+                tool_id=requirement.tool_id,
+                effect_class=requirement.effect_class,
+                status="allowed",
+                release_gate_id=None,
+            ),
+        )
+
+    errors = validate_registry_release_policy(list_capability_specs())
+
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        assert (
+            f"{capability_id}: beta release disposition must exactly match the "
+            "immutable v1 blocked-capability contract" in errors
+        )
+        with pytest.raises(BetaReleaseGateError, match=requirement.release_gate_id):
+            assert_beta_capability_available(
+                capability_id,
+                tool_id=requirement.tool_id,
+                effect_class=requirement.effect_class,
+            )
 
 
 def test_policy_rejects_capability_not_in_allow_list():

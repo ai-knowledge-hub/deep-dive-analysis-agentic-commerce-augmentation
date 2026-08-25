@@ -12,16 +12,18 @@ from pathlib import Path
 from typing import Any
 
 from application.services.agent_runtime.registry import list_capability_specs
-from application.services.agent_runtime.release_policy import (
-    release_dispositions_for_gate,
-    validate_registry_release_policy,
-)
-from scripts.checks.security_contract_v1 import (
+from application.services.agent_runtime.release_policy import validate_registry_release_policy
+from domain.security.contract_v1 import (
+    AUTHORIZED_CLOSURE_AUTHORITY_IDS,
     BLOCKING_DISPOSITION,
     CAPABILITY_RELEASE_GATES,
-    SCHEMA_CLOSURE_APPROVER_IDS,
-    SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS,
-    SCHEMA_REQUIRED_MITIGATION_CLOSURES,
+    IMPLEMENTED_CONTROL_IDS,
+    IMPLEMENTED_VERIFICATION_TEST_REFS,
+    REQUIRED_BLOCKED_CAPABILITIES,
+    REQUIRED_CAPABILITY_EXCLUSIONS_BY_THREAT,
+    SECURITY_CONTRACT_VERSION,
+    THREAT_CLOSURE_REQUIREMENTS,
+    required_blocked_capabilities_for_gate,
 )
 
 
@@ -167,6 +169,90 @@ def _validate_required_scope(
             errors.append(
                 f"{section}: schema {schema_version} has unexpected ids: "
                 f"{', '.join(unexpected)}"
+            )
+
+
+def _validate_security_authority(
+    schema_version: Any,
+    indexes: dict[str, dict[str, dict[str, Any]]],
+    errors: list[str],
+) -> None:
+    if schema_version != SECURITY_CONTRACT_VERSION:
+        return
+    required_threat_ids = SCHEMA_REQUIRED_IDS[schema_version]["threats"]
+    closure_threat_ids = frozenset(THREAT_CLOSURE_REQUIREMENTS)
+    if closure_threat_ids != required_threat_ids:
+        missing = sorted(required_threat_ids - closure_threat_ids)
+        unexpected = sorted(closure_threat_ids - required_threat_ids)
+        errors.append(
+            f"security contract {schema_version}: threat closure authority must "
+            "cover every schema threat exactly"
+            + (f"; missing: {', '.join(missing)}" if missing else "")
+            + (f"; unexpected: {', '.join(unexpected)}" if unexpected else "")
+        )
+
+    for threat_id, requirement in THREAT_CLOSURE_REQUIREMENTS.items():
+        threat = indexes["threats"].get(threat_id)
+        if threat is None:
+            continue
+        if set(_reference_values(threat, "control_ids")) != set(
+            requirement.control_ids
+        ):
+            errors.append(
+                f"{threat_id}: control_ids must exactly match the immutable "
+                f"schema {schema_version} threat contract"
+            )
+        if set(_reference_values(threat, "verification_ids")) != set(
+            requirement.verification_ids
+        ):
+            errors.append(
+                f"{threat_id}: verification_ids must exactly match the immutable "
+                f"schema {schema_version} threat contract"
+            )
+
+    for control_id, control in indexes["controls"].items():
+        expected_status = (
+            "implemented" if control_id in IMPLEMENTED_CONTROL_IDS else "planned"
+        )
+        if control.get("status") != expected_status:
+            errors.append(
+                f"{control_id}: status must remain {expected_status} in immutable "
+                f"schema {schema_version}"
+            )
+
+    for verification_id, verification in indexes["verification_tests"].items():
+        expected_test_refs = IMPLEMENTED_VERIFICATION_TEST_REFS.get(verification_id)
+        expected_status = "implemented" if expected_test_refs is not None else "planned"
+        if verification.get("status") != expected_status:
+            errors.append(
+                f"{verification_id}: status must remain {expected_status} in "
+                f"immutable schema {schema_version}"
+            )
+        if expected_test_refs is not None and tuple(
+            _reference_values(verification, "test_refs")
+        ) != expected_test_refs:
+            errors.append(
+                f"{verification_id}: test_refs must exactly match the immutable "
+                f"schema {schema_version} verification contract"
+            )
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        gate_control_ids = CAPABILITY_RELEASE_GATES.get(requirement.release_gate_id)
+        if gate_control_ids != requirement.required_control_ids:
+            errors.append(
+                f"{capability_id}: immutable blocked-capability controls do not "
+                f"match release gate {requirement.release_gate_id}"
+            )
+        linked_verification_ids: set[str] = set()
+        for control_id in requirement.required_control_ids:
+            control = indexes["controls"].get(control_id)
+            if control is not None:
+                linked_verification_ids.update(
+                    _reference_values(control, "verification_ids")
+                )
+        if linked_verification_ids != set(requirement.required_verification_ids):
+            errors.append(
+                f"{capability_id}: immutable release requirements do not match "
+                "the catalog control verification links"
             )
 
 
@@ -351,18 +437,18 @@ def _validate_blocking_decision(
 
     expected_runtime_exclusions = {
         (
-            str(disposition.release_gate_id),
-            disposition.capability_id,
-            disposition.tool_id,
-            disposition.effect_class,
+            requirement.release_gate_id,
+            requirement.capability_id,
+            requirement.tool_id,
+            requirement.effect_class,
         )
         for exclusion_id in required_exclusion_ids
-        for disposition in release_dispositions_for_gate(exclusion_id)
+        for requirement in required_blocked_capabilities_for_gate(exclusion_id)
     }
     if actual_runtime_exclusions != expected_runtime_exclusions:
         errors.append(
             f"{threat['id']}: blocking_decision runtime_capability_exclusions "
-            "must exactly match the executable beta release policy"
+            "must exactly match the immutable schema-v1 blocked-capability contract"
         )
 
     registry_specs = {spec.name: spec for spec in list_capability_specs()}
@@ -436,7 +522,11 @@ def _validate_mitigation_closure(
         if not isinstance(closure.get(field), str) or not closure[field].strip():
             errors.append(f"{threat['id']}: closure needs {field}")
     approved_by = str(closure.get("approved_by") or "").strip()
-    allowed_approvers = SCHEMA_CLOSURE_APPROVER_IDS.get(schema_version, frozenset())
+    allowed_approvers = (
+        AUTHORIZED_CLOSURE_AUTHORITY_IDS
+        if schema_version == SECURITY_CONTRACT_VERSION
+        else frozenset()
+    )
     if approved_by and approved_by not in allowed_approvers:
         errors.append(
             f"{threat['id']}: closure approved_by is not an authorized "
@@ -467,12 +557,19 @@ def _validate_mitigation_closure(
     if not closure_verifications:
         errors.append(f"{threat['id']}: closure needs verification_ids")
 
-    required_closure = SCHEMA_REQUIRED_MITIGATION_CLOSURES.get(
-        schema_version, {}
-    ).get(threat["id"])
-    if required_closure is not None:
-        required_controls = set(required_closure["control_ids"])
-        required_verifications = set(required_closure["verification_ids"])
+    required_closure = (
+        THREAT_CLOSURE_REQUIREMENTS.get(threat["id"])
+        if schema_version == SECURITY_CONTRACT_VERSION
+        else None
+    )
+    if required_closure is None:
+        errors.append(
+            f"{threat['id']}: schema {schema_version} has no immutable threat "
+            "closure contract"
+        )
+    else:
+        required_controls = set(required_closure.control_ids)
+        required_verifications = set(required_closure.verification_ids)
         if closure_controls != required_controls:
             errors.append(
                 f"{threat['id']}: closure controls must exactly match the "
@@ -526,6 +623,14 @@ def _validate_mitigation_closure(
                 f"{threat['id']}: closure verification {verification_id} is not "
                 "linked by a closure control"
             )
+
+
+def _required_capability_exclusions(
+    schema_version: Any, threat_id: str
+) -> frozenset[str] | None:
+    if schema_version != SECURITY_CONTRACT_VERSION:
+        return None
+    return REQUIRED_CAPABILITY_EXCLUSIONS_BY_THREAT.get(threat_id)
 
 
 def _validate_threats(
@@ -587,9 +692,9 @@ def _validate_threats(
             errors.append(
                 f"{threat['id']}: only a mitigated threat may declare closure"
             )
-        required_exclusion_ids = SCHEMA_REQUIRED_CAPABILITY_EXCLUSIONS.get(
-            schema_version, {}
-        ).get(threat["id"])
+        required_exclusion_ids = _required_capability_exclusions(
+            schema_version, threat["id"]
+        )
         is_unresolved_critical_exposure = (
             threat.get("severity") == "critical"
             and threat.get("exposure") == "active"
@@ -894,6 +999,7 @@ def validate_catalog(
 
     _validate_descriptions(records, errors)
     _validate_references(records, indexes, errors)
+    _validate_security_authority(schema_version, indexes, errors)
     errors.extend(validate_registry_release_policy(list_capability_specs()))
     _validate_threats(records, indexes, safety_catalog, schema_version, errors)
     _validate_statuses(records, indexes, root, errors)

@@ -1,7 +1,7 @@
 # Agent-Workflow Security Threat Model v1
 
 Status: accepted Phase 1 baseline
-Last updated: 2026-08-13
+Last updated: 2026-08-25
 Normative catalog: `security-controls-v1.yaml`
 
 ## Decision
@@ -245,22 +245,29 @@ boundary by deleting an exclusion and its derived controls together. Free text
 such as “ship anyway” cannot satisfy the gate.
 
 `mitigated` is reserved for threats with no open gap mapping and structured
-closure evidence. For release-gated critical threats, schema v1 independently
-pins the minimum control and verification sets, accepts only the named
-`security-review-board` authority, and retains the original blocking decision.
-Changing the mutable threat mappings, closure evidence, or status therefore
-cannot narrow the release boundary. Closed gap records remain as historical
-evidence while their active threat and control links are removed. The gate
-executes the tests behind every implemented verification ID.
+closure evidence. The immutable domain contract independently pins the minimum
+control and verification sets for all 17 schema-v1 threats and accepts only the
+named `security-review-board` authority. Release-gated threats also retain their
+original blocking decision. Changing mutable threat mappings, closure evidence,
+or status therefore cannot narrow the security boundary. Closed gap records
+remain as historical evidence while their active threat and control links are
+removed. The gate executes the tests behind every implemented verification ID.
 
-The executable registry is governed by `agent-runtime-beta-v1`. Every runtime
-capability has an explicit disposition and pinned tool and effect-class
-metadata. `promote_variant_prod` and `publish_copy_revision` map to the
-`autonomous_production_publishing` release gate and are rejected both when a
-run is admitted and immediately before an effect can execute. The security
-catalog repeats those concrete capability, tool, and effect identifiers and
-the traceability check rejects drift in either direction. Adding a registry
-capability without an explicit beta disposition also fails the gate.
+`domain/security/contract_v1.py` is the sole schema-v1 authority. The executable
+registry policy and security catalog are projections of it, not reciprocal
+sources of truth. The contract pins `promote_variant_prod` and
+`publish_copy_revision`, their tool and effect-class identities, the
+`autonomous_production_publishing` gate, and SEC-06/SVT-06 plus SEC-16/SVT-16 as
+release prerequisites. Runtime rejects those capabilities directly from the
+domain contract when a run is admitted and immediately before an effect can
+execute. Editing runtime dispositions and catalog exclusions together therefore
+cannot release them. Adding an unclassified registry capability also fails.
+
+Schema v1 does not contain an in-place release transition. Releasing a pinned
+capability requires its prerequisite controls and executable verifications to
+be implemented, an explicit security approval, and a new versioned domain
+contract and catalog migration. This keeps a projection edit from masquerading
+as a release decision.
 
 The initial implemented controls cover authenticated scoped principals,
 host-side capability and effect policy, external-job idempotency, single-use
@@ -297,10 +304,10 @@ make security-traceability-check
 The command validates exact pinned v1 scope, global ID uniqueness, all local and
 STPA references, complete threat coverage of assets, trust boundaries, controls,
 detections, verifications, and open gaps, hazard-to-constraint coverage,
-reciprocal gap ownership for every planned threat control, independently pinned
-critical-threat release and closure restrictions, executable-registry release
-policy alignment, evidence-backed mitigation closure, planned ownership, and
-executable implemented verifications.
+reciprocal gap ownership for every planned threat control, immutable closure
+requirements for every threat, independently pinned critical-threat release
+restrictions, executable-registry release-policy alignment, evidence-backed
+mitigation closure, planned ownership, and executable implemented verifications.
 
 Schema changes require a new version and an explicit migration decision. IDs
 cannot be silently added to or deleted from schema v1 to make the gate pass.
