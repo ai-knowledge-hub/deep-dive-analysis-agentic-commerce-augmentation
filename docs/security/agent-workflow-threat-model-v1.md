@@ -1,7 +1,7 @@
 # Agent-Workflow Security Threat Model v1
 
-Status: accepted Phase 1 baseline  
-Last updated: 2026-08-11  
+Status: accepted Phase 1 baseline
+Last updated: 2026-08-25
 Normative catalog: `security-controls-v1.yaml`
 
 ## Decision
@@ -237,8 +237,37 @@ test cannot certify a control.
 
 `planned` means a named owner, target phase, verification contract, and GAP
 record exist. `blocked` means the capability must not be exposed. A critical
-active threat requires a `blocking_decision` that states the safe beta boundary;
-the validator rejects the catalog without it.
+active unresolved threat requires a structured `blocking_decision`. Its
+capability-exclusion IDs are pinned per critical threat by the schema-v1
+contract, then resolve through a separate release-gate map to the exact planned
+controls and owned gaps required before exposure. A threat cannot weaken its
+boundary by deleting an exclusion and its derived controls together. Free text
+such as “ship anyway” cannot satisfy the gate.
+
+`mitigated` is reserved for threats with no open gap mapping and structured
+closure evidence. The immutable domain contract independently pins the minimum
+control and verification sets for all 17 schema-v1 threats and accepts only the
+named `security-review-board` authority. Release-gated threats also retain their
+original blocking decision. Changing mutable threat mappings, closure evidence,
+or status therefore cannot narrow the security boundary. Closed gap records
+remain as historical evidence while their active threat and control links are
+removed. The gate executes the tests behind every implemented verification ID.
+
+`domain/security/contract_v1.py` is the sole schema-v1 authority. The executable
+registry policy and security catalog are projections of it, not reciprocal
+sources of truth. The contract pins `promote_variant_prod` and
+`publish_copy_revision`, their tool and effect-class identities, the
+`autonomous_production_publishing` gate, and SEC-06/SVT-06 plus SEC-16/SVT-16 as
+release prerequisites. Runtime rejects those capabilities directly from the
+domain contract when a run is admitted and immediately before an effect can
+execute. Editing runtime dispositions and catalog exclusions together therefore
+cannot release them. Adding an unclassified registry capability also fails.
+
+Schema v1 does not contain an in-place release transition. Releasing a pinned
+capability requires its prerequisite controls and executable verifications to
+be implemented, an explicit security approval, and a new versioned domain
+contract and catalog migration. This keeps a projection edit from masquerading
+as a release decision.
 
 The initial implemented controls cover authenticated scoped principals,
 host-side capability and effect policy, external-job idempotency, single-use
@@ -272,10 +301,13 @@ Run:
 make security-traceability-check
 ```
 
-The command validates pinned v1 scope, global ID uniqueness, all local and STPA
-references, trust-boundary coverage, hazard-to-constraint coverage, control and
-verification traceability, reciprocal gap ownership, critical-threat blocking
-decisions, planned ownership, and executable implemented verifications.
+The command validates exact pinned v1 scope, global ID uniqueness, all local and
+STPA references, complete threat coverage of assets, trust boundaries, controls,
+detections, verifications, and open gaps, hazard-to-constraint coverage,
+reciprocal gap ownership for every planned threat control, immutable closure
+requirements for every threat, independently pinned critical-threat release
+restrictions, executable-registry release-policy alignment, evidence-backed
+mitigation closure, planned ownership, and executable implemented verifications.
 
 Schema changes require a new version and an explicit migration decision. IDs
-cannot be silently deleted from schema v1 to make the gate pass.
+cannot be silently added to or deleted from schema v1 to make the gate pass.

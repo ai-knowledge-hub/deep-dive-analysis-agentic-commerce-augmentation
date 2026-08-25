@@ -2,7 +2,136 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
+from application.services.agent_runtime import release_policy
+from domain.security.contract_v1 import (
+    IMPLEMENTED_CONTROL_IDS,
+    IMPLEMENTED_VERIFICATION_TEST_REFS,
+    REQUIRED_BLOCKED_CAPABILITIES,
+    REQUIRED_CAPABILITY_EXCLUSIONS_BY_THREAT,
+    THREAT_CLOSURE_REQUIREMENTS,
+)
 from scripts.checks import security_traceability_check
+
+
+EXPECTED_POLICY_TEST_REFS = [
+    "tests/modules/test_agent_policy_enforcer.py::test_beta_release_policy_classifies_every_runtime_capability",
+    "tests/modules/test_agent_policy_enforcer.py::test_beta_release_policy_rejects_coordinated_disposition_downgrade",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_capability_not_in_allow_list",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_beta_blocked_capability_before_execution",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_rejects_missing_required_input",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_actions_budget",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_variant_runs_budget",
+    "tests/modules/test_agent_policy_enforcer.py::test_policy_enforces_max_cost_budget",
+    "tests/modules/test_agent_policy_enforcer.py::test_observe_policy_rejects_side_effecting_tool",
+    "tests/modules/test_agent_policy_enforcer.py::test_safe_auto_policy_rejects_external_side_effect_execution",
+    "tests/modules/test_agent_runtime_service.py::test_step_once_rechecks_beta_release_gate_before_capability_effect",
+    "tests/test_agent_runs_api.py::test_create_agent_run_rejects_beta_blocked_production_capability",
+    "tests/test_agent_runs_api.py::test_create_agent_run_enforces_harness_effect_class_boundaries",
+    "tests/test_agent_runs_api.py::test_harness_memory_policy_blocks_learning_mutation_plans",
+]
+EXPECTED_CRITICAL_THREAT_EXCLUSIONS = {
+    "THR-01": {
+        "automatic_global_harness_promotion",
+        "unreviewed_memory_promotion",
+    },
+    "THR-02": {
+        "autonomous_production_publishing",
+        "write_capable_dynamic_child_delegation",
+    },
+    "THR-04": {"public_durable_workflow_and_peer_messages"},
+    "THR-05": {"parallel_multi_tenant_worker_execution"},
+    "THR-10": {"expanded_connectors_without_secret_egress_ssrf_controls"},
+    "THR-16": {"expanded_production_telemetry_and_parallel_context_logging"},
+}
+EXPECTED_THREAT_IDS = {f"THR-{number:02d}" for number in range(1, 18)}
+EXPECTED_THREAT_CLOSURES = {
+    "THR-01": (
+        {"SEC-02", "SEC-09", "SEC-10", "SEC-11", "SEC-12"},
+        {"SVT-02", "SVT-09", "SVT-10", "SVT-11", "SVT-12"},
+    ),
+    "THR-02": (
+        {"SEC-01", "SEC-02", "SEC-06", "SEC-09", "SEC-16"},
+        {"SVT-01", "SVT-02", "SVT-06", "SVT-09", "SVT-16"},
+    ),
+    "THR-03": (
+        {"SEC-02", "SEC-06", "SEC-07", "SEC-18"},
+        {"SVT-02", "SVT-06", "SVT-07", "SVT-18"},
+    ),
+    "THR-04": (
+        {"SEC-03", "SEC-04", "SEC-05", "SEC-07", "SEC-08", "SEC-18", "SEC-20"},
+        {"SVT-03", "SVT-04", "SVT-05", "SVT-07", "SVT-08", "SVT-18", "SVT-20"},
+    ),
+    "THR-05": (
+        {"SEC-01", "SEC-03", "SEC-09", "SEC-13", "SEC-16", "SEC-19", "SEC-20"},
+        {"SVT-01", "SVT-03", "SVT-09", "SVT-13", "SVT-16", "SVT-19", "SVT-20"},
+    ),
+    "THR-06": (
+        {"SEC-07", "SEC-08", "SEC-16", "SEC-17", "SEC-20"},
+        {"SVT-07", "SVT-08", "SVT-16", "SVT-17", "SVT-20"},
+    ),
+    "THR-07": (
+        {"SEC-09", "SEC-10", "SEC-20"},
+        {"SVT-09", "SVT-10", "SVT-20"},
+    ),
+    "THR-08": (
+        {"SEC-10", "SEC-11", "SEC-12"},
+        {"SVT-10", "SVT-11", "SVT-12"},
+    ),
+    "THR-09": (
+        {"SEC-12", "SEC-15", "SEC-18"},
+        {"SVT-12", "SVT-15", "SVT-18"},
+    ),
+    "THR-10": (
+        {"SEC-01", "SEC-09", "SEC-13", "SEC-14", "SEC-19"},
+        {"SVT-01", "SVT-09", "SVT-13", "SVT-14", "SVT-19"},
+    ),
+    "THR-11": (
+        {"SEC-13", "SEC-14", "SEC-16", "SEC-19"},
+        {"SVT-13", "SVT-14", "SVT-16", "SVT-19"},
+    ),
+    "THR-12": (
+        {"SEC-12", "SEC-15"},
+        {"SVT-12", "SVT-15"},
+    ),
+    "THR-13": (
+        {"SEC-02", "SEC-08", "SEC-16", "SEC-17", "SEC-19", "SEC-20"},
+        {"SVT-02", "SVT-08", "SVT-16", "SVT-17", "SVT-19", "SVT-20"},
+    ),
+    "THR-14": (
+        {"SEC-06", "SEC-07", "SEC-08", "SEC-17"},
+        {"SVT-06", "SVT-07", "SVT-08", "SVT-17"},
+    ),
+    "THR-15": (
+        {"SEC-03", "SEC-04", "SEC-05", "SEC-07", "SEC-18"},
+        {"SVT-03", "SVT-04", "SVT-05", "SVT-07", "SVT-18"},
+    ),
+    "THR-16": (
+        {"SEC-09", "SEC-13", "SEC-18", "SEC-19", "SEC-20"},
+        {"SVT-09", "SVT-13", "SVT-18", "SVT-19", "SVT-20"},
+    ),
+    "THR-17": (
+        {"SEC-14", "SEC-16", "SEC-17", "SEC-19"},
+        {"SVT-14", "SVT-16", "SVT-17", "SVT-19"},
+    ),
+}
+EXPECTED_BLOCKED_CAPABILITIES = {
+    "promote_variant_prod": (
+        "promotion.promote_prod",
+        "write_high_risk",
+        "autonomous_production_publishing",
+        frozenset({"SEC-06", "SEC-16"}),
+        frozenset({"SVT-06", "SVT-16"}),
+    ),
+    "publish_copy_revision": (
+        "copy.publish_revision",
+        "write_high_risk",
+        "autonomous_production_publishing",
+        frozenset({"SEC-06", "SEC-16"}),
+        frozenset({"SVT-06", "SVT-16"}),
+    ),
+}
 
 
 def _catalog() -> dict:
@@ -21,6 +150,16 @@ def _validate(catalog: dict, *, root=None) -> list[str]:
         _safety_catalog(),
         root=root,
     )
+
+
+def _mark_threat_mitigated(catalog: dict, threat_id: str) -> dict:
+    threat = next(threat for threat in catalog["threats"] if threat["id"] == threat_id)
+    for gap in catalog["implementation_gaps"]:
+        if threat_id in gap["threat_ids"]:
+            gap["threat_ids"].remove(threat_id)
+    threat["status"] = "mitigated"
+    threat["gap_ids"] = []
+    return threat
 
 
 def test_canonical_security_catalog_is_fully_traceable() -> None:
@@ -57,6 +196,17 @@ def test_schema_v1_rejects_silent_threat_and_gap_deletion() -> None:
 
     assert "threats: schema 1.0 missing required ids: THR-17" in errors
     assert "implementation_gaps: schema 1.0 missing required ids: GAP-15" in errors
+
+
+def test_schema_v1_rejects_unversioned_scope_additions() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["assets"].append(
+        {"id": "ASSET-99", "description": "Unversioned security scope."}
+    )
+
+    errors = _validate(catalog)
+
+    assert "assets: schema 1.0 has unexpected ids: ASSET-99" in errors
 
 
 def test_catalog_ids_are_globally_unique() -> None:
@@ -111,6 +261,28 @@ def test_every_trust_boundary_requires_a_mapped_threat() -> None:
     assert "TB-07: trust boundary has no mapped threat" in errors
 
 
+def test_assets_controls_and_detections_require_threat_coverage() -> None:
+    catalog = deepcopy(_catalog())
+    for threat in catalog["threats"]:
+        threat["asset_ids"] = [
+            identifier for identifier in threat["asset_ids"] if identifier != "ASSET-10"
+        ]
+        threat["control_ids"] = [
+            identifier for identifier in threat["control_ids"] if identifier != "SEC-15"
+        ]
+        threat["detection_ids"] = [
+            identifier
+            for identifier in threat["detection_ids"]
+            if identifier != "SDET-09"
+        ]
+
+    errors = _validate(catalog)
+
+    assert "ASSET-10: asset has no mapped threat" in errors
+    assert "SEC-15: security control has no mapped threat" in errors
+    assert "SDET-09: detection requirement has no mapped threat" in errors
+
+
 def test_stpa_references_must_resolve_against_safety_catalog() -> None:
     catalog = deepcopy(_catalog())
     catalog["threats"][0]["stpa_hazard_ids"] = ["H-404"]
@@ -154,6 +326,103 @@ def test_unresolved_threat_requires_an_owned_gap() -> None:
     assert "THR-01: unresolved threat needs gap_ids" in errors
 
 
+def test_schema_v1_rejects_in_place_implementation_and_mitigation() -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, "THR-11")
+    threat["closure"] = {
+        "approved_by": "security-review-board",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": list(threat["control_ids"]),
+        "verification_ids": list(threat["verification_ids"]),
+    }
+    control = next(item for item in catalog["controls"] if item["id"] == "SEC-14")
+    verification = next(
+        item for item in catalog["verification_tests"] if item["id"] == "SVT-14"
+    )
+    control["status"] = "implemented"
+    verification["status"] = "implemented"
+    verification["test_refs"] = [
+        "tests/test_agent_run_external_agent_auth.py::"
+        "test_create_external_agent_run_requires_bearer_principal"
+    ]
+
+    errors = _validate(catalog)
+
+    assert "SEC-14: status must remain planned in immutable schema 1.0" in errors
+    assert "SVT-14: status must remain planned in immutable schema 1.0" in errors
+
+
+def test_mitigated_threat_requires_executable_closure_evidence() -> None:
+    catalog = deepcopy(_catalog())
+    _mark_threat_mitigated(catalog, "THR-04")
+
+    errors = _validate(catalog)
+
+    assert "THR-04: mitigated threat needs closure evidence" in errors
+
+
+def test_mitigation_closure_cannot_certify_only_a_subset_of_mapped_controls() -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, "THR-04")
+    threat["closure"] = {
+        "approved_by": "security-review-board",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": ["SEC-03", "SEC-04", "SEC-05"],
+        "verification_ids": ["SVT-03", "SVT-04", "SVT-05"],
+    }
+
+    errors = _validate(catalog)
+
+    assert "THR-04: closure controls must exactly match mapped controls" in errors
+    assert (
+        "THR-04: closure verifications must exactly match mapped verifications"
+        in errors
+    )
+
+
+def test_critical_threat_cannot_self_certify_a_narrowed_mitigation() -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, "THR-01")
+    threat.pop("blocking_decision")
+    threat["control_ids"] = ["SEC-02"]
+    threat["verification_ids"] = ["SVT-02"]
+    threat["closure"] = {
+        "approved_by": "arbitrary-reviewer",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": ["SEC-02"],
+        "verification_ids": ["SVT-02"],
+    }
+
+    errors = _validate(catalog)
+
+    assert "THR-01: blocking_decision must be an object" in errors
+    assert (
+        "THR-01: closure controls must exactly match the schema 1.0 minimum "
+        "closure controls" in errors
+    )
+    assert (
+        "THR-01: closure verifications must exactly match the schema 1.0 "
+        "minimum closure verifications" in errors
+    )
+    assert (
+        "THR-01: closure approved_by is not an authorized schema 1.0 security "
+        "authority" in errors
+    )
+
+
+def test_runtime_capability_exclusion_must_match_executable_release_policy() -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-02")
+    threat["blocking_decision"]["runtime_capability_exclusions"] = []
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-02: blocking_decision runtime_capability_exclusions must exactly "
+        "match the immutable schema-v1 blocked-capability contract" in errors
+    )
+
+
 def test_gap_relationships_must_be_bidirectional() -> None:
     catalog = deepcopy(_catalog())
     catalog["implementation_gaps"][0]["threat_ids"].remove("THR-02")
@@ -169,7 +438,247 @@ def test_critical_active_threat_requires_an_explicit_blocking_decision() -> None
 
     errors = _validate(catalog)
 
-    assert "THR-01: blocking_decision must not be empty" in errors
+    assert "THR-01: blocking_decision must be an object" in errors
+
+
+def test_critical_active_threat_rejects_free_text_release_decision() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["threats"][0]["blocking_decision"] = "ship anyway"
+
+    errors = _validate(catalog)
+
+    assert "THR-01: blocking_decision must be an object" in errors
+
+
+def test_release_decision_requires_exact_capability_gate_controls() -> None:
+    catalog = deepcopy(_catalog())
+    catalog["threats"][0]["blocking_decision"]["required_control_ids"] = [
+        "SEC-11"
+    ]
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-01: blocking_decision required_control_ids must exactly match its "
+        "capability release gates" in errors
+    )
+
+
+def test_schema_v1_pins_each_critical_threat_release_boundary() -> None:
+    assert REQUIRED_CAPABILITY_EXCLUSIONS_BY_THREAT == {
+        threat_id: frozenset(exclusion_ids)
+        for threat_id, exclusion_ids in EXPECTED_CRITICAL_THREAT_EXCLUSIONS.items()
+    }
+
+
+def test_schema_v1_has_an_independent_closure_contract_for_every_threat() -> None:
+    assert set(THREAT_CLOSURE_REQUIREMENTS) == EXPECTED_THREAT_IDS
+    assert {
+        threat_id: (
+            set(requirement.control_ids),
+            set(requirement.verification_ids),
+        )
+        for threat_id, requirement in THREAT_CLOSURE_REQUIREMENTS.items()
+    } == EXPECTED_THREAT_CLOSURES
+
+
+def test_schema_v1_pins_mandatory_blocked_capability_tuples() -> None:
+    actual = {
+        capability_id: (
+            requirement.tool_id,
+            requirement.effect_class,
+            requirement.release_gate_id,
+            requirement.required_control_ids,
+            requirement.required_verification_ids,
+        )
+        for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items()
+    }
+
+    assert actual == EXPECTED_BLOCKED_CAPABILITIES
+
+
+def test_schema_v1_pins_implemented_control_and_verification_baseline() -> None:
+    assert IMPLEMENTED_CONTROL_IDS == {
+        "SEC-01",
+        "SEC-02",
+        "SEC-03",
+        "SEC-04",
+        "SEC-05",
+    }
+    assert set(IMPLEMENTED_VERIFICATION_TEST_REFS) == {
+        "SVT-01",
+        "SVT-02",
+        "SVT-03",
+        "SVT-04",
+        "SVT-05",
+    }
+
+
+@pytest.mark.parametrize(
+    "verification_id", sorted(IMPLEMENTED_VERIFICATION_TEST_REFS)
+)
+def test_implemented_verification_rejects_coordinated_test_substitution(
+    verification_id: str,
+) -> None:
+    catalog = deepcopy(_catalog())
+    verification = next(
+        item
+        for item in catalog["verification_tests"]
+        if item["id"] == verification_id
+    )
+    verification["test_refs"] = [
+        "tests/modules/test_agent_policy_enforcer.py::"
+        "test_policy_rejects_capability_not_in_allow_list"
+    ]
+
+    errors = _validate(catalog)
+
+    assert (
+        f"{verification_id}: test_refs must exactly match the immutable schema "
+        "1.0 verification contract" in errors
+    )
+
+
+@pytest.mark.parametrize("threat_id", sorted(EXPECTED_THREAT_IDS))
+def test_every_threat_rejects_coordinated_self_certified_mitigation(
+    threat_id: str,
+) -> None:
+    catalog = deepcopy(_catalog())
+    threat = _mark_threat_mitigated(catalog, threat_id)
+    threat["control_ids"] = ["SEC-01"]
+    threat["verification_ids"] = ["SVT-01"]
+    threat["closure"] = {
+        "approved_by": "security-review-board",
+        "closed_at": "2026-08-13",
+        "implemented_control_ids": ["SEC-01"],
+        "verification_ids": ["SVT-01"],
+    }
+
+    errors = _validate(catalog)
+
+    assert (
+        f"{threat_id}: control_ids must exactly match the immutable schema 1.0 "
+        "threat contract" in errors
+    )
+    assert (
+        f"{threat_id}: verification_ids must exactly match the immutable schema "
+        "1.0 threat contract" in errors
+    )
+    assert (
+        f"{threat_id}: closure controls must exactly match the schema 1.0 "
+        "minimum closure controls" in errors
+    )
+    assert (
+        f"{threat_id}: closure verifications must exactly match the schema 1.0 "
+        "minimum closure verifications" in errors
+    )
+
+
+def test_coordinated_runtime_and_catalog_release_downgrade_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-02")
+    threat["blocking_decision"]["runtime_capability_exclusions"] = []
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        monkeypatch.setitem(
+            release_policy._BETA_CAPABILITY_DISPOSITIONS,
+            capability_id,
+            release_policy.CapabilityReleaseDisposition(
+                capability_id=capability_id,
+                tool_id=requirement.tool_id,
+                effect_class=requirement.effect_class,
+                status="allowed",
+                release_gate_id=None,
+            ),
+        )
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-02: blocking_decision runtime_capability_exclusions must exactly "
+        "match the immutable schema-v1 blocked-capability contract" in errors
+    )
+    for capability_id in EXPECTED_BLOCKED_CAPABILITIES:
+        assert (
+            f"{capability_id}: beta release disposition must exactly match the "
+            "immutable v1 blocked-capability contract" in errors
+        )
+
+
+@pytest.mark.parametrize(
+    ("threat_id", "removed_exclusion_id", "removed_control_id"),
+    [
+        ("THR-01", "unreviewed_memory_promotion", "SEC-11"),
+        ("THR-02", "write_capable_dynamic_child_delegation", "SEC-06"),
+        ("THR-04", "public_durable_workflow_and_peer_messages", "SEC-07"),
+        ("THR-05", "parallel_multi_tenant_worker_execution", "SEC-09"),
+        (
+            "THR-10",
+            "expanded_connectors_without_secret_egress_ssrf_controls",
+            "SEC-14",
+        ),
+        (
+            "THR-16",
+            "expanded_production_telemetry_and_parallel_context_logging",
+            "SEC-18",
+        ),
+    ],
+)
+def test_critical_threat_rejects_coordinated_capability_exclusion_downgrade(
+    threat_id: str,
+    removed_exclusion_id: str,
+    removed_control_id: str,
+) -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == threat_id)
+    decision = threat["blocking_decision"]
+    decision["capability_exclusion_ids"].remove(removed_exclusion_id)
+    decision["required_control_ids"].remove(removed_control_id)
+
+    errors = _validate(catalog)
+
+    assert (
+        f"{threat_id}: blocking_decision capability_exclusion_ids must exactly "
+        "match the schema-v1 threat release boundary" in errors
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "downgraded_value"),
+    [("severity", "high"), ("exposure", "planned")],
+)
+def test_release_gated_threat_cannot_downgrade_its_critical_exposure(
+    field: str,
+    downgraded_value: str,
+) -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-01")
+    threat[field] = downgraded_value
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-01: schema 1.0 release-gated threat must remain critical and active "
+        "until mitigated" in errors
+    )
+
+
+def test_each_planned_threat_control_requires_a_mutually_linked_gap() -> None:
+    catalog = deepcopy(_catalog())
+    threat = next(item for item in catalog["threats"] if item["id"] == "THR-13")
+    gap = next(
+        item for item in catalog["implementation_gaps"] if item["id"] == "GAP-03"
+    )
+    threat["gap_ids"].remove("GAP-03")
+    gap["threat_ids"].remove("THR-13")
+
+    errors = _validate(catalog)
+
+    assert (
+        "THR-13: planned control SEC-08 needs a mutually linked threat gap"
+        in errors
+    )
 
 
 def test_planned_control_and_verification_require_owner_and_phase() -> None:
@@ -192,6 +701,14 @@ def test_implemented_control_requires_an_implemented_verification() -> None:
     assert (
         "SEC-01: implemented control needs an implemented verification" in errors
     )
+
+
+def test_svt_02_certifies_the_complete_policy_control() -> None:
+    verification = next(
+        item for item in _catalog()["verification_tests"] if item["id"] == "SVT-02"
+    )
+
+    assert verification["test_refs"] == EXPECTED_POLICY_TEST_REFS
 
 
 def test_implemented_verification_rejects_non_test_and_missing_files() -> None:

@@ -3,7 +3,53 @@ from __future__ import annotations
 import pytest
 
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
-from application.services.agent_runtime.registry import get_capability_spec
+from application.services.agent_runtime.registry import (
+    get_capability_spec,
+    list_capability_specs,
+)
+from application.services.agent_runtime.release_policy import (
+    BetaReleaseGateError,
+    CapabilityReleaseDisposition,
+    assert_beta_capability_available,
+    validate_registry_release_policy,
+)
+from application.services.agent_runtime import release_policy
+from domain.security.contract_v1 import REQUIRED_BLOCKED_CAPABILITIES
+
+
+def test_beta_release_policy_classifies_every_runtime_capability():
+    assert validate_registry_release_policy(list_capability_specs()) == []
+
+
+def test_beta_release_policy_rejects_coordinated_disposition_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        monkeypatch.setitem(
+            release_policy._BETA_CAPABILITY_DISPOSITIONS,
+            capability_id,
+            CapabilityReleaseDisposition(
+                capability_id=capability_id,
+                tool_id=requirement.tool_id,
+                effect_class=requirement.effect_class,
+                status="allowed",
+                release_gate_id=None,
+            ),
+        )
+
+    errors = validate_registry_release_policy(list_capability_specs())
+
+    for capability_id, requirement in REQUIRED_BLOCKED_CAPABILITIES.items():
+        assert (
+            f"{capability_id}: beta release disposition must exactly match the "
+            "immutable v1 blocked-capability contract" in errors
+        )
+        with pytest.raises(BetaReleaseGateError, match=requirement.release_gate_id):
+            assert_beta_capability_available(
+                capability_id,
+                tool_id=requirement.tool_id,
+                effect_class=requirement.effect_class,
+            )
 
 
 def test_policy_rejects_capability_not_in_allow_list():
@@ -129,6 +175,23 @@ def test_safe_auto_policy_rejects_external_side_effect_execution():
                 "budgets": {},
             },
             action={"id": "a4", "tool_id": spec.tool_id},
+            spec=spec,
+            all_actions=[],
+            inputs={"experiment_id": "exp-1"},
+        )
+
+
+def test_policy_rejects_beta_blocked_capability_before_execution():
+    enforcer = PolicyEnforcer()
+    spec = get_capability_spec("promote_variant_prod")
+    assert spec is not None
+    with pytest.raises(PolicyError, match="autonomous_production_publishing"):
+        enforcer.validate_action_execution(
+            run={
+                "allowed_capabilities": ["promote_variant_prod"],
+                "budgets": {},
+            },
+            action={"id": "a-release", "tool_id": spec.tool_id},
             spec=spec,
             all_actions=[],
             inputs={"experiment_id": "exp-1"},
