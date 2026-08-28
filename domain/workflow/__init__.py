@@ -1,5 +1,32 @@
 """Domain contracts for durable workflow orchestration."""
 
+from domain.workflow.approval import (
+    APPROVAL_ENVELOPE_CONTRACT,
+    APPROVAL_ENVELOPE_SCHEMA_VERSION,
+    TERMINAL_APPROVAL_STATUSES,
+    ApprovalAuthority,
+    ApprovalBinding,
+    ApprovalContractError,
+    ApprovalEnvelope,
+    ApprovalStatus,
+    ApprovalTransition,
+    ApprovalTransitionError,
+    EffectClass,
+    NativeTargetIdentity,
+    PrincipalType,
+    allowed_approval_transitions,
+    approval_status_from_legacy_action_status,
+    can_transition_approval,
+    create_approval_request,
+    require_approval_transition,
+    transition_approval,
+)
+from domain.workflow.approval_serialization import (
+    approval_envelope_digest,
+    approval_envelope_from_payload,
+    approval_envelope_payload,
+    canonical_approval_envelope_bytes,
+)
 from domain.workflow.lifecycle import (
     TERMINAL_WORKFLOW_STATUSES,
     WorkflowStatus,
@@ -11,11 +38,34 @@ from domain.workflow.lifecycle import (
 )
 
 __all__ = [
+    "APPROVAL_ENVELOPE_CONTRACT",
+    "APPROVAL_ENVELOPE_SCHEMA_VERSION",
+    "TERMINAL_APPROVAL_STATUSES",
     "TERMINAL_WORKFLOW_STATUSES",
+    "ApprovalAuthority",
+    "ApprovalBinding",
+    "ApprovalContractError",
+    "ApprovalEnvelope",
+    "ApprovalStatus",
+    "ApprovalTransition",
+    "ApprovalTransitionError",
+    "EffectClass",
+    "NativeTargetIdentity",
+    "PrincipalType",
     "WorkflowStatus",
     "WorkflowTransition",
     "WorkflowTransitionError",
+    "allowed_approval_transitions",
     "allowed_workflow_transitions",
+    "approval_envelope_digest",
+    "approval_envelope_from_payload",
+    "approval_envelope_payload",
+    "approval_status_from_legacy_action_status",
+    "can_transition_approval",
     "can_transition_workflow",
+    "canonical_approval_envelope_bytes",
+    "create_approval_request",
+    "require_approval_transition",
     "require_workflow_transition",
+    "transition_approval",
 ]

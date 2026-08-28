@@ -159,11 +159,13 @@ schema-v1 security authority independently pins all threat closure requirements
 and mandatory blocked beta capabilities; runtime policy and the security
 catalog are validated projections of that authority.
 
-The current agent action lifecycle is still distributed across services, and
-the complete task, attempt, approval, and result transition contracts are not
-implemented. Exact approval binding, evidence and completion semantics,
-durable recovery, and concurrency controls therefore remain prerequisites for
-chat-issued governed effects, parallel execution, joins, and compensation.
+The exact, framework-neutral approval envelope, lifecycle, and canonical digest
+are now executable domain contracts. The current agent action lifecycle is
+still distributed across services, however, and the complete task, attempt, and
+result transition contracts are not implemented. Durable approval persistence,
+pre-effect revalidation, evidence and completion semantics, recovery, and
+concurrency controls therefore remain prerequisites for chat-issued governed
+effects, parallel execution, joins, and compensation.
 
 ## Target Runtime Model
 
@@ -436,10 +438,10 @@ Phase 1 remains open. The next reviewable sequence is:
    [#114](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/114),
    [#115](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/115),
    and [#116](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/116)).
-   Define one immutable approval envelope, persist its independent lifecycle,
-   and revalidate it immediately before a governed effect. Action status alone
-   is not execution authority, and this slice does not release any blocked
-   production capability.
+   The immutable approval envelope and independent lifecycle are defined in
+   #114. Persist that contract in #115 and revalidate it immediately before a
+   governed effect in #116. Action status alone is not execution authority, and
+   this sequence does not release any blocked production capability.
 6. **Evidence, result, and completion contracts.** Make completeness,
    freshness, provenance, missing coverage, partial failure, receipt status,
    and projection lag explicit. A successful tool call, child result, exhausted

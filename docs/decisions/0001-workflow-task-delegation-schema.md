@@ -26,6 +26,12 @@ The workflow lifecycle is governed by
 `domain/workflow/lifecycle.py`. The schema below must not permit adapters to
 bypass that transition contract.
 
+The approval lifecycle and canonical authorization fingerprint are governed by
+`domain/workflow/approval.py` and
+`domain/workflow/approval_serialization.py`. Database rows, events, APIs, and
+framework adapters are projections of that domain contract; they do not define
+alternate approval semantics.
+
 ## Decision
 
 Adopt a framework-neutral, event-sourced workflow model with relational
@@ -260,6 +266,64 @@ strict-set attenuation, as the portable safety rule.
 Assignments do not write shared workflow, belief, or memory state directly.
 They return isolated results for coordinator validation.
 
+### `approval_envelopes`
+
+An approval is an immutable, versioned authorization snapshot for one exact
+effect. It is not a boolean attribute of a task or action. The normative v1
+contract is `workflow.approval-envelope` schema `1.0`.
+
+| Field | Contract |
+| --- | --- |
+| `approval_id`, `schema_version` | Stable approval identity and exact schema contract. |
+| `tenant_id` | Mandatory isolation boundary. |
+| `principal_type`, `principal_id` | Principal requesting the governed effect. |
+| `workflow_id`, `active_graph_revision` | Exact workflow plan that requested authorization. |
+| `task_id`, `action_id` | Exact schedulable unit and governed action. |
+| `capability_id`, `tool_id`, `effect_class` | Registry and risk identity of the effect. |
+| `native_target` | Optional provider, resource type, resource ID, and parent resource ID. |
+| `input_hash`, `payload_hash` | Exact normalized task input and effect payload. |
+| `evidence_digest` | Exact evidence set presented for the decision. |
+| `authority_hash` | Immutable workflow/delegation authority used for admission. |
+| `registry_version`, `registry_fingerprint` | Exact capability registry contract and content. |
+| `harness_id`, `harness_version` | Exact execution harness contract. |
+| `policy_profile_id`, `policy_version` | Exact approval/effect policy contract. |
+| `effect_idempotency_key` | Identity used to reconcile or deduplicate this exact effect. |
+| `status` | `requested`, `approved`, `rejected`, `expired`, `revoked`, `superseded`, or `fulfilled`. |
+| `requested_at`, `decided_at`, `expires_at`, `transitioned_at` | Request lifetime and current-snapshot timestamps. |
+| `approving_authority` | Decision maker's principal type/ID and authoritative source/version. |
+| `revocation_reference`, `supersession_reference` | Required evidence for the corresponding terminal outcome. |
+| `fulfillment_receipt_id` | Required committed-effect evidence for `fulfilled`. |
+
+All listed fields are part of the canonical serialization. Schema v1 rejects
+unknown and omitted fields, uses canonical UTC timestamps and deterministic
+JSON, and hashes the complete snapshot with SHA-256. Adding, removing, or
+reinterpreting a field requires a new schema version; an adapter cannot ignore
+an unfamiliar authority field and continue fail-open.
+
+The complete lifecycle is:
+
+| Source | Permitted targets |
+| --- | --- |
+| `requested` | `approved`, `rejected`, `expired`, `superseded` |
+| `approved` | `expired`, `revoked`, `superseded`, `fulfilled` |
+| `rejected`, `expired`, `revoked`, `superseded`, `fulfilled` | None |
+
+Approval and rejection require an identified approving authority and must occur
+before expiry. Revocation requires a previously approved grant. Supersession
+identifies its replacement, and fulfillment identifies its effect receipt.
+Expiration prevents any new admission or execution authorization. A fulfillment
+receipt may be recorded after expiry only to reconcile an effect that began
+under the same, then-valid approval and the same `effect_idempotency_key`; it
+reports an outcome and does not authorize new work. A retry with the same
+effect identity reconciles the prior outcome, while a different identity needs
+a new approval.
+
+Approval persistence and runtime checks are delivered in the following slices.
+They must persist each immutable lifecycle snapshot or an equivalent append-only
+event plus projection, compare the exact envelope fingerprint at admission and
+immediately before effect commit, and preserve the approving authority and all
+terminal evidence.
+
 ### `task_results`
 
 | Field | Contract |
@@ -321,7 +385,7 @@ or through an equivalent atomic durable-execution boundary.
 | `id`, `tenant_id`, `workflow_id` | Event identity and aggregate scope. |
 | `sequence` | Gap-free, monotonic sequence within a workflow. |
 | `event_type`, `event_version` | Versioned event taxonomy. |
-| `entity_type`, `entity_id` | Workflow, revision, task, attempt, assignment, or result. |
+| `entity_type`, `entity_id` | Workflow, revision, task, attempt, assignment, approval, or result. |
 | `causation_id`, `correlation_id`, `trace_id` | Causal and operational lineage. |
 | `principal_id` | Actor responsible for the event. |
 | `command_id` | Producing command; several events may share it. |
@@ -360,7 +424,9 @@ at execution time.
 6. Only one live lease exists per task; stale workers cannot commit results.
 7. External and internal committed effects require a dedupe key and receipt.
 8. Commands deduplicate independently and may atomically emit multiple events.
-9. Approval is an independent lifecycle; task readiness cannot imply approval.
+9. Approval is an independent exact-effect lifecycle; task or action state
+   cannot imply authority, and all envelope dimensions must match at admission
+   and pre-effect commit.
 10. Child authority is subset-or-equal to parent authority, and every child
     budget dimension is no greater than unreserved remaining parent budget.
 11. Parallel workers return results; a coordinator validates before shared-state
@@ -386,12 +452,22 @@ The migration must preserve current APIs while the new kernel is introduced:
 | operator and machine commands | Populate command-deduplication records before emitting workflow events. |
 | run locks and heartbeats | Evolve into workflow scheduler and task-attempt leases. |
 | registry/tool/skill pins | Copied to workflow and task contracts. |
-| approval and compensating guidance | Remain attached to governed actions and independent approval records. |
+| legacy action status `approved` / `rejected` | Decision projection hint only; it cannot construct an approval envelope or grant authority. |
+| legacy action execution statuses | Do not map to approval status; execution and authorization remain independent. |
+| approval and compensating guidance | Migrate to independent approval snapshots linked to governed actions; preserve existing API fields as projections during compatibility. |
 
 The first vertical spike should represent an existing sequential run as a
 workflow with one immutable revision and one task per ordered action. It should
 dual-project events to the existing control-plane read model. No current API is
 removed until chat and control-plane parity are proven.
+
+During that migration, one current `agent_run` maps to one workflow at graph
+revision `1`. Ordered actions receive deterministic workflow task identities.
+Existing explicit `approved` and `rejected` action values may seed read-model
+decision history, but no historical record becomes executable authority until
+its tenant, workflow/revision, task/action, effect, payload, evidence, authority,
+registry, harness, policy, target, idempotency, lifetime, and approving-authority
+fields have been established under the versioned envelope contract.
 
 ## Framework portability requirements
 
@@ -401,6 +477,7 @@ demonstrate that it can:
 - preserve the domain lifecycle and event sequence
 - persist immutable graph revisions and runtime-created tasks
 - enforce tenant-scoped idempotency and authority non-expansion
+- preserve exact approval-envelope serialization, lifecycle, and fingerprints
 - expose task attempts and leases without hiding retry history
 - represent `all`, `any`, and `quorum` joins deterministically
 - checkpoint and recover without replaying committed effects
@@ -435,7 +512,7 @@ This ADR intentionally does not decide:
 - internal kernel versus LangGraph-style versus Temporal-style execution
 - SQLite-constrained beta versus PostgreSQL and durable queue topology
 - physical JSON versus blob/object payload storage thresholds
-- the full task, attempt, assignment, approval, and result transition matrices
+- the full task, attempt, assignment, and result transition matrices
 - event transport and outbox implementation
 - exact identifier format
 
@@ -448,3 +525,8 @@ Slice 2 is complete when reviewers can trace every target concept to a logical
 record, every current runtime primitive to a compatibility path, and every
 delegated execution to an authority, budget, context, result, and provenance
 boundary—without relying on a particular workflow framework.
+
+The Slice 1.5b amendment is complete when the executable approval contract has
+an exhaustive transition matrix, stable canonical serialization and digest,
+fail-closed schema parsing, temporal and authority validation, and explicit
+legacy compatibility without persistence or runtime-enforcement coupling.
