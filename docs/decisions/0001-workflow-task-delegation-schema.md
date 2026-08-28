@@ -298,7 +298,9 @@ All listed fields are part of the canonical serialization. Schema v1 rejects
 unknown and omitted fields, uses canonical UTC timestamps and deterministic
 JSON, and hashes the complete snapshot with SHA-256. Adding, removing, or
 reinterpreting a field requires a new schema version; an adapter cannot ignore
-an unfamiliar authority field and continue fail-open.
+an unfamiliar authority field and continue fail-open. Schema-v1 domain value
+objects are closed exact types rather than subclass extension points; adapters
+must cross the canonical parser boundary instead of injecting polymorphic state.
 
 The complete lifecycle is:
 
@@ -322,7 +324,10 @@ Approval persistence and runtime checks are delivered in the following slices.
 They must persist each immutable lifecycle snapshot or an equivalent append-only
 event plus projection, compare the exact envelope fingerprint at admission and
 immediately before effect commit, and preserve the approving authority and all
-terminal evidence.
+terminal evidence. The domain contract rejects direct self-supersession.
+Persistence must additionally require the replacement approval to exist in the
+same tenant and compatible workflow/effect scope, and must reject cycles across
+the complete supersession chain.
 
 ### `task_results`
 

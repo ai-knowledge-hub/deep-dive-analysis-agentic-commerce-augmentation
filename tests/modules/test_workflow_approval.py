@@ -4,6 +4,7 @@ import copy
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import pytest
@@ -363,6 +364,26 @@ class ImpostorEnum(str, Enum):
     APPROVED = "approved"
 
 
+class MutableApprovalAuthority(ApprovalAuthority):
+    def __setattr__(self, name: str, value: object) -> None:
+        object.__setattr__(self, name, value)
+
+
+class MutableNativeTargetIdentity(NativeTargetIdentity):
+    def __setattr__(self, name: str, value: object) -> None:
+        object.__setattr__(self, name, value)
+
+
+class MutableApprovalBinding(ApprovalBinding):
+    def __setattr__(self, name: str, value: object) -> None:
+        object.__setattr__(self, name, value)
+
+
+class MutableApprovalEnvelope(ApprovalEnvelope):
+    def __setattr__(self, name: str, value: object) -> None:
+        object.__setattr__(self, name, value)
+
+
 @pytest.mark.parametrize(
     ("factory", "overrides"),
     [
@@ -377,6 +398,132 @@ def test_same_value_from_a_different_enum_cannot_impersonate_contract_type(
 ) -> None:
     with pytest.raises(ApprovalContractError, match="supported enum"):
         factory(**overrides)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"principal_id": ""},
+        {"principal_id": " operator-001"},
+        {"authority_source": ""},
+        {"authority_version": "operator-policy-v2 "},
+    ],
+)
+def test_approval_authority_identifiers_fail_closed(
+    overrides: dict[str, str],
+) -> None:
+    with pytest.raises(ApprovalContractError, match="canonical string"):
+        make_authority(**overrides)
+
+
+def test_decided_envelope_rejects_mutable_authority_impostor() -> None:
+    impostor = SimpleNamespace(
+        principal_type=PrincipalType.HUMAN,
+        principal_id="",
+        authority_source="",
+        authority_version="",
+    )
+
+    with pytest.raises(ApprovalContractError, match="ApprovalAuthority"):
+        ApprovalEnvelope(
+            binding=make_binding(),
+            status=ApprovalStatus.APPROVED,
+            transitioned_at=DECIDED_AT,
+            decided_at=DECIDED_AT,
+            approving_authority=impostor,
+        )
+
+
+def test_decided_envelope_rejects_mutable_approval_authority_subclass() -> None:
+    authority = MutableApprovalAuthority(
+        principal_type=PrincipalType.HUMAN,
+        principal_id="operator-001",
+        authority_source="operator-policy",
+        authority_version="operator-policy-v2",
+    )
+    authority.principal_id = "mutated-operator"
+
+    with pytest.raises(ApprovalContractError, match="ApprovalAuthority"):
+        ApprovalEnvelope(
+            binding=make_binding(),
+            status=ApprovalStatus.APPROVED,
+            transitioned_at=DECIDED_AT,
+            decided_at=DECIDED_AT,
+            approving_authority=authority,
+        )
+
+
+def test_approval_authority_is_frozen_under_normal_mutation() -> None:
+    authority = make_authority()
+
+    with pytest.raises(FrozenInstanceError):
+        authority.principal_id = "mutated-operator"  # type: ignore[misc]
+
+
+def test_binding_rejects_mutable_native_target_subclass() -> None:
+    target = MutableNativeTargetIdentity(
+        provider_id="shopify",
+        resource_type="product",
+        resource_id="gid://shopify/Product/123",
+    )
+
+    with pytest.raises(ApprovalContractError, match="NativeTargetIdentity"):
+        make_binding(native_target=target)
+
+
+def test_envelope_rejects_mutable_binding_subclass() -> None:
+    binding = MutableApprovalBinding(**make_binding().__dict__)
+
+    with pytest.raises(ApprovalContractError, match="ApprovalBinding"):
+        ApprovalEnvelope(
+            binding=binding,
+            status=ApprovalStatus.REQUESTED,
+            transitioned_at=REQUESTED_AT,
+        )
+
+
+def test_serializer_rejects_polymorphic_envelope() -> None:
+    envelope = MutableApprovalEnvelope(**make_approved().__dict__)
+
+    with pytest.raises(ApprovalContractError, match="ApprovalEnvelope"):
+        approval_envelope_payload(envelope)
+
+
+@pytest.mark.parametrize(
+    "serializer",
+    [
+        approval_envelope_payload,
+        canonical_approval_envelope_bytes,
+        approval_envelope_digest,
+    ],
+)
+def test_serialization_revalidates_a_tampered_authority_snapshot(
+    serializer: Callable[[ApprovalEnvelope], object],
+) -> None:
+    approved = make_approved()
+    object.__setattr__(
+        approved,
+        "approving_authority",
+        SimpleNamespace(
+            principal_type=PrincipalType.HUMAN,
+            principal_id="",
+            authority_source="",
+            authority_version="",
+        ),
+    )
+
+    with pytest.raises(ApprovalContractError, match="ApprovalAuthority"):
+        serializer(approved)
+
+
+def test_serialization_revalidates_identifiers_on_nested_frozen_authority() -> None:
+    approved = make_approved()
+    authority = approved.approving_authority
+    assert authority is not None
+    object.__setattr__(authority, "principal_id", "")
+
+    with pytest.raises(ApprovalContractError, match="canonical string"):
+        approval_envelope_digest(approved)
 
 
 def test_parser_round_trips_the_complete_envelope() -> None:
@@ -438,6 +585,35 @@ def test_parser_rejects_unsupported_or_noncanonical_values(
     target[path[-1]] = value
 
     with pytest.raises(ApprovalContractError):
+        approval_envelope_from_payload(payload)
+
+
+@pytest.mark.parametrize("source_factory", [make_requested, make_approved])
+def test_approval_cannot_supersede_itself(
+    source_factory: Callable[[], ApprovalEnvelope],
+) -> None:
+    source = source_factory()
+
+    with pytest.raises(ApprovalContractError, match="cannot supersede itself"):
+        transition_approval(
+            source,
+            ApprovalStatus.SUPERSEDED,
+            occurred_at=DECIDED_AT + timedelta(minutes=1),
+            supersession_reference=source.binding.approval_id,
+        )
+
+
+def test_parser_rejects_self_superseding_snapshot() -> None:
+    superseded = transition_approval(
+        make_requested(),
+        ApprovalStatus.SUPERSEDED,
+        occurred_at=DECIDED_AT,
+        supersession_reference="approval-002",
+    )
+    payload = approval_envelope_payload(superseded)
+    payload["lifecycle"]["supersession_reference"] = "approval-001"
+
+    with pytest.raises(ApprovalContractError, match="cannot supersede itself"):
         approval_envelope_from_payload(payload)
 
 

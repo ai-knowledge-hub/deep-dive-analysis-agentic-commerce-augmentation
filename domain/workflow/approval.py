@@ -113,6 +113,11 @@ class NativeTargetIdentity:
     parent_resource_id: str | None = None
 
     def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Revalidate this frozen value at a trust boundary."""
+
         _require_identifier("native_target.provider_id", self.provider_id)
         _require_identifier("native_target.resource_type", self.resource_type)
         _require_identifier("native_target.resource_id", self.resource_id)
@@ -132,6 +137,11 @@ class ApprovalAuthority:
     authority_version: str
 
     def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Revalidate this frozen authority at a trust boundary."""
+
         _require_enum(
             "approving_authority.principal_type", self.principal_type, PrincipalType
         )
@@ -176,6 +186,11 @@ class ApprovalBinding:
     expires_at: datetime
 
     def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Revalidate this frozen effect binding at a trust boundary."""
+
         if self.schema_version != APPROVAL_ENVELOPE_SCHEMA_VERSION:
             raise ApprovalContractError(
                 "approval schema_version must match the supported domain contract"
@@ -205,12 +220,15 @@ class ApprovalBinding:
             raise ApprovalContractError("active_graph_revision must be an integer")
         if self.active_graph_revision < 1:
             raise ApprovalContractError("active_graph_revision must be positive")
-        if self.native_target is not None and not isinstance(
-            self.native_target, NativeTargetIdentity
+        if (
+            self.native_target is not None
+            and type(self.native_target) is not NativeTargetIdentity
         ):
             raise ApprovalContractError(
                 "native_target must be a NativeTargetIdentity or null"
             )
+        if self.native_target is not None:
+            self.native_target.validate()
         for field_name in (
             "input_hash",
             "payload_hash",
@@ -239,8 +257,14 @@ class ApprovalEnvelope:
     fulfillment_receipt_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.binding, ApprovalBinding):
+        self.validate()
+
+    def validate(self) -> None:
+        """Revalidate the complete immutable snapshot at a trust boundary."""
+
+        if type(self.binding) is not ApprovalBinding:
             raise ApprovalContractError("binding must be an ApprovalBinding")
+        self.binding.validate()
         _require_enum("status", self.status, ApprovalStatus)
         _require_aware_datetime("transitioned_at", self.transitioned_at)
         if self.transitioned_at < self.binding.requested_at:
@@ -249,6 +273,12 @@ class ApprovalEnvelope:
             raise ApprovalContractError(
                 "decided_at and approving_authority must be present together"
             )
+        if self.approving_authority is not None:
+            if type(self.approving_authority) is not ApprovalAuthority:
+                raise ApprovalContractError(
+                    "approving_authority must be an ApprovalAuthority"
+                )
+            self.approving_authority.validate()
         if self.decided_at is not None:
             _require_aware_datetime("decided_at", self.decided_at)
             if (
@@ -382,6 +412,8 @@ def _validate_lifecycle_metadata(envelope: ApprovalEnvelope) -> None:
         _require_identifier("revocation_reference", envelope.revocation_reference)
     elif status is ApprovalStatus.SUPERSEDED:
         _require_identifier("supersession_reference", envelope.supersession_reference)
+        if envelope.supersession_reference == envelope.binding.approval_id:
+            raise ApprovalContractError("approval cannot supersede itself")
     elif status is ApprovalStatus.FULFILLED:
         if not has_decision:
             raise ApprovalContractError("only an approved grant can be fulfilled")

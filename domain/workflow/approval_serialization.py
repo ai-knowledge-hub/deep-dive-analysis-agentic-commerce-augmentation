@@ -77,6 +77,9 @@ _APPROVING_AUTHORITY_KEYS = frozenset(
 def approval_envelope_payload(envelope: ApprovalEnvelope) -> dict[str, Any]:
     """Return the complete schema-v1 payload for an immutable snapshot."""
 
+    if type(envelope) is not ApprovalEnvelope:
+        raise ApprovalContractError("envelope must be an ApprovalEnvelope")
+    envelope.validate()
     binding = envelope.binding
     target = binding.native_target
     authority = envelope.approving_authority
