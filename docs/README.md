@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: current
-Last updated: 2026-08-11
+Last updated: 2026-08-25
 
 Use this index to avoid treating historical planning notes as active product or architecture guidance.
 
@@ -37,6 +37,9 @@ Use this index to avoid treating historical planning notes as active product or 
 - `research/agent-harness-orchestration-notes-v1.md`: focused research input on
   recursive context, parallel and long-running subagents, goals, and continual
   harness state, with explicit beta boundaries.
+- `research/current-platform-whole-system-map-v1.md`: evidence-led map of the
+  current platform, module dependencies, causal flows, integration modes, LLM
+  harness, learning boundaries, target evolution, and open decisions.
 
 ## Reference Docs
 

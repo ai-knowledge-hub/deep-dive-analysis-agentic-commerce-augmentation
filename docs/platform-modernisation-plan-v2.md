@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-08-10
+Last updated: 2026-08-25
 
 ## Purpose
 
@@ -51,6 +51,13 @@ Baseline verified on 2026-08-03:
 - Architecture checks: no cycles or complexity violations.
 - Production Next.js build: passed.
 
+This is a historical baseline, not the current test count. A whole-system
+review on 2026-08-22 ran the then-current backend suite with 413 tests passed
+and 1 skipped. The ratified planning checkpoint on 2026-08-25, after Phase 1
+security-authority hardening, passed 440 tests with 1 skipped. Architecture,
+safety, security, lint, bloat, entrypoint, and diff gates also passed for the
+security-authority change.
+
 The complete frontend gate is:
 
 ```bash
@@ -65,6 +72,7 @@ make arch-check
 make bloat-check
 make script-entrypoint-check
 make safety-traceability-check
+make security-traceability-check
 make test
 ```
 
@@ -144,10 +152,20 @@ contract, or worker result schema.
 
 ### State and safety
 
-Run and action lifecycles are implemented across services using status strings
-and conditional logic. The allowed transitions and safety constraints are not
-defined in one enforceable domain contract. This is insufficient for parallel
-execution, approvals, retries, timeouts, joins, and compensation.
+The workflow lifecycle and terminal-state invariants now have one executable
+domain contract. The logical workflow/task/delegation schema, STPA baseline,
+and security threat model are also accepted and machine checked. The immutable
+schema-v1 security authority independently pins all threat closure requirements
+and mandatory blocked beta capabilities; runtime policy and the security
+catalog are validated projections of that authority.
+
+The exact, framework-neutral approval envelope, lifecycle, and canonical digest
+are now executable domain contracts. The current agent action lifecycle is
+still distributed across services, however, and the complete task, attempt, and
+result transition contracts are not implemented. Durable approval persistence,
+pre-effect revalidation, evidence and completion semantics, recovery, and
+concurrency controls therefore remain prerequisites for chat-issued governed
+effects, parallel execution, joins, and compensation.
 
 ## Target Runtime Model
 
@@ -235,6 +253,10 @@ Status: completed on 2026-08-03.
 
 ### Phase 1: Contracts and safety model
 
+Status: open. Slices 1–4 established the first contract baseline; exact
+approval, evidence/completion contracts, and the working framework-comparison
+spike remain.
+
 Deliverables:
 
 - workflow, task, attempt, delegation, approval, checkpoint, and result schemas
@@ -263,13 +285,18 @@ Deliverables:
 - one conversation and command gateway replaces the two chat models
 - typed intents for explain, navigate, propose, approve, pause, retry, and cancel
 - structured plan, progress, evidence, approval, and result artifacts in chat
+- artifacts expose durable revision, projection cursor and freshness,
+  completeness, missing or partial evidence, and effect receipts
 - control-plane deep links remain visible and auditable
 - one existing sequential agent run can be created and supervised end to end
 
 Exit gate:
 
 - an operator completes one commerce-optimisation objective without entering Lab
-- every chat mutation maps to a visible command, preflight, and event receipt
+- every chat mutation maps to an exact command envelope, preflight, durable
+  authorization where required, and event receipt
+- chat and control-plane views cannot report completion ahead of the durable
+  result, evidence-completeness, and receipt gates
 
 ### Phase 3: Durable workflow kernel
 
@@ -288,6 +315,14 @@ Exit gate:
 
 ### Phase 4: Bounded parallel subagents
 
+Prerequisites:
+
+- a concurrency-safe shared database and durable queue or workflow engine
+- task-attempt leases, fencing, idempotent commands, crash recovery, and
+  atomic multidimensional budget reservations
+- executable approval, cancellation, context-isolation, result-validation,
+  tenant-isolation, and dependency-bulkhead controls
+
 Deliverables:
 
 - versioned specialist role templates
@@ -302,6 +337,8 @@ Exit gate:
 
 - independent tasks execute concurrently and recover independently
 - synthesized results preserve complete provenance and tenant isolation
+- topology, restart, duplicate-delivery, revocation, and noisy-neighbour gates
+  pass before multi-tenant parallel beta exposure
 
 ### Phase 5: Hardening and simplification
 
@@ -352,7 +389,7 @@ Do not begin with a wholesale frontend or backend rewrite. The current runtime,
 policy, event, registry, belief, and memory foundations should be evolved behind
 stable contracts.
 
-## Immediate Next Slice
+## Immediate Next Slices
 
 Phase 1 established its first contract baseline through four small, reviewable
 changes:
@@ -394,3 +431,29 @@ harness self-promotion remain excluded.
 No dynamic planner, subagent, or chat redesign should land unless the lifecycle,
 schema, safety, and security contracts agree on state, authority, effects,
 trust boundaries, and failure semantics.
+
+Phase 1 remains open. The next reviewable sequence is:
+
+5. **Exact approval and effect authorization** ([#112](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/112),
+   [#114](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/114),
+   [#115](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/115),
+   and [#116](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/116)).
+   The immutable approval envelope and independent lifecycle are defined in
+   #114. Persist that contract in #115 and revalidate it immediately before a
+   governed effect in #116. Action status alone is not execution authority, and
+   this sequence does not release any blocked production capability.
+6. **Evidence, result, and completion contracts.** Make completeness,
+   freshness, provenance, missing coverage, partial failure, receipt status,
+   and projection lag explicit. A successful tool call, child result, exhausted
+   limit, or UI summary cannot imply objective completion.
+7. **Sequential workflow compatibility and framework spike.** Represent one
+   existing ordered agent run as an immutable workflow revision and tasks,
+   dual-project its events to current APIs, and compare an internal kernel,
+   LangGraph-style execution, and Temporal-style execution against the
+   accepted portability, replay, recovery, lease, and operations criteria.
+
+Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
+the primary command surface. The current supported envelope remains bounded,
+supervised or low-risk sequential execution. Dynamic workflows, reliable
+parallel agents, transaction-grade external effects, and automatic harness
+self-promotion remain contracted or planned rather than implemented.
