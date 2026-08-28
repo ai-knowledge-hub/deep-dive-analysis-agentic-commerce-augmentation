@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from types import MappingProxyType
 from typing import Final, Mapping
@@ -191,6 +191,7 @@ class ApprovalBinding:
     def validate(self) -> None:
         """Revalidate this frozen effect binding at a trust boundary."""
 
+        _require_identifier("schema_version", self.schema_version)
         if self.schema_version != APPROVAL_ENVELOPE_SCHEMA_VERSION:
             raise ApprovalContractError(
                 "approval schema_version must match the supported domain contract"
@@ -214,10 +215,10 @@ class ApprovalBinding:
             _require_identifier(field_name, getattr(self, field_name))
         _require_enum("principal_type", self.principal_type, PrincipalType)
         _require_enum("effect_class", self.effect_class, EffectClass)
-        if isinstance(self.active_graph_revision, bool) or not isinstance(
-            self.active_graph_revision, int
-        ):
-            raise ApprovalContractError("active_graph_revision must be an integer")
+        if type(self.active_graph_revision) is not int:
+            raise ApprovalContractError(
+                "active_graph_revision must be an exact integer"
+            )
         if self.active_graph_revision < 1:
             raise ApprovalContractError("active_graph_revision must be positive")
         if (
@@ -237,9 +238,11 @@ class ApprovalBinding:
             "registry_fingerprint",
         ):
             _require_digest(field_name, getattr(self, field_name))
-        _require_aware_datetime("requested_at", self.requested_at)
-        _require_aware_datetime("expires_at", self.expires_at)
-        if self.expires_at <= self.requested_at:
+        requested_at = _normalize_datetime("requested_at", self.requested_at)
+        expires_at = _normalize_datetime("expires_at", self.expires_at)
+        object.__setattr__(self, "requested_at", requested_at)
+        object.__setattr__(self, "expires_at", expires_at)
+        if expires_at <= requested_at:
             raise ApprovalContractError("expires_at must be after requested_at")
 
 
@@ -266,8 +269,9 @@ class ApprovalEnvelope:
             raise ApprovalContractError("binding must be an ApprovalBinding")
         self.binding.validate()
         _require_enum("status", self.status, ApprovalStatus)
-        _require_aware_datetime("transitioned_at", self.transitioned_at)
-        if self.transitioned_at < self.binding.requested_at:
+        transitioned_at = _normalize_datetime("transitioned_at", self.transitioned_at)
+        object.__setattr__(self, "transitioned_at", transitioned_at)
+        if transitioned_at < self.binding.requested_at:
             raise ApprovalContractError("transitioned_at cannot be before requested_at")
         if (self.decided_at is None) != (self.approving_authority is None):
             raise ApprovalContractError(
@@ -280,16 +284,13 @@ class ApprovalEnvelope:
                 )
             self.approving_authority.validate()
         if self.decided_at is not None:
-            _require_aware_datetime("decided_at", self.decided_at)
-            if (
-                not self.binding.requested_at
-                <= self.decided_at
-                < self.binding.expires_at
-            ):
+            decided_at = _normalize_datetime("decided_at", self.decided_at)
+            object.__setattr__(self, "decided_at", decided_at)
+            if not self.binding.requested_at <= decided_at < self.binding.expires_at:
                 raise ApprovalContractError(
                     "decided_at must be within the approval request lifetime"
                 )
-            if self.transitioned_at < self.decided_at:
+            if transitioned_at < decided_at:
                 raise ApprovalContractError(
                     "transitioned_at cannot be before decided_at"
                 )
@@ -301,10 +302,17 @@ class ApprovalTransition:
     source: ApprovalStatus
     target: ApprovalStatus
 
+    def __post_init__(self) -> None:
+        _require_enum("source", self.source, ApprovalStatus)
+        _require_enum("target", self.target, ApprovalStatus)
+
 
 def create_approval_request(binding: ApprovalBinding) -> ApprovalEnvelope:
     """Create the first immutable snapshot for a validated approval binding."""
 
+    if type(binding) is not ApprovalBinding:
+        raise ApprovalContractError("binding must be an ApprovalBinding")
+    binding.validate()
     return ApprovalEnvelope(
         binding=binding,
         status=ApprovalStatus.REQUESTED,
@@ -313,10 +321,13 @@ def create_approval_request(binding: ApprovalBinding) -> ApprovalEnvelope:
 
 
 def allowed_approval_transitions(status: ApprovalStatus) -> frozenset[ApprovalStatus]:
+    _require_enum("status", status, ApprovalStatus)
     return _ALLOWED_APPROVAL_TRANSITIONS[status]
 
 
 def can_transition_approval(source: ApprovalStatus, target: ApprovalStatus) -> bool:
+    _require_enum("source", source, ApprovalStatus)
+    _require_enum("target", target, ApprovalStatus)
     return target in allowed_approval_transitions(source)
 
 
@@ -341,8 +352,11 @@ def transition_approval(
 ) -> ApprovalEnvelope:
     """Return the next immutable snapshot after validating time and metadata."""
 
+    if type(envelope) is not ApprovalEnvelope:
+        raise ApprovalContractError("envelope must be an ApprovalEnvelope")
+    envelope.validate()
     require_approval_transition(envelope.status, target)
-    _require_aware_datetime("occurred_at", occurred_at)
+    occurred_at = _normalize_datetime("occurred_at", occurred_at)
     if occurred_at < envelope.transitioned_at:
         raise ApprovalContractError(
             "approval transitions cannot move backwards in time"
@@ -494,27 +508,38 @@ def _validate_transition_arguments(
 
 
 def _require_identifier(field_name: str, value: object) -> None:
-    if not isinstance(value, str) or not value or value != value.strip():
+    if type(value) is not str:
+        raise ApprovalContractError(f"{field_name} must be an exact string")
+    if not value or value != value.strip():
         raise ApprovalContractError(
             f"{field_name} must be a non-empty canonical string"
         )
 
 
 def _require_digest(field_name: str, value: object) -> None:
-    if not isinstance(value, str) or _DIGEST_PATTERN.fullmatch(value) is None:
+    if type(value) is not str:
+        raise ApprovalContractError(f"{field_name} must be an exact string")
+    if _DIGEST_PATTERN.fullmatch(value) is None:
         raise ApprovalContractError(
             f"{field_name} must be a lowercase SHA-256 hex digest"
         )
 
 
 def _require_enum(field_name: str, value: object, enum_type: type[Enum]) -> None:
-    if not isinstance(value, enum_type):
+    if type(value) is not enum_type:
         raise ApprovalContractError(f"{field_name} must be a supported enum value")
 
 
-def _require_aware_datetime(field_name: str, value: object) -> None:
-    if not isinstance(value, datetime) or value.utcoffset() is None:
+def _normalize_datetime(field_name: str, value: object) -> datetime:
+    if type(value) is not datetime:
+        raise ApprovalContractError(f"{field_name} must be an exact built-in datetime")
+    if value.tzinfo is None:
         raise ApprovalContractError(f"{field_name} must be timezone-aware")
+    if type(value.tzinfo) is not timezone:
+        raise ApprovalContractError(
+            f"{field_name} must use a built-in fixed-offset timezone"
+        )
+    return value.astimezone(timezone.utc)
 
 
 __all__ = [

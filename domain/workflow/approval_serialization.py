@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Mapping, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from domain.workflow.approval import (
     APPROVAL_ENVELOPE_CONTRACT,
@@ -157,14 +157,20 @@ def approval_envelope_digest(envelope: ApprovalEnvelope) -> str:
     return hashlib.sha256(canonical_approval_envelope_bytes(envelope)).hexdigest()
 
 
-def approval_envelope_from_payload(value: Mapping[str, Any]) -> ApprovalEnvelope:
+def approval_envelope_from_payload(value: dict[str, Any]) -> ApprovalEnvelope:
     """Parse schema v1, rejecting omitted and unknown authority fields."""
 
     top_level = _as_mapping("approval envelope", value)
     _require_exact_keys("approval envelope", top_level, _TOP_LEVEL_KEYS)
-    if top_level["contract"] != APPROVAL_ENVELOPE_CONTRACT:
+    if (
+        type(top_level["contract"]) is not str
+        or top_level["contract"] != APPROVAL_ENVELOPE_CONTRACT
+    ):
         raise ApprovalContractError("unsupported approval envelope contract")
-    if top_level["schema_version"] != APPROVAL_ENVELOPE_SCHEMA_VERSION:
+    if (
+        type(top_level["schema_version"]) is not str
+        or top_level["schema_version"] != APPROVAL_ENVELOPE_SCHEMA_VERSION
+    ):
         raise ApprovalContractError("unsupported approval envelope schema_version")
 
     scope = _as_mapping("scope", top_level["scope"])
@@ -229,7 +235,7 @@ def _format_optional_datetime(value: datetime | None) -> str | None:
 
 
 def _parse_datetime(field_name: str, value: object) -> datetime:
-    if not isinstance(value, str):
+    if type(value) is not str:
         raise ApprovalContractError(f"{field_name} must be a canonical timestamp")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -246,17 +252,19 @@ def _parse_optional_datetime(field_name: str, value: object) -> datetime | None:
     return None if value is None else _parse_datetime(field_name, value)
 
 
-def _as_mapping(field_name: str, value: object) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise ApprovalContractError(f"{field_name} must be an object")
-    return cast(Mapping[str, Any], value)
+def _as_mapping(field_name: str, value: object) -> dict[str, Any]:
+    if type(value) is not dict:
+        raise ApprovalContractError(f"{field_name} must be an exact object")
+    return cast(dict[str, Any], value)
 
 
 def _require_exact_keys(
     field_name: str,
-    value: Mapping[str, Any],
+    value: dict[str, Any],
     expected: frozenset[str],
 ) -> None:
+    if any(type(key) is not str for key in value):
+        raise ApprovalContractError(f"{field_name} keys must be exact strings")
     actual = frozenset(value)
     if actual != expected:
         missing = sorted(expected - actual)
@@ -268,6 +276,10 @@ def _require_exact_keys(
 
 
 def _parse_enum(enum_type: type[_EnumT], value: object) -> _EnumT:
+    if type(value) is not str:
+        raise ApprovalContractError(
+            f"{enum_type.__name__} must be encoded as an exact string"
+        )
     try:
         return enum_type(value)
     except (TypeError, ValueError) as exc:

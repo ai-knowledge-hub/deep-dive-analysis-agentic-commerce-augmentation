@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import FrozenInstanceError, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -384,6 +384,51 @@ class MutableApprovalEnvelope(ApprovalEnvelope):
         object.__setattr__(self, name, value)
 
 
+class LyingStripString(str):
+    def strip(self, chars: str | None = None) -> str:
+        return self
+
+
+class LyingEqualityString(str):
+    def strip(self, chars: str | None = None) -> str:
+        return self
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __ne__(self, other: object) -> bool:
+        return False
+
+    __hash__ = str.__hash__
+
+
+class LyingNegativeInteger(int):
+    def __lt__(self, other: object) -> bool:
+        return False
+
+
+class MutableTimezone(tzinfo):
+    def __init__(self, offset: timedelta) -> None:
+        self.offset = offset
+
+    def utcoffset(self, value: datetime | None) -> timedelta:
+        return self.offset
+
+    def dst(self, value: datetime | None) -> timedelta:
+        return timedelta(0)
+
+    def tzname(self, value: datetime | None) -> str:
+        return "mutable"
+
+
+class HostileDatetime(datetime):
+    pass
+
+
+class HostileDictionary(dict[str, Any]):
+    pass
+
+
 @pytest.mark.parametrize(
     ("factory", "overrides"),
     [
@@ -482,11 +527,208 @@ def test_envelope_rejects_mutable_binding_subclass() -> None:
         )
 
 
+def test_request_creation_rejects_mutable_binding_subclass_before_field_use() -> None:
+    binding = MutableApprovalBinding(**make_binding().__dict__)
+
+    with pytest.raises(ApprovalContractError, match="ApprovalBinding"):
+        create_approval_request(binding)
+
+
 def test_serializer_rejects_polymorphic_envelope() -> None:
     envelope = MutableApprovalEnvelope(**make_approved().__dict__)
 
     with pytest.raises(ApprovalContractError, match="ApprovalEnvelope"):
         approval_envelope_payload(envelope)
+
+
+def test_transition_rejects_polymorphic_envelope_before_field_use() -> None:
+    envelope = MutableApprovalEnvelope(**make_requested().__dict__)
+
+    with pytest.raises(ApprovalContractError, match="ApprovalEnvelope"):
+        transition_approval(
+            envelope,
+            ApprovalStatus.EXPIRED,
+            occurred_at=EXPIRES_AT,
+        )
+
+
+@pytest.mark.parametrize(
+    ("factory", "overrides"),
+    [
+        (make_binding, {"tenant_id": LyingStripString(" tenant-evil ")}),
+        (make_binding, {"input_hash": LyingStripString("a" * 64)}),
+        (make_authority, {"principal_id": LyingStripString(" operator-evil ")}),
+    ],
+)
+def test_direct_construction_rejects_string_subclasses(
+    factory: Callable[..., object],
+    overrides: dict[str, object],
+) -> None:
+    with pytest.raises(ApprovalContractError, match="exact string"):
+        factory(**overrides)
+
+
+def test_direct_construction_rejects_integer_subclass_with_lying_comparison() -> None:
+    with pytest.raises(ApprovalContractError, match="exact integer"):
+        make_binding(active_graph_revision=LyingNegativeInteger(-1))
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["requested_at", "expires_at"],
+)
+def test_direct_construction_rejects_mutable_timezone(field_name: str) -> None:
+    mutable_timezone = MutableTimezone(timedelta(0))
+    hostile_time = datetime(2026, 8, 25, 9, 0, tzinfo=mutable_timezone)
+
+    with pytest.raises(ApprovalContractError, match="built-in fixed-offset"):
+        make_binding(**{field_name: hostile_time})
+
+
+def test_direct_construction_rejects_datetime_subclass() -> None:
+    hostile_time = HostileDatetime(
+        2026,
+        8,
+        25,
+        9,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+    with pytest.raises(ApprovalContractError, match="exact built-in datetime"):
+        make_binding(requested_at=hostile_time)
+
+
+def test_transition_rejects_mutable_timezone_and_normalizes_fixed_offset() -> None:
+    mutable_time = datetime(
+        2026,
+        8,
+        25,
+        9,
+        5,
+        tzinfo=MutableTimezone(timedelta(0)),
+    )
+    with pytest.raises(ApprovalContractError, match="built-in fixed-offset"):
+        transition_approval(
+            make_requested(),
+            ApprovalStatus.APPROVED,
+            occurred_at=mutable_time,
+            approving_authority=make_authority(),
+        )
+
+    fixed_offset_time = DECIDED_AT.astimezone(timezone(timedelta(hours=1)))
+    approved = transition_approval(
+        make_requested(),
+        ApprovalStatus.APPROVED,
+        occurred_at=fixed_offset_time,
+        approving_authority=make_authority(),
+    )
+    assert approved.transitioned_at == DECIDED_AT
+    assert approved.transitioned_at.tzinfo is timezone.utc
+    assert approved.decided_at == DECIDED_AT
+    assert approved.decided_at is not None
+    assert approved.decided_at.tzinfo is timezone.utc
+
+
+@pytest.mark.parametrize("path", [(), ("scope",), ("lifecycle",)])
+def test_parser_rejects_mapping_subclasses(path: tuple[str, ...]) -> None:
+    payload = approval_envelope_payload(make_approved())
+    if not path:
+        hostile_payload = HostileDictionary(payload)
+    else:
+        hostile_payload = copy.deepcopy(payload)
+        hostile_payload[path[0]] = HostileDictionary(hostile_payload[path[0]])
+
+    with pytest.raises(ApprovalContractError, match="exact object"):
+        approval_envelope_from_payload(hostile_payload)
+
+
+def test_parser_rejects_string_subclass_used_as_mapping_key() -> None:
+    payload = approval_envelope_payload(make_approved())
+    hostile_payload = {
+        LyingStripString(key) if key == "scope" else key: value
+        for key, value in payload.items()
+    }
+
+    with pytest.raises(ApprovalContractError, match="keys must be exact strings"):
+        approval_envelope_from_payload(hostile_payload)
+
+
+@pytest.mark.parametrize(
+    ("path", "hostile_value"),
+    [
+        (("scope", "principal_id"), LyingStripString(" operator-evil ")),
+        (("scope", "active_graph_revision"), LyingNegativeInteger(-1)),
+        (
+            ("lifecycle", "requested_at"),
+            LyingStripString("2026-08-25T09:00:00.000000Z"),
+        ),
+    ],
+)
+def test_parser_rejects_hostile_primitive_subclasses(
+    path: tuple[str, str],
+    hostile_value: object,
+) -> None:
+    payload = copy.deepcopy(approval_envelope_payload(make_approved()))
+    payload[path[0]][path[1]] = hostile_value
+
+    with pytest.raises(ApprovalContractError):
+        approval_envelope_from_payload(payload)
+
+
+def test_parser_rejects_self_supersession_with_lying_string_equality() -> None:
+    superseded = transition_approval(
+        make_requested(),
+        ApprovalStatus.SUPERSEDED,
+        occurred_at=DECIDED_AT,
+        supersession_reference="approval-002",
+    )
+    payload = approval_envelope_payload(superseded)
+    payload["lifecycle"]["supersession_reference"] = LyingEqualityString("approval-001")
+
+    with pytest.raises(ApprovalContractError):
+        approval_envelope_from_payload(payload)
+
+
+def test_direct_transition_rejects_self_supersession_with_lying_equality() -> None:
+    requested = make_requested()
+
+    with pytest.raises(ApprovalContractError, match="exact string"):
+        transition_approval(
+            requested,
+            ApprovalStatus.SUPERSEDED,
+            occurred_at=DECIDED_AT,
+            supersession_reference=LyingEqualityString(requested.binding.approval_id),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "hostile_value"),
+    [
+        ("principal_id", LyingStripString(" agent-evil ")),
+        ("active_graph_revision", LyingNegativeInteger(-1)),
+        (
+            "requested_at",
+            datetime(
+                2026,
+                8,
+                25,
+                9,
+                0,
+                tzinfo=MutableTimezone(timedelta(0)),
+            ),
+        ),
+    ],
+)
+def test_serialization_rejects_hostile_leaf_added_after_construction(
+    field_name: str,
+    hostile_value: object,
+) -> None:
+    requested = make_requested()
+    object.__setattr__(requested.binding, field_name, hostile_value)
+
+    with pytest.raises(ApprovalContractError):
+        approval_envelope_digest(requested)
 
 
 @pytest.mark.parametrize(
@@ -682,6 +924,10 @@ def test_timezone_equivalent_instants_have_the_same_fingerprint() -> None:
     )
 
     assert approval_envelope_digest(equivalent) == approval_envelope_digest(original)
+    assert type(equivalent.binding.requested_at) is datetime
+    assert equivalent.binding.requested_at.tzinfo is timezone.utc
+    assert type(equivalent.binding.expires_at) is datetime
+    assert equivalent.binding.expires_at.tzinfo is timezone.utc
 
 
 def test_decision_and_terminal_evidence_change_the_snapshot_fingerprint() -> None:

@@ -301,6 +301,10 @@ reinterpreting a field requires a new schema version; an adapter cannot ignore
 an unfamiliar authority field and continue fail-open. Schema-v1 domain value
 objects are closed exact types rather than subclass extension points; adapters
 must cross the canonical parser boundary instead of injecting polymorphic state.
+Identifiers, hashes, enum encodings, revision numbers, mapping keys, and mapping
+containers use exact built-in leaf types. Accepted timestamps use built-in
+fixed-offset timezone values and are normalized immediately to built-in UTC;
+custom `datetime` or `tzinfo` behavior is rejected before comparison or hashing.
 
 The complete lifecycle is:
 
