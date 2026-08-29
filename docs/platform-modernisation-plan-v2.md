@@ -164,11 +164,14 @@ are now executable domain contracts. Approval requests and decisions are also
 persisted as canonical snapshots with append-only event history and independent
 idempotent command receipts. Current action statuses and agent events are fed as
 compatibility projections from the same transaction, and ledger reads verify
-the projection against immutable history. The complete task, attempt, and
-result transition contracts are not implemented, however. Pre-effect approval
-revalidation, evidence and completion semantics, recovery, and broader workflow
-concurrency controls therefore remain prerequisites for chat-issued governed
-effects, parallel execution, joins, and compensation.
+the projection against immutable history. New approval commands require verified
+bearer authority, compare the source action lifecycle again inside the commit,
+and validate complete history-backed supersession chains under the write lock.
+The complete task, attempt, and result transition contracts are not implemented,
+however. Pre-effect approval revalidation, evidence and completion semantics,
+recovery, and broader workflow concurrency controls therefore remain
+prerequisites for chat-issued governed effects, parallel execution, joins, and
+compensation.
 
 ## Target Runtime Model
 

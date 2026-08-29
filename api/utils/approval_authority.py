@@ -3,8 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Request
 
 from api.utils.agent_run_authorization import require_agent_run_control_access
-from api.utils.principals import PrincipalContext, resolve_principal_context
-from api.utils.tenancy import require_client_role
+from api.utils.principals import PrincipalContext
 from domain.workflow.approval import ApprovalAuthority, PrincipalType
 
 
@@ -17,8 +16,9 @@ def require_approval_authority(
 ) -> ApprovalAuthority:
     """Resolve an approval actor from the authenticated control context.
 
-    Body fields may locate the compatibility tenant/user context, but they never
-    directly populate the persisted authority object.
+    Body fields may locate compatibility data, but approval authority must come
+    from verified bearer claims. The current API has no authenticated human
+    session contract, so user-context fallbacks fail closed.
     """
 
     principal = require_agent_run_control_access(
@@ -28,25 +28,10 @@ def require_approval_authority(
         user_id=user_id,
         required_scope="agent_runs:write",
     )
-    if principal is None:
-        principal = resolve_principal_context(
-            request=request,
-            client_id=client_id,
-            user_id=user_id,
-            principal_type=None,
-            principal_id=None,
-            agent_profile_id=None,
-        )
-    if principal.auth_method == "tenant_context":
+    if principal is None or principal.auth_method != "bearer_token":
         raise HTTPException(
             status_code=401,
-            detail="Approval decisions require authenticated user or bearer context",
-        )
-    if principal.auth_method == "user_context":
-        require_client_role(
-            client_id=client_id,
-            user_id=principal.user_id,
-            allowed_roles={"admin", "owner", "operator"},
+            detail="Approval decisions require verified bearer authority",
         )
     return ApprovalAuthority(
         principal_type=_principal_type(principal),
@@ -67,15 +52,13 @@ def _principal_type(principal: PrincipalContext) -> PrincipalType:
 
 
 def _authority_source(principal: PrincipalContext) -> str:
-    if principal.auth_method == "bearer_token":
-        return "agent-principal-token"
-    return "tenant-membership"
+    del principal
+    return "agent-principal-token"
 
 
 def _authority_version(principal: PrincipalContext) -> str:
-    if principal.auth_method == "bearer_token":
-        return "agent-principal-signing-secret:v1"
-    return "tenant-membership:v1"
+    del principal
+    return "agent-principal-signing-secret:v1"
 
 
 __all__ = ["require_approval_authority"]

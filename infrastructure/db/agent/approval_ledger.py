@@ -4,8 +4,47 @@ import sqlite3
 import uuid
 from typing import Any, Dict, List, Optional
 
+from domain.workflow.approval import (
+    ApprovalBinding,
+    ApprovalContractError,
+    ApprovalEnvelope,
+    ApprovalStatus,
+    can_transition_approval,
+)
+from domain.workflow.approval_serialization import (
+    approval_envelope_digest,
+    approval_envelope_from_payload,
+)
 from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
+
+
+_SUPERSESSION_SCOPE_FIELDS = (
+    "tenant_id",
+    "principal_type",
+    "principal_id",
+    "workflow_id",
+    "capability_id",
+    "tool_id",
+    "effect_class",
+    "native_target",
+    "authority_hash",
+    "registry_version",
+    "registry_fingerprint",
+    "harness_id",
+    "harness_version",
+    "policy_profile_id",
+    "policy_version",
+)
+_ALLOWED_ACTION_PROJECTION_TRANSITIONS = frozenset(
+    {
+        ("proposed", None),
+        ("proposed", "approved"),
+        ("proposed", "rejected"),
+        ("approved", "approved"),
+        ("approved", "rejected"),
+    }
+)
 
 
 def get_approval(
@@ -129,6 +168,7 @@ def commit_approval_command(
     completed_at: str,
     mutations: List[Dict[str, Any]],
     result: Dict[str, Any],
+    expected_action_status: str,
     action_status: Optional[str],
     audit_events: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
@@ -156,6 +196,46 @@ def commit_approval_command(
                 return {"outcome": "idempotency_conflict", "command": existing}
             return {"outcome": "replayed", "command": existing}
 
+        if (
+            type(expected_action_status) is not str
+            or (action_status is not None and type(action_status) is not str)
+            or (expected_action_status, action_status)
+            not in (_ALLOWED_ACTION_PROJECTION_TRANSITIONS)
+        ):
+            conn.rollback()
+            return {
+                "outcome": "action_state_conflict",
+                "reason": "approval command requested an invalid action lifecycle transition",
+            }
+
+        action_row = conn.execute(
+            """
+            SELECT a.status
+            FROM agent_actions a
+            JOIN agent_runs r ON r.id = a.agent_run_id
+            WHERE a.id = ? AND a.agent_run_id = ? AND r.client_id = ?
+            """,
+            (action_id, workflow_id, tenant_id),
+        ).fetchone()
+        if not action_row or str(action_row["status"] or "") != expected_action_status:
+            conn.rollback()
+            return {
+                "outcome": "action_state_conflict",
+                "reason": "governed action lifecycle state changed before approval commit",
+            }
+
+        supersession_error = _validate_supersession_mutations_locked(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            action_id=action_id,
+            command_type=command_type,
+            mutations=mutations,
+        )
+        if supersession_error:
+            conn.rollback()
+            return {"outcome": "validation_error", **supersession_error}
+
         for mutation in mutations:
             conflict = _apply_mutation(
                 conn,
@@ -173,9 +253,9 @@ def commit_approval_command(
                 """
                 UPDATE agent_actions
                 SET status = ?, updated_at = datetime('now')
-                WHERE id = ? AND agent_run_id = ?
+                WHERE id = ? AND agent_run_id = ? AND status = ?
                 """,
-                (action_status, action_id, workflow_id),
+                (action_status, action_id, workflow_id, expected_action_status),
             )
             if cursor.rowcount != 1:
                 conn.rollback()
@@ -303,31 +383,190 @@ def commit_approval_command(
     return {"outcome": "committed", "command": stored}
 
 
-def supersession_would_cycle(
+def _validate_supersession_mutations_locked(
+    conn: sqlite3.Connection,
     *,
     tenant_id: str,
     workflow_id: str,
-    source_approval_id: str,
-    replacement_approval_id: str,
-) -> bool:
-    """Follow durable replacement links and fail closed on any cycle."""
-
-    current = replacement_approval_id
+    action_id: str,
+    command_type: str,
+    mutations: List[Dict[str, Any]],
+) -> Dict[str, Any] | None:
+    superseded = [item for item in mutations if item.get("status") == "superseded"]
+    if not superseded:
+        return None
+    if len(superseded) != 1:
+        return _validation_error(
+            "invalid_supersession_command",
+            "approval command must append exactly one supersession edge",
+        )
+    mutation = superseded[0]
+    if command_type != "supersede":
+        return _validation_error(
+            "invalid_supersession_command",
+            "supersession edge requires a supersede command receipt",
+        )
+    try:
+        proposed = approval_envelope_from_payload(dict(mutation["envelope"]))
+    except (ApprovalContractError, KeyError, TypeError):
+        return _validation_error(
+            "invalid_supersession_command",
+            "supersession mutation is not a canonical approval envelope",
+        )
+    if (
+        proposed.status is not ApprovalStatus.SUPERSEDED
+        or approval_envelope_digest(proposed) != mutation.get("envelope_digest")
+        or proposed.binding.approval_id != mutation.get("approval_id")
+        or proposed.binding.action_id != action_id
+    ):
+        return _validation_error(
+            "invalid_supersession_command",
+            "supersession mutation does not match its governed approval",
+        )
+    source, error = _validated_history_envelope_locked(
+        conn,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        approval_id=proposed.binding.approval_id,
+    )
+    if error:
+        return error
+    if (
+        source is None
+        or source.binding != proposed.binding
+        or not can_transition_approval(source.status, proposed.status)
+    ):
+        return _validation_error(
+            "invalid_supersession_command",
+            "supersession mutation changed the source approval binding",
+        )
+    replacement_id = str(proposed.supersession_reference or "")
+    current_id = replacement_id
     visited: set[str] = set()
-    while current:
-        if current == source_approval_id or current in visited:
-            return True
-        visited.add(current)
-        row = get_approval(
-            approval_id=current,
+    while current_id:
+        if current_id == source.binding.approval_id or current_id in visited:
+            return _validation_error(
+                "supersession_cycle",
+                "replacement approval would create a supersession cycle",
+            )
+        visited.add(current_id)
+        current, error = _validated_history_envelope_locked(
+            conn,
             tenant_id=tenant_id,
             workflow_id=workflow_id,
+            approval_id=current_id,
         )
-        if not row or row["status"] != "superseded":
-            return False
-        lifecycle = dict(row["envelope"].get("lifecycle") or {})
-        current = str(lifecycle.get("supersession_reference") or "")
-    return False
+        if error:
+            return error
+        if current is None:
+            return _validation_error(
+                "replacement_approval_not_found",
+                "replacement approval does not exist in the same tenant and workflow",
+                status_code=404,
+            )
+        if not _bindings_have_compatible_supersession_scope(
+            source.binding, current.binding
+        ):
+            return _validation_error(
+                "replacement_scope_mismatch",
+                "replacement approval has incompatible authority or effect scope",
+            )
+        if current.status is not ApprovalStatus.SUPERSEDED:
+            return None
+        current_id = str(current.supersession_reference or "")
+    return _validation_error(
+        "corrupt_approval_history",
+        "superseded approval history has no replacement reference",
+        status_code=500,
+    )
+
+
+def _validated_history_envelope_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    approval_id: str,
+) -> tuple[ApprovalEnvelope | None, Dict[str, Any] | None]:
+    record = conn.execute(
+        """
+        SELECT *
+        FROM approval_records
+        WHERE approval_id = ? AND tenant_id = ? AND workflow_id = ?
+        """,
+        (approval_id, tenant_id, workflow_id),
+    ).fetchone()
+    if not record:
+        return None, None
+    tail = conn.execute(
+        """
+        SELECT *
+        FROM approval_events
+        WHERE approval_id = ? AND tenant_id = ? AND workflow_id = ?
+        ORDER BY sequence DESC
+        LIMIT 1
+        """,
+        (approval_id, tenant_id, workflow_id),
+    ).fetchone()
+    if not tail:
+        return None, _validation_error(
+            "corrupt_approval_history",
+            "approval projection has no append-only history",
+            status_code=500,
+        )
+    try:
+        record_envelope = approval_envelope_from_payload(
+            from_json(record["envelope_json"], default={})
+        )
+        event_envelope = approval_envelope_from_payload(
+            from_json(tail["envelope_json"], default={})
+        )
+    except (ApprovalContractError, TypeError):
+        return None, _validation_error(
+            "corrupt_approval_history",
+            "approval projection or event is not canonical",
+            status_code=500,
+        )
+    if (
+        approval_envelope_digest(record_envelope) != record["envelope_digest"]
+        or approval_envelope_digest(event_envelope) != tail["envelope_digest"]
+        or str(record["approval_id"]) != record_envelope.binding.approval_id
+        or str(record["tenant_id"]) != record_envelope.binding.tenant_id
+        or str(record["workflow_id"]) != record_envelope.binding.workflow_id
+        or str(record["action_id"]) != record_envelope.binding.action_id
+        or str(tail["approval_id"]) != event_envelope.binding.approval_id
+        or str(tail["tenant_id"]) != event_envelope.binding.tenant_id
+        or str(tail["workflow_id"]) != event_envelope.binding.workflow_id
+        or str(tail["action_id"]) != event_envelope.binding.action_id
+        or str(record["current_status"]) != record_envelope.status.value
+        or str(tail["status"]) != event_envelope.status.value
+        or int(record["current_sequence"]) != int(tail["sequence"])
+        or str(record["current_status"]) != str(tail["status"])
+        or str(record["envelope_digest"]) != str(tail["envelope_digest"])
+        or str(record["action_id"]) != str(tail["action_id"])
+        or record_envelope != event_envelope
+    ):
+        return None, _validation_error(
+            "corrupt_approval_history",
+            "approval projection diverges from append-only history",
+            status_code=500,
+        )
+    return record_envelope, None
+
+
+def _bindings_have_compatible_supersession_scope(
+    source: ApprovalBinding, replacement: ApprovalBinding
+) -> bool:
+    return all(
+        getattr(source, field) == getattr(replacement, field)
+        for field in _SUPERSESSION_SCOPE_FIELDS
+    )
+
+
+def _validation_error(
+    code: str, reason: str, *, status_code: int = 409
+) -> Dict[str, Any]:
+    return {"code": code, "reason": reason, "status_code": status_code}
 
 
 def _apply_mutation(
@@ -481,5 +720,4 @@ __all__ = [
     "get_current_approval_for_action",
     "list_approval_events",
     "list_approvals_for_action",
-    "supersession_would_cycle",
 ]

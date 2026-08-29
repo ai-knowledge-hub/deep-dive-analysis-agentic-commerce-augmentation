@@ -39,6 +39,7 @@ MAX_APPROVAL_TTL_SECONDS = 86_400
 SUPPORTED_APPROVAL_COMMANDS = frozenset(
     {"request", "approve", "reject", "revoke", "expire", "supersede"}
 )
+DECIDABLE_ACTION_STATUSES = frozenset({"proposed", "approved"})
 
 
 class ApprovalLedgerError(ValueError):
@@ -81,9 +82,7 @@ def issue_action_approval_command(
         action_id=action_id,
     )
     approving_authority.validate()
-    normalized_key = _require_canonical_identifier(
-        "idempotency_key", idempotency_key
-    )
+    normalized_key = _require_canonical_identifier("idempotency_key", idempotency_key)
     normalized_approval_id = _optional_identifier("approval_id", approval_id)
     normalized_revocation = _optional_identifier(
         "revocation_reference", revocation_reference
@@ -145,6 +144,11 @@ def issue_action_approval_command(
         action_id=action_id,
         approval_id=normalized_approval_id,
     )
+    expected_action_status = _expected_action_status(
+        action=action,
+        current=current,
+        operation=operation,
+    )
     if expected_sequence is not None and (
         current is None or int(current["sequence"]) != expected_sequence
     ):
@@ -173,8 +177,7 @@ def issue_action_approval_command(
                 requested,
                 sequence=1,
                 expected_sequence=None,
-                require_no_existing_action_approval=operation
-                in {"approve", "reject"},
+                require_no_existing_action_approval=operation in {"approve", "reject"},
             )
         )
         envelope = requested
@@ -235,6 +238,7 @@ def issue_action_approval_command(
         completed_at=_format_datetime(now),
         mutations=mutations,
         result=result,
+        expected_action_status=expected_action_status,
         action_status=_legacy_action_projection(final_envelope.status),
         audit_events=_audit_events(
             run=run,
@@ -256,6 +260,17 @@ def issue_action_approval_command(
         raise ApprovalLedgerError(
             "another approval decision won the concurrency race",
             code="approval_version_conflict",
+        )
+    if outcome == "action_state_conflict":
+        raise ApprovalLedgerError(
+            "governed action lifecycle state changed before approval commit",
+            code="action_state_conflict",
+        )
+    if outcome == "validation_error":
+        raise ApprovalLedgerError(
+            str(stored.get("reason") or "approval integrity validation failed"),
+            code=str(stored.get("code") or "approval_integrity_error"),
+            status_code=int(stored.get("status_code") or 409),
         )
     command = stored.get("command")
     if not isinstance(command, dict):
@@ -324,6 +339,33 @@ def _load_current_approval(
     return current
 
 
+def _expected_action_status(
+    *,
+    action: Dict[str, Any],
+    current: Dict[str, Any] | None,
+    operation: str,
+) -> str:
+    status = str(action.get("status") or "").strip().lower()
+    allowed = DECIDABLE_ACTION_STATUSES
+    if current is None and operation == "request":
+        allowed = frozenset({"proposed"})
+    elif current is not None:
+        approval_status = str(current.get("status") or "")
+        allowed = (
+            frozenset({"proposed"})
+            if approval_status == ApprovalStatus.REQUESTED.value
+            else frozenset({"approved"})
+            if approval_status == ApprovalStatus.APPROVED.value
+            else frozenset()
+        )
+    if status not in allowed:
+        raise ApprovalLedgerError(
+            f"governed action cannot accept {operation} in its current lifecycle state",
+            code="action_not_decidable",
+        )
+    return status
+
+
 def _new_request(
     *,
     run: Dict[str, Any],
@@ -361,9 +403,7 @@ def _new_request(
         or "legacy-unpinned-registry-v1"
     ).strip()
     registry_fingerprint = str(
-        action.get("registry_fingerprint")
-        or run.get("registry_fingerprint")
-        or ""
+        action.get("registry_fingerprint") or run.get("registry_fingerprint") or ""
     ).strip()
     if not _is_digest(registry_fingerprint):
         registry_fingerprint = _hash_payload(
@@ -441,9 +481,7 @@ def _new_request(
         harness_id=harness_id,
         harness_version=f"registry:{registry_fingerprint}:harness:{harness_id}",
         policy_profile_id=policy_profile_id,
-        policy_version=(
-            f"registry:{registry_fingerprint}:policy:{policy_profile_id}"
-        ),
+        policy_version=(f"registry:{registry_fingerprint}:policy:{policy_profile_id}"),
         effect_idempotency_key=str(
             action.get("dedupe_key") or f"agent-action:{action['id']}:effect:v1"
         ),
@@ -511,11 +549,6 @@ def _transition_for_command(
                     code="missing_supersession_reference",
                     status_code=400,
                 )
-            _validate_replacement(
-                deps=deps,
-                source=envelope,
-                replacement_approval_id=supersession_reference,
-            )
             return transition_approval(
                 envelope,
                 ApprovalStatus.SUPERSEDED,
@@ -523,67 +556,12 @@ def _transition_for_command(
                 supersession_reference=supersession_reference,
             )
     except ApprovalContractError as exc:
-        raise ApprovalLedgerError(
-            str(exc), code="invalid_approval_transition"
-        ) from exc
+        raise ApprovalLedgerError(str(exc), code="invalid_approval_transition") from exc
     raise ApprovalLedgerError(
         f"unsupported approval command {operation!r}",
         code="unsupported_approval_command",
         status_code=400,
     )
-
-
-def _validate_replacement(
-    *, deps: AppDeps, source: ApprovalEnvelope, replacement_approval_id: str
-) -> None:
-    binding = source.binding
-    replacement_row = deps.approval_ledger.get_approval(
-        approval_id=replacement_approval_id,
-        tenant_id=binding.tenant_id,
-        workflow_id=binding.workflow_id,
-    )
-    if not replacement_row:
-        raise ApprovalLedgerError(
-            "replacement approval does not exist in the same tenant and workflow",
-            code="replacement_approval_not_found",
-            status_code=404,
-        )
-    replacement = _parse_stored_envelope(replacement_row)
-    comparable = (
-        "tenant_id",
-        "principal_type",
-        "principal_id",
-        "workflow_id",
-        "capability_id",
-        "tool_id",
-        "effect_class",
-        "native_target",
-        "authority_hash",
-        "registry_version",
-        "registry_fingerprint",
-        "harness_id",
-        "harness_version",
-        "policy_profile_id",
-        "policy_version",
-    )
-    if any(
-        getattr(binding, field) != getattr(replacement.binding, field)
-        for field in comparable
-    ):
-        raise ApprovalLedgerError(
-            "replacement approval has incompatible authority or effect scope",
-            code="replacement_scope_mismatch",
-        )
-    if deps.approval_ledger.supersession_would_cycle(
-        tenant_id=binding.tenant_id,
-        workflow_id=binding.workflow_id,
-        source_approval_id=binding.approval_id,
-        replacement_approval_id=replacement_approval_id,
-    ):
-        raise ApprovalLedgerError(
-            "replacement approval would create a supersession cycle",
-            code="supersession_cycle",
-        )
 
 
 def _validate_action_policy(*, run: Dict[str, Any], action: Dict[str, Any]) -> None:
@@ -687,7 +665,11 @@ def _audit_events(
             if envelope.status in {ApprovalStatus.REJECTED, ApprovalStatus.REVOKED}
             else base["event_type"]
         )
-        return [base] if compatibility["event_type"] == base["event_type"] else [base, compatibility]
+        return (
+            [base]
+            if compatibility["event_type"] == base["event_type"]
+            else [base, compatibility]
+        )
     received = dict(base)
     received["event_type"] = f"operator_command_{operation}"
     received["status"] = "received"
@@ -842,9 +824,7 @@ def _reload_authoritative_scope(
     workflow_id: str,
     action_id: str,
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    run = deps.agent_runs.get_agent_run(
-        run_id=workflow_id, client_id=tenant_id
-    )
+    run = deps.agent_runs.get_agent_run(run_id=workflow_id, client_id=tenant_id)
     action = deps.agent_actions.get_agent_action(
         action_id=action_id, client_id=tenant_id
     )
@@ -952,6 +932,7 @@ def _format_datetime(value: datetime) -> str:
 
 __all__ = [
     "ApprovalLedgerError",
+    "DECIDABLE_ACTION_STATUSES",
     "DEFAULT_APPROVAL_TTL_SECONDS",
     "MAX_APPROVAL_TTL_SECONDS",
     "SUPPORTED_APPROVAL_COMMANDS",
