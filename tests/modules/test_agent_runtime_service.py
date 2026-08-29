@@ -26,6 +26,7 @@ from application.services.agent_runtime.runtime import (
     PlanOnlyModeError,
     RunBusyError,
 )
+from domain.workflow.approval import ApprovalAuthority, PrincipalType
 from shared.db.connection import get_connection, init_db, set_database_path
 
 
@@ -1012,6 +1013,12 @@ def test_decide_agent_action_rejects_high_risk_approval_under_safe_auto(tmp_path
             client_id="client-a",
             user_id="user-a",
             decision="approve",
+            approving_authority=ApprovalAuthority(
+                principal_type=PrincipalType.HUMAN,
+                principal_id="human:user-a",
+                authority_source="test-user-context",
+                authority_version="v1",
+            ),
         )
 
     unchanged = deps.agent_actions.get_agent_action(action_id=action["id"])

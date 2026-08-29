@@ -333,6 +333,28 @@ Persistence must additionally require the replacement approval to exist in the
 same tenant and compatible workflow/effect scope, and must reject cycles across
 the complete supersession chain.
 
+Slice 1.5c persists this contract through three separate records. An
+`approval_records` row is the current, rebuildable projection; immutable
+`approval_events` retain every canonical lifecycle snapshot; and immutable
+`approval_commands` deduplicate operator intent independently of event
+identity. A command receipt, one or more snapshots, the legacy action-status
+projection, and the control-plane audit events commit in one SQLite transaction
+guarded by `BEGIN IMMEDIATE` and approval-sequence compare-and-swap. Database
+triggers reject updates or deletion of event and command history. Reads compare
+the projection and canonical digest to the append-only event tail before using
+it. Each governed action owns one approval lineage in this compatibility slice;
+reapproval after amendment, expiry, rejection, revocation, or supersession uses
+a replacement action and a new envelope rather than resurrecting the old
+action.
+
+The compatibility API resolves approving authority from an authenticated
+bearer principal or an authoritative tenant membership with an approval-capable
+role. Request parameters may locate that context but are not copied into the
+authority record. Legacy action `approved` and `rejected` values are written
+only after the corresponding durable decision commits; they remain projections
+and cannot authorize execution. Pre-effect consumption of the ledger remains a
+separate Slice 1.5d responsibility.
+
 ### `task_results`
 
 | Field | Contract |
@@ -539,3 +561,10 @@ The Slice 1.5b amendment is complete when the executable approval contract has
 an exhaustive transition matrix, stable canonical serialization and digest,
 fail-closed schema parsing, temporal and authority validation, and explicit
 legacy compatibility without persistence or runtime-enforcement coupling.
+
+The Slice 1.5c amendment is complete when approval requests and decisions
+survive restart, identical command retries return their immutable receipt,
+conflicting key reuse and stale concurrent decisions fail closed, every event
+names its envelope digest and authority, supersession is scope-compatible and
+acyclic, and current sequential approval APIs remain compatible. It does not
+make any approval executable; Slice 1.5d owns admission and pre-effect checks.

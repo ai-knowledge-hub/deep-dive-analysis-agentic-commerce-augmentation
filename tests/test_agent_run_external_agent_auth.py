@@ -41,6 +41,10 @@ def client(tmp_path, monkeypatch):
     init_db()
     deps = default_deps()
     deps.clients.create_client(client_id=CLIENT_ID, name="Client A")
+    deps.users.ensure_user(USER_ID)
+    deps.clients.add_client_user(
+        client_id=CLIENT_ID, user_id=USER_ID, role="operator"
+    )
     return TestClient(app)
 
 

@@ -160,10 +160,13 @@ and mandatory blocked beta capabilities; runtime policy and the security
 catalog are validated projections of that authority.
 
 The exact, framework-neutral approval envelope, lifecycle, and canonical digest
-are now executable domain contracts. The current agent action lifecycle is
-still distributed across services, however, and the complete task, attempt, and
-result transition contracts are not implemented. Durable approval persistence,
-pre-effect revalidation, evidence and completion semantics, recovery, and
+are now executable domain contracts. Approval requests and decisions are also
+persisted as canonical snapshots with append-only event history and independent
+idempotent command receipts. Current action statuses and agent events are fed as
+compatibility projections from the same transaction, and ledger reads verify
+the projection against immutable history. The complete task, attempt, and
+result transition contracts are not implemented, however. Pre-effect approval
+revalidation, evidence and completion semantics, recovery, and broader workflow
 concurrency controls therefore remain prerequisites for chat-issued governed
 effects, parallel execution, joins, and compensation.
 
@@ -439,9 +442,10 @@ Phase 1 remains open. The next reviewable sequence is:
    [#115](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/115),
    and [#116](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/116)).
    The immutable approval envelope and independent lifecycle are defined in
-   #114. Persist that contract in #115 and revalidate it immediately before a
-   governed effect in #116. Action status alone is not execution authority, and
-   this sequence does not release any blocked production capability.
+   #114, and #115 adds the durable ledger plus retry-safe operator commands.
+   Revalidate the exact authorization immediately before a governed effect in
+   #116. Action status alone is not execution authority, and this sequence does
+   not release any blocked production capability.
 6. **Evidence, result, and completion contracts.** Make completeness,
    freshness, provenance, missing coverage, partial failure, receipt status,
    and projection lag explicit. A successful tool call, child result, exhausted
