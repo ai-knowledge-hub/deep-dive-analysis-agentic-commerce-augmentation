@@ -3,6 +3,7 @@ from __future__ import annotations
 from shared.db.connection import init_db, set_database_path
 from infrastructure.memory.semantic_memory import SemanticMemory
 from infrastructure.llm.research_agent import run_research
+from shared.config.env import settings
 
 
 def test_research_agent_executes_tool_calls(monkeypatch, tmp_path):
@@ -29,6 +30,7 @@ def test_research_agent_executes_tool_calls(monkeypatch, tmp_path):
         "infrastructure.llm.research_agent.generate_with_tools",
         fake_generate_with_tools,
     )
+    monkeypatch.setattr(settings, "llm_provider", "openai")
 
     result = run_research(
         "running shoes", goals=["Reduce pain"], context="Session context"

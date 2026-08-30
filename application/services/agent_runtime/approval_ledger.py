@@ -306,6 +306,21 @@ def list_action_approvals(
     return approvals
 
 
+def get_authoritative_approval(
+    *, deps: AppDeps, tenant_id: str, workflow_id: str, approval_id: str
+) -> Dict[str, Any] | None:
+    """Resolve and verify one ledger projection against immutable history."""
+
+    row = deps.approval_ledger.get_approval(
+        approval_id=approval_id,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+    )
+    if row:
+        _validate_record_history(deps=deps, row=row)
+    return row
+
+
 def _load_current_approval(
     *,
     deps: AppDeps,
@@ -354,7 +369,11 @@ def _expected_action_status(
         allowed = (
             frozenset({"proposed"})
             if approval_status == ApprovalStatus.REQUESTED.value
-            else frozenset({"approved"})
+            else (
+                frozenset({"approved", "executing"})
+                if operation in {"reject", "revoke", "expire", "supersede"}
+                else frozenset({"approved"})
+            )
             if approval_status == ApprovalStatus.APPROVED.value
             else frozenset()
         )
@@ -375,6 +394,27 @@ def _new_request(
     ttl_seconds: int | None,
 ) -> ApprovalEnvelope:
     ttl = _approval_ttl(run=run, requested=ttl_seconds)
+    binding = build_action_approval_binding(
+        run=run,
+        action=action,
+        approval_id=approval_id,
+        requested_at=now,
+        expires_at=now + timedelta(seconds=ttl),
+    )
+    return create_approval_request(binding)
+
+
+def build_action_approval_binding(
+    *,
+    run: Dict[str, Any],
+    action: Dict[str, Any],
+    approval_id: str,
+    requested_at: datetime,
+    expires_at: datetime,
+    native_target: Any = None,
+) -> ApprovalBinding:
+    """Rebuild the exact approval scope from current authoritative runtime state."""
+
     capability_id = _require_canonical_identifier(
         "capability_id", str(action.get("capability_name") or "")
     )
@@ -429,6 +469,7 @@ def _new_request(
             "capability_id": capability_id,
             "capability_version": action.get("capability_version"),
             "tool_id": tool_id,
+            "tool_version": action.get("tool_version"),
             "effect_class": effect_class.value,
             "inputs": action.get("inputs") or {},
         }
@@ -458,20 +499,20 @@ def _new_request(
             "policy_profile_id": policy_profile_id,
         }
     )
-    binding = ApprovalBinding(
+    return ApprovalBinding(
         approval_id=approval_id,
         schema_version=APPROVAL_ENVELOPE_SCHEMA_VERSION,
         tenant_id=str(run["client_id"]),
         principal_type=principal_type,
         principal_id=principal_id,
         workflow_id=str(run["id"]),
-        active_graph_revision=1,
+        active_graph_revision=int(run.get("active_graph_revision") or 1),
         task_id=str(action["id"]),
         action_id=str(action["id"]),
         capability_id=capability_id,
         tool_id=tool_id,
         effect_class=effect_class,
-        native_target=None,
+        native_target=native_target,
         input_hash=input_hash,
         payload_hash=payload_hash,
         evidence_digest=evidence_digest,
@@ -485,10 +526,9 @@ def _new_request(
         effect_idempotency_key=str(
             action.get("dedupe_key") or f"agent-action:{action['id']}:effect:v1"
         ),
-        requested_at=now,
-        expires_at=now + timedelta(seconds=ttl),
+        requested_at=requested_at,
+        expires_at=expires_at,
     )
-    return create_approval_request(binding)
 
 
 def _transition_for_command(
@@ -936,6 +976,8 @@ __all__ = [
     "DEFAULT_APPROVAL_TTL_SECONDS",
     "MAX_APPROVAL_TTL_SECONDS",
     "SUPPORTED_APPROVAL_COMMANDS",
+    "build_action_approval_binding",
+    "get_authoritative_approval",
     "issue_action_approval_command",
     "list_action_approvals",
 ]

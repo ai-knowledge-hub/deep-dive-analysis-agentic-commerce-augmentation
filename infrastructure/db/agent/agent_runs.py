@@ -146,7 +146,9 @@ def update_agent_run(
     return get_agent_run(run_id)
 
 
-def get_agent_run(run_id: str, *, client_id: Optional[str] = None) -> Dict[str, Any] | None:
+def get_agent_run(
+    run_id: str, *, client_id: Optional[str] = None
+) -> Dict[str, Any] | None:
     conn = get_connection()
     if client_id:
         row = conn.execute(
@@ -154,7 +156,9 @@ def get_agent_run(run_id: str, *, client_id: Optional[str] = None) -> Dict[str, 
             (run_id, client_id),
         ).fetchone()
     else:
-        row = conn.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM agent_runs WHERE id = ?", (run_id,)
+        ).fetchone()
     return _row(row) if row else None
 
 
@@ -398,6 +402,9 @@ def _row(row) -> Dict[str, Any]:
         "registry_fingerprint": row["registry_fingerprint"]
         if "registry_fingerprint" in row.keys()
         else None,
+        "active_graph_revision": int(row["active_graph_revision"])
+        if "active_graph_revision" in row.keys()
+        else 1,
         "error": row["error_text"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],

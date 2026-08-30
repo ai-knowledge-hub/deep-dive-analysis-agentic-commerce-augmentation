@@ -15,6 +15,8 @@ from domain.workflow.approval_serialization import (
     approval_envelope_digest,
     approval_envelope_from_payload,
 )
+from domain.workflow.approval_execution import approval_execution_source_digest
+import infrastructure.db.agent.approval_persistence as approval_persistence
 from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
 
@@ -43,6 +45,7 @@ _ALLOWED_ACTION_PROJECTION_TRANSITIONS = frozenset(
         ("proposed", "rejected"),
         ("approved", "approved"),
         ("approved", "rejected"),
+        ("executing", "rejected"),
     }
 )
 
@@ -62,7 +65,7 @@ def get_approval(
         )
         .fetchone()
     )
-    return _approval_row(row) if row else None
+    return approval_persistence.approval_row(row) if row else None
 
 
 def get_current_approval_for_action(
@@ -89,7 +92,7 @@ def get_current_approval_for_action(
         )
         .fetchone()
     )
-    return _approval_row(row) if row else None
+    return approval_persistence.approval_row(row) if row else None
 
 
 def list_approvals_for_action(
@@ -109,7 +112,7 @@ def list_approvals_for_action(
         )
         .fetchall()
     )
-    return [_approval_row(row) for row in rows]
+    return [approval_persistence.approval_row(row) for row in rows]
 
 
 def list_approval_events(
@@ -129,7 +132,7 @@ def list_approval_events(
         )
         .fetchall()
     )
-    return [_event_row(row) for row in rows]
+    return [approval_persistence.event_row(row) for row in rows]
 
 
 def get_command_by_idempotency_key(
@@ -147,7 +150,480 @@ def get_command_by_idempotency_key(
         )
         .fetchone()
     )
-    return _command_row(row) if row else None
+    return approval_persistence.command_row(row) if row else None
+
+
+def get_effect_execution(
+    *, tenant_id: str, workflow_id: str, effect_idempotency_key: str
+) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT *
+            FROM approval_effect_executions
+            WHERE tenant_id = ? AND workflow_id = ? AND effect_idempotency_key = ?
+            """,
+            (tenant_id, workflow_id, effect_idempotency_key),
+        )
+        .fetchone()
+    )
+    return approval_persistence.effect_execution_row(row) if row else None
+
+
+def commit_effect_authorization(
+    *,
+    execution_id: str,
+    tenant_id: str,
+    workflow_id: str,
+    action_id: str,
+    approval_id: str,
+    envelope_digest: str,
+    authorization_source_digest: str,
+    effect_idempotency_key: str,
+    authorized_at: str,
+    audit_event: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Linearize one exact, single-use approval immediately before its effect."""
+
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        envelope, error = _validated_history_envelope_locked(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            approval_id=approval_id,
+        )
+        if error or envelope is None:
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": (error or {}).get("reason", "approval does not exist"),
+            }
+        if (
+            envelope.status is not ApprovalStatus.APPROVED
+            or approval_envelope_digest(envelope) != envelope_digest
+            or envelope.binding.action_id != action_id
+            or envelope.binding.effect_idempotency_key != effect_idempotency_key
+        ):
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": "approval is no longer valid for this exact effect",
+            }
+        now = approval_persistence.parse_timestamp(authorized_at)
+        if now >= envelope.binding.expires_at:
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": "approval expired before the effect authorization commit",
+            }
+        scope = approval_persistence.runtime_scope_locked(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            action_id=action_id,
+        )
+        if scope is None:
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": "governed action no longer exists in workflow scope",
+            }
+        run, action = scope
+        if (
+            action.get("status") != "executing"
+            or action.get("approval_id") != approval_id
+            or action.get("approval_envelope_digest") != envelope_digest
+            or approval_execution_source_digest(run=run, action=action)
+            != authorization_source_digest
+        ):
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": "runtime source changed after approval revalidation",
+            }
+
+        existing = conn.execute(
+            """
+            SELECT * FROM approval_effect_executions
+            WHERE approval_id = ?
+               OR (tenant_id = ? AND workflow_id = ? AND effect_idempotency_key = ?)
+            LIMIT 1
+            """,
+            (approval_id, tenant_id, workflow_id, effect_idempotency_key),
+        ).fetchone()
+        if existing:
+            current = approval_persistence.effect_execution_row(existing)
+            same_identity = all(
+                current[field] == expected
+                for field, expected in {
+                    "tenant_id": tenant_id,
+                    "workflow_id": workflow_id,
+                    "action_id": action_id,
+                    "approval_id": approval_id,
+                    "approval_envelope_digest": envelope_digest,
+                    "authorization_source_digest": authorization_source_digest,
+                    "effect_idempotency_key": effect_idempotency_key,
+                }.items()
+            )
+            conn.rollback()
+            if same_identity:
+                return {
+                    "outcome": "completed"
+                    if current["status"] == "succeeded"
+                    else "reconcile",
+                    "execution": current,
+                }
+            return {
+                "outcome": "identity_conflict",
+                "reason": "approval or effect identity was already consumed differently",
+            }
+
+        conn.execute(
+            """
+            INSERT INTO approval_effect_executions (
+                execution_id, tenant_id, workflow_id, action_id, approval_id,
+                approval_envelope_digest, authorization_source_digest,
+                effect_idempotency_key, status, started_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'started', ?, ?)
+            """,
+            (
+                execution_id,
+                tenant_id,
+                workflow_id,
+                action_id,
+                approval_id,
+                envelope_digest,
+                authorization_source_digest,
+                effect_idempotency_key,
+                authorized_at,
+                authorized_at,
+            ),
+        )
+        approval_persistence.insert_agent_audit_event_locked(
+            conn,
+            workflow_id=workflow_id,
+            action_id=action_id,
+            event=audit_event,
+        )
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        conn.rollback()
+        return {"outcome": "identity_conflict", "reason": str(exc)}
+    except Exception:
+        conn.rollback()
+        raise
+    return {
+        "outcome": "started",
+        "execution": get_effect_execution(
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            effect_idempotency_key=effect_idempotency_key,
+        ),
+    }
+
+
+def mark_effect_execution_uncertain(
+    *,
+    execution_id: str,
+    tenant_id: str,
+    workflow_id: str,
+    action_id: str,
+    error_code: str,
+    occurred_at: str,
+    audit_event: Dict[str, Any],
+) -> Dict[str, Any]:
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cursor = conn.execute(
+            """
+            UPDATE approval_effect_executions
+            SET status = 'uncertain', error_code = ?, updated_at = ?
+            WHERE execution_id = ? AND tenant_id = ? AND workflow_id = ?
+              AND action_id = ? AND status = 'started'
+            """,
+            (
+                error_code,
+                occurred_at,
+                execution_id,
+                tenant_id,
+                workflow_id,
+                action_id,
+            ),
+        )
+        row = conn.execute(
+            """
+            SELECT * FROM approval_effect_executions
+            WHERE execution_id = ? AND tenant_id = ? AND workflow_id = ?
+            """,
+            (execution_id, tenant_id, workflow_id),
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            return {"outcome": "not_found"}
+        current = approval_persistence.effect_execution_row(row)
+        if cursor.rowcount == 1:
+            approval_persistence.insert_agent_audit_event_locked(
+                conn,
+                workflow_id=workflow_id,
+                action_id=action_id,
+                event=audit_event,
+            )
+            conn.commit()
+            return {"outcome": "uncertain", "execution": current}
+        conn.rollback()
+        return {
+            "outcome": "completed" if current["status"] == "succeeded" else "uncertain",
+            "execution": current,
+        }
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def commit_effect_completion(
+    *,
+    execution_id: str,
+    tenant_id: str,
+    workflow_id: str,
+    action_id: str,
+    approval_id: str,
+    expected_envelope_digest: str,
+    effect_idempotency_key: str,
+    receipt_id: str,
+    outputs: Dict[str, Any],
+    outputs_hash: str,
+    completed_at: str,
+    command_id: str,
+    idempotency_key: str,
+    request_hash: str,
+    result: Dict[str, Any],
+    mutation: Dict[str, Any],
+    audit_events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Atomically persist receipt, fulfillment, action outcome, and audit links."""
+
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT * FROM approval_effect_executions
+            WHERE execution_id = ? AND tenant_id = ? AND workflow_id = ?
+            """,
+            (execution_id, tenant_id, workflow_id),
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            return {"outcome": "not_found"}
+        execution = approval_persistence.effect_execution_row(row)
+        exact_identity = all(
+            execution[field] == expected
+            for field, expected in {
+                "action_id": action_id,
+                "approval_id": approval_id,
+                "approval_envelope_digest": expected_envelope_digest,
+                "effect_idempotency_key": effect_idempotency_key,
+            }.items()
+        )
+        if not exact_identity:
+            conn.rollback()
+            return {
+                "outcome": "identity_conflict",
+                "reason": "effect completion does not match the authorized identity",
+            }
+        if execution["status"] == "succeeded":
+            conn.rollback()
+            if (
+                execution["receipt_id"] == receipt_id
+                and execution["outputs_hash"] == outputs_hash
+            ):
+                return {"outcome": "replayed", "execution": execution}
+            return {
+                "outcome": "identity_conflict",
+                "reason": "completed effect was reconciled with different evidence",
+            }
+        if execution["status"] not in {"started", "uncertain"}:
+            conn.rollback()
+            return {"outcome": "state_conflict"}
+
+        envelope, error = _validated_history_envelope_locked(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            approval_id=approval_id,
+        )
+        if error or envelope is None:
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": (error or {}).get("reason", "approval does not exist"),
+            }
+        if (
+            envelope.status is not ApprovalStatus.APPROVED
+            or approval_envelope_digest(envelope) != expected_envelope_digest
+        ):
+            conn.rollback()
+            return {
+                "outcome": "authorization_conflict",
+                "reason": "approval changed after the effect was authorized",
+            }
+        try:
+            fulfilled = approval_envelope_from_payload(dict(mutation["envelope"]))
+        except (ApprovalContractError, KeyError, TypeError):
+            conn.rollback()
+            return {
+                "outcome": "validation_error",
+                "reason": "effect fulfillment is not a canonical approval envelope",
+            }
+        if (
+            fulfilled.status is not ApprovalStatus.FULFILLED
+            or fulfilled.binding != envelope.binding
+            or fulfilled.fulfillment_receipt_id != receipt_id
+            or approval_envelope_digest(fulfilled) != mutation.get("envelope_digest")
+            or not can_transition_approval(envelope.status, fulfilled.status)
+        ):
+            conn.rollback()
+            return {
+                "outcome": "validation_error",
+                "reason": "effect fulfillment changed the approved binding or receipt",
+            }
+        action_row = conn.execute(
+            """
+            SELECT status FROM agent_actions
+            WHERE id = ? AND agent_run_id = ?
+            """,
+            (action_id, workflow_id),
+        ).fetchone()
+        if not action_row or str(action_row["status"]) not in {"executing", "failed"}:
+            conn.rollback()
+            return {
+                "outcome": "action_state_conflict",
+                "reason": "action is not awaiting effect completion or reconciliation",
+            }
+
+        result_json = to_json(result) or to_json({})
+        result_hash = str(result["result_hash"])
+        conn.execute(
+            """
+            INSERT INTO approval_commands (
+                command_id, tenant_id, workflow_id, action_id, approval_id,
+                command_type, command_version, principal_type, principal_id,
+                authority_source, authority_version, idempotency_key,
+                request_hash, expected_sequence, status, result_json,
+                result_hash, first_event_sequence, last_event_sequence,
+                received_at, completed_at
+            )
+            VALUES (?, ?, ?, ?, ?, 'fulfill', '1.0', 'internal_agent',
+                    'agent-runtime', 'pre-effect-authorization', '1.0', ?, ?, ?,
+                    'committed', json(?), ?, ?, ?, ?, ?)
+            """,
+            (
+                command_id,
+                tenant_id,
+                workflow_id,
+                action_id,
+                approval_id,
+                idempotency_key,
+                request_hash,
+                int(mutation["expected_sequence"]),
+                result_json,
+                result_hash,
+                int(mutation["sequence"]),
+                int(mutation["sequence"]),
+                completed_at,
+                completed_at,
+            ),
+        )
+        conflict = _apply_mutation(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            action_id=action_id,
+            mutation=mutation,
+        )
+        if conflict:
+            conn.rollback()
+            return {"outcome": "authorization_conflict", "reason": conflict}
+        conn.execute(
+            """
+            INSERT INTO approval_events (
+                event_id, tenant_id, workflow_id, action_id, approval_id,
+                sequence, event_type, event_version, status, envelope_json,
+                envelope_digest, command_id, event_index, principal_type,
+                principal_id, authority_source, authority_version, occurred_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'approval_fulfilled', '1.0', 'fulfilled',
+                    json(?), ?, ?, 0, 'internal_agent', 'agent-runtime',
+                    'pre-effect-authorization', '1.0', ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                tenant_id,
+                workflow_id,
+                action_id,
+                approval_id,
+                int(mutation["sequence"]),
+                to_json(mutation["envelope"]) or to_json({}),
+                mutation["envelope_digest"],
+                command_id,
+                completed_at,
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE approval_effect_executions
+            SET status = 'succeeded', receipt_id = ?, outputs_hash = ?,
+                error_code = NULL, completed_at = ?, updated_at = ?
+            WHERE execution_id = ? AND status IN ('started', 'uncertain')
+            """,
+            (receipt_id, outputs_hash, completed_at, completed_at, execution_id),
+        )
+        conn.execute(
+            """
+            UPDATE agent_actions
+            SET status = 'executed', outputs_json = json(?), outputs_hash = ?,
+                receipt_id = ?, error_text = NULL,
+                approval_id = ?, approval_envelope_digest = ?,
+                updated_at = datetime('now')
+            WHERE id = ? AND agent_run_id = ? AND status IN ('executing', 'failed')
+            """,
+            (
+                to_json(outputs) or to_json({}),
+                outputs_hash,
+                receipt_id,
+                approval_id,
+                mutation["envelope_digest"],
+                action_id,
+                workflow_id,
+            ),
+        )
+        for event in audit_events:
+            approval_persistence.insert_agent_audit_event_locked(
+                conn,
+                workflow_id=workflow_id,
+                action_id=action_id,
+                event=event,
+            )
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        conn.rollback()
+        return {"outcome": "identity_conflict", "reason": str(exc)}
+    except Exception:
+        conn.rollback()
+        raise
+    return {
+        "outcome": "committed",
+        "execution": get_effect_execution(
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            effect_idempotency_key=effect_idempotency_key,
+        ),
+    }
 
 
 def commit_approval_command(
@@ -191,7 +667,7 @@ def commit_approval_command(
         ).fetchone()
         if replay:
             conn.rollback()
-            existing = _command_row(replay)
+            existing = approval_persistence.command_row(replay)
             if existing["request_hash"] != request_hash:
                 return {"outcome": "idempotency_conflict", "command": existing}
             return {"outcome": "replayed", "command": existing}
@@ -224,6 +700,27 @@ def commit_approval_command(
                 "reason": "governed action lifecycle state changed before approval commit",
             }
 
+        if command_type in {"reject", "revoke", "expire", "supersede"}:
+            started_effect = conn.execute(
+                """
+                SELECT status FROM approval_effect_executions
+                WHERE tenant_id = ? AND workflow_id = ? AND approval_id = ?
+                LIMIT 1
+                """,
+                (tenant_id, workflow_id, approval_id),
+            ).fetchone()
+            if started_effect:
+                conn.rollback()
+                return {
+                    "outcome": "validation_error",
+                    "code": "effect_already_started",
+                    "status_code": 409,
+                    "reason": (
+                        "approval can no longer be revoked, expired, rejected, or "
+                        "superseded after its exact effect was committed for execution"
+                    ),
+                }
+
         supersession_error = _validate_supersession_mutations_locked(
             conn,
             tenant_id=tenant_id,
@@ -252,10 +749,18 @@ def commit_approval_command(
             cursor = conn.execute(
                 """
                 UPDATE agent_actions
-                SET status = ?, updated_at = datetime('now')
+                SET status = ?, approval_id = ?, approval_envelope_digest = ?,
+                    updated_at = datetime('now')
                 WHERE id = ? AND agent_run_id = ? AND status = ?
                 """,
-                (action_status, action_id, workflow_id, expected_action_status),
+                (
+                    action_status,
+                    approval_id,
+                    str(mutations[-1]["envelope_digest"]),
+                    action_id,
+                    workflow_id,
+                    expected_action_status,
+                ),
             )
             if cursor.rowcount != 1:
                 conn.rollback()
@@ -646,78 +1151,15 @@ def _apply_mutation(
     return None
 
 
-def _approval_row(row: sqlite3.Row) -> Dict[str, Any]:
-    return {
-        "approval_id": row["approval_id"],
-        "tenant_id": row["tenant_id"],
-        "workflow_id": row["workflow_id"],
-        "action_id": row["action_id"],
-        "sequence": int(row["current_sequence"]),
-        "status": row["current_status"],
-        "envelope": from_json(row["envelope_json"], default={}),
-        "envelope_digest": row["envelope_digest"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
-
-
-def _command_row(row: sqlite3.Row) -> Dict[str, Any]:
-    return {
-        "command_id": row["command_id"],
-        "tenant_id": row["tenant_id"],
-        "workflow_id": row["workflow_id"],
-        "action_id": row["action_id"],
-        "approval_id": row["approval_id"],
-        "command_type": row["command_type"],
-        "command_version": row["command_version"],
-        "principal_type": row["principal_type"],
-        "principal_id": row["principal_id"],
-        "authority_source": row["authority_source"],
-        "authority_version": row["authority_version"],
-        "idempotency_key": row["idempotency_key"],
-        "request_hash": row["request_hash"],
-        "expected_sequence": int(row["expected_sequence"])
-        if row["expected_sequence"] is not None
-        else None,
-        "status": row["status"],
-        "result": from_json(row["result_json"], default={}),
-        "result_hash": row["result_hash"],
-        "first_event_sequence": int(row["first_event_sequence"]),
-        "last_event_sequence": int(row["last_event_sequence"]),
-        "received_at": row["received_at"],
-        "completed_at": row["completed_at"],
-    }
-
-
-def _event_row(row: sqlite3.Row) -> Dict[str, Any]:
-    return {
-        "event_id": row["event_id"],
-        "tenant_id": row["tenant_id"],
-        "workflow_id": row["workflow_id"],
-        "action_id": row["action_id"],
-        "approval_id": row["approval_id"],
-        "sequence": int(row["sequence"]),
-        "event_type": row["event_type"],
-        "event_version": row["event_version"],
-        "status": row["status"],
-        "envelope": from_json(row["envelope_json"], default={}),
-        "envelope_digest": row["envelope_digest"],
-        "command_id": row["command_id"],
-        "event_index": int(row["event_index"]),
-        "principal_type": row["principal_type"],
-        "principal_id": row["principal_id"],
-        "authority_source": row["authority_source"],
-        "authority_version": row["authority_version"],
-        "occurred_at": row["occurred_at"],
-        "recorded_at": row["recorded_at"],
-    }
-
-
 __all__ = [
+    "commit_effect_authorization",
+    "commit_effect_completion",
     "commit_approval_command",
+    "get_effect_execution",
     "get_approval",
     "get_command_by_idempotency_key",
     "get_current_approval_for_action",
     "list_approval_events",
     "list_approvals_for_action",
+    "mark_effect_execution_uncertain",
 ]

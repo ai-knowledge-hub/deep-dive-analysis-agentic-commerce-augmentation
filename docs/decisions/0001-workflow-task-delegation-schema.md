@@ -358,8 +358,24 @@ data but do not authenticate a human and cannot populate the authority record.
 Human session approval remains fail-closed until a verified session or token
 contract is available. Legacy action `approved` and `rejected` values are
 written only after the corresponding durable decision commits; they remain
-projections and cannot authorize execution. Pre-effect consumption of the
-ledger remains a separate Slice 1.5d responsibility.
+projections and cannot authorize execution.
+
+Slice 1.5d consumes this ledger through a two-check runtime boundary. Admission
+loads the authoritative projection and append-only tail, verifies the pinned
+digest and active lifecycle, and rebuilds every binding dimension from the
+current run and action. Immediately before a governed capability call, a
+`BEGIN IMMEDIATE` transaction repeats the history, expiry, action state,
+approval pin, and source-snapshot checks and commits one single-use
+`approval_effect_executions` identity. The transaction is the revocation/effect
+linearization point: a terminal command committed first prevents execution; an
+effect-start committed first prevents later revocation from pretending the
+effect never began. Started or uncertain effects must reconcile by the same
+identity and receipt, while a different action, approval, or effect key fails
+closed. Successful completion atomically records the effect receipt, marks the
+approval fulfilled, updates the compatibility action projection, and appends
+linked audit events. Low-risk sequential actions retain their existing path;
+versioned beta capability blocks are checked before this approval boundary and
+remain in force.
 
 ### `task_results`
 
@@ -576,3 +592,13 @@ acyclic under the commit lock, projection rollback cannot hide immutable graph
 history, terminal actions cannot be resurrected, and approval authority comes
 only from verified claims. It does not make any approval executable; Slice 1.5d
 owns admission and pre-effect checks.
+
+The Slice 1.5d amendment is complete when status alone cannot authorize a
+governed effect; tenant, principal, action, capability/tool/effect identity and
+version, payload, evidence, authority, revision, registry, harness, policy,
+expiry, revocation, and supersession are revalidated at admission and under the
+pre-effect write lock; each approval/effect identity is single use; both
+revocation race orders are deterministic; uncertain outcomes reconcile without
+blind re-execution; and receipt, fulfillment, action, and audit projections
+commit as one outcome. SEC-06/CTRL-03 are executable, while independent beta
+release prerequisites remain blocked.

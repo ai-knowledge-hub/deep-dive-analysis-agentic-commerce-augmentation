@@ -27,6 +27,10 @@ from domain.workflow.approval_serialization import (
     approval_envelope_payload,
     canonical_approval_envelope_bytes,
 )
+from domain.workflow.approval_execution import (
+    approval_execution_source_digest,
+    approval_execution_source_payload,
+)
 from domain.workflow.lifecycle import (
     TERMINAL_WORKFLOW_STATUSES,
     WorkflowStatus,
@@ -58,6 +62,8 @@ __all__ = [
     "allowed_approval_transitions",
     "allowed_workflow_transitions",
     "approval_envelope_digest",
+    "approval_execution_source_digest",
+    "approval_execution_source_payload",
     "approval_envelope_from_payload",
     "approval_envelope_payload",
     "approval_status_from_legacy_action_status",

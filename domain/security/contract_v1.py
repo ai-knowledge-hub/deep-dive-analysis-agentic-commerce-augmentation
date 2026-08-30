@@ -9,7 +9,7 @@ SECURITY_CONTRACT_VERSION = "1.0"
 BLOCKING_DISPOSITION = "excluded_until_required_controls_implemented"
 AUTHORIZED_CLOSURE_AUTHORITY_IDS = frozenset({"security-review-board"})
 IMPLEMENTED_CONTROL_IDS = frozenset(
-    {"SEC-01", "SEC-02", "SEC-03", "SEC-04", "SEC-05"}
+    {"SEC-01", "SEC-02", "SEC-03", "SEC-04", "SEC-05", "SEC-06"}
 )
 IMPLEMENTED_VERIFICATION_TEST_REFS = {
     "SVT-01": (
@@ -50,6 +50,19 @@ IMPLEMENTED_VERIFICATION_TEST_REFS = {
     "SVT-05": (
         "tests/test_external_agent_jobs_api.py::test_external_agent_job_receipt_is_signed_and_tracks_run_status",
         "tests/test_agent_runs_api.py::test_operator_command_endpoint_records_receipt_and_delegates_approval",
+    ),
+    "SVT-06": (
+        "tests/modules/test_approval_effect_authorization.py::test_governed_effect_cannot_execute_from_action_status_alone",
+        "tests/modules/test_approval_effect_authorization.py::test_exact_approval_is_consumed_fulfilled_and_linked_to_receipt",
+        "tests/modules/test_approval_effect_authorization.py::test_every_mutable_binding_dimension_fails_closed",
+        "tests/modules/test_approval_effect_authorization.py::test_expiry_is_checked_again_at_execution_time",
+        "tests/modules/test_approval_effect_authorization.py::test_approval_cannot_cross_tenant_or_action_scope",
+        "tests/modules/test_approval_effect_authorization.py::test_superseded_approval_stays_terminal_at_execution_boundary",
+        "tests/modules/test_approval_effect_authorization.py::test_revocation_wins_when_it_commits_before_pre_effect_authorization",
+        "tests/modules/test_approval_effect_authorization.py::test_pre_effect_commit_wins_race_and_prevents_late_revocation",
+        "tests/modules/test_approval_effect_authorization.py::test_effect_identity_and_outcome_state_cannot_be_rewritten",
+        "tests/modules/test_approval_effect_authorization.py::test_uncertain_same_effect_reconciles_after_restart_without_second_execution",
+        "tests/modules/test_approval_effect_authorization.py::test_same_effect_identity_cannot_be_reused_by_a_second_action",
     ),
 }
 
@@ -101,12 +114,8 @@ REQUIRED_CAPABILITY_EXCLUSIONS_BY_THREAT = {
     ),
     "THR-04": frozenset({"public_durable_workflow_and_peer_messages"}),
     "THR-05": frozenset({"parallel_multi_tenant_worker_execution"}),
-    "THR-10": frozenset(
-        {"expanded_connectors_without_secret_egress_ssrf_controls"}
-    ),
-    "THR-16": frozenset(
-        {"expanded_production_telemetry_and_parallel_context_logging"}
-    ),
+    "THR-10": frozenset({"expanded_connectors_without_secret_egress_ssrf_controls"}),
+    "THR-16": frozenset({"expanded_production_telemetry_and_parallel_context_logging"}),
 }
 
 THREAT_CLOSURE_REQUIREMENTS = {

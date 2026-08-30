@@ -184,7 +184,9 @@ def get_agent_action(
             (action_id, client_id),
         ).fetchone()
     else:
-        row = conn.execute("SELECT * FROM agent_actions WHERE id = ?", (action_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM agent_actions WHERE id = ?", (action_id,)
+        ).fetchone()
     return _row(row) if row else None
 
 
@@ -312,7 +314,9 @@ def _row(row) -> Dict[str, Any]:
         if "registry_fingerprint" in row.keys()
         else None,
         "tool_version": row["tool_version"] if "tool_version" in row.keys() else None,
-        "skill_version": row["skill_version"] if "skill_version" in row.keys() else None,
+        "skill_version": row["skill_version"]
+        if "skill_version" in row.keys()
+        else None,
         "effect_class": row["effect_class"] if "effect_class" in row.keys() else None,
         "side_effects": from_json(row["side_effects_json"], default=[])
         if "side_effects_json" in row.keys()
@@ -328,6 +332,10 @@ def _row(row) -> Dict[str, Any]:
         if "retry_count" in row.keys()
         else 0,
         "dedupe_key": row["dedupe_key"] if "dedupe_key" in row.keys() else None,
+        "approval_id": row["approval_id"] if "approval_id" in row.keys() else None,
+        "approval_envelope_digest": row["approval_envelope_digest"]
+        if "approval_envelope_digest" in row.keys()
+        else None,
         "error": row["error_text"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],

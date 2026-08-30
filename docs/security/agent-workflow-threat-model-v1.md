@@ -146,7 +146,9 @@ detections, verifications, and gaps are in `security-controls-v1.yaml`.
   claims. Existing API tests certify the implemented subset.
 - SEC-02 enforces host capability, effect, approval, and budget policy. Existing
   policy and API tests certify the implemented subset.
-- SEC-06 will bind approval to the exact execution envelope.
+- SEC-06 binds approval to the exact execution envelope at admission and at an
+  atomic pre-effect commit, with single-use effect identity and durable outcome
+  reconciliation.
 - SEC-09 will create minimal tenant-scoped context capsules in which untrusted
   data and opaque secret handles cannot grant authority.
 
@@ -269,10 +271,11 @@ be implemented, an explicit security approval, and a new versioned domain
 contract and catalog migration. This keeps a projection edit from masquerading
 as a release decision.
 
-The initial implemented controls cover authenticated scoped principals,
-host-side capability and effect policy, external-job idempotency, single-use
-provider callbacks, and signed external-job receipts. They do not certify the
-future workflow kernel, worker fencing, parallel messages, context capsules,
+The implemented controls cover authenticated scoped principals, host-side
+capability and effect policy, external-job idempotency, single-use provider
+callbacks, signed external-job receipts, and exact approval consumption for the
+current governed runtime. They do not certify the future workflow kernel,
+worker fencing, parallel messages, context capsules,
 harness promotion, egress control, or cross-infrastructure isolation.
 
 ## Beta boundaries

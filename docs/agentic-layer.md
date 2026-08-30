@@ -10,6 +10,9 @@ Implemented now:
 - Runtime step execution service with short lease locking and heartbeat refresh
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
 - Operator UX in `/agent-runs` with queue approvals and action explainability
+- Exact governed-effect authorization backed by the canonical approval ledger,
+  admission revalidation, atomic pre-effect consumption, single-use effect
+  identity, durable uncertain outcomes, and linked fulfillment receipts
 - Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution
@@ -172,8 +175,8 @@ Each capability definition includes:
 | `review_validation_readiness` | Evaluate observed/synthetic coverage and readiness gates | **Implemented (executable)** |
 | `recommend_next_action` | Emit ranked next-step recommendations under constraints | **Implemented (executable)** |
 | `promote_variant_lab` | Promote variant for lab progression | **Implemented (executable)** |
-| `promote_variant_prod` | Promote variant for production/publish path | **Implemented (executable, approval-gated)** |
-| `publish_copy_revision` | Publish selected revision to product copy | **Implemented (executable, approval-gated)** |
+| `promote_variant_prod` | Promote variant for production/publish path | **Implemented adapter; beta runtime execution blocked by the versioned release contract** |
+| `publish_copy_revision` | Publish selected revision to product copy | **Implemented adapter; beta runtime execution blocked by the versioned release contract** |
 
 Notes:
 - `action only` means the planner seeds it as a proposed action, but execution is not wired yet.

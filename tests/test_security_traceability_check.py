@@ -251,9 +251,7 @@ def test_every_trust_boundary_requires_a_mapped_threat() -> None:
     catalog = deepcopy(_catalog())
     for threat in catalog["threats"]:
         threat["trust_boundary_ids"] = [
-            boundary
-            for boundary in threat["trust_boundary_ids"]
-            if boundary != "TB-07"
+            boundary for boundary in threat["trust_boundary_ids"] if boundary != "TB-07"
         ]
 
     errors = _validate(catalog)
@@ -312,9 +310,7 @@ def test_threat_verification_must_be_linked_by_a_mapped_control() -> None:
 
     errors = _validate(catalog)
 
-    assert (
-        "THR-01: verification SVT-20 is not linked by a mapped control" in errors
-    )
+    assert "THR-01: verification SVT-20 is not linked by a mapped control" in errors
 
 
 def test_unresolved_threat_requires_an_owned_gap() -> None:
@@ -425,11 +421,11 @@ def test_runtime_capability_exclusion_must_match_executable_release_policy() -> 
 
 def test_gap_relationships_must_be_bidirectional() -> None:
     catalog = deepcopy(_catalog())
-    catalog["implementation_gaps"][0]["threat_ids"].remove("THR-02")
+    catalog["implementation_gaps"][1]["threat_ids"].remove("THR-03")
 
     errors = _validate(catalog)
 
-    assert "THR-02: gap GAP-01 does not link back to the threat" in errors
+    assert "THR-03: gap GAP-02 does not link back to the threat" in errors
 
 
 def test_critical_active_threat_requires_an_explicit_blocking_decision() -> None:
@@ -452,9 +448,7 @@ def test_critical_active_threat_rejects_free_text_release_decision() -> None:
 
 def test_release_decision_requires_exact_capability_gate_controls() -> None:
     catalog = deepcopy(_catalog())
-    catalog["threats"][0]["blocking_decision"]["required_control_ids"] = [
-        "SEC-11"
-    ]
+    catalog["threats"][0]["blocking_decision"]["required_control_ids"] = ["SEC-11"]
 
     errors = _validate(catalog)
 
@@ -504,6 +498,7 @@ def test_schema_v1_pins_implemented_control_and_verification_baseline() -> None:
         "SEC-03",
         "SEC-04",
         "SEC-05",
+        "SEC-06",
     }
     assert set(IMPLEMENTED_VERIFICATION_TEST_REFS) == {
         "SVT-01",
@@ -511,20 +506,17 @@ def test_schema_v1_pins_implemented_control_and_verification_baseline() -> None:
         "SVT-03",
         "SVT-04",
         "SVT-05",
+        "SVT-06",
     }
 
 
-@pytest.mark.parametrize(
-    "verification_id", sorted(IMPLEMENTED_VERIFICATION_TEST_REFS)
-)
+@pytest.mark.parametrize("verification_id", sorted(IMPLEMENTED_VERIFICATION_TEST_REFS))
 def test_implemented_verification_rejects_coordinated_test_substitution(
     verification_id: str,
 ) -> None:
     catalog = deepcopy(_catalog())
     verification = next(
-        item
-        for item in catalog["verification_tests"]
-        if item["id"] == verification_id
+        item for item in catalog["verification_tests"] if item["id"] == verification_id
     )
     verification["test_refs"] = [
         "tests/modules/test_agent_policy_enforcer.py::"
@@ -675,32 +667,27 @@ def test_each_planned_threat_control_requires_a_mutually_linked_gap() -> None:
 
     errors = _validate(catalog)
 
-    assert (
-        "THR-13: planned control SEC-08 needs a mutually linked threat gap"
-        in errors
-    )
+    assert "THR-13: planned control SEC-08 needs a mutually linked threat gap" in errors
 
 
 def test_planned_control_and_verification_require_owner_and_phase() -> None:
     catalog = deepcopy(_catalog())
-    catalog["controls"][5].pop("owner")
-    catalog["verification_tests"][5].pop("target_phase")
+    catalog["controls"][6].pop("owner")
+    catalog["verification_tests"][6].pop("target_phase")
 
     errors = _validate(catalog)
 
-    assert "SEC-06: owner must not be empty" in errors
-    assert "SVT-06: target_phase must not be empty" in errors
+    assert "SEC-07: owner must not be empty" in errors
+    assert "SVT-07: target_phase must not be empty" in errors
 
 
 def test_implemented_control_requires_an_implemented_verification() -> None:
     catalog = deepcopy(_catalog())
-    catalog["controls"][0]["verification_ids"] = ["SVT-06"]
+    catalog["controls"][0]["verification_ids"] = ["SVT-07"]
 
     errors = _validate(catalog)
 
-    assert (
-        "SEC-01: implemented control needs an implemented verification" in errors
-    )
+    assert "SEC-01: implemented control needs an implemented verification" in errors
 
 
 def test_svt_02_certifies_the_complete_policy_control() -> None:
@@ -722,16 +709,18 @@ def test_implemented_verification_rejects_non_test_and_missing_files() -> None:
 
     assert "SVT-01: test_ref must be a pytest node under tests/: README.md" in errors
     assert (
-        "SVT-01: test_ref file does not exist: tests/test_does_not_exist.py"
-        in errors
+        "SVT-01: test_ref file does not exist: tests/test_does_not_exist.py" in errors
     )
 
 
 def test_canonical_implemented_verification_nodes_execute() -> None:
-    assert security_traceability_check.run_implemented_verifications(
-        _catalog(),
-        root=security_traceability_check.ROOT,
-    ) == []
+    assert (
+        security_traceability_check.run_implemented_verifications(
+            _catalog(),
+            root=security_traceability_check.ROOT,
+        )
+        == []
+    )
 
 
 def test_uncollected_pytest_node_cannot_certify_a_verification() -> None:
