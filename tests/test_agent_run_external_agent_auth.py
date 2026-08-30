@@ -41,6 +41,8 @@ def client(tmp_path, monkeypatch):
     init_db()
     deps = default_deps()
     deps.clients.create_client(client_id=CLIENT_ID, name="Client A")
+    deps.users.ensure_user(USER_ID)
+    deps.clients.add_client_user(client_id=CLIENT_ID, user_id=USER_ID, role="operator")
     return TestClient(app)
 
 
@@ -146,8 +148,11 @@ def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_s
         f"/agent-runs/actions/{operator_action['id']}/decision",
         json={"client_id": CLIENT_ID, "user_id": USER_ID, "decision": "approve"},
     )
-    assert human_shaped_decision.status_code == 200
-    assert human_shaped_decision.json()["action"]["status"] == "approved"
+    assert human_shaped_decision.status_code == 401
+    assert (
+        deps.agent_actions.get_agent_action(operator_action["id"])["status"]
+        == "proposed"
+    )
 
     human_shaped_pause = client.post(
         f"/agent-runs/{run['id']}/pause",
@@ -317,7 +322,10 @@ def test_bearer_token_cannot_self_assert_agent_profile(client: TestClient):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "agent_profile_id does not match authenticated principal"
+    assert (
+        response.json()["detail"]
+        == "agent_profile_id does not match authenticated principal"
+    )
 
 
 def _legacy_agent_principal_token(payload: dict, *, secret: str) -> str:

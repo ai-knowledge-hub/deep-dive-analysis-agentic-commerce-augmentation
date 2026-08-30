@@ -403,6 +403,20 @@ class AgentEventsStore(Protocol):
     def list_agent_events(self, **kwargs: Any) -> list[dict]: ...
 
 
+class ApprovalLedgerStore(Protocol):
+    def get_approval(self, **kwargs: Any) -> dict | None: ...
+
+    def get_current_approval_for_action(self, **kwargs: Any) -> dict | None: ...
+
+    def list_approvals_for_action(self, **kwargs: Any) -> list[dict]: ...
+
+    def list_approval_events(self, **kwargs: Any) -> list[dict]: ...
+
+    def get_command_by_idempotency_key(self, **kwargs: Any) -> dict | None: ...
+
+    def commit_approval_command(self, **kwargs: Any) -> dict: ...
+
+
 class SemanticMemory(Protocol):
     def get(self, key: str) -> list[str]: ...
 
@@ -452,6 +466,7 @@ class AppDeps:
     agent_runs: AgentRunsStore
     agent_actions: AgentActionsStore
     agent_events: AgentEventsStore
+    approval_ledger: ApprovalLedgerStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

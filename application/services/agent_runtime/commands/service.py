@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from application.ports.deps import AppDeps
+from application.services.agent_runtime.approval_ledger import ApprovalLedgerError
 from application.services.agent_runtime.commands.decisions import (
     apply_command_action_decision,
 )
@@ -17,6 +18,7 @@ from application.services.agent_runtime.commands.recovery import (
 from application.services.agent_runtime.runtime import (
     AgentRuntimeService,
 )
+from domain.workflow.approval import ApprovalAuthority
 
 
 SUPPORTED_COMMANDS = {
@@ -80,6 +82,8 @@ def issue_agent_run_command(
     action_id: Optional[str],
     message: Optional[str],
     metadata: Dict[str, Any],
+    approving_authority: ApprovalAuthority | None = None,
+    idempotency_key: str | None = None,
 ) -> Dict[str, Any]:
     run, action, normalized_command = _command_context(
         deps=deps,
@@ -95,8 +99,45 @@ def issue_agent_run_command(
         action=action,
         metadata=metadata,
     )
-    if not preflight["allowed"]:
+    if not preflight["allowed"] and normalized_command not in {"approve", "reject"}:
         raise AgentRunCommandError(status_code=409, detail=preflight)
+
+    if normalized_command in {"approve", "reject"}:
+        result = {"run": run, "preflight": preflight}
+        _apply_agent_run_command(
+            deps=deps,
+            runtime=runtime,
+            result=result,
+            run_id=run_id,
+            run=run,
+            action=action,
+            command_type=normalized_command,
+            command_receipt={},
+            user_id=user_id,
+            message=message,
+            metadata=metadata,
+            approving_authority=approving_authority,
+            idempotency_key=idempotency_key,
+        )
+        ledger_command = dict(result.get("approval_command") or {})
+        if result.get("approval_replayed"):
+            result["preflight"] = {
+                **preflight,
+                "allowed": True,
+                "blockers": [],
+                "replayed": True,
+            }
+        result["command"] = {
+            "id": ledger_command.get("command_id"),
+            "event_type": f"operator_command_{normalized_command}",
+            "status": "received",
+            "anchors": {
+                "approval_id": ledger_command.get("approval_id"),
+                "approval_command_id": ledger_command.get("command_id"),
+                "approval_result_hash": ledger_command.get("result_hash"),
+            },
+        }
+        return result
 
     receipt = _record_command_event(
         deps=deps,
@@ -128,6 +169,8 @@ def issue_agent_run_command(
         user_id=user_id,
         message=message,
         metadata=metadata,
+        approving_authority=approving_authority,
+        idempotency_key=idempotency_key,
     )
 
     _record_command_event(
@@ -184,6 +227,8 @@ def _apply_agent_run_command(
     user_id: Optional[str],
     message: Optional[str],
     metadata: Dict[str, Any],
+    approving_authority: ApprovalAuthority | None,
+    idempotency_key: str | None,
 ) -> None:
     if command_type == "change_plan":
         result["action"] = create_change_plan_recovery_action(
@@ -222,10 +267,30 @@ def _apply_agent_run_command(
     elif command_type in {"approve", "reject"}:
         if not action:
             raise AgentRunCommandError(status_code=400, detail="Action id is required")
-        result["action"] = apply_command_action_decision(
-            deps=deps,
-            run_id=run_id,
-            run=run,
-            action=action,
-            command_type=command_type,
-        )
+        if approving_authority is None:
+            raise AgentRunCommandError(
+                status_code=401,
+                detail="Approval command requires authenticated authority",
+            )
+        try:
+            approval_result = apply_command_action_decision(
+                deps=deps,
+                run_id=run_id,
+                run=run,
+                action=action,
+                command_type=command_type,
+                approving_authority=approving_authority,
+                idempotency_key=idempotency_key
+                or f"operator-command:{run_id}:{action['id']}:{command_type}",
+                message=message,
+                metadata=metadata,
+            )
+        except ApprovalLedgerError as exc:
+            raise AgentRunCommandError(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        result["action"] = approval_result.get("action") or action
+        result["approval"] = approval_result.get("approval")
+        result["approval_command"] = approval_result.get("command")
+        result["approval_replayed"] = bool(approval_result.get("replayed"))

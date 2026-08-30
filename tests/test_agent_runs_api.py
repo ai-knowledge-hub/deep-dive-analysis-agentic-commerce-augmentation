@@ -112,6 +112,16 @@ def _registry_params(**params):
     return {"client_id": CLIENT_ID, "user_id": USER_ID, **params}
 
 
+def _approval_headers() -> dict[str, str]:
+    token = build_agent_principal_token(
+        principal_id=f"human:{USER_ID}",
+        client_id=CLIENT_ID,
+        principal_type="human",
+        scopes=["agent_runs:write"],
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_agent_run_events_endpoint_supports_filter_and_cursor(client: TestClient):
     run, _ = _seed_run_with_events()
 
@@ -217,7 +227,9 @@ def test_agent_run_routes_enforce_client_scope(client: TestClient):
     assert wrong_scope_decision.status_code == 404
 
 
-def test_create_agent_run_persists_principal_policy_and_trace_fields(client: TestClient):
+def test_create_agent_run_persists_principal_policy_and_trace_fields(
+    client: TestClient,
+):
     token = build_agent_principal_token(
         principal_id="principal-ext-1",
         client_id=CLIENT_ID,
@@ -385,10 +397,14 @@ def test_create_agent_run_prefers_profile_policy_and_pins_tenant_registry(
     assert response.status_code == 200
     run = response.json()["run"]
     assert run["policy_profile_id"] == "human_approval_required"
-    registry_row = get_connection().execute(
-        "SELECT payload_json FROM agent_registry_versions WHERE registry_fingerprint = ?",
-        (run["registry_fingerprint"],),
-    ).fetchone()
+    registry_row = (
+        get_connection()
+        .execute(
+            "SELECT payload_json FROM agent_registry_versions WHERE registry_fingerprint = ?",
+            (run["registry_fingerprint"],),
+        )
+        .fetchone()
+    )
     assert registry_row is not None
     registry_payload = json.loads(registry_row["payload_json"])
     profile = next(
@@ -430,7 +446,11 @@ def test_create_agent_run_rejects_beta_blocked_production_capability(
 
 
 def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
-    base = {"client_id": CLIENT_ID, "user_id": USER_ID, "allowed_capabilities": ["run_variant"]}
+    base = {
+        "client_id": CLIENT_ID,
+        "user_id": USER_ID,
+        "allowed_capabilities": ["run_variant"],
+    }
     bad_run_mode = client.post(
         "/agent-runs",
         json={**base, "run_mode": "manual"},
@@ -443,7 +463,9 @@ def test_create_agent_run_rejects_unknown_profiles(client: TestClient):
         json={**base, "policy_profile_id": "unknown_profile"},
     )
     assert bad_policy.status_code == 400
-    assert "Unsupported policy_profile_id: unknown_profile" in bad_policy.json()["detail"]
+    assert (
+        "Unsupported policy_profile_id: unknown_profile" in bad_policy.json()["detail"]
+    )
 
     bad_harness = client.post(
         "/agent-runs",
@@ -536,7 +558,9 @@ def test_harness_planner_mode_filters_observe_only_plans(client: TestClient):
     actions = default_deps().agent_actions.list_agent_actions(
         agent_run_id=run["id"], limit=10
     )
-    assert [action["capability_name"] for action in actions] == ["recommend_next_action"]
+    assert [action["capability_name"] for action in actions] == [
+        "recommend_next_action"
+    ]
 
 
 def test_harness_memory_policy_blocks_learning_mutation_plans(client: TestClient):
@@ -626,6 +650,7 @@ def test_operator_command_endpoint_records_receipt_and_delegates_approval(
 
     response = client.post(
         f"/agent-runs/{run['id']}/commands",
+        headers=_approval_headers(),
         json={
             "client_id": CLIENT_ID,
             "user_id": USER_ID,
@@ -642,6 +667,36 @@ def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     assert payload["preflight"]["allowed"] is True
     assert payload["action"]["status"] == "approved"
 
+    replay = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        headers=_approval_headers(),
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "approve",
+            "action_id": action["id"],
+            "message": "Approve from operator chat.",
+        },
+    )
+    assert replay.status_code == 200
+    assert replay.json()["approval_replayed"] is True
+    assert replay.json()["preflight"]["replayed"] is True
+    assert replay.json()["command"]["id"] == payload["command"]["id"]
+
+    mismatched_retry = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        headers=_approval_headers(),
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "approve",
+            "action_id": action["id"],
+            "message": "A different approval explanation.",
+        },
+    )
+    assert mismatched_retry.status_code == 409
+    assert mismatched_retry.json()["detail"]["code"] == "idempotency_key_reused"
+
     events = client.get(
         f"/agent-runs/{run['id']}/events",
         params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
@@ -650,6 +705,133 @@ def test_operator_command_endpoint_records_receipt_and_delegates_approval(
     assert "operator_command_approve" in event_types
     assert "action_approved" in event_types
     assert any(event["status"] == "completed" for event in events.json()["events"])
+    assert event_types.count("operator_command_approve") == 2
+
+
+def test_approval_command_api_is_retry_safe_and_exposes_scoped_history(
+    client: TestClient,
+):
+    created = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+    run = created.json()["run"]
+    detail = client.get(
+        f"/agent-runs/{run['id']}",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    action = detail.json()["actions"][0]
+    payload = {
+        "client_id": CLIENT_ID,
+        "user_id": "caller-selected-user",
+        "command_type": "approve",
+        "idempotency_key": "api-approval-command-1",
+    }
+
+    approved = client.post(
+        f"/agent-runs/actions/{action['id']}/approval-commands",
+        headers=_approval_headers(),
+        json=payload,
+    )
+    replay = client.post(
+        f"/agent-runs/actions/{action['id']}/approval-commands",
+        headers=_approval_headers(),
+        json=payload,
+    )
+
+    assert approved.status_code == 200
+    assert approved.json()["approval"]["status"] == "approved"
+    assert approved.json()["command"]["principal_id"] == f"human:{USER_ID}"
+    assert replay.status_code == 200
+    assert replay.json()["replayed"] is True
+    assert (
+        replay.json()["command"]["command_id"]
+        == approved.json()["command"]["command_id"]
+    )
+
+    conflicting = client.post(
+        f"/agent-runs/actions/{action['id']}/approval-commands",
+        headers=_approval_headers(),
+        json={**payload, "command_type": "reject"},
+    )
+    assert conflicting.status_code == 409
+    assert conflicting.json()["detail"]["code"] == "idempotency_key_reused"
+
+    history = client.get(
+        f"/agent-runs/actions/{action['id']}/approvals",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+    assert history.status_code == 200
+    assert len(history.json()["approvals"]) == 1
+    assert [
+        event["event_type"] for event in history.json()["approvals"][0]["events"]
+    ] == ["approval_requested", "approval_approved"]
+
+    wrong_tenant = client.get(
+        f"/agent-runs/actions/{action['id']}/approvals",
+        params={"client_id": "client-b", "user_id": USER_ID},
+    )
+    assert wrong_tenant.status_code == 404
+
+    untrusted_user = client.post(
+        f"/agent-runs/actions/{action['id']}/approval-commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": "untrusted-user",
+            "command_type": "revoke",
+            "idempotency_key": "untrusted-revocation",
+            "revocation_reference": "untrusted-request",
+        },
+    )
+    assert untrusted_user.status_code == 401
+
+
+def test_approval_command_rejects_unauthenticated_user_impersonation(
+    client: TestClient,
+):
+    deps = default_deps()
+    deps.users.ensure_user("victim-operator")
+    deps.clients.add_client_user(
+        client_id=CLIENT_ID,
+        user_id="victim-operator",
+        role="operator",
+    )
+    created = client.post(
+        "/agent-runs",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": "victim-operator",
+            "allowed_capabilities": ["run_variant"],
+        },
+    )
+    assert created.status_code == 200
+    run = created.json()["run"]
+    action = deps.agent_actions.list_agent_actions(agent_run_id=run["id"], limit=10)[0]
+
+    response = client.post(
+        f"/agent-runs/actions/{action['id']}/approval-commands",
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": "victim-operator",
+            "command_type": "approve",
+            "idempotency_key": "impersonated-approval",
+        },
+    )
+
+    assert response.status_code == 401
+    assert deps.agent_actions.get_agent_action(action["id"])["status"] == "proposed"
+    assert (
+        deps.approval_ledger.list_approvals_for_action(
+            tenant_id=CLIENT_ID,
+            workflow_id=run["id"],
+            action_id=action["id"],
+        )
+        == []
+    )
 
 
 def test_operator_command_preflight_blocks_plan_only_step(client: TestClient):
@@ -780,10 +962,14 @@ def test_create_agent_run_resolves_machine_principal_from_bearer_token(
     assert run["harness_id"] == "safe_autonomy_b2b"
     assert run["run_mode"] == "auto_execute_safe"
 
-    principal_row = get_connection().execute(
-        "SELECT * FROM principals WHERE id = ?",
-        ("principal-ext-2",),
-    ).fetchone()
+    principal_row = (
+        get_connection()
+        .execute(
+            "SELECT * FROM principals WHERE id = ?",
+            ("principal-ext-2",),
+        )
+        .fetchone()
+    )
     assert principal_row is not None
     assert principal_row["principal_type"] == "external_agent"
     assert principal_row["tenant_id"] == CLIENT_ID
