@@ -15,13 +15,27 @@ from application.services.agent_runtime.approval_ledger import (
     build_action_approval_binding,
     get_authoritative_approval,
 )
+from application.services.agent_runtime.approval_registry import (
+    ApprovalRegistryError,
+    capability_spec_from_contract_json,
+    prepare_action_for_exact_approval,
+)
+from application.services.agent_runtime.approval_receipts import (
+    ApprovalReceiptError,
+    verify_effect_receipt,
+)
 from application.services.agent_runtime.registry import CapabilitySpec
 from domain.workflow.approval import (
     ApprovalBinding,
     ApprovalStatus,
     transition_approval,
 )
-from domain.workflow.approval_execution import approval_execution_source_digest
+from domain.workflow.approval_execution import (
+    approval_effect_start_snapshot,
+    approval_effect_start_snapshot_digest,
+    approval_execution_source_digest,
+    canonical_json,
+)
 from domain.workflow.approval_serialization import (
     approval_envelope_digest,
     approval_envelope_from_payload,
@@ -46,6 +60,11 @@ class ExactApprovalAuthorization:
     effect_idempotency_key: str
     authorization_source_digest: str
     binding: ApprovalBinding
+    approval_envelope_json: str
+    executable_inputs_json: str
+    capability_contract_json: str
+    authorization_snapshot_json: str | None = None
+    authorization_snapshot_digest: str | None = None
     execution_id: str | None = None
 
 
@@ -124,14 +143,35 @@ def validate_exact_action_approval(
             mismatches=("expires_at",),
         )
     try:
-        expected = build_action_approval_binding(
+        prepared_action, registry_authority = prepare_action_for_exact_approval(
+            deps=deps,
             run=run,
             action=action,
+            spec=spec,
+        )
+        if prepared_action["inputs"] != action.get("inputs") or prepared_action[
+            "inputs_hash"
+        ] != action.get("inputs_hash"):
+            raise ApprovalAuthorizationError(
+                "persisted action is not the normalized executable payload",
+                code="approval_payload_not_normalized",
+                mismatches=("inputs", "input_hash"),
+            )
+        expected = build_action_approval_binding(
+            run=run,
+            action=prepared_action,
             approval_id=approval_id,
             requested_at=envelope.binding.requested_at,
             expires_at=envelope.binding.expires_at,
-            native_target=envelope.binding.native_target,
         )
+    except ApprovalRegistryError as exc:
+        raise ApprovalAuthorizationError(
+            str(exc),
+            code="approval_registry_mismatch",
+            mismatches=exc.mismatches,
+        ) from exc
+    except ApprovalAuthorizationError:
+        raise
     except ApprovalLedgerError as exc:
         raise ApprovalAuthorizationError(
             str(exc),
@@ -151,9 +191,12 @@ def validate_exact_action_approval(
         envelope_digest=approval_envelope_digest(envelope),
         effect_idempotency_key=envelope.binding.effect_idempotency_key,
         authorization_source_digest=approval_execution_source_digest(
-            run=run, action=action
+            run=run, action=prepared_action
         ),
         binding=envelope.binding,
+        approval_envelope_json=canonical_json(approval_envelope_payload(envelope)),
+        executable_inputs_json=canonical_json(prepared_action["inputs"]),
+        capability_contract_json=registry_authority.capability_contract_json,
     )
 
 
@@ -163,6 +206,8 @@ def commit_pre_effect_authorization(
     run: dict[str, Any],
     action: dict[str, Any],
     spec: CapabilitySpec,
+    executable_inputs: Mapping[str, Any],
+    lock_token: str,
     now: datetime | None = None,
 ) -> ExactApprovalAuthorization | None:
     """Commit the exact approval use at the effect linearization point."""
@@ -177,6 +222,29 @@ def commit_pre_effect_authorization(
     )
     if authorization is None:
         return None
+    if _hash_payload(executable_inputs) != authorization.binding.input_hash:
+        raise ApprovalAuthorizationError(
+            "executable payload differs from the exact approved payload",
+            code="approval_payload_mismatch",
+            mismatches=("input_hash",),
+        )
+    snapshot = approval_effect_start_snapshot(
+        approval_envelope=json.loads(authorization.approval_envelope_json),
+        authorization_source_digest=authorization.authorization_source_digest,
+        executable_inputs=json.loads(authorization.executable_inputs_json),
+        capability_contract_json=authorization.capability_contract_json,
+        audit_context={
+            "sequence": int(action.get("sequence") or 0),
+            "skill_id": action.get("skill_id"),
+            "trace_id": run.get("trace_id"),
+        },
+    )
+    snapshot_digest = approval_effect_start_snapshot_digest(snapshot)
+    start_authorization = replace(
+        authorization,
+        authorization_snapshot_json=canonical_json(snapshot),
+        authorization_snapshot_digest=snapshot_digest,
+    )
     result = deps.approval_ledger.commit_effect_authorization(
         execution_id=str(uuid.uuid4()),
         tenant_id=authorization.binding.tenant_id,
@@ -185,12 +253,15 @@ def commit_pre_effect_authorization(
         approval_id=authorization.approval_id,
         envelope_digest=authorization.envelope_digest,
         authorization_source_digest=authorization.authorization_source_digest,
+        authorization_snapshot=snapshot,
+        authorization_snapshot_digest=snapshot_digest,
         effect_idempotency_key=authorization.effect_idempotency_key,
+        lock_token=_require_identifier("lock_token", lock_token),
         authorized_at=_format_datetime(checked_at),
         audit_event=_effect_event(
             run=run,
             action=action,
-            authorization=authorization,
+            authorization=start_authorization,
             event_type="approval_effect_started",
             status="started",
             note="Exact approval consumed at pre-effect commit",
@@ -200,7 +271,7 @@ def commit_pre_effect_authorization(
     if outcome == "started":
         execution = dict(result.get("execution") or {})
         return replace(
-            authorization,
+            start_authorization,
             execution_id=_require_identifier(
                 "execution_id", execution.get("execution_id")
             ),
@@ -209,6 +280,11 @@ def commit_pre_effect_authorization(
         raise ApprovalAuthorizationError(
             "effect identity already started; reconcile its durable receipt instead of executing again",
             code="effect_reconciliation_required",
+        )
+    if outcome == "budget_conflict":
+        raise ApprovalAuthorizationError(
+            str(result.get("reason") or "effect budget is exhausted"),
+            code="effect_budget_exhausted",
         )
     raise ApprovalAuthorizationError(
         str(result.get("reason") or "pre-effect authorization failed"),
@@ -233,6 +309,24 @@ def complete_authorized_effect(
 
     if authorization is None:
         return None
+    try:
+        verified_receipt = verify_effect_receipt(
+            deps=deps,
+            binding=authorization.binding,
+            effect_execution_id=_require_identifier(
+                "execution_id", authorization.execution_id
+            ),
+            executable_inputs=json.loads(authorization.executable_inputs_json),
+            capability_contract_json=authorization.capability_contract_json,
+            outputs=outputs,
+            claimed_outputs_hash=outputs_hash,
+            receipt_id=receipt_id,
+        )
+    except ApprovalReceiptError as exc:
+        raise ApprovalAuthorizationError(
+            str(exc), code=exc.code, mismatches=exc.mismatches
+        ) from exc
+    outputs_hash = verified_receipt.outputs_hash
     execution_id = _require_identifier("execution_id", authorization.execution_id)
     completed_at = _normalize_utc(now or datetime.now(timezone.utc))
     row = get_authoritative_approval(
@@ -255,7 +349,7 @@ def complete_authorized_effect(
             "approval changed before effect receipt commit",
             code="approval_changed_after_effect",
         )
-    normalized_receipt = receipt_id or f"approval-effect-receipt:{uuid.uuid4()}"
+    normalized_receipt = verified_receipt.receipt_id
     fulfilled = transition_approval(
         envelope,
         ApprovalStatus.FULFILLED,
@@ -391,13 +485,16 @@ def reconcile_authorized_effect(
     safe after process loss and never invokes the capability again.
     """
 
+    # Retained for caller compatibility; immutable start evidence is authoritative.
+    _ = spec
+
     tenant_id = _require_identifier("tenant_id", run.get("client_id"))
     workflow_id = _require_identifier("workflow_id", run.get("id"))
-    effect_key = _require_identifier("effect_idempotency_key", action.get("dedupe_key"))
-    execution = deps.approval_ledger.get_effect_execution(
+    action_id = _require_identifier("action_id", action.get("id"))
+    execution = deps.approval_ledger.get_effect_execution_for_action(
         tenant_id=tenant_id,
         workflow_id=workflow_id,
-        effect_idempotency_key=effect_key,
+        action_id=action_id,
     )
     if execution is None:
         raise ApprovalAuthorizationError(
@@ -410,10 +507,31 @@ def reconcile_authorized_effect(
             code="effect_identity_conflict",
             mismatches=("action_id",),
         )
+    authorization = _authorization_from_effect_start(
+        deps=deps,
+        execution=execution,
+    )
     if execution.get("status") == "succeeded":
+        try:
+            verified_receipt = verify_effect_receipt(
+                deps=deps,
+                binding=authorization.binding,
+                effect_execution_id=_require_identifier(
+                    "execution_id", authorization.execution_id
+                ),
+                executable_inputs=json.loads(authorization.executable_inputs_json),
+                capability_contract_json=authorization.capability_contract_json,
+                outputs=outputs,
+                claimed_outputs_hash=outputs_hash,
+                receipt_id=receipt_id,
+            )
+        except ApprovalReceiptError as exc:
+            raise ApprovalAuthorizationError(
+                str(exc), code=exc.code, mismatches=exc.mismatches
+            ) from exc
         if (
-            execution.get("receipt_id") == receipt_id
-            and execution.get("outputs_hash") == outputs_hash
+            execution.get("receipt_id") == verified_receipt.receipt_id
+            and execution.get("outputs_hash") == verified_receipt.outputs_hash
         ):
             return dict(execution)
         raise ApprovalAuthorizationError(
@@ -424,33 +542,6 @@ def reconcile_authorized_effect(
         raise ApprovalAuthorizationError(
             "effect is not awaiting reconciliation",
             code="effect_state_conflict",
-        )
-    authorization = validate_exact_action_approval(
-        deps=deps,
-        run=run,
-        action=action,
-        spec=spec,
-        now=now,
-    )
-    if authorization is None:
-        raise ApprovalAuthorizationError(
-            "effect is not governed by exact approval",
-            code="approval_not_required",
-        )
-    expected = {
-        "approval_id": authorization.approval_id,
-        "approval_envelope_digest": authorization.envelope_digest,
-        "authorization_source_digest": authorization.authorization_source_digest,
-        "effect_idempotency_key": authorization.effect_idempotency_key,
-    }
-    mismatches = tuple(
-        field for field, value in expected.items() if execution.get(field) != value
-    )
-    if mismatches:
-        raise ApprovalAuthorizationError(
-            "durable effect start no longer matches its exact authorization",
-            code="effect_identity_conflict",
-            mismatches=mismatches,
         )
     reconciled = complete_authorized_effect(
         deps=deps,
@@ -473,6 +564,160 @@ def reconcile_authorized_effect(
             code="effect_receipt_commit_failed",
         )
     return reconciled
+
+
+def _authorization_from_effect_start(
+    *,
+    deps: AppDeps,
+    execution: Mapping[str, Any],
+) -> ExactApprovalAuthorization:
+    """Reconstruct authority from the immutable, then-valid start snapshot."""
+
+    approval_id = _require_identifier("approval_id", execution.get("approval_id"))
+    tenant_id = _require_identifier("tenant_id", execution.get("tenant_id"))
+    workflow_id = _require_identifier("workflow_id", execution.get("workflow_id"))
+    start_digest = _require_digest(
+        "approval_envelope_digest", execution.get("approval_envelope_digest")
+    )
+    snapshot_payload = execution.get("authorization_snapshot")
+    if (
+        snapshot_payload is None
+        and execution.get("authorization_snapshot_digest") is None
+    ):
+        raise ApprovalAuthorizationError(
+            "legacy effect start has no reconstructable authorization snapshot",
+            code="effect_start_evidence_unavailable",
+            mismatches=("authorization_snapshot",),
+        )
+    if type(snapshot_payload) is not dict:
+        raise ApprovalAuthorizationError(
+            "effect start has no immutable authorization snapshot",
+            code="effect_start_authority_invalid",
+        )
+    snapshot_digest = _require_digest(
+        "authorization_snapshot_digest",
+        execution.get("authorization_snapshot_digest"),
+    )
+    if approval_effect_start_snapshot_digest(snapshot_payload) != snapshot_digest:
+        raise ApprovalAuthorizationError(
+            "effect-start authorization snapshot digest is invalid",
+            code="effect_start_authority_invalid",
+            mismatches=("authorization_snapshot_digest",),
+        )
+    if (
+        snapshot_payload.get("contract") != "workflow.approval-effect-start"
+        or snapshot_payload.get("version") != "1.0"
+        or type(snapshot_payload.get("approval_envelope")) is not dict
+        or type(snapshot_payload.get("executable_inputs")) is not dict
+        or type(snapshot_payload.get("capability_contract")) is not dict
+        or type(snapshot_payload.get("audit_context")) is not dict
+    ):
+        raise ApprovalAuthorizationError(
+            "effect-start authorization snapshot is incomplete",
+            code="effect_start_authority_invalid",
+        )
+    events = deps.approval_ledger.list_approval_events(
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        approval_id=approval_id,
+        limit=200,
+    )
+    snapshot = next(
+        (event for event in events if event.get("envelope_digest") == start_digest),
+        None,
+    )
+    if snapshot is None:
+        raise ApprovalAuthorizationError(
+            "effect start approval snapshot is absent from immutable history",
+            code="approval_history_invalid",
+        )
+    try:
+        envelope = approval_envelope_from_payload(
+            dict(snapshot_payload["approval_envelope"])
+        )
+    except Exception as exc:
+        raise ApprovalAuthorizationError(
+            "effect start approval snapshot is not canonical",
+            code="approval_history_invalid",
+        ) from exc
+    started_at = _normalize_utc(
+        _parse_datetime("started_at", execution.get("started_at"))
+    )
+    if (
+        envelope.status is not ApprovalStatus.APPROVED
+        or approval_envelope_digest(envelope) != start_digest
+        or envelope.decided_at is None
+        or started_at < envelope.decided_at
+        or started_at >= envelope.binding.expires_at
+    ):
+        raise ApprovalAuthorizationError(
+            "effect did not start from a then-valid approved snapshot",
+            code="effect_start_authority_invalid",
+        )
+    executable_inputs = dict(snapshot_payload["executable_inputs"])
+    capability_contract_json = canonical_json(snapshot_payload["capability_contract"])
+    try:
+        start_spec = capability_spec_from_contract_json(capability_contract_json)
+    except ApprovalRegistryError as exc:
+        raise ApprovalAuthorizationError(
+            str(exc), code="effect_start_authority_invalid", mismatches=exc.mismatches
+        ) from exc
+    source_digest = _require_digest(
+        "authorization_source_digest",
+        snapshot_payload.get("authorization_source_digest"),
+    )
+    mismatches = tuple(
+        field
+        for field, actual, expected in (
+            ("tenant_id", envelope.binding.tenant_id, tenant_id),
+            ("workflow_id", envelope.binding.workflow_id, workflow_id),
+            ("approval_id", envelope.binding.approval_id, approval_id),
+            (
+                "input_hash",
+                _hash_payload(executable_inputs),
+                envelope.binding.input_hash,
+            ),
+            ("capability_id", start_spec.name, envelope.binding.capability_id),
+            ("tool_id", start_spec.tool_id, envelope.binding.tool_id),
+            (
+                "effect_class",
+                start_spec.effect_class,
+                envelope.binding.effect_class.value,
+            ),
+        )
+        if actual != expected
+    )
+    expected_execution = {
+        "action_id": envelope.binding.action_id,
+        "approval_id": approval_id,
+        "approval_envelope_digest": start_digest,
+        "authorization_source_digest": source_digest,
+        "effect_idempotency_key": envelope.binding.effect_idempotency_key,
+    }
+    mismatches += tuple(
+        field
+        for field, expected in expected_execution.items()
+        if execution.get(field) != expected
+    )
+    if mismatches:
+        raise ApprovalAuthorizationError(
+            "durable effect start no longer matches its exact authorization",
+            code="effect_identity_conflict",
+            mismatches=tuple(dict.fromkeys(mismatches)),
+        )
+    return ExactApprovalAuthorization(
+        approval_id=approval_id,
+        envelope_digest=start_digest,
+        effect_idempotency_key=envelope.binding.effect_idempotency_key,
+        authorization_source_digest=source_digest,
+        binding=envelope.binding,
+        approval_envelope_json=canonical_json(snapshot_payload["approval_envelope"]),
+        executable_inputs_json=canonical_json(executable_inputs),
+        capability_contract_json=capability_contract_json,
+        authorization_snapshot_json=canonical_json(snapshot_payload),
+        authorization_snapshot_digest=snapshot_digest,
+        execution_id=_require_identifier("execution_id", execution.get("execution_id")),
+    )
 
 
 def denial_event(
@@ -518,18 +763,41 @@ def _effect_event(
     note: str,
     extra_anchors: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _ = run, action
+    try:
+        capability = capability_spec_from_contract_json(
+            authorization.capability_contract_json
+        )
+        snapshot = json.loads(
+            _require_identifier(
+                "authorization_snapshot_json",
+                authorization.authorization_snapshot_json,
+            )
+        )
+    except (ApprovalRegistryError, json.JSONDecodeError) as exc:
+        raise ApprovalAuthorizationError(
+            "effect audit identity is absent from immutable start evidence",
+            code="effect_start_authority_invalid",
+        ) from exc
+    audit_context = snapshot.get("audit_context")
+    if type(audit_context) is not dict:
+        raise ApprovalAuthorizationError(
+            "effect audit context is absent from immutable start evidence",
+            code="effect_start_authority_invalid",
+        )
+    binding = authorization.binding
     return {
-        "sequence": int(action.get("sequence") or 0),
+        "sequence": int(audit_context.get("sequence") or 0),
         "event_type": event_type,
         "status": status,
-        "capability_name": action.get("capability_name"),
-        "capability_version": action.get("capability_version"),
-        "principal_type": run.get("principal_type"),
-        "principal_id": run.get("principal_id"),
-        "tool_id": action.get("tool_id"),
-        "skill_id": action.get("skill_id"),
-        "effect_class": action.get("effect_class"),
-        "trace_id": run.get("trace_id"),
+        "capability_name": binding.capability_id,
+        "capability_version": capability.default_version,
+        "principal_type": binding.principal_type.value,
+        "principal_id": binding.principal_id,
+        "tool_id": binding.tool_id,
+        "skill_id": audit_context.get("skill_id"),
+        "effect_class": binding.effect_class.value,
+        "trace_id": audit_context.get("trace_id"),
         "note": note,
         "is_policy_event": True,
         "anchors": {
@@ -592,6 +860,25 @@ def _normalize_utc(value: datetime) -> datetime:
 
 def _format_datetime(value: datetime) -> str:
     return value.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _parse_datetime(field_name: str, value: object) -> datetime:
+    if type(value) is not str or not value:
+        raise ApprovalAuthorizationError(
+            f"{field_name} must be a canonical timestamp",
+            code="effect_start_authority_invalid",
+            mismatches=(field_name,),
+        )
+    try:
+        return datetime.fromisoformat(
+            value[:-1] + "+00:00" if value.endswith("Z") else value
+        )
+    except ValueError as exc:
+        raise ApprovalAuthorizationError(
+            f"{field_name} must be a canonical timestamp",
+            code="effect_start_authority_invalid",
+            mismatches=(field_name,),
+        ) from exc
 
 
 def _hash_payload(value: object) -> str:

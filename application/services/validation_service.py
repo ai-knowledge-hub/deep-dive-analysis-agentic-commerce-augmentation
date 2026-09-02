@@ -45,6 +45,10 @@ class ValidationService:
         model: Optional[str] = None,
         prompt_version: Optional[str] = "v1",
         requested_by: Optional[str] = None,
+        agent_action_id: Optional[str] = None,
+        approval_id: Optional[str] = None,
+        effect_idempotency_key: Optional[str] = None,
+        approval_effect_execution_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         normalized_mode = _normalize_validation_mode(mode)
         if normalized_mode is None:
@@ -78,6 +82,10 @@ class ValidationService:
             integration_type=_integration_type_for_mode(normalized_mode),
             provider_run_id=None,
             callback_verified=False,
+            agent_action_id=agent_action_id,
+            approval_id=approval_id,
+            effect_idempotency_key=effect_idempotency_key,
+            approval_effect_execution_id=approval_effect_execution_id,
             input_payload=input_payload,
             requested_by=requested_by,
         )
@@ -274,6 +282,11 @@ class ValidationService:
             job_id=job_id, client_id=client_id, status="running"
         )
         provider = _normalize_provider(job.get("provider"))
+        requested_model = (
+            job.get("requested_model")
+            if job.get("approval_effect_execution_id") is not None
+            else job.get("requested_model") or job.get("model")
+        )
         prompt = build_validation_prompt(
             input_payload=job.get("input_payload") or {},
             schema=VALIDATION_OUTPUT_SCHEMA,
@@ -281,7 +294,7 @@ class ValidationService:
         start = time.perf_counter()
         try:
             response = _run_validation_prompt(
-                prompt=prompt, provider=provider, model=job.get("model")
+                prompt=prompt, provider=provider, model=requested_model
             )
         except Exception as exc:  # pragma: no cover - provider failures
             self._deps.validation_jobs.update_job_status(
@@ -298,7 +311,7 @@ class ValidationService:
         result = self._deps.validation_results.create_result(
             job_id=job_id,
             provider=job.get("provider"),
-            model=job.get("model"),
+            model=requested_model,
             structured_result=structured,
             raw_response=response,
             score=_safe_float(structured.get("score")),

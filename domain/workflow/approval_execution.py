@@ -70,7 +70,52 @@ def approval_execution_source_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def approval_effect_start_snapshot(
+    *,
+    approval_envelope: Mapping[str, Any],
+    authorization_source_digest: str,
+    executable_inputs: Mapping[str, Any],
+    capability_contract_json: str,
+    audit_context: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Freeze every authority and payload needed to record a late receipt."""
+
+    if type(capability_contract_json) is not str:
+        raise TypeError("capability_contract_json must be exact text")
+    capability_contract = json.loads(capability_contract_json)
+    return json.loads(
+        canonical_json(
+            {
+                "contract": "workflow.approval-effect-start",
+                "version": "1.0",
+                "approval_envelope": dict(approval_envelope),
+                "authorization_source_digest": authorization_source_digest,
+                "executable_inputs": dict(executable_inputs),
+                "capability_contract": capability_contract,
+                "audit_context": dict(audit_context),
+            }
+        )
+    )
+
+
+def approval_effect_start_snapshot_digest(snapshot: Mapping[str, Any]) -> str:
+    return hashlib.sha256(canonical_json(snapshot).encode("utf-8")).hexdigest()
+
+
+def canonical_json(value: object) -> str:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
 __all__ = [
+    "approval_effect_start_snapshot",
+    "approval_effect_start_snapshot_digest",
     "approval_execution_source_digest",
     "approval_execution_source_payload",
+    "canonical_json",
 ]

@@ -36,6 +36,7 @@ def execute_with_exact_authorization(
     action: Dict[str, Any],
     spec: CapabilitySpec,
     inputs: Dict[str, Any],
+    lock_token: str,
     user_id: str | None,
     state: AuthorizedExecutionState,
 ) -> Dict[str, Any]:
@@ -45,6 +46,8 @@ def execute_with_exact_authorization(
         run=run,
         action=action,
         spec=spec,
+        executable_inputs=inputs,
+        lock_token=lock_token,
     )
     state.effect_invoked = True
     outputs = execute_runtime_capability(
@@ -52,13 +55,34 @@ def execute_with_exact_authorization(
         context=CapabilityContext(
             client_id=str(run.get("client_id") or ""),
             user_id=user_id,
+            agent_action_id=(
+                state.authorization.binding.action_id
+                if state.authorization is not None
+                else None
+            ),
+            approval_id=(
+                state.authorization.approval_id
+                if state.authorization is not None
+                else None
+            ),
+            effect_idempotency_key=(
+                state.authorization.effect_idempotency_key
+                if state.authorization is not None
+                else None
+            ),
+            approval_effect_execution_id=(
+                state.authorization.execution_id
+                if state.authorization is not None
+                else None
+            ),
         ),
         capability_name=spec.name,
         inputs=inputs,
     )
-    output_errors = validate_outputs(spec, outputs)
-    if output_errors:
-        raise CapabilityExecutionError("; ".join(output_errors))
+    if state.authorization is None:
+        output_errors = validate_outputs(spec, outputs)
+        if output_errors:
+            raise CapabilityExecutionError("; ".join(output_errors))
     complete_authorized_effect(
         deps=deps,
         run=run,

@@ -11,8 +11,12 @@ Implemented now:
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
 - Operator UX in `/agent-runs` with queue approvals and action explainability
 - Exact governed-effect authorization backed by the canonical approval ledger,
-  admission revalidation, atomic pre-effect consumption, single-use effect
-  identity, durable uncertain outcomes, and linked fulfillment receipts
+  registry-authoritative pre-approval canonical payloads consumed unchanged,
+  admission revalidation, atomic
+  lease/status/budget checks at pre-effect consumption, single-use effect
+  identity, durable uncertain outcomes, provenance- and outcome-checked
+  reconciliation with immutable requested-model binding, fail-closed recovery
+  from unexpected post-start errors, and linked fulfillment receipts
 - Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution

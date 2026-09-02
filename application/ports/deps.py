@@ -416,6 +416,8 @@ class ApprovalLedgerStore(Protocol):
 
     def get_effect_execution(self, **kwargs: Any) -> dict | None: ...
 
+    def get_effect_execution_for_action(self, **kwargs: Any) -> dict | None: ...
+
     def commit_effect_authorization(self, **kwargs: Any) -> dict: ...
 
     def mark_effect_execution_uncertain(self, **kwargs: Any) -> dict: ...
@@ -423,6 +425,12 @@ class ApprovalLedgerStore(Protocol):
     def commit_effect_completion(self, **kwargs: Any) -> dict: ...
 
     def commit_approval_command(self, **kwargs: Any) -> dict: ...
+
+
+class AgentRegistryStore(Protocol):
+    def ensure_agent_registry_version(self, **kwargs: Any) -> dict: ...
+
+    def get_agent_registry_version(self, **kwargs: Any) -> dict | None: ...
 
 
 class SemanticMemory(Protocol):
@@ -475,6 +483,7 @@ class AppDeps:
     agent_actions: AgentActionsStore
     agent_events: AgentEventsStore
     approval_ledger: ApprovalLedgerStore
+    agent_registry: AgentRegistryStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

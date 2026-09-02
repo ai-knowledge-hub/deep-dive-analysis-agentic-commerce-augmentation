@@ -7,6 +7,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+from domain.workflow.approval_serialization import (
+    approval_envelope_digest,
+    approval_envelope_from_payload,
+)
+from domain.workflow.approval_execution import (
+    approval_effect_start_snapshot_digest,
+    approval_execution_source_digest,
+)
+from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
 
 
@@ -86,6 +95,10 @@ def effect_execution_row(row: sqlite3.Row) -> Dict[str, Any]:
         "approval_id": row["approval_id"],
         "approval_envelope_digest": row["approval_envelope_digest"],
         "authorization_source_digest": row["authorization_source_digest"],
+        "authorization_snapshot": from_json(
+            row["authorization_snapshot_json"], default=None
+        ),
+        "authorization_snapshot_digest": row["authorization_snapshot_digest"],
         "effect_idempotency_key": row["effect_idempotency_key"],
         "status": row["status"],
         "receipt_id": row["receipt_id"],
@@ -95,6 +108,74 @@ def effect_execution_row(row: sqlite3.Row) -> Dict[str, Any]:
         "completed_at": row["completed_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def get_effect_execution_for_action(
+    *, tenant_id: str, workflow_id: str, action_id: str
+) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute(
+            """
+        SELECT * FROM approval_effect_executions
+        WHERE tenant_id = ? AND workflow_id = ? AND action_id = ?
+        """,
+            (tenant_id, workflow_id, action_id),
+        )
+        .fetchone()
+    )
+    return effect_execution_row(row) if row else None
+
+
+def get_effect_execution(
+    *, tenant_id: str, workflow_id: str, effect_idempotency_key: str
+) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute(
+            """
+        SELECT * FROM approval_effect_executions
+        WHERE tenant_id = ? AND workflow_id = ? AND effect_idempotency_key = ?
+        """,
+            (tenant_id, workflow_id, effect_idempotency_key),
+        )
+        .fetchone()
+    )
+    return effect_execution_row(row) if row else None
+
+
+def effect_start_snapshot_is_valid(
+    *,
+    snapshot: Dict[str, Any],
+    snapshot_digest: str,
+    source_digest: str,
+    envelope_digest: str,
+    tenant_id: str,
+    workflow_id: str,
+    action_id: str,
+    approval_id: str,
+    effect_idempotency_key: str,
+) -> bool:
+    try:
+        envelope = approval_envelope_from_payload(snapshot.get("approval_envelope"))
+    except (TypeError, ValueError):
+        return False
+    binding = envelope.binding
+    return (
+        approval_effect_start_snapshot_digest(snapshot) == snapshot_digest
+        and snapshot.get("contract") == "workflow.approval-effect-start"
+        and snapshot.get("version") == "1.0"
+        and type(snapshot.get("executable_inputs")) is dict
+        and type(snapshot.get("capability_contract")) is dict
+        and type(snapshot.get("audit_context")) is dict
+        and snapshot.get("authorization_source_digest") == source_digest
+        and approval_envelope_digest(envelope) == envelope_digest
+        and binding.tenant_id == tenant_id
+        and binding.workflow_id == workflow_id
+        and binding.action_id == action_id
+        and binding.approval_id == approval_id
+        and binding.effect_idempotency_key == effect_idempotency_key
+    )
 
 
 def runtime_scope_locked(
@@ -113,6 +194,9 @@ def runtime_scope_locked(
             r.principal_id AS run_principal_id,
             r.allowed_capabilities_json,
             r.budgets_json,
+            r.status AS run_status,
+            r.lock_token,
+            r.lock_expires_at,
             r.registry_version AS run_registry_version,
             r.registry_fingerprint AS run_registry_fingerprint,
             r.harness_id,
@@ -154,6 +238,9 @@ def runtime_scope_locked(
         "principal_id": row["run_principal_id"],
         "allowed_capabilities": from_json(row["allowed_capabilities_json"], default=[]),
         "budgets": from_json(row["budgets_json"], default={}),
+        "status": row["run_status"],
+        "lock_token": row["lock_token"],
+        "lock_expires_at": row["lock_expires_at"],
         "registry_version": row["run_registry_version"],
         "registry_fingerprint": row["run_registry_fingerprint"],
         "harness_id": row["harness_id"],
@@ -186,6 +273,124 @@ def runtime_scope_locked(
         "approval_envelope_digest": row["action_approval_envelope_digest"],
     }
     return run, action
+
+
+def normalize_action_for_approval_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    action_id: str,
+    expected_action_status: str,
+    normalization: Dict[str, Any],
+) -> str | None:
+    scope = runtime_scope_locked(
+        conn,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        action_id=action_id,
+    )
+    if scope is None or approval_execution_source_digest(
+        run=scope[0], action=scope[1]
+    ) != normalization.get("expected_source_digest"):
+        return "governed action changed before input normalization"
+    conn.execute(
+        """
+        UPDATE agent_actions
+        SET inputs_json = json(?), inputs_hash = ?, updated_at = datetime('now')
+        WHERE id = ? AND agent_run_id = ? AND status = ?
+        """,
+        (
+            to_json(normalization.get("normalized_inputs")) or to_json({}),
+            normalization.get("normalized_inputs_hash"),
+            action_id,
+            workflow_id,
+            expected_action_status,
+        ),
+    )
+    normalized_scope = runtime_scope_locked(
+        conn,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        action_id=action_id,
+    )
+    if normalized_scope is None or approval_execution_source_digest(
+        run=normalized_scope[0], action=normalized_scope[1]
+    ) != normalization.get("normalized_source_digest"):
+        return "normalized approval payload was not persisted exactly"
+    return None
+
+
+def budget_reservation_conflict_locked(
+    conn: sqlite3.Connection,
+    *,
+    workflow_id: str,
+    action: Dict[str, Any],
+    budgets: Dict[str, Any],
+) -> str | None:
+    """Reserve count-based shared budgets by counting starts under the write lock."""
+
+    max_actions = _non_negative_int(budgets.get("max_actions"))
+    if max_actions is not None:
+        executed = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM agent_actions WHERE agent_run_id = ? AND status = 'executed'",
+                (workflow_id,),
+            ).fetchone()[0]
+        )
+        reserved = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM approval_effect_executions
+                WHERE workflow_id = ? AND status IN ('started', 'uncertain')
+                """,
+                (workflow_id,),
+            ).fetchone()[0]
+        )
+        if executed + reserved >= max_actions:
+            return (
+                "action budget exhausted before effect commit: "
+                f"consumed_or_reserved={executed + reserved}, max_actions={max_actions}"
+            )
+    if action.get("capability_name") == "run_variant":
+        max_variant_runs = _non_negative_int(budgets.get("max_variant_runs"))
+        if max_variant_runs is not None:
+            executed_variants = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) FROM agent_actions
+                    WHERE agent_run_id = ? AND status = 'executed'
+                      AND capability_name = 'run_variant'
+                    """,
+                    (workflow_id,),
+                ).fetchone()[0]
+            )
+            reserved_variants = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM approval_effect_executions e
+                    JOIN agent_actions a ON a.id = e.action_id
+                    WHERE e.workflow_id = ? AND e.status IN ('started', 'uncertain')
+                      AND a.capability_name = 'run_variant'
+                    """,
+                    (workflow_id,),
+                ).fetchone()[0]
+            )
+            if executed_variants + reserved_variants >= max_variant_runs:
+                return (
+                    "variant-run budget exhausted before effect commit: "
+                    "consumed_or_reserved="
+                    f"{executed_variants + reserved_variants}, "
+                    f"max_variant_runs={max_variant_runs}"
+                )
+    return None
+
+
+def _non_negative_int(value: object) -> int | None:
+    if type(value) is not int or value < 0:
+        return None
+    return value
 
 
 def insert_agent_audit_event_locked(

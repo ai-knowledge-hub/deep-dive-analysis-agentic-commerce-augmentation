@@ -146,9 +146,29 @@ detections, verifications, and gaps are in `security-controls-v1.yaml`.
   claims. Existing API tests certify the implemented subset.
 - SEC-02 enforces host capability, effect, approval, and budget policy. Existing
   policy and API tests certify the implemented subset.
-- SEC-06 binds approval to the exact execution envelope at admission and at an
-  atomic pre-effect commit, with single-use effect identity and durable outcome
-  reconciliation.
+- SEC-06 uses the complete fingerprinted capability contract—including defaults,
+  schemas, and field canonicalizers—to canonicalize every executable value before
+  approval and hashing. Governed execution consumes that frozen payload without
+  further normalization, and same-version live-catalog drift fails closed. Its
+  atomic pre-effect commit rechecks
+  cancellation, lease ownership, expiry, action state, and count budgets, then
+  freezes the approved payload and contract in an immutable start snapshot.
+  Normal completion and reconciliation both require the same tenant-scoped,
+  provenance-checked provider evidence bound to the exact action, approval,
+  effect idempotency key, and effect-execution row. When the frozen payload
+  requires an in-app auto-run, that evidence must be a completed job with a
+  durable matching result. The job's immutable requested model is checked
+  against the frozen effect-start inputs, drives provider execution, and remains
+  the result-model oracle even if mutable observed job fields drift; a queued
+  bound job is sufficient only when the approved effect disabled auto-run.
+  Completion audit authority is projected
+  from immutable start evidence. Databases upgraded from the
+  published migration 044 receive effect-start fields through migration 045;
+  databases that already applied 045 receive immutable requested-model recovery
+  through migration 046. Legacy starts without reconstructable evidence remain
+  quarantined and fail closed. Any unexpected failure after the effect-start
+  commit records an uncertain effect and failed action/run for reconciliation;
+  it cannot leave a silent `started`/`executing` projection.
 - SEC-09 will create minimal tenant-scoped context capsules in which untrusted
   data and opaque secret handles cannot grant authority.
 

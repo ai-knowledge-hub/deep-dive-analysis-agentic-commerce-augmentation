@@ -18,6 +18,9 @@ from application.services.agent_runtime.runtime.audit import (
     record_action_event,
     record_run_event,
 )
+from application.services.agent_runtime.runtime.action_claims import (
+    claim_next_approved_action,
+)
 from application.services.agent_runtime.runtime.failures import (
     record_approval_authorization_failure,
     record_capability_failure,
@@ -175,7 +178,7 @@ class AgentRuntimeService:
             stop = apply_stopping_condition(deps=self._deps, run=run)
             if stop:
                 raise NoApprovedActionError(stop.note)
-            action = self._claim_next_approved_action(run_id=run_id)
+            action = claim_next_approved_action(deps=self._deps, run_id=run_id)
             if not action:
                 status = compute_next_run_status(
                     deps=self._deps, run=run, run_id=run_id
@@ -217,7 +220,7 @@ class AgentRuntimeService:
                     )
                 except HarnessPostureError as exc:
                     raise AgentRuntimeError(str(exc)) from exc
-                inputs = spec.normalize_inputs(action.get("inputs") or {})
+                action_inputs = dict(action.get("inputs") or {})
                 self._policy.validate_action_preflight(
                     run=run, action=action, spec=spec
                 )
@@ -226,6 +229,11 @@ class AgentRuntimeService:
                     run=run,
                     action=action,
                     spec=spec,
+                )
+                inputs = (
+                    action_inputs
+                    if execution_state.authorization is not None
+                    else spec.normalize_inputs(action_inputs)
                 )
                 self._policy.validate_action_execution(
                     run=run,
@@ -241,6 +249,7 @@ class AgentRuntimeService:
                     action=action,
                     spec=spec,
                     inputs=inputs,
+                    lock_token=lock_token,
                     user_id=user_id,
                     state=execution_state,
                 )
@@ -294,6 +303,20 @@ class AgentRuntimeService:
                     state=execution_state,
                     error=str(exc),
                     error_code="capability_value_error",
+                )
+                raise CapabilityExecutionError(str(exc)) from exc
+            except Exception as exc:
+                # Once exact authorization has committed, any unexpected failure
+                # may have happened after the external effect was invoked. Fail
+                # closed and preserve the durable effect as uncertain so receipt
+                # reconciliation, rather than an unsafe retry, owns recovery.
+                record_capability_failure(
+                    deps=self._deps,
+                    run=run,
+                    action=action,
+                    state=execution_state,
+                    error=str(exc),
+                    error_code="unexpected_capability_failure",
                 )
                 raise CapabilityExecutionError(str(exc)) from exc
 
@@ -363,21 +386,6 @@ class AgentRuntimeService:
     def _assert_not_terminal(self, run: Dict[str, Any], *, action: str) -> None:
         if self._normalized_status(run) in _TERMINAL_STATUSES:
             raise AgentRuntimeError(f"Terminal runs cannot be {action}")
-
-    def _claim_next_approved_action(self, *, run_id: str) -> Dict[str, Any] | None:
-        actions = self._deps.agent_actions.list_agent_actions(
-            agent_run_id=run_id, limit=500
-        )
-        approved = [item for item in actions if item.get("status") == "approved"]
-        for item in approved:
-            claimed = self._deps.agent_actions.transition_agent_action_status(
-                action_id=str(item.get("id") or ""),
-                from_status="approved",
-                to_status="executing",
-            )
-            if claimed:
-                return claimed
-        return None
 
 
 __all__ = [

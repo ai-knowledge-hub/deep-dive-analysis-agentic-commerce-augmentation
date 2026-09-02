@@ -14,11 +14,18 @@ from application.services.agent_runtime.approval_ledger import (
     issue_action_approval_command,
     list_action_approvals,
 )
+from application.services.agent_runtime.registry import (
+    REGISTRY_VERSION,
+    registry_contract_payload,
+)
+from application.services.agent_runtime.registry.hashing import hash_registry_payload
 from domain.workflow.approval import ApprovalAuthority, PrincipalType
 from shared.db.connection import get_connection, init_db, set_database_path
 
 
 TENANT_ID = "client-a"
+REGISTRY_PAYLOAD = registry_contract_payload()
+REGISTRY_FINGERPRINT = hash_registry_payload(REGISTRY_PAYLOAD)
 
 
 @pytest.fixture
@@ -28,6 +35,11 @@ def ledger(tmp_path):
     init_db()
     deps = default_deps()
     deps.clients.create_client(client_id=TENANT_ID, name="Client A")
+    deps.agent_registry.ensure_agent_registry_version(
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=REGISTRY_FINGERPRINT,
+        payload=REGISTRY_PAYLOAD,
+    )
     return deps, db_path
 
 
@@ -65,8 +77,8 @@ def _run_and_action(
         principal_id="internal-agent:test",
         harness_id="operator_supervised",
         policy_profile_id="human_approval_required",
-        registry_version="registry-v1",
-        registry_fingerprint="a" * 64,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=REGISTRY_FINGERPRINT,
     )
     action = deps.agent_actions.create_agent_action(
         agent_run_id=run["id"],
@@ -86,8 +98,8 @@ def _run_and_action(
         validation_job_id=None,
         tool_id="experiment.run_variant",
         skill_id="optimize-product-representation",
-        registry_version="registry-v1",
-        registry_fingerprint="a" * 64,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=REGISTRY_FINGERPRINT,
         tool_version="v1",
         skill_version="v1",
         effect_class="write_low_risk",
@@ -122,8 +134,8 @@ def _additional_action(
         validation_job_id=None,
         tool_id="experiment.run_variant",
         skill_id="optimize-product-representation",
-        registry_version="registry-v1",
-        registry_fingerprint="a" * 64,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=REGISTRY_FINGERPRINT,
         tool_version="v1",
         skill_version="v1",
         effect_class="write_low_risk",
@@ -417,7 +429,9 @@ def test_concurrent_conflicting_decisions_have_one_winner(ledger, monkeypatch):
 
 def test_amended_action_cannot_inherit_prior_approval(ledger):
     deps, _ = ledger
-    run, original = _run_and_action(deps, inputs={"budget": 10})
+    run, original = _run_and_action(
+        deps, inputs={"experiment_id": "experiment-a", "budget": 10}
+    )
     approved = issue_action_approval_command(
         deps=deps,
         run=run,
@@ -432,7 +446,7 @@ def test_amended_action_cannot_inherit_prior_approval(ledger):
         status="proposed",
         capability_name="run_variant",
         capability_version="v1",
-        inputs={"budget": 11},
+        inputs={"experiment_id": "experiment-a", "budget": 11},
         outputs={},
         inputs_hash=None,
         outputs_hash=None,
@@ -444,8 +458,8 @@ def test_amended_action_cannot_inherit_prior_approval(ledger):
         validation_job_id=None,
         tool_id="experiment.run_variant",
         skill_id="optimize-product-representation",
-        registry_version="registry-v1",
-        registry_fingerprint="a" * 64,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=REGISTRY_FINGERPRINT,
         tool_version="v1",
         skill_version="v1",
         effect_class="write_low_risk",
@@ -514,8 +528,8 @@ def test_expiry_and_supersession_fail_closed_on_time_scope_and_cycles(ledger):
         validation_job_id=None,
         tool_id="experiment.run_variant",
         skill_id="optimize-product-representation",
-        registry_version="registry-v1",
-        registry_fingerprint="a" * 64,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=REGISTRY_FINGERPRINT,
         tool_version="v1",
         skill_version="v1",
         effect_class="write_low_risk",

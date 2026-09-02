@@ -7,6 +7,11 @@ from application.services.agent_runtime.agent_first import (
     capability_to_tool_id,
     tool_effect_class,
 )
+from application.services.agent_runtime.registry.input_contracts import (
+    canonicalize_inputs,
+    default_input_properties,
+    object_schema,
+)
 
 REGISTRY_VERSION = "agent-runtime-static-v1"
 SUPPORTED_RUN_MODES = ("plan_only", "auto_execute_safe")
@@ -20,6 +25,7 @@ class ToolSpec:
     default_version: str = "v1"
     required_inputs: tuple[str, ...] = ()
     default_inputs: Dict[str, Any] = field(default_factory=dict)
+    input_canonicalizers: Dict[str, str] = field(default_factory=dict)
     input_schema: Dict[str, Any] = field(default_factory=dict)
     output_schema: Dict[str, Any] = field(default_factory=dict)
     side_effects: tuple[str, ...] = ()
@@ -30,10 +36,11 @@ class ToolSpec:
     effect_class: str = "write_low_risk"
 
     def normalize_inputs(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
-        normalized: Dict[str, Any] = dict(self.default_inputs)
-        for key, value in dict(inputs or {}).items():
-            normalized[str(key)] = value
-        return normalized
+        return canonicalize_inputs(
+            defaults=self.default_inputs,
+            canonicalizers=self.input_canonicalizers,
+            inputs=inputs,
+        )
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,7 @@ class CapabilitySpec:
     default_version: str = "v1"
     required_inputs: tuple[str, ...] = ()
     default_inputs: Dict[str, Any] = field(default_factory=dict)
+    input_canonicalizers: Dict[str, str] = field(default_factory=dict)
     input_schema: Dict[str, Any] = field(default_factory=dict)
     output_schema: Dict[str, Any] = field(default_factory=dict)
     side_effects: tuple[str, ...] = ()
@@ -54,10 +62,11 @@ class CapabilitySpec:
     effect_class: str = "write_low_risk"
 
     def normalize_inputs(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
-        normalized: Dict[str, Any] = dict(self.default_inputs)
-        for key, value in dict(inputs or {}).items():
-            normalized[str(key)] = value
-        return normalized
+        return canonicalize_inputs(
+            defaults=self.default_inputs,
+            canonicalizers=self.input_canonicalizers,
+            inputs=inputs,
+        )
 
 
 def _tool(
@@ -67,6 +76,7 @@ def _tool(
     default_version: str = "v1",
     required_inputs: tuple[str, ...] = (),
     default_inputs: Dict[str, Any] | None = None,
+    input_canonicalizers: Dict[str, str] | None = None,
     input_properties: Dict[str, Any] | None = None,
     output_properties: Dict[str, Any] | None = None,
     output_required: tuple[str, ...] = (),
@@ -84,14 +94,15 @@ def _tool(
         default_version=default_version,
         required_inputs=required_inputs,
         default_inputs=defaults,
-        input_schema=_schema(
+        input_canonicalizers=dict(input_canonicalizers or {}),
+        input_schema=object_schema(
             required=required_inputs,
             properties={
-                **_default_input_properties(defaults),
+                **default_input_properties(defaults),
                 **dict(input_properties or {}),
             },
         ),
-        output_schema=_schema(
+        output_schema=object_schema(
             required=output_required,
             properties=dict(output_properties or {}),
         ),
@@ -102,29 +113,6 @@ def _tool(
         next_state=next_state,
         effect_class=tool_effect_class(tool_id) or "write_low_risk",
     )
-
-
-def _schema(*, required: tuple[str, ...], properties: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "type": "object",
-        "required": list(required),
-        "properties": properties,
-        "additionalProperties": True,
-    }
-
-
-def _default_input_properties(defaults: Mapping[str, Any]) -> Dict[str, Any]:
-    return {key: _property_for_value(value) for key, value in defaults.items()}
-
-
-def _property_for_value(value: Any) -> Dict[str, Any]:
-    if isinstance(value, bool):
-        return {"type": "boolean", "default": value}
-    if isinstance(value, int):
-        return {"type": "integer", "default": value}
-    if isinstance(value, float):
-        return {"type": "number", "default": value}
-    return {"type": "string", "default": value}
 
 
 def _ownership_for_tool(tool_id: str) -> tuple[str, str]:
@@ -228,8 +216,12 @@ _TOOLS: Dict[str, ToolSpec] = {
         input_properties={
             "experiment_id": {"type": "string"},
             "provider": {"type": "string"},
+            "mode": {"type": "string"},
+            "model": {"type": "string"},
+            "prompt_version": {"type": "string"},
             "auto_run": {"type": "boolean"},
             "variant_id": {"type": "string"},
+            "variant_selection": {"type": "string"},
         },
         output_properties={"validation_job_id": {"type": "string"}},
         output_required=("validation_job_id",),
@@ -239,6 +231,15 @@ _TOOLS: Dict[str, ToolSpec] = {
             "auto_run": True,
             "variant_selection": "top_1",
             "prompt_version": "v1",
+        },
+        input_canonicalizers={
+            "experiment_id": "strip",
+            "provider": "strip_lower_or_default",
+            "mode": "strip_lower_or_default",
+            "model": "strip_or_none",
+            "prompt_version": "strip_or_default",
+            "variant_id": "strip_or_none",
+            "variant_selection": "strip_lower_or_default",
         },
         side_effects=("create_validation_job", "create_validation_result"),
         review_checklist=("Confirm provider configuration and cost posture.",),
@@ -415,6 +416,7 @@ _CAPABILITIES: Dict[str, CapabilitySpec] = {
         default_version=tool.default_version,
         required_inputs=tool.required_inputs,
         default_inputs=dict(tool.default_inputs),
+        input_canonicalizers=dict(tool.input_canonicalizers),
         input_schema=tool.input_schema,
         output_schema=tool.output_schema,
         side_effects=tool.side_effects,

@@ -432,10 +432,19 @@ Progress:
   contracts, and explicitly owned gaps. Security threats cross-resolve to STPA
   hazards and constraints, and CI executes tests claimed by implemented
   controls.
-- Slice 5 now has an immutable exact approval contract, durable decision and
-  effect ledgers, atomic pre-effect authorization, single-use effect identity,
-  receipt-linked fulfillment, and executable mismatch, race, replay, and
-  reconciliation evidence for the current sequential runtime.
+- Slice 5 now has an immutable exact approval contract, a normalized executable
+  payload governed by the complete fingerprinted capability contract, durable
+  decision and effect ledgers with immutable start evidence, atomic
+  cancellation/lease/count-budget pre-effect authorization, single-use effect
+  identity, shared normal/recovery provider-provenance verification,
+  auto-run outcome/result parity, immutable requested-model binding, exact
+  effect-bound receipt-linked fulfillment, immutable audit authority, and
+  executable mismatch, catalog-drift, historical-receipt reuse, migration
+  upgrades through already-applied 044 and 045 databases, coordinated model
+  substitution, race, replay, projection-mutation, and late-reconciliation
+  evidence
+  for the current sequential runtime. Legacy effect starts without the new
+  immutable evidence remain quarantined for operator resolution.
 
 Focused research on OpenAI, Claude Code, recursive language and agent harness
 papers, and the local Hermes and Prime Agent implementations is recorded in
@@ -456,6 +465,9 @@ Phase 1 remains open. The next reviewable sequence is:
    The immutable approval envelope and independent lifecycle are defined in
    #114, #115 adds the durable ledger plus retry-safe operator commands, and
    #116 revalidates and consumes exact authorization at the pre-effect commit.
+   The fingerprinted capability contract canonicalizes executable inputs before
+   approval; governed execution consumes the frozen values unchanged, and any
+   unexpected post-start failure becomes an uncertain, reconcilable outcome.
    Action status alone is not execution authority. The implemented SEC-06
    boundary does not release production publishing because SEC-16 and its
    versioned release decision remain unresolved.

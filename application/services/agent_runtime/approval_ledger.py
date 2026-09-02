@@ -12,6 +12,10 @@ from application.services.agent_runtime.agent_first import (
     tool_effect_class,
 )
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
+from application.services.agent_runtime.approval_registry import (
+    ApprovalRegistryError,
+    prepare_action_for_exact_approval,
+)
 from application.services.agent_runtime.registry import (
     get_capability_spec,
 )
@@ -32,6 +36,7 @@ from domain.workflow.approval_serialization import (
     approval_envelope_from_payload,
     approval_envelope_payload,
 )
+from domain.workflow.approval_execution import approval_execution_source_digest
 
 
 DEFAULT_APPROVAL_TTL_SECONDS = 900
@@ -144,6 +149,40 @@ def issue_action_approval_command(
         action_id=action_id,
         approval_id=normalized_approval_id,
     )
+    if current is None and operation == "approve":
+        _validate_action_policy(run=run, action=action)
+    approval_normalization: Dict[str, Any] | None = None
+    if current is None:
+        spec = get_capability_spec(str(action.get("capability_name") or ""))
+        if spec is None:
+            raise ApprovalLedgerError(
+                "governed capability is absent from the executable registry",
+                code="approval_registry_mismatch",
+                status_code=400,
+            )
+        source_before_normalization = approval_execution_source_digest(
+            run=run, action=action
+        )
+        try:
+            prepared_action, _ = prepare_action_for_exact_approval(
+                deps=deps,
+                run=run,
+                action=action,
+                spec=spec,
+            )
+        except ApprovalRegistryError as exc:
+            raise ApprovalLedgerError(
+                str(exc), code="approval_registry_mismatch", status_code=409
+            ) from exc
+        approval_normalization = {
+            "expected_source_digest": source_before_normalization,
+            "normalized_inputs": prepared_action["inputs"],
+            "normalized_inputs_hash": prepared_action["inputs_hash"],
+            "normalized_source_digest": approval_execution_source_digest(
+                run=run, action=prepared_action
+            ),
+        }
+        action = prepared_action
     expected_action_status = _expected_action_status(
         action=action,
         current=current,
@@ -249,6 +288,7 @@ def issue_action_approval_command(
             operation=operation,
             audit_context=audit_context,
         ),
+        approval_normalization=approval_normalization,
     )
     outcome = str(stored.get("outcome") or "")
     if outcome == "idempotency_conflict":

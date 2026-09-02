@@ -153,22 +153,8 @@ def get_command_by_idempotency_key(
     return approval_persistence.command_row(row) if row else None
 
 
-def get_effect_execution(
-    *, tenant_id: str, workflow_id: str, effect_idempotency_key: str
-) -> Dict[str, Any] | None:
-    row = (
-        get_connection()
-        .execute(
-            """
-            SELECT *
-            FROM approval_effect_executions
-            WHERE tenant_id = ? AND workflow_id = ? AND effect_idempotency_key = ?
-            """,
-            (tenant_id, workflow_id, effect_idempotency_key),
-        )
-        .fetchone()
-    )
-    return approval_persistence.effect_execution_row(row) if row else None
+get_effect_execution = approval_persistence.get_effect_execution
+get_effect_execution_for_action = approval_persistence.get_effect_execution_for_action
 
 
 def commit_effect_authorization(
@@ -180,12 +166,30 @@ def commit_effect_authorization(
     approval_id: str,
     envelope_digest: str,
     authorization_source_digest: str,
+    authorization_snapshot: Dict[str, Any],
+    authorization_snapshot_digest: str,
     effect_idempotency_key: str,
+    lock_token: str,
     authorized_at: str,
     audit_event: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Linearize one exact, single-use approval immediately before its effect."""
 
+    if not approval_persistence.effect_start_snapshot_is_valid(
+        snapshot=authorization_snapshot,
+        snapshot_digest=authorization_snapshot_digest,
+        source_digest=authorization_source_digest,
+        envelope_digest=envelope_digest,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        action_id=action_id,
+        approval_id=approval_id,
+        effect_idempotency_key=effect_idempotency_key,
+    ):
+        return {
+            "outcome": "authorization_conflict",
+            "reason": "effect-start authorization snapshot is incomplete",
+        }
     conn = get_connection()
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -233,7 +237,15 @@ def commit_effect_authorization(
             }
         run, action = scope
         if (
-            action.get("status") != "executing"
+            run.get("status") not in {"planned", "running"}
+            or run.get("lock_token") != lock_token
+            or not run.get("lock_expires_at")
+            or conn.execute(
+                "SELECT datetime(?) > datetime(?)",
+                (run.get("lock_expires_at"), authorized_at),
+            ).fetchone()[0]
+            != 1
+            or action.get("status") != "executing"
             or action.get("approval_id") != approval_id
             or action.get("approval_envelope_digest") != envelope_digest
             or approval_execution_source_digest(run=run, action=action)
@@ -242,7 +254,10 @@ def commit_effect_authorization(
             conn.rollback()
             return {
                 "outcome": "authorization_conflict",
-                "reason": "runtime source changed after approval revalidation",
+                "reason": (
+                    "run cancellation, lease loss, or runtime source change won "
+                    "before the effect commit"
+                ),
             }
 
         existing = conn.execute(
@@ -265,6 +280,7 @@ def commit_effect_authorization(
                     "approval_id": approval_id,
                     "approval_envelope_digest": envelope_digest,
                     "authorization_source_digest": authorization_source_digest,
+                    "authorization_snapshot_digest": authorization_snapshot_digest,
                     "effect_idempotency_key": effect_idempotency_key,
                 }.items()
             )
@@ -281,14 +297,25 @@ def commit_effect_authorization(
                 "reason": "approval or effect identity was already consumed differently",
             }
 
+        budget_reason = approval_persistence.budget_reservation_conflict_locked(
+            conn,
+            workflow_id=workflow_id,
+            action=action,
+            budgets=run.get("budgets") or {},
+        )
+        if budget_reason:
+            conn.rollback()
+            return {"outcome": "budget_conflict", "reason": budget_reason}
+
         conn.execute(
             """
             INSERT INTO approval_effect_executions (
                 execution_id, tenant_id, workflow_id, action_id, approval_id,
                 approval_envelope_digest, authorization_source_digest,
+                authorization_snapshot_json, authorization_snapshot_digest,
                 effect_idempotency_key, status, started_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'started', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'started', ?, ?)
             """,
             (
                 execution_id,
@@ -298,6 +325,8 @@ def commit_effect_authorization(
                 approval_id,
                 envelope_digest,
                 authorization_source_digest,
+                to_json(authorization_snapshot),
+                authorization_snapshot_digest,
                 effect_idempotency_key,
                 authorized_at,
                 authorized_at,
@@ -647,6 +676,7 @@ def commit_approval_command(
     expected_action_status: str,
     action_status: Optional[str],
     audit_events: List[Dict[str, Any]],
+    approval_normalization: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Atomically commit a command receipt, ledger snapshots and projections.
 
@@ -699,6 +729,24 @@ def commit_approval_command(
                 "outcome": "action_state_conflict",
                 "reason": "governed action lifecycle state changed before approval commit",
             }
+
+        if approval_normalization is not None:
+            normalization_error = (
+                approval_persistence.normalize_action_for_approval_locked(
+                    conn,
+                    tenant_id=tenant_id,
+                    workflow_id=workflow_id,
+                    action_id=action_id,
+                    expected_action_status=expected_action_status,
+                    normalization=approval_normalization,
+                )
+            )
+            if normalization_error:
+                conn.rollback()
+                return {
+                    "outcome": "concurrency_conflict",
+                    "reason": normalization_error,
+                }
 
         if command_type in {"reject", "revoke", "expire", "supersede"}:
             started_effect = conn.execute(
@@ -1149,17 +1197,3 @@ def _apply_mutation(
     if cursor.rowcount != 1:
         return "approval version changed before command commit"
     return None
-
-
-__all__ = [
-    "commit_effect_authorization",
-    "commit_effect_completion",
-    "commit_approval_command",
-    "get_effect_execution",
-    "get_approval",
-    "get_command_by_idempotency_key",
-    "get_current_approval_for_action",
-    "list_approval_events",
-    "list_approvals_for_action",
-    "mark_effect_execution_uncertain",
-]

@@ -24,6 +24,12 @@ if "google" not in sys.modules:
 from api.composition import default_deps
 from api.main import app
 from api.utils.principals import build_agent_principal_token
+from application.services.agent_runtime.registry import (
+    REGISTRY_VERSION,
+    get_capability_spec,
+    registry_contract_payload,
+)
+from application.services.agent_runtime.registry.hashing import hash_registry_payload
 from infrastructure.db.core.connection import get_connection
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
@@ -50,6 +56,15 @@ def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_s
     client: TestClient,
 ):
     deps = default_deps()
+    registry_payload = registry_contract_payload()
+    registry_fingerprint = hash_registry_payload(registry_payload)
+    deps.agent_registry.ensure_agent_registry_version(
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=registry_fingerprint,
+        payload=registry_payload,
+    )
+    spec = get_capability_spec("seed_hypotheses")
+    assert spec is not None
     run = deps.agent_runs.create_agent_run(
         client_id=CLIENT_ID,
         brand_id=None,
@@ -68,6 +83,8 @@ def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_s
         principal_id="agent-owner",
         agent_profile_id="buyer-assistant-v1",
         trace_id="trace_external_owner_control",
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=registry_fingerprint,
     )
     action = deps.agent_actions.create_agent_action(
         agent_run_id=run["id"],
@@ -85,6 +102,11 @@ def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_s
         hypothesis_id=None,
         variant_id=None,
         validation_job_id=None,
+        tool_id=spec.tool_id,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=registry_fingerprint,
+        tool_version=spec.default_version,
+        effect_class=spec.effect_class,
     )
 
     wrong_principal_token = build_agent_principal_token(
@@ -143,6 +165,11 @@ def test_external_agent_owned_run_allows_operator_supervision_and_owner_bearer_s
         hypothesis_id=None,
         variant_id=None,
         validation_job_id=None,
+        tool_id=spec.tool_id,
+        registry_version=REGISTRY_VERSION,
+        registry_fingerprint=registry_fingerprint,
+        tool_version=spec.default_version,
+        effect_class=spec.effect_class,
     )
     human_shaped_decision = client.post(
         f"/agent-runs/actions/{operator_action['id']}/decision",

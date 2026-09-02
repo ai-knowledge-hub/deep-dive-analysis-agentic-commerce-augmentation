@@ -29,7 +29,10 @@ from application.services.agent_runtime.capabilities.types import (
     CapabilityContext,
     CapabilityExecutionError,
 )
-from application.services.agent_runtime.registry import get_capability_spec
+from application.services.agent_runtime.registry import (
+    get_capability_spec,
+    validate_inputs,
+)
 from application.services.validation_service import ValidationService
 
 
@@ -44,7 +47,16 @@ def execute_capability(
     spec = get_capability_spec(name)
     if not spec:
         raise CapabilityExecutionError(f"Unsupported capability: {name}")
-    inputs = spec.normalize_inputs(inputs or {})
+    canonical_inputs = spec.normalize_inputs(inputs or {})
+    governed_effect = context.approval_effect_execution_id is not None
+    if governed_effect and canonical_inputs != inputs:
+        raise CapabilityExecutionError(
+            f"{name} received non-canonical inputs after effect authorization"
+        )
+    inputs = dict(inputs) if governed_effect else canonical_inputs
+    input_errors = validate_inputs(spec, inputs)
+    if input_errors:
+        raise CapabilityExecutionError("; ".join(input_errors))
     missing_inputs = []
     for key in spec.required_inputs:
         value = inputs.get(key)
@@ -218,17 +230,15 @@ def execute_capability(
             "status": "variant_run_completed",
         }
     if name == "request_synthetic_validation":
-        experiment_id = str(inputs.get("experiment_id") or "").strip()
-        provider = str(inputs.get("provider") or "openrouter").strip().lower()
-        mode = str(inputs.get("mode") or "in_app_byok").strip().lower()
-        model = str(inputs.get("model") or "").strip() or None
-        prompt_version = str(inputs.get("prompt_version") or "v1").strip()
-        auto_run = bool(inputs.get("auto_run", True))
-        target_variant_id = str(inputs.get("variant_id") or "").strip() or None
+        experiment_id = inputs["experiment_id"]
+        provider = inputs["provider"]
+        mode = inputs["mode"]
+        model = inputs.get("model")
+        prompt_version = inputs["prompt_version"]
+        auto_run = inputs["auto_run"]
+        target_variant_id = inputs.get("variant_id")
         if not target_variant_id:
-            variant_selection = (
-                str(inputs.get("variant_selection") or "top_1").strip().lower()
-            )
+            variant_selection = inputs["variant_selection"]
             target_variant_id = _select_candidate_variant_id(
                 deps=deps,
                 experiment_id=experiment_id,
@@ -255,6 +265,10 @@ def execute_capability(
                 prompt_version=prompt_version,
                 input_payload=payload,
                 requested_by=context.user_id,
+                agent_action_id=context.agent_action_id,
+                approval_id=context.approval_id,
+                effect_idempotency_key=context.effect_idempotency_key,
+                approval_effect_execution_id=context.approval_effect_execution_id,
             )
             result = None
             if auto_run and mode in {"in_app", "in_app_byok"}:

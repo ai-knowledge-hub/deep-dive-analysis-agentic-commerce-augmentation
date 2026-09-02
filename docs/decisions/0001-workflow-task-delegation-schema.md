@@ -360,22 +360,49 @@ contract is available. Legacy action `approved` and `rejected` values are
 written only after the corresponding durable decision commits; they remain
 projections and cannot authorize execution.
 
-Slice 1.5d consumes this ledger through a two-check runtime boundary. Admission
-loads the authoritative projection and append-only tail, verifies the pinned
-digest and active lifecycle, and rebuilds every binding dimension from the
-current run and action. Immediately before a governed capability call, a
+Slice 1.5d consumes this ledger through a two-check runtime boundary. Before the
+first approval snapshot is written, the fingerprinted registry contract applies
+its defaults and field canonicalizers to produce one persisted executable payload
+under the approval transaction. Governed execution consumes those frozen values
+without further transformation. Capability, tool,
+effect, version, registry, harness, and policy identity come from the
+fingerprinted registry record rather than the mutable action. Admission loads
+the authoritative projection and append-only tail, verifies the pinned digest
+and active lifecycle, and rebuilds every binding dimension against those
+independent authorities. Immediately before a governed capability call, a
 `BEGIN IMMEDIATE` transaction repeats the history, expiry, action state,
-approval pin, and source-snapshot checks and commits one single-use
-`approval_effect_executions` identity. The transaction is the revocation/effect
-linearization point: a terminal command committed first prevents execution; an
-effect-start committed first prevents later revocation from pretending the
-effect never began. Started or uncertain effects must reconcile by the same
-identity and receipt, while a different action, approval, or effect key fails
-closed. Successful completion atomically records the effect receipt, marks the
-approval fulfilled, updates the compatibility action projection, and appends
-linked audit events. Low-risk sequential actions retain their existing path;
-versioned beta capability blocks are checked before this approval boundary and
-remain in force.
+approval pin, source-snapshot, executable run-status, current lease-token, and
+lease-expiry checks. It reserves count-based action and variant budgets and
+commits one single-use `approval_effect_executions` identity in the same write.
+The transaction is the cancellation, lease, budget, revocation, and effect
+linearization point: a conflicting control-plane write committed first prevents
+execution; an effect-start committed first is the durable reservation and
+prevents later revocation from pretending the effect never began. The start row
+immutably snapshots the then-valid approval, normalized executable inputs, and
+complete fingerprinted capability contract. Started or uncertain effects
+reconcile from that snapshot rather than mutable run/action projections or
+present-time expiry. Both normal and recovery completion independently verify
+the frozen output schema, canonical output hash, and tenant-scoped provider-job
+provenance bound to the exact action, approval, effect key, and effect-execution
+row before a receipt can fulfill the approval. Frozen in-app `auto_run=true`
+inputs additionally require a completed job and durable matching result; queued
+job evidence is sufficient only when the approved payload does not require the
+provider run. The requested model is immutable, must match the effect-start
+inputs, drives in-app provider execution, and—not a mutable observed model—is
+the result-model reconciliation oracle. Completion audit authority is also
+derived from the frozen binding rather than mutable run/action projections.
+Migration 045 upgrades databases that already applied the original migration
+044, and migration 046 reconstructs immutable requested models from effect-start
+snapshots for databases that already applied 045. Legacy starts lacking a
+reconstructable snapshot remain uncertain and require operator handling rather
+than inferred authorization. An unexpected error after the effect-start commit
+also moves the effect to `uncertain` and the action/run to `failed`, preserving a
+recoverable receipt-reconciliation path instead of a stranded execution.
+Successful completion atomically records the
+effect receipt, marks the approval fulfilled, updates the compatibility action
+projection, and appends linked audit events. Low-risk sequential actions retain
+their existing path; versioned beta capability blocks are checked before this
+approval boundary and remain in force.
 
 ### `task_results`
 

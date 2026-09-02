@@ -43,13 +43,20 @@ def test_registry_contains_core_capability_and_defaults():
     assert spec.owner_principal_id == "platform.commerce-optimization"
     assert spec.steward_team == "commerce-optimization"
     assert validate_inputs(spec, normalized) == []
-    assert "retrieval_max_results" in validate_inputs(
-        spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
-    )[0]
-    assert validate_outputs(spec, {"metric_id": "metric-1", "variant_id": "variant-1"}) == []
-    assert "metric_id" in validate_outputs(
-        spec, {"metric_id": 123, "variant_id": "variant-1"}
-    )[0]
+    assert (
+        "retrieval_max_results"
+        in validate_inputs(
+            spec, {"experiment_id": "exp-1", "retrieval_max_results": "five"}
+        )[0]
+    )
+    assert (
+        validate_outputs(spec, {"metric_id": "metric-1", "variant_id": "variant-1"})
+        == []
+    )
+    assert (
+        "metric_id"
+        in validate_outputs(spec, {"metric_id": 123, "variant_id": "variant-1"})[0]
+    )
     assert "variant_id" in validate_outputs(spec, {"metric_id": "metric-1"})[0]
     assert "metric_id" in validate_outputs(spec, {"variant_id": "variant-1"})[0]
     baseline = get_capability_spec("run_control_baseline")
@@ -58,14 +65,17 @@ def test_registry_contains_core_capability_and_defaults():
     posterior = get_capability_spec("update_posterior_and_decisions")
     assert posterior is not None
     assert set(posterior.output_schema["required"]) == {"new_metric_id", "variant_id"}
-    assert validate_outputs(
-        posterior,
-        {
-            "new_metric_id": "metric-2",
-            "source_metric_id": "metric-1",
-            "variant_id": "variant-1",
-        },
-    ) == []
+    assert (
+        validate_outputs(
+            posterior,
+            {
+                "new_metric_id": "metric-2",
+                "source_metric_id": "metric-1",
+                "variant_id": "variant-1",
+            },
+        )
+        == []
+    )
     version_context = version_context_for_capability(
         "run_variant",
         tool_id="experiment.run_variant",
@@ -88,6 +98,36 @@ def test_registry_support_and_next_state():
     assert capability_supported("not_real") is False
     assert next_state_for_capability("seed_hypotheses") == "hypotheses_ready"
     assert next_state_for_capability("recommend_next_action") is None
+
+
+def test_synthetic_validation_registry_canonicalizes_every_executable_string():
+    spec = get_capability_spec("request_synthetic_validation")
+    assert spec is not None
+    normalized = spec.normalize_inputs(
+        {
+            "experiment_id": " experiment-a ",
+            "provider": " OPENROUTER ",
+            "mode": " IN_APP_BYOK ",
+            "model": " approved-model ",
+            "prompt_version": " v1 ",
+            "variant_id": " variant-a ",
+            "variant_selection": " TOP_1 ",
+            "auto_run": False,
+        }
+    )
+
+    assert normalized == {
+        "experiment_id": "experiment-a",
+        "provider": "openrouter",
+        "mode": "in_app_byok",
+        "model": "approved-model",
+        "prompt_version": "v1",
+        "variant_id": "variant-a",
+        "variant_selection": "top_1",
+        "auto_run": False,
+    }
+    assert spec.normalize_inputs(normalized) == normalized
+    assert spec.input_schema["properties"]["model"] == {"type": "string"}
 
 
 def test_tool_registry_shim_contains_machine_facing_ids():
@@ -150,29 +190,30 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         if item["id"] == "protocol.checkout.v1"
     )
     assert discovery_adapter["permission_scope"] == "protocol.discovery:read"
-    assert discovery_adapter["allowed_capabilities"] == [
-        "discover_protocol_candidates"
-    ]
+    assert discovery_adapter["allowed_capabilities"] == ["discover_protocol_candidates"]
     assert planned_checkout_adapter["status"] == "planned"
     assert planned_checkout_adapter["effect_class"] == "external_side_effect"
     assert planned_checkout_adapter["allowed_capabilities"] == []
     assert planned_checkout_adapter["writes_external_system"] is True
     assert planned_checkout_adapter["requires_operator_review"] is True
     assert planned_checkout_adapter["contract_intent"] == "readiness_boundary"
-    assert "Real transaction execution is not supported" in planned_checkout_adapter[
-        "description"
-    ]
+    assert (
+        "Real transaction execution is not supported"
+        in planned_checkout_adapter["description"]
+    )
     assert planned_checkout_adapter["receipt_contract"]["required"] is True
     assert (
         planned_checkout_adapter["receipt_contract"]["receipt_type"]
         == "external_write_execution"
     )
-    assert "approval_receipt_id" in planned_checkout_adapter["receipt_contract"][
-        "required_fields"
-    ]
-    assert "checkout_session_id" in planned_checkout_adapter["receipt_contract"][
-        "evidence_fields"
-    ]
+    assert (
+        "approval_receipt_id"
+        in planned_checkout_adapter["receipt_contract"]["required_fields"]
+    )
+    assert (
+        "checkout_session_id"
+        in planned_checkout_adapter["receipt_contract"]["evidence_fields"]
+    )
     assert planned_checkout_adapter["receipt_contract"]["must_link_run_event"] is True
     planned_payment_adapter = next(
         item
@@ -189,17 +230,19 @@ def test_registry_payload_can_use_persistent_tool_ownership():
         == "external_write_execution"
     )
     assert planned_payment_adapter["contract_intent"] == "readiness_boundary"
-    assert "payment_handler" in planned_payment_adapter["receipt_contract"][
-        "evidence_fields"
-    ]
+    assert (
+        "payment_handler"
+        in planned_payment_adapter["receipt_contract"]["evidence_fields"]
+    )
     assert (
         planned_browser_adapter["receipt_contract"]["receipt_type"]
         == "external_write_execution"
     )
     assert planned_browser_adapter["contract_intent"] == "readiness_boundary"
-    assert "browser_session_id" in planned_browser_adapter["receipt_contract"][
-        "evidence_fields"
-    ]
+    assert (
+        "browser_session_id"
+        in planned_browser_adapter["receipt_contract"]["evidence_fields"]
+    )
     assert any(
         item["id"] == "buyer-assistant-v1"
         and item["default_harness_id"] == "safe_autonomy_b2b"
@@ -235,14 +278,22 @@ def test_registry_payload_can_use_persistent_tool_ownership():
     assert readiness_boundaries["protocol.ucp.checkout"]["blocked_reason"] == (
         "readiness_boundary_only_no_transaction_execution"
     )
-    assert next(
-        item for item in payload["skill_tool_mappings"] if item["tool_id"] == "run.read"
-    )["executable"] is False
-    assert next(
-        item
-        for item in payload["skill_tool_mappings"]
-        if item["tool_id"] == "protocol.ucp.checkout"
-    )["executable"] is False
+    assert (
+        next(
+            item
+            for item in payload["skill_tool_mappings"]
+            if item["tool_id"] == "run.read"
+        )["executable"]
+        is False
+    )
+    assert (
+        next(
+            item
+            for item in payload["skill_tool_mappings"]
+            if item["tool_id"] == "protocol.ucp.checkout"
+        )["executable"]
+        is False
+    )
     ucp_checkout_mapping = next(
         item
         for item in payload["skill_tool_mappings"]
@@ -320,7 +371,10 @@ def test_runtime_tools_resolve_to_skill_lineage():
     assert skill_id_for_tool_id("protocol.discover_candidates") == (
         "discover-protocol-candidates"
     )
-    assert skill_id_for_tool_id("experiment.run_variant") == "optimize-product-representation"
+    assert (
+        skill_id_for_tool_id("experiment.run_variant")
+        == "optimize-product-representation"
+    )
     assert (
         skill_id_for_capability("request_synthetic_validation")
         == "request-validation-and-ingest-result"
@@ -347,5 +401,8 @@ def test_runtime_tools_resolve_to_skill_lineage():
         ).id
         == "promote-and-publish-approved-copy"
     )
-    assert skill_id_for_tool_id("copy.publish_revision") == "promote-and-publish-approved-copy"
+    assert (
+        skill_id_for_tool_id("copy.publish_revision")
+        == "promote-and-publish-approved-copy"
+    )
     assert skill_id_for_tool_id("not.real") is None
