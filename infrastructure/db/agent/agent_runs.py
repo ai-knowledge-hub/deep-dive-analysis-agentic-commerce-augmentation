@@ -146,6 +146,33 @@ def update_agent_run(
     return get_agent_run(run_id)
 
 
+def restore_agent_run_after_effect_reconciliation(
+    *,
+    run_id: str,
+    client_id: str,
+    state: str,
+    status: str,
+) -> Dict[str, Any] | None:
+    """Restore a failed projection without racing terminal control-plane state."""
+
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE agent_runs
+        SET state = ?,
+            status = ?,
+            error_text = CASE WHEN ? = 'failed' THEN error_text ELSE NULL END,
+            updated_at = datetime('now')
+        WHERE id = ?
+          AND client_id = ?
+          AND lower(status) NOT IN ('canceled', 'cancelled', 'completed', 'paused')
+        """,
+        (state, status, status, run_id, client_id),
+    )
+    conn.commit()
+    return get_agent_run(run_id, client_id=client_id)
+
+
 def get_agent_run(
     run_id: str, *, client_id: Optional[str] = None
 ) -> Dict[str, Any] | None:

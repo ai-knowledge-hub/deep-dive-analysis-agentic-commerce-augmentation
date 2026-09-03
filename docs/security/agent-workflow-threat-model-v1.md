@@ -168,7 +168,11 @@ detections, verifications, and gaps are in `security-controls-v1.yaml`.
   through migration 046. Legacy starts without reconstructable evidence remain
   quarantined and fail closed. Any unexpected failure after the effect-start
   commit records an uncertain effect and failed action/run for reconciliation;
-  it cannot leave a silent `started`/`executing` projection.
+  it cannot leave a silent `started`/`executing` projection. A verified-bearer,
+  tenant-scoped `reconcile_effect` operator command discovers the uniquely bound
+  validation job from durable provenance, applies the same receipt verifier,
+  restores the action/workflow projections, and is idempotent. It never invokes
+  the capability again or resurrects a canceled run.
 - SEC-09 will create minimal tenant-scoped context capsules in which untrusted
   data and opaque secret handles cannot grant authority.
 

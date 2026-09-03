@@ -142,6 +142,23 @@ def get_job(job_id: str, *, client_id: Optional[str] = None) -> Dict[str, Any] |
     return _row(row) if row else None
 
 
+def get_job_for_effect_execution(
+    *, approval_effect_execution_id: str, client_id: str
+) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT * FROM validation_jobs
+            WHERE approval_effect_execution_id = ? AND client_id = ?
+            """,
+            (approval_effect_execution_id, client_id),
+        )
+        .fetchone()
+    )
+    return _row(row) if row else None
+
+
 def list_jobs(
     *,
     client_id: str,

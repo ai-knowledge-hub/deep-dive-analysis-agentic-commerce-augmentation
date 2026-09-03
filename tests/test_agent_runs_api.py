@@ -22,11 +22,20 @@ from api.composition import default_deps
 from api.main import app
 from api.utils.principals import build_agent_principal_token
 from application.services.agent_runtime.agent_first import list_skill_specs
+from application.services.agent_runtime.approval_authorization import (
+    mark_authorized_effect_uncertain,
+)
 from infrastructure.db.agent.agent_profiles import update_agent_profile_defaults
 from infrastructure.db.agent.agent_registry import update_agent_registry_harness_profile
 from shared.config.env import get_settings
 from shared.db.connection import get_connection
 from shared.db.connection import init_db, set_database_path
+from tests.modules.approval_effect_support import matching_validation_job
+from tests.modules.test_approval_effect_authorization import (
+    _approve,
+    _commit_effect,
+    _run_and_action,
+)
 
 CLIENT_ID = "client-a"
 USER_ID = "user-a"
@@ -861,6 +870,137 @@ def test_operator_command_preflight_blocks_plan_only_step(client: TestClient):
     assert preflight["allowed"] is False
     assert preflight["risk_level"] == "medium"
     assert "Run is plan-only" in preflight["blockers"][0]
+
+
+def test_operator_reconciles_uncertain_effect_through_authenticated_command(
+    client: TestClient, tmp_path
+):
+    deps, run, action, spec = _run_and_action(tmp_path)
+    approved = _approve(deps, run, action)
+    approved_action = approved["action"]
+    executing = deps.agent_actions.transition_agent_action_status(
+        action_id=action["id"], from_status="approved", to_status="executing"
+    )
+    authorization = _commit_effect(deps, run, executing, spec)
+    mark_authorized_effect_uncertain(
+        deps=deps,
+        run=run,
+        action=executing,
+        authorization=authorization,
+        error_code="receipt_commit_failed",
+    )
+    deps.agent_actions.update_agent_action_status(
+        action_id=action["id"], status="failed", error="receipt commit failed"
+    )
+    deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="failed", error="receipt commit failed"
+    )
+    deps.agent_runs.release_run_lock(run_id=run["id"], lock_token="worker-a")
+    job = matching_validation_job(
+        deps, approved_action, status="failed", with_result=False
+    )
+    command = {
+        "client_id": CLIENT_ID,
+        "user_id": USER_ID,
+        "command_type": "reconcile_effect",
+        "action_id": action["id"],
+    }
+
+    unauthenticated = client.post(f"/agent-runs/{run['id']}/commands", json=command)
+    assert unauthenticated.status_code == 401
+    still_uncertain = deps.approval_ledger.get_effect_execution_for_action(
+        tenant_id=CLIENT_ID, workflow_id=run["id"], action_id=action["id"]
+    )
+    assert still_uncertain["status"] == "uncertain"
+
+    token = build_agent_principal_token(
+        principal_id="human:recovery-operator",
+        client_id=CLIENT_ID,
+        principal_type="human",
+        scopes=["agent_runs:supervise", "agent_runs:write"],
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    wrong_tenant = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        headers=headers,
+        json={**command, "client_id": "client-b"},
+    )
+    assert wrong_tenant.status_code == 404
+
+    incomplete = client.post(
+        f"/agent-runs/{run['id']}/commands", headers=headers, json=command
+    )
+    assert incomplete.status_code == 409
+    assert incomplete.json()["detail"]["code"] == "effect_receipt_outcome_incomplete"
+    still_failed = deps.agent_actions.get_agent_action(action_id=action["id"])
+    assert still_failed["status"] == "failed"
+    still_uncertain = deps.approval_ledger.get_effect_execution_for_action(
+        tenant_id=CLIENT_ID, workflow_id=run["id"], action_id=action["id"]
+    )
+    assert still_uncertain["status"] == "uncertain"
+
+    job = deps.validation_jobs.update_job_status(
+        job_id=job["id"], client_id=CLIENT_ID, status="completed"
+    )
+    deps.validation_results.create_result(
+        job_id=job["id"],
+        provider=job["provider"],
+        model=job["requested_model"],
+        structured_result={"winner_id": "variant-a", "score": 0.9},
+        raw_response=None,
+        score=0.9,
+        winner_id="variant-a",
+        evidence_strength="strong",
+        latency_ms=10,
+        cost_usd=None,
+        source="synthetic",
+        callback_verified=False,
+    )
+
+    response = client.post(
+        f"/agent-runs/{run['id']}/commands", headers=headers, json=command
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["preflight"]["allowed"] is True
+    assert payload["preflight"]["side_effects"] == []
+    assert payload["effect_execution"]["status"] == "succeeded"
+    assert payload["effect_execution"]["receipt_id"] == f"validation-job:{job['id']}"
+    assert payload["validation_job"]["id"] == job["id"]
+    assert payload["action"]["status"] == "executed"
+    assert payload["run"]["state"] == "validation_completed"
+    assert payload["run"]["status"] == "completed"
+    assert payload["run"]["error"] is None
+
+    replay = client.post(
+        f"/agent-runs/{run['id']}/commands", headers=headers, json=command
+    )
+    assert replay.status_code == 200
+    assert replay.json()["effect_execution"] == payload["effect_execution"]
+    assert len(deps.validation_jobs.list_jobs(client_id=CLIENT_ID)) == 1
+
+    events = client.get(
+        f"/agent-runs/{run['id']}/events",
+        params={"client_id": CLIENT_ID, "user_id": USER_ID, "event_type": "all"},
+    )
+    assert events.status_code == 200
+    event_payloads = events.json()["events"]
+    event_types = [event["event_type"] for event in event_payloads]
+    assert "approval_effect_succeeded" in event_types
+    assert "operator_command_reconcile_effect" in event_types
+    reconciliation_events = [
+        event
+        for event in event_payloads
+        if event["event_type"] == "operator_command_reconcile_effect"
+    ]
+    assert {event["principal_type"] for event in reconciliation_events} == {"human"}
+    assert {event["principal_id"] for event in reconciliation_events} == {
+        "human:recovery-operator"
+    }
+    assert {
+        event["anchors"]["command_authority_source"] for event in reconciliation_events
+    } == {"agent-principal-token"}
 
 
 def test_operator_retry_command_creates_new_proposed_retry_action(client: TestClient):

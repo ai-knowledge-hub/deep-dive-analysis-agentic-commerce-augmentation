@@ -38,6 +38,11 @@ def _rollback_guidance(
         return (
             "Cancel is terminal. Create a new run to continue from the same objective."
         )
+    if command_type == "reconcile_effect":
+        return (
+            "Reconciliation does not invoke the provider. Invalid or incomplete "
+            "evidence leaves the effect uncertain for later recovery."
+        )
     if effect_class == "write_high_risk":
         return "High-risk writes may need a compensating action or manual rollback after execution."
     if effect_class == "external_side_effect":
@@ -261,7 +266,9 @@ def _fallback_capability_for_run(
     if requested_capability in allowed:
         return requested_capability
     harness = _active_harness(run)
-    fallback_order = [str(item).strip() for item in list(harness.get("fallback_order") or [])]
+    fallback_order = [
+        str(item).strip() for item in list(harness.get("fallback_order") or [])
+    ]
     if "registry_recovery_template" in fallback_order:
         for candidate in (
             "review_validation_readiness",
@@ -432,7 +439,9 @@ def create_retry_action(
     )
     next_sequence = max([int(item.get("sequence") or 0) for item in actions] or [0]) + 1
     retry_count = int(action.get("retry_count") or 0) + 1
-    retry_strategy = str(metadata.get("retry_strategy") or _default_retry_strategy(run)).strip()
+    retry_strategy = str(
+        metadata.get("retry_strategy") or _default_retry_strategy(run)
+    ).strip()
     allowed = [
         str(item).strip()
         for item in list(run.get("allowed_capabilities") or [])

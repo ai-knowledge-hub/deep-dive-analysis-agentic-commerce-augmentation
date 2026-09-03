@@ -473,7 +473,7 @@ def reconcile_authorized_effect(
     deps: AppDeps,
     run: dict[str, Any],
     action: dict[str, Any],
-    spec: CapabilitySpec,
+    spec: CapabilitySpec | None,
     outputs: dict[str, Any],
     outputs_hash: str,
     receipt_id: str,

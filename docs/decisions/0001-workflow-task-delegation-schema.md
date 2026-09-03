@@ -398,6 +398,12 @@ reconstructable snapshot remain uncertain and require operator handling rather
 than inferred authorization. An unexpected error after the effect-start commit
 also moves the effect to `uncertain` and the action/run to `failed`, preserving a
 recoverable receipt-reconciliation path instead of a stranded execution.
+That path is exposed through the authenticated, tenant-scoped
+`reconcile_effect` operator command. The command accepts only workflow/action
+identity, discovers the unique validation job bound to the immutable effect
+start, verifies it through the normal receipt contract, and projects the
+result idempotently without re-invoking the capability. A canceled run retains
+its terminal control-plane state even when its late external outcome is recorded.
 Successful completion atomically records the
 effect receipt, marks the approval fulfilled, updates the compatibility action
 projection, and appends linked audit events. Low-risk sequential actions retain

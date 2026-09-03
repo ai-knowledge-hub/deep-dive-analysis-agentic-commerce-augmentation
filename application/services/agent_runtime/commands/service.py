@@ -4,6 +4,10 @@ from typing import Any, Dict, Optional
 
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.approval_ledger import ApprovalLedgerError
+from application.services.agent_runtime.commands.context import (
+    AgentRunCommandError,
+    command_context,
+)
 from application.services.agent_runtime.commands.decisions import (
     apply_command_action_decision,
 )
@@ -15,31 +19,14 @@ from application.services.agent_runtime.commands.recovery import (
     create_change_plan_recovery_action,
     create_retry_action,
 )
+from application.services.agent_runtime.effect_recovery import (
+    EffectRecoveryError,
+    reconcile_effect_from_durable_evidence,
+)
 from application.services.agent_runtime.runtime import (
     AgentRuntimeService,
 )
 from domain.workflow.approval import ApprovalAuthority
-
-
-SUPPORTED_COMMANDS = {
-    "explain",
-    "focus",
-    "change_plan",
-    "start",
-    "pause",
-    "cancel",
-    "step",
-    "approve",
-    "reject",
-    "retry",
-}
-
-
-class AgentRunCommandError(Exception):
-    def __init__(self, *, status_code: int, detail: Any) -> None:
-        super().__init__(str(detail))
-        self.status_code = status_code
-        self.detail = detail
 
 
 def preflight_agent_run_command(
@@ -51,7 +38,7 @@ def preflight_agent_run_command(
     action_id: Optional[str],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    run, action, normalized_command = _command_context(
+    run, action, normalized_command = command_context(
         deps=deps,
         run_id=run_id,
         client_id=client_id,
@@ -85,7 +72,7 @@ def issue_agent_run_command(
     approving_authority: ApprovalAuthority | None = None,
     idempotency_key: str | None = None,
 ) -> Dict[str, Any]:
-    run, action, normalized_command = _command_context(
+    run, action, normalized_command = command_context(
         deps=deps,
         run_id=run_id,
         client_id=client_id,
@@ -147,6 +134,7 @@ def issue_agent_run_command(
         action=action,
         note=message or f"Operator chat command: {normalized_command}",
         metadata=metadata,
+        command_authority=approving_authority,
     )
     result: Dict[str, Any] = {
         "command": receipt,
@@ -181,37 +169,9 @@ def issue_agent_run_command(
         action=result.get("action") or action,
         note=f"Operator chat command completed: {normalized_command}",
         metadata=metadata,
+        command_authority=approving_authority,
     )
     return result
-
-
-def _command_context(
-    *,
-    deps: AppDeps,
-    run_id: str,
-    client_id: str,
-    command_type: str,
-    action_id: Optional[str],
-) -> tuple[Dict[str, Any], Optional[Dict[str, Any]], str]:
-    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
-    if not run:
-        raise AgentRunCommandError(status_code=404, detail="Agent run not found")
-
-    normalized_command = str(command_type or "").strip().lower()
-    if normalized_command not in SUPPORTED_COMMANDS:
-        raise AgentRunCommandError(status_code=400, detail="Unsupported command")
-
-    action = None
-    if action_id:
-        action = deps.agent_actions.get_agent_action(
-            action_id=action_id,
-            client_id=client_id,
-        )
-        if not action or str(action.get("agent_run_id") or "") != run_id:
-            raise AgentRunCommandError(
-                status_code=404, detail="Agent action not found"
-            )
-    return run, action, normalized_command
 
 
 def _apply_agent_run_command(
@@ -264,6 +224,31 @@ def _apply_agent_run_command(
             action=action,
             metadata=metadata,
         )
+    elif command_type == "reconcile_effect":
+        if not action:
+            raise AgentRunCommandError(status_code=400, detail="Action id is required")
+        if approving_authority is None:
+            raise AgentRunCommandError(
+                status_code=401,
+                detail="Effect reconciliation requires authenticated authority",
+            )
+        try:
+            result.update(
+                reconcile_effect_from_durable_evidence(
+                    deps=deps,
+                    run=run,
+                    action=action,
+                )
+            )
+        except EffectRecoveryError as exc:
+            raise AgentRunCommandError(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.code,
+                    "message": str(exc),
+                    "mismatches": list(exc.mismatches),
+                },
+            ) from exc
     elif command_type in {"approve", "reject"}:
         if not action:
             raise AgentRunCommandError(status_code=400, detail="Action id is required")

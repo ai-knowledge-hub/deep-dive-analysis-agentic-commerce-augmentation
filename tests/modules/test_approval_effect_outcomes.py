@@ -15,6 +15,9 @@ from application.services.agent_runtime.capabilities import (
     CapabilityExecutionError,
     execute_capability,
 )
+from application.services.agent_runtime.effect_recovery import (
+    reconcile_effect_from_durable_evidence,
+)
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
     AgentRuntimeService,
@@ -178,6 +181,58 @@ def test_reconciliation_accepts_bound_queued_job_when_auto_run_is_disabled(tmp_p
     )
 
     assert reconciled["status"] == "succeeded"
+
+
+def test_effect_recovery_records_receipt_without_resurrecting_canceled_run(tmp_path):
+    deps, run, action, _ = _uncertain_effect(tmp_path)
+    job = matching_validation_job(deps, action)
+    canceled = deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="canceled", error="operator canceled"
+    )
+
+    result = reconcile_effect_from_durable_evidence(
+        deps=deps, run=canceled, action=action
+    )
+
+    assert result["effect_execution"]["status"] == "succeeded"
+    assert result["effect_execution"]["receipt_id"] == f"validation-job:{job['id']}"
+    assert result["action"]["status"] == "executed"
+    assert result["run"]["status"] == "canceled"
+    assert result["run"]["state"] == canceled["state"]
+    assert result["run"]["error"] == "operator canceled"
+
+
+def test_effect_recovery_cannot_overwrite_concurrent_cancellation(
+    tmp_path, monkeypatch
+):
+    deps, run, action, _ = _uncertain_effect(tmp_path)
+    matching_validation_job(deps, action)
+    failed = deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="failed", error="provider outcome unknown"
+    )
+    restore = deps.agent_runs.restore_agent_run_after_effect_reconciliation
+
+    def _cancel_before_restore(**kwargs):
+        deps.agent_runs.update_agent_run(
+            run_id=run["id"], status="canceled", error="operator canceled"
+        )
+        return restore(**kwargs)
+
+    monkeypatch.setattr(
+        deps.agent_runs,
+        "restore_agent_run_after_effect_reconciliation",
+        _cancel_before_restore,
+    )
+
+    result = reconcile_effect_from_durable_evidence(
+        deps=deps, run=failed, action=action
+    )
+
+    assert result["effect_execution"]["status"] == "succeeded"
+    assert result["action"]["status"] == "executed"
+    assert result["run"]["status"] == "canceled"
+    assert result["run"]["state"] == failed["state"]
+    assert result["run"]["error"] == "operator canceled"
 
 
 def test_approval_canonicalizes_payload_before_effect_start(tmp_path, monkeypatch):

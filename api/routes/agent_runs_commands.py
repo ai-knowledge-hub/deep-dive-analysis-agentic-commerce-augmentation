@@ -92,7 +92,7 @@ def issue_agent_run_command(
         raise HTTPException(status_code=404, detail="Agent run not found")
     normalized_command = payload.command_type.strip().lower()
     approving_authority = None
-    if normalized_command in {"approve", "reject"}:
+    if normalized_command in {"approve", "reject", "reconcile_effect"}:
         approving_authority = require_approval_authority(
             request=request,
             run=run,

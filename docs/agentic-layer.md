@@ -16,7 +16,9 @@ Implemented now:
   lease/status/budget checks at pre-effect consumption, single-use effect
   identity, durable uncertain outcomes, provenance- and outcome-checked
   reconciliation with immutable requested-model binding, fail-closed recovery
-  from unexpected post-start errors, and linked fulfillment receipts
+  from unexpected post-start errors, a bearer-authorized tenant-scoped
+  `reconcile_effect` operator command with cancellation-safe projection recovery,
+  and linked fulfillment receipts
 - Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution
