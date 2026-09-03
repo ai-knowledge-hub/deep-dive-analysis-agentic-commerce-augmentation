@@ -14,7 +14,10 @@ from application.services.agent_runtime.approval_registry import (
     capability_spec_from_contract_json,
 )
 from application.services.agent_runtime.runtime.payloads import hash_payload
-from application.services.agent_runtime.runtime.status import compute_next_run_status
+from application.services.agent_runtime.runtime.status import (
+    derive_next_run_status,
+    record_stopping_decision,
+)
 from domain.workflow.approval_execution import canonical_json
 
 
@@ -31,6 +34,9 @@ class EffectRecoveryError(ValueError):
         self.code = code
         self.status_code = status_code
         self.mismatches = mismatches
+
+
+_PROJECTION_RESTORE_ATTEMPTS = 5
 
 
 def reconcile_effect_from_durable_evidence(
@@ -101,40 +107,92 @@ def reconcile_effect_from_durable_evidence(
             "reconciled action projection is unavailable",
             code="effect_projection_unavailable",
         )
-    current_run = deps.agent_runs.get_agent_run(run_id=workflow_id, client_id=tenant_id)
-    if current_run is None:
-        raise EffectRecoveryError(
-            "reconciled run projection is unavailable",
-            code="effect_projection_unavailable",
-        )
-    current_status = str(current_run.get("status") or "").strip().lower()
-    preserves_control_plane_state = current_status in {
-        "canceled",
-        "cancelled",
-        "completed",
-        "paused",
-    }
-    next_status = (
-        current_status
-        if preserves_control_plane_state
-        else compute_next_run_status(deps=deps, run=current_run, run_id=workflow_id)
-    )
-    updated_run = deps.agent_runs.restore_agent_run_after_effect_reconciliation(
-        run_id=workflow_id,
-        client_id=tenant_id,
-        state=(
-            current_run.get("state")
-            if preserves_control_plane_state
-            else frozen_spec.next_state or current_run.get("state")
-        ),
-        status=next_status,
+    updated_run = _restore_run_projection(
+        deps=deps,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        next_state=frozen_spec.next_state,
     )
     return {
         "effect_execution": reconciled,
         "validation_job": job,
         "action": updated_action,
-        "run": updated_run or current_run,
+        "run": updated_run,
     }
+
+
+def _restore_run_projection(
+    *, deps: AppDeps, tenant_id: str, workflow_id: str, next_state: str | None
+) -> Mapping[str, Any]:
+    for _ in range(_PROJECTION_RESTORE_ATTEMPTS):
+        current_run = deps.agent_runs.get_agent_run(
+            run_id=workflow_id, client_id=tenant_id
+        )
+        if current_run is None:
+            raise EffectRecoveryError(
+                "reconciled run projection is unavailable",
+                code="effect_projection_unavailable",
+            )
+        current_status = str(current_run.get("status") or "").strip().lower()
+        if current_status in {"canceled", "cancelled", "completed", "paused"}:
+            return current_run
+        actions = deps.agent_actions.list_agent_actions(
+            agent_run_id=workflow_id, limit=501
+        )
+        if len(actions) > 500:
+            raise EffectRecoveryError(
+                "run action projection exceeds the reconciliation safety bound",
+                code="effect_projection_too_large",
+            )
+        next_status, stop = derive_next_run_status(run=current_run, actions=actions)
+        restore = deps.agent_runs.restore_agent_run_after_effect_reconciliation(
+            run_id=workflow_id,
+            client_id=tenant_id,
+            state=next_state or str(current_run.get("state") or ""),
+            status=next_status,
+            expected_run_state=str(current_run.get("state") or ""),
+            expected_run_status=current_status,
+            expected_action_projection=_action_projection(actions),
+        )
+        outcome = restore.get("outcome")
+        restored_run = restore.get("run")
+        if outcome == "restored" and restored_run is not None:
+            if stop:
+                record_stopping_decision(deps=deps, run_id=workflow_id, stop=stop)
+            return restored_run
+        if outcome == "control_plane_state_preserved" and restored_run is not None:
+            return restored_run
+        if outcome not in {"action_projection_changed", "run_projection_changed"}:
+            raise EffectRecoveryError(
+                "reconciled run projection is unavailable",
+                code="effect_projection_unavailable",
+            )
+    raise EffectRecoveryError(
+        "run or action projection changed repeatedly during reconciliation",
+        code="effect_projection_conflict",
+    )
+
+
+def _action_projection(
+    actions: list[Mapping[str, Any]],
+) -> tuple[tuple[Any, ...], ...]:
+    return tuple(
+        (
+            action.get("id"),
+            int(action.get("sequence") or 0),
+            action.get("status"),
+            action.get("capability_name"),
+            action.get("outputs_hash"),
+            action.get("error"),
+        )
+        for action in sorted(
+            actions,
+            key=lambda item: (
+                int(item.get("sequence") or 0),
+                str(item.get("id") or ""),
+            ),
+        )
+    )
 
 
 def _frozen_capability_spec(execution: Mapping[str, Any]):

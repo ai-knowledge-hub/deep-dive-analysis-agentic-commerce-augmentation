@@ -469,8 +469,9 @@ Phase 1 remains open. The next reviewable sequence is:
    approval; governed execution consumes the frozen values unchanged, and any
    unexpected post-start failure becomes an uncertain outcome. A bearer-authorized,
    tenant-scoped `reconcile_effect` command discovers immutable bound provider
-   evidence, reconciles without re-execution, restores failed projections, and
-   preserves cancellation.
+   evidence, reconciles without re-execution, restores failed projections,
+   preserves cancellation, and retries projection derivation when concurrent
+   replanning changes the action set.
    Action status alone is not execution authority. The implemented SEC-06
    boundary does not release production publishing because SEC-16 and its
    versioned release decision remain unresolved.

@@ -18,6 +18,7 @@ from application.services.agent_runtime.capabilities import (
 from application.services.agent_runtime.effect_recovery import (
     reconcile_effect_from_durable_evidence,
 )
+from application.services.agent_runtime.commands.recovery import create_retry_action
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
     AgentRuntimeService,
@@ -233,6 +234,48 @@ def test_effect_recovery_cannot_overwrite_concurrent_cancellation(
     assert result["run"]["status"] == "canceled"
     assert result["run"]["state"] == failed["state"]
     assert result["run"]["error"] == "operator canceled"
+
+
+def test_effect_recovery_retries_projection_after_concurrent_replan(
+    tmp_path, monkeypatch
+):
+    deps, run, action, _ = _uncertain_effect(tmp_path)
+    matching_validation_job(deps, action)
+    failed = deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="failed", error="provider outcome unknown"
+    )
+    restore = deps.agent_runs.restore_agent_run_after_effect_reconciliation
+    concurrent_action = None
+    restore_calls = 0
+
+    def _replan_before_first_restore(**kwargs):
+        nonlocal concurrent_action, restore_calls
+        restore_calls += 1
+        if restore_calls == 1:
+            concurrent_action = create_retry_action(
+                deps=deps,
+                run_id=run["id"],
+                run=failed,
+                action={**action, "status": "failed"},
+                metadata={"retry_strategy": "same_action"},
+            )
+        return restore(**kwargs)
+
+    monkeypatch.setattr(
+        deps.agent_runs,
+        "restore_agent_run_after_effect_reconciliation",
+        _replan_before_first_restore,
+    )
+
+    result = reconcile_effect_from_durable_evidence(
+        deps=deps, run=failed, action=action
+    )
+
+    assert restore_calls == 2
+    assert result["effect_execution"]["status"] == "succeeded"
+    assert result["action"]["status"] == "executed"
+    assert concurrent_action["status"] == "proposed"
+    assert result["run"]["status"] == "planned"
 
 
 def test_approval_canonicalizes_payload_before_effect_start(tmp_path, monkeypatch):

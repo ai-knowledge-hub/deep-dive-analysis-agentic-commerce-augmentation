@@ -89,6 +89,7 @@ IMPLEMENTED_VERIFICATION_TEST_REFS = {
         "tests/test_agent_runs_api.py::test_operator_reconciles_uncertain_effect_through_authenticated_command",
         "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_records_receipt_without_resurrecting_canceled_run",
         "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_cannot_overwrite_concurrent_cancellation",
+        "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_retries_projection_after_concurrent_replan",
         "tests/modules/test_approval_effect_outcomes.py::test_governed_capability_consumes_canonical_strings_without_rewriting",
         "tests/modules/test_approval_effect_outcomes.py::test_coordinated_job_result_model_substitution_cannot_fulfill_approval",
         "tests/modules/test_approval_effect_outcomes.py::test_governed_auto_run_uses_immutable_requested_model",

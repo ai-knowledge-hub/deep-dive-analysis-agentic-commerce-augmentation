@@ -404,6 +404,10 @@ identity, discovers the unique validation job bound to the immutable effect
 start, verifies it through the normal receipt contract, and projects the
 result idempotently without re-invoking the capability. A canceled run retains
 its terminal control-plane state even when its late external outcome is recorded.
+Run-projection recovery compares the observed run state and complete
+status-relevant action snapshot under the database write lock. If concurrent
+replanning changes either, recovery reloads and re-derives the projection rather
+than committing a stale terminal status.
 Successful completion atomically records the
 effect receipt, marks the approval fulfilled, updates the compatibility action
 projection, and appends linked audit events. Low-risk sequential actions retain

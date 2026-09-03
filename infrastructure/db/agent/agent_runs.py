@@ -152,25 +152,76 @@ def restore_agent_run_after_effect_reconciliation(
     client_id: str,
     state: str,
     status: str,
-) -> Dict[str, Any] | None:
-    """Restore a failed projection without racing terminal control-plane state."""
+    expected_run_state: str,
+    expected_run_status: str,
+    expected_action_projection: tuple[tuple[Any, ...], ...],
+) -> Dict[str, Any]:
+    """CAS a recovery projection against run state and its complete action set."""
 
     conn = get_connection()
-    conn.execute(
-        """
-        UPDATE agent_runs
-        SET state = ?,
-            status = ?,
-            error_text = CASE WHEN ? = 'failed' THEN error_text ELSE NULL END,
-            updated_at = datetime('now')
-        WHERE id = ?
-          AND client_id = ?
-          AND lower(status) NOT IN ('canceled', 'cancelled', 'completed', 'paused')
-        """,
-        (state, status, status, run_id, client_id),
-    )
-    conn.commit()
-    return get_agent_run(run_id, client_id=client_id)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        run_row = conn.execute(
+            "SELECT * FROM agent_runs WHERE id = ? AND client_id = ?",
+            (run_id, client_id),
+        ).fetchone()
+        if run_row is None:
+            conn.rollback()
+            return {"outcome": "not_found", "run": None}
+        current_run = _row(run_row)
+        current_status = str(current_run.get("status") or "").strip().lower()
+        if current_status in {"canceled", "cancelled", "completed", "paused"}:
+            conn.rollback()
+            return {"outcome": "control_plane_state_preserved", "run": current_run}
+        if (
+            current_run.get("state") != expected_run_state
+            or current_status != expected_run_status
+        ):
+            conn.rollback()
+            return {"outcome": "run_projection_changed", "run": current_run}
+        action_rows = conn.execute(
+            """
+            SELECT id, sequence, status, capability_name, outputs_hash, error_text
+            FROM agent_actions
+            WHERE agent_run_id = ?
+            ORDER BY sequence ASC, id ASC
+            """,
+            (run_id,),
+        ).fetchall()
+        current_action_projection = tuple(
+            (
+                row["id"],
+                int(row["sequence"]),
+                row["status"],
+                row["capability_name"],
+                row["outputs_hash"],
+                row["error_text"],
+            )
+            for row in action_rows
+        )
+        if current_action_projection != expected_action_projection:
+            conn.rollback()
+            return {"outcome": "action_projection_changed", "run": current_run}
+        conn.execute(
+            """
+            UPDATE agent_runs
+            SET state = ?,
+                status = ?,
+                error_text = CASE WHEN ? = 'failed' THEN error_text ELSE NULL END,
+                updated_at = datetime('now')
+            WHERE id = ? AND client_id = ?
+            """,
+            (state, status, status, run_id, client_id),
+        )
+        updated_row = conn.execute(
+            "SELECT * FROM agent_runs WHERE id = ? AND client_id = ?",
+            (run_id, client_id),
+        ).fetchone()
+        conn.commit()
+        return {"outcome": "restored", "run": _row(updated_row)}
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def get_agent_run(

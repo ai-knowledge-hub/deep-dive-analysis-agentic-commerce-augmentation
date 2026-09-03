@@ -17,7 +17,8 @@ Implemented now:
   identity, durable uncertain outcomes, provenance- and outcome-checked
   reconciliation with immutable requested-model binding, fail-closed recovery
   from unexpected post-start errors, a bearer-authorized tenant-scoped
-  `reconcile_effect` operator command with cancellation-safe projection recovery,
+  `reconcile_effect` operator command with cancellation- and concurrent-replan-safe
+  compare-and-swap projection recovery,
   and linked fulfillment receipts
 - Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
