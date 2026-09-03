@@ -471,7 +471,9 @@ Phase 1 remains open. The next reviewable sequence is:
    tenant-scoped `reconcile_effect` command discovers immutable bound provider
    evidence, reconciles without re-execution, restores failed projections,
    preserves cancellation, and retries projection derivation when concurrent
-   replanning changes the action set.
+   replanning changes the action set. Recovery-action writes recheck terminal
+   status under the database write lock, so stale preflight cannot append work
+   after reconciliation completes; further work starts in a new run.
    Action status alone is not execution authority. The implemented SEC-06
    boundary does not release production publishing because SEC-16 and its
    versioned release decision remain unresolved.

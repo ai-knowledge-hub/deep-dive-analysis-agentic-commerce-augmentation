@@ -411,7 +411,8 @@ Operator steering is exposed via:
 - `POST /agent-runs/{run_id}/commands/preflight`
 - mutating commands: `approve`, `reject`, `retry`, `start`, `pause`, `cancel`, `step`
 - non-mutating command receipts: `explain`, `focus`
-- structured recovery command: `change_plan`
+- structured recovery command: `change_plan`; terminal runs require a new run,
+  with the terminal boundary rechecked atomically when the action is inserted
 - command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
 - high-risk command preflight requires explicit confirmation in the operator chat before submission
 - step commands require explicit confirmation before execution

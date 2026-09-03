@@ -1002,6 +1002,30 @@ def test_operator_reconciles_uncertain_effect_through_authenticated_command(
         event["anchors"]["command_authority_source"] for event in reconciliation_events
     } == {"agent-principal-token"}
 
+    actions_before_change_plan = deps.agent_actions.list_agent_actions(
+        agent_run_id=run["id"], limit=10
+    )
+    terminal_change_plan = client.post(
+        f"/agent-runs/{run['id']}/commands",
+        headers=headers,
+        json={
+            "client_id": CLIENT_ID,
+            "user_id": USER_ID,
+            "command_type": "change_plan",
+        },
+    )
+    assert terminal_change_plan.status_code == 409
+    assert any(
+        "Terminal runs cannot accept recovery actions" in blocker
+        for blocker in terminal_change_plan.json()["detail"]["blockers"]
+    )
+    actions_after_change_plan = deps.agent_actions.list_agent_actions(
+        agent_run_id=run["id"], limit=10
+    )
+    assert [item["id"] for item in actions_after_change_plan] == [
+        item["id"] for item in actions_before_change_plan
+    ]
+
 
 def test_operator_retry_command_creates_new_proposed_retry_action(client: TestClient):
     deps = default_deps()

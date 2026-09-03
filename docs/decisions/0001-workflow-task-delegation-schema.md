@@ -407,7 +407,10 @@ its terminal control-plane state even when its late external outcome is recorded
 Run-projection recovery compares the observed run state and complete
 status-relevant action snapshot under the database write lock. If concurrent
 replanning changes either, recovery reloads and re-derives the projection rather
-than committing a stale terminal status.
+than committing a stale terminal status. Conversely, `change_plan` and `retry`
+reject terminal runs at preflight and recheck that boundary under the action
+insert write lock. A command whose stale preflight races reconciliation cannot
+append work after completion; continuing a terminal workflow requires a new run.
 Successful completion atomically records the
 effect receipt, marks the approval fulfilled, updates the compatibility action
 projection, and appends linked audit events. Low-risk sequential actions retain

@@ -18,7 +18,11 @@ from application.services.agent_runtime.capabilities import (
 from application.services.agent_runtime.effect_recovery import (
     reconcile_effect_from_durable_evidence,
 )
-from application.services.agent_runtime.commands.recovery import create_retry_action
+from application.services.agent_runtime.commands.recovery import (
+    RecoveryActionCreationError,
+    create_change_plan_recovery_action,
+    create_retry_action,
+)
 from application.services.agent_runtime.runtime import (
     AgentRuntimeError,
     AgentRuntimeService,
@@ -276,6 +280,49 @@ def test_effect_recovery_retries_projection_after_concurrent_replan(
     assert result["action"]["status"] == "executed"
     assert concurrent_action["status"] == "proposed"
     assert result["run"]["status"] == "planned"
+
+
+@pytest.mark.parametrize("command_type", ["change_plan", "retry"])
+def test_terminal_run_rejects_stale_recovery_action_commit(tmp_path, command_type):
+    deps, run, action, _ = _uncertain_effect(tmp_path)
+    matching_validation_job(deps, action)
+    stale_failed_run = deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="failed", error="provider outcome unknown"
+    )
+    reconciled = reconcile_effect_from_durable_evidence(
+        deps=deps, run=stale_failed_run, action=action
+    )
+    actions_before = deps.agent_actions.list_agent_actions(
+        agent_run_id=run["id"], limit=10
+    )
+
+    with pytest.raises(RecoveryActionCreationError, match="became terminal"):
+        if command_type == "change_plan":
+            create_change_plan_recovery_action(
+                deps=deps,
+                run_id=run["id"],
+                run=stale_failed_run,
+                source_action=action,
+                command_receipt={"id": "stale-change-plan"},
+                message=None,
+                metadata={},
+            )
+        else:
+            create_retry_action(
+                deps=deps,
+                run_id=run["id"],
+                run=stale_failed_run,
+                action={**action, "status": "failed"},
+                metadata={"retry_strategy": "same_action"},
+            )
+
+    actions_after = deps.agent_actions.list_agent_actions(
+        agent_run_id=run["id"], limit=10
+    )
+    assert reconciled["run"]["status"] == "completed"
+    assert [item["id"] for item in actions_after] == [
+        item["id"] for item in actions_before
+    ]
 
 
 def test_approval_canonicalizes_payload_before_effect_start(tmp_path, monkeypatch):

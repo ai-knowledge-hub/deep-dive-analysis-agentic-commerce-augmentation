@@ -17,6 +17,13 @@ from application.services.agent_runtime.registry import (
 )
 
 
+class RecoveryActionCreationError(RuntimeError):
+    """Raised when recovery action admission loses a terminal-state race."""
+
+
+_RECOVERY_ACTION_RUN_STATUSES = ("planned", "running", "failed", "paused")
+
+
 def _hash_payload(value: Any) -> str:
     try:
         encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode(
@@ -384,7 +391,14 @@ def create_change_plan_recovery_action(
             allowed_capabilities=allowed,
         ),
         dedupe_key=f"change_plan:{command_receipt.get('id')}",
+        client_id=str(run.get("client_id") or ""),
+        admissible_run_statuses=_RECOVERY_ACTION_RUN_STATUSES,
     )
+    if not recovery_action:
+        raise RecoveryActionCreationError(
+            "Run became terminal before the recovery action could be committed; "
+            "create a new run to continue."
+        )
     deps.agent_events.create_agent_event(
         agent_run_id=run_id,
         action_id=str(recovery_action.get("id") or ""),
@@ -537,7 +551,14 @@ def create_retry_action(
         ),
         retry_count=retry_count,
         dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
+        client_id=str(run.get("client_id") or ""),
+        admissible_run_statuses=_RECOVERY_ACTION_RUN_STATUSES,
     )
+    if not retry_action:
+        raise RecoveryActionCreationError(
+            "Run became terminal before the retry action could be committed; "
+            "create a new run to continue."
+        )
     deps.agent_events.create_agent_event(
         agent_run_id=run_id,
         action_id=str(retry_action.get("id") or ""),
@@ -578,3 +599,10 @@ def create_retry_action(
         },
     )
     return retry_action
+
+
+__all__ = [
+    "RecoveryActionCreationError",
+    "create_change_plan_recovery_action",
+    "create_retry_action",
+]

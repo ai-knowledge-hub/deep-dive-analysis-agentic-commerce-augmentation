@@ -5,9 +5,7 @@ from typing import Any, Dict, List, Optional
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.agent_first import skill_id_for_tool_id
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
-from application.services.agent_runtime.registry import (
-    get_capability_spec,
-)
+from application.services.agent_runtime.registry import get_capability_spec
 from application.services.agent_runtime.commands.recovery import (
     _default_retry_strategy,
     _harness_context,
@@ -16,6 +14,9 @@ from application.services.agent_runtime.commands.recovery import (
 )
 from application.services.agent_runtime.commands.reconciliation_preflight import (
     effect_reconciliation_preflight,
+)
+from application.services.agent_runtime.commands.lifecycle_preflight import (
+    command_lifecycle_blockers,
 )
 from domain.workflow.approval import ApprovalAuthority
 
@@ -116,15 +117,13 @@ def _command_preflight(
     if command_type == "retry" and action:
         if str(action.get("status") or "").lower() != "failed":
             blockers.append("Retry is only available for failed actions.")
-    if command_type == "step":
-        if run_mode == "plan_only":
-            blockers.append("Run is plan-only. Switch mode before executing steps.")
-        if run_status in {"canceled", "completed"}:
-            blockers.append("Run is not executable in its current status.")
-    if command_type == "start" and run_status in {"canceled", "completed"}:
-        blockers.append("Canceled or completed runs cannot be started.")
-    if command_type == "cancel" and run_status in {"canceled", "completed"}:
-        blockers.append("Run is already terminal.")
+    blockers.extend(
+        command_lifecycle_blockers(
+            command_type=command_type,
+            run_status=run_status,
+            run_mode=run_mode,
+        )
+    )
     if command_type == "change_plan":
         allowed = [
             str(item).strip()

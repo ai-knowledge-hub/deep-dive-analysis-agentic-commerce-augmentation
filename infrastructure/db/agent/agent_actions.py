@@ -38,79 +38,101 @@ def create_agent_action(
     retry_count: int = 0,
     dedupe_key: Optional[str] = None,
     error: Optional[str] = None,
+    client_id: Optional[str] = None,
+    admissible_run_statuses: tuple[str, ...] | None = None,
 ) -> Dict[str, Any]:
     action_id = str(uuid.uuid4())
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO agent_actions (
-            id,
-            agent_run_id,
-            sequence,
-            status,
-            capability_name,
-            capability_version,
-            inputs_json,
-            outputs_json,
-            inputs_hash,
-            outputs_hash,
-            rationale_text,
-            confidence,
-            snapshot_version,
-            hypothesis_id,
-            variant_id,
-            validation_job_id,
-            tool_id,
-            skill_id,
-            registry_version,
-            registry_fingerprint,
-            tool_version,
-            skill_version,
-            effect_class,
-            side_effects_json,
-            rollback_guidance,
-            compensating_actions_json,
-            receipt_id,
-            retry_count,
-            dedupe_key,
-            error_text
+    guarded = admissible_run_statuses is not None
+    try:
+        if guarded:
+            if not client_id:
+                raise ValueError("client_id is required for guarded action creation")
+            conn.execute("BEGIN IMMEDIATE")
+            run_row = conn.execute(
+                "SELECT status FROM agent_runs WHERE id = ? AND client_id = ?",
+                (agent_run_id, client_id),
+            ).fetchone()
+            allowed = {item.strip().lower() for item in admissible_run_statuses}
+            current_status = (
+                str(run_row["status"] or "").strip().lower() if run_row else ""
+            )
+            if current_status not in allowed:
+                conn.rollback()
+                return {}
+        conn.execute(
+            """
+            INSERT INTO agent_actions (
+                id,
+                agent_run_id,
+                sequence,
+                status,
+                capability_name,
+                capability_version,
+                inputs_json,
+                outputs_json,
+                inputs_hash,
+                outputs_hash,
+                rationale_text,
+                confidence,
+                snapshot_version,
+                hypothesis_id,
+                variant_id,
+                validation_job_id,
+                tool_id,
+                skill_id,
+                registry_version,
+                registry_fingerprint,
+                tool_version,
+                skill_version,
+                effect_class,
+                side_effects_json,
+                rollback_guidance,
+                compensating_actions_json,
+                receipt_id,
+                retry_count,
+                dedupe_key,
+                error_text
+            )
+            VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
+            """,
+            (
+                action_id,
+                agent_run_id,
+                int(sequence),
+                status,
+                capability_name,
+                capability_version,
+                to_json(inputs) or to_json({}),
+                to_json(outputs) or to_json({}),
+                inputs_hash,
+                outputs_hash,
+                rationale,
+                confidence,
+                snapshot_version,
+                hypothesis_id,
+                variant_id,
+                validation_job_id,
+                tool_id,
+                skill_id,
+                registry_version,
+                registry_fingerprint,
+                tool_version,
+                skill_version,
+                effect_class,
+                to_json(side_effects or []) or to_json([]),
+                rollback_guidance,
+                to_json(compensating_actions or []) or to_json([]),
+                receipt_id,
+                int(retry_count),
+                dedupe_key,
+                error,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
-        """,
-        (
-            action_id,
-            agent_run_id,
-            int(sequence),
-            status,
-            capability_name,
-            capability_version,
-            to_json(inputs) or to_json({}),
-            to_json(outputs) or to_json({}),
-            inputs_hash,
-            outputs_hash,
-            rationale,
-            confidence,
-            snapshot_version,
-            hypothesis_id,
-            variant_id,
-            validation_job_id,
-            tool_id,
-            skill_id,
-            registry_version,
-            registry_fingerprint,
-            tool_version,
-            skill_version,
-            effect_class,
-            to_json(side_effects or []) or to_json([]),
-            rollback_guidance,
-            to_json(compensating_actions or []) or to_json([]),
-            receipt_id,
-            int(retry_count),
-            dedupe_key,
-            error,
-        ),
-    )
-    conn.commit()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return get_agent_action(action_id) or {}
 
 

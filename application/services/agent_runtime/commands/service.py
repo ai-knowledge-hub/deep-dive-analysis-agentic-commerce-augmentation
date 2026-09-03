@@ -16,6 +16,7 @@ from application.services.agent_runtime.commands.preflight import (
     _record_command_event,
 )
 from application.services.agent_runtime.commands.recovery import (
+    RecoveryActionCreationError,
     create_change_plan_recovery_action,
     create_retry_action,
 )
@@ -191,15 +192,21 @@ def _apply_agent_run_command(
     idempotency_key: str | None,
 ) -> None:
     if command_type == "change_plan":
-        result["action"] = create_change_plan_recovery_action(
-            deps=deps,
-            run_id=run_id,
-            run=run,
-            source_action=action,
-            command_receipt=command_receipt,
-            message=message,
-            metadata=metadata,
-        )
+        try:
+            result["action"] = create_change_plan_recovery_action(
+                deps=deps,
+                run_id=run_id,
+                run=run,
+                source_action=action,
+                command_receipt=command_receipt,
+                message=message,
+                metadata=metadata,
+            )
+        except RecoveryActionCreationError as exc:
+            raise AgentRunCommandError(
+                status_code=409,
+                detail={"code": "run_terminal", "message": str(exc)},
+            ) from exc
     elif command_type == "start":
         runtime_result = runtime.start_run(run_id=run_id)
         result["run"] = runtime_result.run
@@ -217,13 +224,19 @@ def _apply_agent_run_command(
     elif command_type == "retry":
         if not action:
             raise AgentRunCommandError(status_code=400, detail="Action id is required")
-        result["action"] = create_retry_action(
-            deps=deps,
-            run_id=run_id,
-            run=run,
-            action=action,
-            metadata=metadata,
-        )
+        try:
+            result["action"] = create_retry_action(
+                deps=deps,
+                run_id=run_id,
+                run=run,
+                action=action,
+                metadata=metadata,
+            )
+        except RecoveryActionCreationError as exc:
+            raise AgentRunCommandError(
+                status_code=409,
+                detail={"code": "run_terminal", "message": str(exc)},
+            ) from exc
     elif command_type == "reconcile_effect":
         if not action:
             raise AgentRunCommandError(status_code=400, detail="Action id is required")
