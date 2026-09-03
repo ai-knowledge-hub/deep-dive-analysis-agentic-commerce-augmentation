@@ -473,7 +473,11 @@ Phase 1 remains open. The next reviewable sequence is:
    preserves cancellation, and retries projection derivation when concurrent
    replanning changes the action set. Recovery-action writes recheck terminal
    status under the database write lock, so stale preflight cannot append work
-   after reconciliation completes; further work starts in a new run.
+   after reconciliation completes. They allocate their action sequence under
+   that same lock, so concurrent retry and change-plan commands cannot collide
+   or silently lose an accepted recovery request. Retry ordinal and effect
+   identity are allocated there too, preventing concurrent retries from sharing
+   a single-use authorization identity; further work starts in a new run.
    Action status alone is not execution authority. The implemented SEC-06
    boundary does not release production publishing because SEC-16 and its
    versioned release decision remain unresolved.

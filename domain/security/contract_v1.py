@@ -91,6 +91,8 @@ IMPLEMENTED_VERIFICATION_TEST_REFS = {
         "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_cannot_overwrite_concurrent_cancellation",
         "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_retries_projection_after_concurrent_replan",
         "tests/modules/test_approval_effect_outcomes.py::test_terminal_run_rejects_stale_recovery_action_commit",
+        "tests/modules/test_approval_effect_outcomes.py::test_concurrent_recovery_commands_allocate_unique_sequences_under_write_lock",
+        "tests/modules/test_approval_effect_outcomes.py::test_concurrent_retries_allocate_unique_ordinals_and_effect_identities",
         "tests/modules/test_approval_effect_outcomes.py::test_governed_capability_consumes_canonical_strings_without_rewriting",
         "tests/modules/test_approval_effect_outcomes.py::test_coordinated_job_result_model_substitution_cannot_fulfill_approval",
         "tests/modules/test_approval_effect_outcomes.py::test_governed_auto_run_uses_immutable_requested_model",

@@ -40,11 +40,24 @@ def create_agent_action(
     error: Optional[str] = None,
     client_id: Optional[str] = None,
     admissible_run_statuses: tuple[str, ...] | None = None,
+    allocate_run_sequence: bool = False,
+    retry_identity_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
     action_id = str(uuid.uuid4())
     conn = get_connection()
     guarded = admissible_run_statuses is not None
+    assigned_sequence = int(sequence)
+    assigned_retry_count = int(retry_count)
+    assigned_dedupe_key = dedupe_key
     try:
+        if allocate_run_sequence and not guarded:
+            raise ValueError("run sequence allocation requires guarded action creation")
+        if retry_identity_prefix is not None and not allocate_run_sequence:
+            raise ValueError(
+                "retry identity allocation requires guarded run sequence allocation"
+            )
+        if retry_identity_prefix is not None and not retry_identity_prefix:
+            raise ValueError("retry identity prefix must not be empty")
         if guarded:
             if not client_id:
                 raise ValueError("client_id is required for guarded action creation")
@@ -60,6 +73,38 @@ def create_agent_action(
             if current_status not in allowed:
                 conn.rollback()
                 return {}
+            if allocate_run_sequence:
+                assigned_sequence = int(
+                    conn.execute(
+                        """
+                        SELECT COALESCE(MAX(sequence), 0) + 1
+                        FROM agent_actions
+                        WHERE agent_run_id = ?
+                        """,
+                        (agent_run_id,),
+                    ).fetchone()[0]
+                )
+            if retry_identity_prefix is not None:
+                latest_retry_count = int(
+                    conn.execute(
+                        """
+                        SELECT COALESCE(MAX(retry_count), 0)
+                        FROM agent_actions
+                        WHERE agent_run_id = ?
+                          AND substr(dedupe_key, 1, length(?)) = ?
+                        """,
+                        (
+                            agent_run_id,
+                            retry_identity_prefix,
+                            retry_identity_prefix,
+                        ),
+                    ).fetchone()[0]
+                )
+                assigned_retry_count = max(
+                    assigned_retry_count,
+                    latest_retry_count + 1,
+                )
+                assigned_dedupe_key = f"{retry_identity_prefix}{assigned_retry_count}"
         conn.execute(
             """
             INSERT INTO agent_actions (
@@ -99,7 +144,7 @@ def create_agent_action(
             (
                 action_id,
                 agent_run_id,
-                int(sequence),
+                assigned_sequence,
                 status,
                 capability_name,
                 capability_version,
@@ -124,8 +169,8 @@ def create_agent_action(
                 rollback_guidance,
                 to_json(compensating_actions or []) or to_json([]),
                 receipt_id,
-                int(retry_count),
-                dedupe_key,
+                assigned_retry_count,
+                assigned_dedupe_key,
                 error,
             ),
         )

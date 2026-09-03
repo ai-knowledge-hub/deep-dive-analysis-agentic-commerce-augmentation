@@ -300,11 +300,6 @@ def create_change_plan_recovery_action(
     message: Optional[str],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    actions = deps.agent_actions.list_agent_actions(
-        agent_run_id=run_id,
-        limit=500,
-    )
-    next_sequence = max([int(item.get("sequence") or 0) for item in actions] or [0]) + 1
     allowed = [
         str(item).strip()
         for item in list(run.get("allowed_capabilities") or [])
@@ -356,7 +351,7 @@ def create_change_plan_recovery_action(
     ) or _capability_rollback_guidance(capability_name, effect_class)
     recovery_action = deps.agent_actions.create_agent_action(
         agent_run_id=run_id,
-        sequence=next_sequence,
+        sequence=0,
         status="proposed",
         capability_name=capability_name,
         capability_version=None,
@@ -393,6 +388,7 @@ def create_change_plan_recovery_action(
         dedupe_key=f"change_plan:{command_receipt.get('id')}",
         client_id=str(run.get("client_id") or ""),
         admissible_run_statuses=_RECOVERY_ACTION_RUN_STATUSES,
+        allocate_run_sequence=True,
     )
     if not recovery_action:
         raise RecoveryActionCreationError(
@@ -447,11 +443,6 @@ def create_retry_action(
     action: Dict[str, Any],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    actions = deps.agent_actions.list_agent_actions(
-        agent_run_id=run_id,
-        limit=500,
-    )
-    next_sequence = max([int(item.get("sequence") or 0) for item in actions] or [0]) + 1
     retry_count = int(action.get("retry_count") or 0) + 1
     retry_strategy = str(
         metadata.get("retry_strategy") or _default_retry_strategy(run)
@@ -514,7 +505,7 @@ def create_retry_action(
     ) or _capability_rollback_guidance(capability_name, effect_class)
     retry_action = deps.agent_actions.create_agent_action(
         agent_run_id=run_id,
-        sequence=next_sequence,
+        sequence=0,
         status="proposed",
         capability_name=capability_name,
         capability_version=(
@@ -550,9 +541,11 @@ def create_retry_action(
             allowed_capabilities=allowed,
         ),
         retry_count=retry_count,
-        dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
+        dedupe_key=None,
         client_id=str(run.get("client_id") or ""),
         admissible_run_statuses=_RECOVERY_ACTION_RUN_STATUSES,
+        allocate_run_sequence=True,
+        retry_identity_prefix=f"retry:{action.get('id')}:{retry_strategy}:",
     )
     if not retry_action:
         raise RecoveryActionCreationError(
@@ -587,7 +580,7 @@ def create_retry_action(
             "snapshot_version": retry_action.get("snapshot_version"),
             "metric_id": None,
             "original_action_id": action.get("id"),
-            "retry_count": retry_count,
+            "retry_count": retry_action.get("retry_count"),
             "retry_strategy": retry_strategy,
             "recovery_template_id": recovery_template.get("id"),
             "harness_id": run.get("harness_id"),

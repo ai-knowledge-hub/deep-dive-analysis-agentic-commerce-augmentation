@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import sqlite3
+from threading import Barrier
 
 import pytest
 
@@ -323,6 +325,110 @@ def test_terminal_run_rejects_stale_recovery_action_commit(tmp_path, command_typ
     assert [item["id"] for item in actions_after] == [
         item["id"] for item in actions_before
     ]
+
+
+def test_concurrent_recovery_commands_allocate_unique_sequences_under_write_lock(
+    tmp_path, monkeypatch
+):
+    deps, run, action, _ = _run_and_action(tmp_path)
+    failed_run = deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="failed", error="provider outcome unknown"
+    )
+    failed_action = deps.agent_actions.update_agent_action_status(
+        action_id=action["id"], status="failed", error="provider outcome unknown"
+    )
+    barrier = Barrier(2)
+    create_action = deps.agent_actions.create_agent_action
+
+    def _synchronized_create(**kwargs):
+        barrier.wait(timeout=5)
+        return create_action(**kwargs)
+
+    monkeypatch.setattr(deps.agent_actions, "create_agent_action", _synchronized_create)
+
+    def _change_plan():
+        return create_change_plan_recovery_action(
+            deps=deps,
+            run_id=run["id"],
+            run=failed_run,
+            source_action=failed_action,
+            command_receipt={"id": "concurrent-change-plan"},
+            message=None,
+            metadata={},
+        )
+
+    def _retry():
+        return create_retry_action(
+            deps=deps,
+            run_id=run["id"],
+            run=failed_run,
+            action=failed_action,
+            metadata={"retry_strategy": "same_action"},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        actions = [executor.submit(_change_plan), executor.submit(_retry)]
+        created = [future.result(timeout=10) for future in actions]
+
+    assert {item["sequence"] for item in created} == {2, 3}
+    assert {item["status"] for item in created} == {"proposed"}
+    persisted = deps.agent_actions.list_agent_actions(agent_run_id=run["id"], limit=10)
+    assert [item["sequence"] for item in persisted] == [1, 2, 3]
+
+
+def test_concurrent_retries_allocate_unique_ordinals_and_effect_identities(
+    tmp_path, monkeypatch
+):
+    deps, run, action, spec = _run_and_action(tmp_path)
+    failed_run = deps.agent_runs.update_agent_run(
+        run_id=run["id"], status="failed", error="provider outcome unknown"
+    )
+    failed_action = deps.agent_actions.update_agent_action_status(
+        action_id=action["id"], status="failed", error="provider outcome unknown"
+    )
+    barrier = Barrier(2)
+    create_action = deps.agent_actions.create_agent_action
+
+    def _synchronized_create(**kwargs):
+        barrier.wait(timeout=5)
+        return create_action(**kwargs)
+
+    monkeypatch.setattr(deps.agent_actions, "create_agent_action", _synchronized_create)
+
+    def _retry():
+        return create_retry_action(
+            deps=deps,
+            run_id=run["id"],
+            run=failed_run,
+            action=failed_action,
+            metadata={"retry_strategy": "same_action"},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        created = [
+            future.result(timeout=10)
+            for future in [executor.submit(_retry), executor.submit(_retry)]
+        ]
+
+    assert {item["sequence"] for item in created} == {2, 3}
+    assert {item["retry_count"] for item in created} == {1, 2}
+    assert {item["dedupe_key"] for item in created} == {
+        f"retry:{action['id']}:same_action:1",
+        f"retry:{action['id']}:same_action:2",
+    }
+
+    started_effects = []
+    for retry_action in created:
+        approved = _approve(deps, failed_run, retry_action)["action"]
+        executing = deps.agent_actions.transition_agent_action_status(
+            action_id=approved["id"], from_status="approved", to_status="executing"
+        )
+        started_effects.append(_commit_effect(deps, failed_run, executing, spec))
+
+    assert {effect.effect_idempotency_key for effect in started_effects} == {
+        f"retry:{action['id']}:same_action:1",
+        f"retry:{action['id']}:same_action:2",
+    }
 
 
 def test_approval_canonicalizes_payload_before_effect_start(tmp_path, monkeypatch):

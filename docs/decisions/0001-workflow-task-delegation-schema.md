@@ -411,6 +411,13 @@ than committing a stale terminal status. Conversely, `change_plan` and `retry`
 reject terminal runs at preflight and recheck that boundary under the action
 insert write lock. A command whose stale preflight races reconciliation cannot
 append work after completion; continuing a terminal workflow requires a new run.
+The same guarded insert allocates `MAX(sequence) + 1` only after acquiring the
+database write lock. Concurrent `change_plan` and `retry` commands therefore
+serialize sequence allocation and cannot lose a valid recovery request to a
+uniqueness collision. For retries, that transaction also allocates the next
+retry ordinal for the source action and strategy and derives the final effect
+idempotency key from it. Concurrent retries consequently remain distinct
+authorized effects instead of sharing a single-use identity.
 Successful completion atomically records the
 effect receipt, marks the approval fulfilled, updates the compatibility action
 projection, and appends linked audit events. Low-risk sequential actions retain
