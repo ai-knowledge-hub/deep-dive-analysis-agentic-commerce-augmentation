@@ -103,6 +103,7 @@ def default_deps() -> AppDeps:
         agent_events=agent_db.agent_events,
         approval_ledger=agent_db.approval_ledger,
         agent_registry=agent_db.agent_registry,
+        governed_effect_receipts=agent_db.governed_effect_receipts,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),

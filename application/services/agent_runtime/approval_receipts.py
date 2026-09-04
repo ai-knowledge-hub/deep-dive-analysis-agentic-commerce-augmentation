@@ -76,6 +76,15 @@ def verify_effect_receipt(
             code="effect_start_authority_invalid",
             mismatches=("input_hash",),
         )
+    if spec.name == "promote_variant_lab":
+        return _verify_lab_promotion_receipt(
+            deps=deps,
+            binding=binding,
+            effect_execution_id=effect_execution_id,
+            outputs=outputs,
+            computed_hash=computed_hash,
+            receipt_id=receipt_id,
+        )
     if spec.name != "request_synthetic_validation":
         raise ApprovalReceiptError(
             "this governed capability has no executable receipt-provenance verifier",
@@ -137,6 +146,117 @@ def verify_effect_receipt(
     return VerifiedEffectReceipt(
         receipt_id=expected_receipt_id,
         outputs_hash=computed_hash,
+    )
+
+
+def _verify_lab_promotion_receipt(
+    *,
+    deps: AppDeps,
+    binding: ApprovalBinding,
+    effect_execution_id: str,
+    outputs: Mapping[str, Any],
+    computed_hash: str,
+    receipt_id: str | None,
+) -> VerifiedEffectReceipt:
+    durable = deps.governed_effect_receipts.get_receipt_for_effect_execution(
+        approval_effect_execution_id=effect_execution_id,
+        tenant_id=binding.tenant_id,
+    )
+    if durable is None:
+        raise ApprovalReceiptError(
+            "lab promotion has no tenant-scoped durable effect receipt",
+            code="effect_receipt_unverifiable",
+            mismatches=("approval_effect_execution_id",),
+        )
+    expected_identity = {
+        "tenant_id": binding.tenant_id,
+        "workflow_id": binding.workflow_id,
+        "action_id": binding.action_id,
+        "approval_id": binding.approval_id,
+        "effect_idempotency_key": binding.effect_idempotency_key,
+        "approval_effect_execution_id": effect_execution_id,
+        "capability_name": "promote_variant_lab",
+    }
+    mismatches = tuple(
+        field
+        for field, expected in expected_identity.items()
+        if durable.get(field) != expected
+    )
+    if durable.get("outputs") != dict(outputs):
+        mismatches += ("outputs",)
+    if durable.get("outputs_hash") != computed_hash:
+        mismatches += ("outputs_hash",)
+    analytics_event = deps.analytics_events.get_event(
+        str(durable.get("analytics_event_id") or "")
+    )
+    decision_event = deps.decision_events.get_decision_event(
+        event_id=str(durable.get("decision_event_id") or "")
+    )
+    if not _lab_analytics_event_matches(
+        event=analytics_event, tenant_id=binding.tenant_id, outputs=outputs
+    ):
+        mismatches += ("analytics_event",)
+    if not _lab_decision_event_matches(
+        event=decision_event, tenant_id=binding.tenant_id, outputs=outputs
+    ):
+        mismatches += ("decision_event",)
+    expected_receipt_id = f"lab-promotion:{effect_execution_id}"
+    if durable.get("receipt_id") != expected_receipt_id:
+        mismatches += ("receipt_id",)
+    if receipt_id is not None and receipt_id != expected_receipt_id:
+        mismatches += ("receipt_id",)
+    if mismatches:
+        raise ApprovalReceiptError(
+            "durable lab-promotion evidence does not match the exact effect start",
+            code="effect_receipt_provenance_mismatch",
+            mismatches=tuple(dict.fromkeys(mismatches)),
+        )
+    return VerifiedEffectReceipt(
+        receipt_id=expected_receipt_id,
+        outputs_hash=computed_hash,
+    )
+
+
+def _lab_analytics_event_matches(
+    *, event: Mapping[str, Any] | None, tenant_id: str, outputs: Mapping[str, Any]
+) -> bool:
+    if event is None:
+        return False
+    metadata = event.get("metadata")
+    return (
+        event.get("id") == outputs.get("analytics_event_id")
+        and event.get("client_id") == tenant_id
+        and event.get("experiment_id") == outputs.get("experiment_id")
+        and event.get("variant_id") == outputs.get("variant_id")
+        and event.get("event_type") == "variant_promoted_lab"
+        and event.get("source") == "agent_runtime"
+        and type(metadata) is dict
+        and metadata.get("reason") == outputs.get("reason")
+        and metadata.get("metric_id") == outputs.get("source_metric_id")
+        and metadata.get("posterior") == outputs.get("posterior")
+        and metadata.get("decision_action") == outputs.get("decision_action")
+        and metadata.get("decision_tier") == outputs.get("decision_tier")
+        and metadata.get("policy_version") == outputs.get("decision_policy_version")
+    )
+
+
+def _lab_decision_event_matches(
+    *, event: Mapping[str, Any] | None, tenant_id: str, outputs: Mapping[str, Any]
+) -> bool:
+    posterior = outputs.get("posterior")
+    try:
+        confidence = float(posterior) if posterior is not None else 0.0
+    except (TypeError, ValueError):
+        return False
+    confidence = max(0.0, min(1.0, confidence))
+    return bool(
+        event is not None
+        and event.get("id") == outputs.get("decision_event_id")
+        and event.get("client_id") == tenant_id
+        and event.get("policy_action") == "promote_variant_lab"
+        and event.get("selected_reason") == outputs.get("reason")
+        and event.get("expected_gain") == confidence
+        and event.get("uncertainty") == 1.0 - confidence
     )
 
 

@@ -96,6 +96,11 @@ IMPLEMENTED_VERIFICATION_TEST_REFS = {
         "tests/modules/test_approval_effect_outcomes.py::test_governed_capability_consumes_canonical_strings_without_rewriting",
         "tests/modules/test_approval_effect_outcomes.py::test_coordinated_job_result_model_substitution_cannot_fulfill_approval",
         "tests/modules/test_approval_effect_outcomes.py::test_governed_auto_run_uses_immutable_requested_model",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_commits_effect_and_receipt_atomically",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_write_failure_rolls_back_events_and_receipt",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_recovers_from_durable_receipt_without_reexecution",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_reconciliation_rejects_substituted_outputs",
+        "tests/modules/test_governed_effect_receipts.py::test_governed_effect_receipt_is_immutable",
     ),
 }
 

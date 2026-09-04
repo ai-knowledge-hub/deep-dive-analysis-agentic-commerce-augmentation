@@ -66,18 +66,14 @@ def reconcile_effect_from_durable_evidence(
             status_code=404,
         )
     execution_id = _identifier("execution_id", execution.get("execution_id"))
-    job = deps.validation_jobs.get_job_for_effect_execution(
-        approval_effect_execution_id=execution_id,
-        client_id=tenant_id,
-    )
-    if job is None:
-        raise EffectRecoveryError(
-            "no tenant-scoped provider evidence is bound to this effect start",
-            code="effect_receipt_unavailable",
-        )
-
-    outputs = {"validation_job_id": _identifier("validation_job_id", job.get("id"))}
     try:
+        frozen_spec = _frozen_capability_spec(execution)
+        outputs, receipt_id, evidence = _durable_evidence(
+            deps=deps,
+            tenant_id=tenant_id,
+            execution_id=execution_id,
+            capability_name=frozen_spec.name,
+        )
         reconciled = reconcile_authorized_effect(
             deps=deps,
             run=dict(run),
@@ -85,9 +81,8 @@ def reconcile_effect_from_durable_evidence(
             spec=None,
             outputs=outputs,
             outputs_hash=hash_payload(outputs),
-            receipt_id=f"validation-job:{outputs['validation_job_id']}",
+            receipt_id=receipt_id,
         )
-        frozen_spec = _frozen_capability_spec(execution)
     except ApprovalAuthorizationError as exc:
         raise EffectRecoveryError(
             str(exc), code=exc.code, mismatches=exc.mismatches
@@ -115,10 +110,45 @@ def reconcile_effect_from_durable_evidence(
     )
     return {
         "effect_execution": reconciled,
-        "validation_job": job,
+        "evidence": evidence,
+        "validation_job": (
+            evidence if frozen_spec.name == "request_synthetic_validation" else None
+        ),
+        "governed_effect_receipt": (
+            evidence if frozen_spec.name == "promote_variant_lab" else None
+        ),
         "action": updated_action,
         "run": updated_run,
     }
+
+
+def _durable_evidence(
+    *, deps: AppDeps, tenant_id: str, execution_id: str, capability_name: str
+) -> tuple[dict[str, Any], str, Mapping[str, Any]]:
+    if capability_name == "request_synthetic_validation":
+        job = deps.validation_jobs.get_job_for_effect_execution(
+            approval_effect_execution_id=execution_id,
+            client_id=tenant_id,
+        )
+        if job is not None:
+            job_id = _identifier("validation_job_id", job.get("id"))
+            return (
+                {"validation_job_id": job_id},
+                f"validation-job:{job_id}",
+                job,
+            )
+    elif capability_name == "promote_variant_lab":
+        receipt = deps.governed_effect_receipts.get_receipt_for_effect_execution(
+            approval_effect_execution_id=execution_id,
+            tenant_id=tenant_id,
+        )
+        if receipt is not None and type(receipt.get("outputs")) is dict:
+            receipt_id = _identifier("receipt_id", receipt.get("receipt_id"))
+            return dict(receipt["outputs"]), receipt_id, receipt
+    raise EffectRecoveryError(
+        "no tenant-scoped durable evidence is bound to this effect start",
+        code="effect_receipt_unavailable",
+    )
 
 
 def _restore_run_projection(

@@ -37,21 +37,45 @@ def effect_reconciliation_preflight(
         execution_status = str(execution.get("status") or "").strip().lower()
         if execution_status not in {"started", "uncertain", "succeeded"}:
             blockers.append("The governed effect is not awaiting reconciliation.")
-        execution_id = str(execution.get("execution_id") or "")
-        if not deps.validation_jobs.get_job_for_effect_execution(
-            approval_effect_execution_id=execution_id,
-            client_id=str(run.get("client_id") or ""),
+        if not _has_bound_durable_evidence(
+            deps=deps,
+            execution=execution,
+            tenant_id=str(run.get("client_id") or ""),
         ):
             blockers.append(
-                "No tenant-scoped provider evidence is bound to this effect start."
+                "No tenant-scoped durable evidence is bound to this effect start."
             )
     return {
         "blockers": blockers,
         "warnings": [
-            "Reconciliation never invokes the capability; it validates and records existing durable provider evidence."
+            "Reconciliation never invokes the capability; it validates and records existing durable evidence."
         ],
         "side_effects": [],
     }
+
+
+def _has_bound_durable_evidence(
+    *, deps: AppDeps, execution: Mapping[str, Any], tenant_id: str
+) -> bool:
+    execution_id = str(execution.get("execution_id") or "")
+    snapshot = execution.get("authorization_snapshot")
+    contract = snapshot.get("capability_contract") if type(snapshot) is dict else None
+    capability_name = contract.get("name") if type(contract) is dict else None
+    if capability_name == "request_synthetic_validation":
+        return bool(
+            deps.validation_jobs.get_job_for_effect_execution(
+                approval_effect_execution_id=execution_id,
+                client_id=tenant_id,
+            )
+        )
+    if capability_name == "promote_variant_lab":
+        return bool(
+            deps.governed_effect_receipts.get_receipt_for_effect_execution(
+                approval_effect_execution_id=execution_id,
+                tenant_id=tenant_id,
+            )
+        )
+    return False
 
 
 __all__ = ["effect_reconciliation_preflight"]

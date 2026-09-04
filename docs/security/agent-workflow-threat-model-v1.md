@@ -154,8 +154,11 @@ detections, verifications, and gaps are in `security-controls-v1.yaml`.
   cancellation, lease ownership, expiry, action state, and count budgets, then
   freezes the approved payload and contract in an immutable start snapshot.
   Normal completion and reconciliation both require the same tenant-scoped,
-  provenance-checked provider evidence bound to the exact action, approval,
-  effect idempotency key, and effect-execution row. When the frozen payload
+  provenance-checked durable evidence bound to the exact action, approval,
+  effect idempotency key, and effect-execution row. Lab promotion atomically
+  commits its analytics projection, decision projection, and immutable receipt;
+  a partial write cannot certify the effect, and recovery consumes that receipt
+  without invoking promotion again. When a frozen validation payload
   requires an in-app auto-run, that evidence must be a completed job with a
   durable matching result. The job's immutable requested model is checked
   against the frozen effect-start inputs, drives provider execution, and remains

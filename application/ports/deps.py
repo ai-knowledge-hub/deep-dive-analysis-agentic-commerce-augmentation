@@ -234,6 +234,8 @@ class ExperimentCalibrationsStore(Protocol):
 class AnalyticsEventsStore(Protocol):
     def create_event(self, **kwargs: Any) -> dict: ...
 
+    def get_event(self, *args: Any, **kwargs: Any) -> dict | None: ...
+
     def list_events(self, **kwargs: Any) -> list[dict]: ...
 
 
@@ -309,6 +311,14 @@ class DecisionEventsStore(Protocol):
     def list_decision_events(self, **kwargs: Any) -> list[dict]: ...
 
     def get_latest_decision_event(self, **kwargs: Any) -> dict | None: ...
+
+    def get_decision_event(self, **kwargs: Any) -> dict | None: ...
+
+
+class GovernedEffectReceiptsStore(Protocol):
+    def commit_lab_promotion(self, **kwargs: Any) -> dict: ...
+
+    def get_receipt_for_effect_execution(self, **kwargs: Any) -> dict | None: ...
 
 
 class MemoryArtifactsStore(Protocol):
@@ -490,6 +500,7 @@ class AppDeps:
     agent_events: AgentEventsStore
     approval_ledger: ApprovalLedgerStore
     agent_registry: AgentRegistryStore
+    governed_effect_receipts: GovernedEffectReceiptsStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

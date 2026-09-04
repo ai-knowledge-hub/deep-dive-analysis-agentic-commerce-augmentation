@@ -12,6 +12,13 @@ from application.services.agent_runtime.registry.input_contracts import (
     default_input_properties,
     object_schema,
 )
+from application.services.agent_runtime.registry.lab_promotion_contract import (
+    LAB_PROMOTION_DEFAULT_INPUTS,
+    LAB_PROMOTION_INPUT_CANONICALIZERS,
+    LAB_PROMOTION_INPUT_PROPERTIES,
+    LAB_PROMOTION_OUTPUT_PROPERTIES,
+    LAB_PROMOTION_OUTPUT_REQUIRED,
+)
 
 REGISTRY_VERSION = "agent-runtime-static-v1"
 SUPPORTED_RUN_MODES = ("plan_only", "auto_execute_safe")
@@ -352,14 +359,11 @@ _TOOLS: Dict[str, ToolSpec] = {
         capability_name="promote_variant_lab",
         summary="Promote a variant into the lab progression path.",
         required_inputs=("experiment_id",),
-        input_properties={
-            "experiment_id": {"type": "string"},
-            "variant_selection": {"type": "string"},
-            "require_promote_decision": {"type": "boolean"},
-        },
-        output_properties={"variant_id": {"type": "string"}},
-        output_required=("variant_id",),
-        default_inputs={"variant_selection": "top_1", "require_promote_decision": True},
+        input_properties=LAB_PROMOTION_INPUT_PROPERTIES,
+        input_canonicalizers=LAB_PROMOTION_INPUT_CANONICALIZERS,
+        output_properties=LAB_PROMOTION_OUTPUT_PROPERTIES,
+        output_required=LAB_PROMOTION_OUTPUT_REQUIRED,
+        default_inputs=LAB_PROMOTION_DEFAULT_INPUTS,
         side_effects=("create_analytics_event", "create_decision_event"),
         review_checklist=("Confirm the lab-promotion gate passed.",),
     ),

@@ -29,6 +29,9 @@ from application.services.agent_runtime.capabilities.types import (
     CapabilityContext,
     CapabilityExecutionError,
 )
+from application.services.agent_runtime.capabilities.lab_promotion import (
+    commit_governed_lab_promotion,
+)
 from application.services.agent_runtime.registry import (
     get_capability_spec,
     validate_inputs,
@@ -504,6 +507,22 @@ def execute_capability(
             else None
         )
         confidence = _safe_float(posterior, default=0.0)
+
+        if governed_effect:
+            return commit_governed_lab_promotion(
+                deps=deps,
+                context=context,
+                experiment_id=experiment_id,
+                variant_id=variant_id,
+                experiment=experiment,
+                source_metric_id=latest_metric.get("id"),
+                metric_payload=metric_payload,
+                reason=reason,
+                posterior=posterior,
+                decision_action=decision_action,
+                promotion_tier=promotion_tier,
+                confidence=confidence,
+            )
 
         event = deps.analytics_events.create_event(
             client_id=context.client_id,
