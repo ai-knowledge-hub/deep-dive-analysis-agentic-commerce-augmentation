@@ -15,7 +15,11 @@ from application.services.agent_runtime.runtime import AgentRuntimeService
 from application.services.agent_runtime.runtime.payloads import hash_payload
 from shared.db.connection import get_connection
 from tests.modules.approval_effect_support import approval_authority
-from tests.modules.test_approval_effect_authorization import _approve, _run_and_action
+from tests.modules.test_approval_effect_authorization import (
+    _approve,
+    _commit_effect,
+    _run_and_action,
+)
 
 
 def _lab_action(tmp_path):
@@ -70,6 +74,87 @@ def _lab_action(tmp_path):
     return deps, run, action, spec, experiment, variant, metric
 
 
+def _cross_tenant_lab_action(tmp_path):
+    deps, run, action, spec = _run_and_action(
+        tmp_path,
+        capability_name="promote_variant_lab",
+        dedupe_key="effect:cross-tenant-lab-promotion:1",
+    )
+    deps.clients.create_brand(brand_id="brand-a", client_id="client-a", name="Brand A")
+    deps.clients.create_product(
+        product_id="product-a", brand_id="brand-a", name="Product A"
+    )
+    experiment_a = deps.experiments.create_experiment(
+        client_id="client-a",
+        brand_id="brand-a",
+        product_id="product-a",
+        name="Tenant A experiment",
+    )
+    deps.clients.create_client(client_id="client-b", name="Client B")
+    deps.clients.create_brand(brand_id="brand-b", client_id="client-b", name="Brand B")
+    deps.clients.create_product(
+        product_id="product-b", brand_id="brand-b", name="Product B"
+    )
+    experiment_b = deps.experiments.create_experiment(
+        client_id="client-b",
+        brand_id="brand-b",
+        product_id="product-b",
+        name="Tenant B experiment",
+    )
+    variant_b = deps.experiments.add_variant(
+        experiment_id=experiment_b["id"],
+        client_id="client-b",
+        label="Tenant B candidate",
+        variant_type="candidate",
+        payload={"description": "Tenant B candidate"},
+    )
+    cross_linked_metric = deps.experiment_runs.create_metric(
+        experiment_id=experiment_a["id"],
+        variant_id=variant_b["id"],
+        metrics={
+            "decision_action": "promote_variant",
+            "decision_tier": "lab",
+            "posterior": 0.91,
+            "decision_policy_version": "test-v1",
+        },
+    )
+    inputs = {
+        "experiment_id": experiment_a["id"],
+        "variant_id": variant_b["id"],
+        "reason": "Attempt a cross-tenant promotion",
+    }
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE agent_actions
+        SET inputs_json = json(?), inputs_hash = NULL, variant_id = ?
+        WHERE id = ?
+        """,
+        (json.dumps(inputs), variant_b["id"], action["id"]),
+    )
+    conn.commit()
+    return (
+        deps,
+        run,
+        deps.agent_actions.get_agent_action(action_id=action["id"]),
+        spec,
+        experiment_a,
+        variant_b,
+        cross_linked_metric,
+    )
+
+
+def _assert_no_lab_promotion_projection(deps) -> None:
+    assert deps.analytics_events.list_events(client_id="client-a") == []
+    assert deps.decision_events.list_decision_events(client_id="client-a") == []
+    assert (
+        get_connection()
+        .execute("SELECT COUNT(*) FROM governed_effect_receipts")
+        .fetchone()[0]
+        == 0
+    )
+
+
 def test_lab_promotion_commits_effect_and_receipt_atomically(tmp_path):
     deps, run, action, _, experiment, variant, metric = _lab_action(tmp_path)
     approved = _approve(deps, run, action)
@@ -100,6 +185,49 @@ def test_lab_promotion_commits_effect_and_receipt_atomically(tmp_path):
         deps.decision_events.get_decision_event(event_id=outputs["decision_event_id"])
         is not None
     )
+
+
+def test_lab_promotion_rejects_cross_tenant_variant_before_effect(tmp_path):
+    deps, run, action, _, _, _, _ = _cross_tenant_lab_action(tmp_path)
+    _approve(deps, run, action)
+
+    with pytest.raises(
+        CapabilityExecutionError,
+        match="variant does not belong to the tenant-scoped experiment",
+    ):
+        AgentRuntimeService(deps=deps).step_once(run_id=run["id"], user_id="operator-a")
+
+    _assert_no_lab_promotion_projection(deps)
+
+
+def test_lab_promotion_commit_revalidates_tenant_variant_metric_scope(tmp_path):
+    deps, run, action, spec, experiment, variant, metric = _cross_tenant_lab_action(
+        tmp_path
+    )
+    approved = _approve(deps, run, action)
+    executing = deps.agent_actions.transition_agent_action_status(
+        action_id=action["id"], from_status="approved", to_status="executing"
+    )
+    authorization = _commit_effect(deps, run, executing, spec)
+
+    with pytest.raises(
+        ValueError,
+        match="experiment, variant, and metric scope is invalid",
+    ):
+        deps.governed_effect_receipts.commit_lab_promotion(
+            tenant_id="client-a",
+            workflow_id=run["id"],
+            action_id=action["id"],
+            approval_id=approved["approval"]["approval_id"],
+            effect_idempotency_key=action["dedupe_key"],
+            approval_effect_execution_id=authorization.execution_id,
+            experiment_id=experiment["id"],
+            variant_id=variant["id"],
+            reason=action["inputs"]["reason"],
+            source_metric_id=metric["id"],
+        )
+
+    _assert_no_lab_promotion_projection(deps)
 
 
 def test_lab_promotion_write_failure_rolls_back_events_and_receipt(

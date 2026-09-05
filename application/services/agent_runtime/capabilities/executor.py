@@ -448,17 +448,18 @@ def execute_capability(
                 "promote_variant_lab could not resolve a candidate variant"
             )
 
-        variant = deps.experiments.get_variant(variant_id)
-        if not variant:
-            raise CapabilityExecutionError("variant not found")
-        if _is_control_variant_row(variant):
-            raise CapabilityExecutionError("cannot promote control variant")
-
         experiment = deps.experiments.get_experiment(
             experiment_id=experiment_id, client_id=context.client_id
         )
         if not experiment:
             raise CapabilityExecutionError("experiment not found")
+        variant = deps.experiments.get_variant(variant_id)
+        if not variant or variant.get("experiment_id") != experiment_id:
+            raise CapabilityExecutionError(
+                "variant does not belong to the tenant-scoped experiment"
+            )
+        if _is_control_variant_row(variant):
+            raise CapabilityExecutionError("cannot promote control variant")
 
         latest_metric = _latest_metric_for_variant(
             deps=deps, experiment_id=experiment_id, variant_id=variant_id
@@ -514,14 +515,8 @@ def execute_capability(
                 context=context,
                 experiment_id=experiment_id,
                 variant_id=variant_id,
-                experiment=experiment,
                 source_metric_id=latest_metric.get("id"),
-                metric_payload=metric_payload,
                 reason=reason,
-                posterior=posterior,
-                decision_action=decision_action,
-                promotion_tier=promotion_tier,
-                confidence=confidence,
             )
 
         event = deps.analytics_events.create_event(

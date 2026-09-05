@@ -176,6 +176,8 @@ def _verify_lab_promotion_receipt(
         "effect_idempotency_key": binding.effect_idempotency_key,
         "approval_effect_execution_id": effect_execution_id,
         "capability_name": "promote_variant_lab",
+        "scope_status": "validated",
+        "source_metric_id": outputs.get("source_metric_id"),
     }
     mismatches = tuple(
         field

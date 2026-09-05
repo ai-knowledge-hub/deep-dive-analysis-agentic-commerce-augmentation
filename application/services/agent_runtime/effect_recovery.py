@@ -142,7 +142,11 @@ def _durable_evidence(
             approval_effect_execution_id=execution_id,
             tenant_id=tenant_id,
         )
-        if receipt is not None and type(receipt.get("outputs")) is dict:
+        if (
+            receipt is not None
+            and receipt.get("scope_status") == "validated"
+            and type(receipt.get("outputs")) is dict
+        ):
             receipt_id = _identifier("receipt_id", receipt.get("receipt_id"))
             return dict(receipt["outputs"]), receipt_id, receipt
     raise EffectRecoveryError(

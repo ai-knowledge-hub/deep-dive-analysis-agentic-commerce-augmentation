@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any
 
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.capabilities.types import (
@@ -17,14 +17,8 @@ def commit_governed_lab_promotion(
     context: CapabilityContext,
     experiment_id: str,
     variant_id: str,
-    experiment: Mapping[str, Any],
     source_metric_id: object,
-    metric_payload: Mapping[str, Any],
     reason: str,
-    posterior: Any,
-    decision_action: object,
-    promotion_tier: object,
-    confidence: float,
 ) -> dict[str, Any]:
     """Atomically persist the local effect and exact durable receipt."""
 
@@ -46,20 +40,8 @@ def commit_governed_lab_promotion(
             ),
             experiment_id=experiment_id,
             variant_id=variant_id,
-            brand_id=experiment.get("brand_id"),
-            product_id=experiment.get("product_id"),
             reason=reason,
             source_metric_id=_required_identifier("source_metric_id", source_metric_id),
-            posterior=posterior,
-            decision_action=(
-                str(decision_action) if decision_action is not None else None
-            ),
-            promotion_tier=str(promotion_tier or "lab"),
-            policy_version=_optional_text(
-                metric_payload.get("decision_policy_version")
-            ),
-            uncertainty=max(0.0, min(1.0, 1.0 - confidence)),
-            expected_gain=confidence,
         )
     except ValueError as exc:
         raise CapabilityExecutionError(str(exc)) from exc
@@ -72,10 +54,6 @@ def _required_identifier(field: str, value: object) -> str:
             f"governed lab promotion requires canonical {field}"
         )
     return value
-
-
-def _optional_text(value: object) -> str | None:
-    return str(value) if value is not None else None
 
 
 def _workflow_id_for_action(*, deps: AppDeps, action_id: str, client_id: str) -> str:

@@ -17,6 +17,89 @@ from shared.db.connection import set_database_path
 from shared.db.migrations import MIGRATIONS_PATH, apply_migrations
 
 
+def test_migration_048_upgrades_applied_047_with_relational_receipt_scope(tmp_path):
+    old_migrations = tmp_path / "old-migrations"
+    old_migrations.mkdir()
+    for migration in sorted(MIGRATIONS_PATH.glob("*.sql")):
+        if migration.name <= "047_governed_effect_receipts.sql":
+            shutil.copy2(migration, old_migrations / migration.name)
+
+    database_path = tmp_path / "applied-047.db"
+    conn = sqlite3.connect(database_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript((MIGRATIONS_PATH.parent / "schema.sql").read_text())
+    apply_migrations(conn, migrations_path=old_migrations)
+    old_columns = {
+        row["name"]
+        for row in conn.execute(
+            "PRAGMA table_info(governed_effect_receipts)"
+        ).fetchall()
+    }
+    assert "source_metric_id" not in old_columns
+    assert "scope_status" not in old_columns
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("DROP TRIGGER governed_effect_receipt_matches_start")
+    conn.execute(
+        """
+        INSERT INTO governed_effect_receipts (
+            receipt_id, tenant_id, workflow_id, action_id, approval_id,
+            effect_idempotency_key, approval_effect_execution_id,
+            capability_name, analytics_event_id, decision_event_id,
+            outputs_json, outputs_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'promote_variant_lab', ?, ?, json(?), ?)
+        """,
+        (
+            "legacy-invalid-receipt",
+            "client-missing",
+            "run-missing",
+            "action-missing",
+            "approval-missing",
+            "effect-missing",
+            "execution-missing",
+            "analytics-missing",
+            "decision-missing",
+            json.dumps(
+                {
+                    "experiment_id": "experiment-missing",
+                    "variant_id": "variant-missing",
+                    "source_metric_id": "metric-missing",
+                }
+            ),
+            "a" * 64,
+        ),
+    )
+    conn.commit()
+
+    apply_migrations(conn)
+
+    upgraded_columns = {
+        row["name"]
+        for row in conn.execute(
+            "PRAGMA table_info(governed_effect_receipts)"
+        ).fetchall()
+    }
+    assert {"source_metric_id", "scope_status"} <= upgraded_columns
+    assert conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name = ?",
+        ("048_governed_receipt_scope.sql",),
+    ).fetchone()
+    assert conn.execute(
+        """
+        SELECT 1 FROM sqlite_master
+        WHERE type = 'trigger' AND name = 'governed_effect_receipt_validated_scope'
+        """
+    ).fetchone()
+    legacy = conn.execute(
+        """
+        SELECT source_metric_id, scope_status
+        FROM governed_effect_receipts
+        WHERE receipt_id = 'legacy-invalid-receipt'
+        """
+    ).fetchone()
+    assert tuple(legacy) == (None, "invalid_legacy")
+    conn.close()
+
+
 def test_migration_045_upgrades_applied_044_and_quarantines_legacy_starts(tmp_path):
     old_migrations = tmp_path / "old-migrations"
     old_migrations.mkdir()

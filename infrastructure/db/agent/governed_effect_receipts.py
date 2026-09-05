@@ -25,16 +25,8 @@ def commit_lab_promotion(
     approval_effect_execution_id: str,
     experiment_id: str,
     variant_id: str,
-    brand_id: str | None,
-    product_id: str | None,
     reason: str,
     source_metric_id: str,
-    posterior: Any,
-    decision_action: str | None,
-    promotion_tier: str,
-    policy_version: str | None,
-    uncertainty: float,
-    expected_gain: float,
 ) -> Dict[str, Any]:
     """Commit both lab-promotion projections and their receipt as one effect."""
 
@@ -49,7 +41,6 @@ def commit_lab_promotion(
         "variant_id": variant_id,
         "reason": reason,
         "source_metric_id": source_metric_id,
-        "promotion_tier": promotion_tier,
     }
     for field, value in identifiers.items():
         _require_identifier(field, value)
@@ -66,6 +57,10 @@ def commit_lab_promotion(
         ).fetchone()
         if existing is not None:
             receipt = _row(existing)
+            if receipt.get("scope_status") != "validated":
+                raise ValueError(
+                    "legacy lab-promotion receipt has no validated tenant scope"
+                )
             _require_replay_match(
                 receipt=receipt,
                 workflow_id=workflow_id,
@@ -76,10 +71,6 @@ def commit_lab_promotion(
                 variant_id=variant_id,
                 reason=reason,
                 source_metric_id=source_metric_id,
-                posterior=posterior,
-                decision_action=decision_action,
-                decision_tier=promotion_tier,
-                decision_policy_version=policy_version,
             )
             conn.rollback()
             return receipt
@@ -112,6 +103,82 @@ def commit_lab_promotion(
             or capability.get("name") != _LAB_PROMOTION_CAPABILITY
         ):
             raise ValueError("effect start is not authorized for lab promotion")
+        executable_inputs = snapshot.get("executable_inputs")
+        if type(executable_inputs) is not dict:
+            raise ValueError("effect start has no canonical executable inputs")
+        explicit_variant_id = executable_inputs.get("variant_id")
+        if (
+            executable_inputs.get("experiment_id") != experiment_id
+            or executable_inputs.get("reason") != reason
+            or (explicit_variant_id is not None and explicit_variant_id != variant_id)
+        ):
+            raise ValueError(
+                "lab-promotion target does not match the approved executable inputs"
+            )
+
+        scope = conn.execute(
+            """
+            SELECT experiment.brand_id, experiment.product_id,
+                   variant.label AS variant_label,
+                   variant.payload_json AS variant_payload_json,
+                   metric.metrics_json
+            FROM experiments experiment
+            JOIN experiment_variants variant
+              ON variant.id = ? AND variant.experiment_id = experiment.id
+            JOIN experiment_metrics metric
+              ON metric.id = ?
+             AND metric.experiment_id = experiment.id
+             AND metric.variant_id = variant.id
+            WHERE experiment.id = ? AND experiment.client_id = ?
+            """,
+            (variant_id, source_metric_id, experiment_id, tenant_id),
+        ).fetchone()
+        if scope is None:
+            raise ValueError(
+                "lab-promotion experiment, variant, and metric scope is invalid"
+            )
+        variant_payload = from_json(scope["variant_payload_json"], default={})
+        variant_role = (
+            str(variant_payload.get("role") or "").strip().lower()
+            if type(variant_payload) is dict
+            else ""
+        )
+        if (
+            variant_role == "control"
+            or "control" in str(scope["variant_label"] or "").strip().lower()
+        ):
+            raise ValueError("lab-promotion cannot target a control variant")
+        brand_id = scope["brand_id"]
+        product_id = scope["product_id"]
+        metric_payload = from_json(scope["metrics_json"], default={})
+        if type(metric_payload) is not dict:
+            raise ValueError("lab-promotion source metric payload is invalid")
+        decision_action = metric_payload.get("decision_action")
+        decision_outputs = metric_payload.get("decision_outputs")
+        promotion_tier = (
+            decision_outputs.get("promotion_tier")
+            if type(decision_outputs) is dict
+            else None
+        ) or metric_payload.get("decision_tier")
+        if (
+            executable_inputs.get("require_promote_decision", True) is True
+            and decision_action != "promote_variant"
+        ):
+            raise ValueError(
+                "lab-promotion source metric does not authorize variant promotion"
+            )
+        if str(promotion_tier or "").strip().lower() == "prod":
+            raise ValueError("lab-promotion source metric requires the prod path")
+        promotion_tier = str(promotion_tier or "lab")
+        posterior = metric_payload.get("posterior")
+        confidence = _safe_float(posterior, default=0.0)
+        confidence = max(0.0, min(1.0, confidence))
+        uncertainty = 1.0 - confidence
+        expected_gain = confidence
+        policy_version_raw = metric_payload.get("decision_policy_version")
+        policy_version = (
+            str(policy_version_raw) if policy_version_raw is not None else None
+        )
 
         analytics_event_id = str(uuid.uuid4())
         decision_event_id = str(uuid.uuid4())
@@ -182,8 +249,8 @@ def commit_lab_promotion(
                 receipt_id, tenant_id, workflow_id, action_id, approval_id,
                 effect_idempotency_key, approval_effect_execution_id,
                 capability_name, analytics_event_id, decision_event_id,
-                outputs_json, outputs_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?)
+                outputs_json, outputs_hash, source_metric_id, scope_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, ?, 'validated')
             """,
             (
                 receipt_id,
@@ -198,6 +265,7 @@ def commit_lab_promotion(
                 decision_event_id,
                 outputs_json,
                 outputs_hash,
+                source_metric_id,
             ),
         )
         row = conn.execute(
@@ -281,6 +349,13 @@ def _canonical_json(value: object) -> str:
     )
 
 
+def _safe_float(value: Any, *, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _row(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "receipt_id": row["receipt_id"],
@@ -295,6 +370,8 @@ def _row(row: sqlite3.Row) -> Dict[str, Any]:
         "decision_event_id": row["decision_event_id"],
         "outputs": from_json(row["outputs_json"], default={}),
         "outputs_hash": row["outputs_hash"],
+        "source_metric_id": row["source_metric_id"],
+        "scope_status": row["scope_status"],
         "created_at": row["created_at"],
     }
 

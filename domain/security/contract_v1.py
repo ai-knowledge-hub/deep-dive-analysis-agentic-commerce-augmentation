@@ -101,6 +101,9 @@ IMPLEMENTED_VERIFICATION_TEST_REFS = {
         "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_recovers_from_durable_receipt_without_reexecution",
         "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_reconciliation_rejects_substituted_outputs",
         "tests/modules/test_governed_effect_receipts.py::test_governed_effect_receipt_is_immutable",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_rejects_cross_tenant_variant_before_effect",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_commit_revalidates_tenant_variant_metric_scope",
+        "tests/modules/test_approval_effect_migration.py::test_migration_048_upgrades_applied_047_with_relational_receipt_scope",
     ),
 }
 

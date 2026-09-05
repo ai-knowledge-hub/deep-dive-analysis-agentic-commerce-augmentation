@@ -69,12 +69,11 @@ def _has_bound_durable_evidence(
             )
         )
     if capability_name == "promote_variant_lab":
-        return bool(
-            deps.governed_effect_receipts.get_receipt_for_effect_execution(
-                approval_effect_execution_id=execution_id,
-                tenant_id=tenant_id,
-            )
+        receipt = deps.governed_effect_receipts.get_receipt_for_effect_execution(
+            approval_effect_execution_id=execution_id,
+            tenant_id=tenant_id,
         )
+        return bool(receipt and receipt.get("scope_status") == "validated")
     return False
 
 
