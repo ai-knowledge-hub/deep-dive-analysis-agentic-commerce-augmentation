@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 
 import pytest
 
@@ -155,6 +156,95 @@ def _assert_no_lab_promotion_projection(deps) -> None:
     )
 
 
+def _commit_with_previous_lab_writer(
+    *, deps, run, action, approval_id, execution_id, experiment, variant, metric
+):
+    analytics_event_id = str(uuid.uuid4())
+    decision_event_id = str(uuid.uuid4())
+    reason = action["inputs"]["reason"]
+    metric_payload = metric["metrics"]
+    posterior = metric_payload["posterior"]
+    outputs = {
+        "experiment_id": experiment["id"],
+        "variant_id": variant["id"],
+        "promotion_tier": "lab",
+        "reason": reason,
+        "source_metric_id": metric["id"],
+        "posterior": posterior,
+        "decision_action": metric_payload["decision_action"],
+        "decision_tier": metric_payload["decision_tier"],
+        "decision_policy_version": metric_payload["decision_policy_version"],
+        "analytics_event_id": analytics_event_id,
+        "decision_event_id": decision_event_id,
+        "status": "variant_promoted_lab",
+    }
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """
+            INSERT INTO analytics_events (
+                id, client_id, brand_id, product_id, variant_id, experiment_id,
+                event_type, source, metadata_json
+            ) VALUES (?, 'client-a', ?, ?, ?, ?,
+                      'variant_promoted_lab', 'agent_runtime', json(?))
+            """,
+            (
+                analytics_event_id,
+                experiment["brand_id"],
+                experiment["product_id"],
+                variant["id"],
+                experiment["id"],
+                json.dumps({"metric_id": metric["id"], "reason": reason}),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO decision_events (
+                id, client_id, brand_id, product_id, policy_action,
+                uncertainty, expected_gain, selected_reason
+            ) VALUES (?, 'client-a', ?, ?, 'promote_variant_lab', ?, ?, ?)
+            """,
+            (
+                decision_event_id,
+                experiment["brand_id"],
+                experiment["product_id"],
+                1.0 - posterior,
+                posterior,
+                reason,
+            ),
+        )
+        # Exact column list used by the immediately preceding a0be38e writer.
+        conn.execute(
+            """
+            INSERT INTO governed_effect_receipts (
+                receipt_id, tenant_id, workflow_id, action_id, approval_id,
+                effect_idempotency_key, approval_effect_execution_id,
+                capability_name, analytics_event_id, decision_event_id,
+                outputs_json, outputs_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'promote_variant_lab', ?, ?, json(?), ?)
+            """,
+            (
+                f"lab-promotion:{execution_id}",
+                "client-a",
+                run["id"],
+                action["id"],
+                approval_id,
+                action["dedupe_key"],
+                execution_id,
+                analytics_event_id,
+                decision_event_id,
+                json.dumps(outputs),
+                hash_payload(outputs),
+            ),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return outputs
+
+
 def test_lab_promotion_commits_effect_and_receipt_atomically(tmp_path):
     deps, run, action, _, experiment, variant, metric = _lab_action(tmp_path)
     approved = _approve(deps, run, action)
@@ -185,6 +275,60 @@ def test_lab_promotion_commits_effect_and_receipt_atomically(tmp_path):
         deps.decision_events.get_decision_event(event_id=outputs["decision_event_id"])
         is not None
     )
+
+
+def test_migration_048_accepts_previous_writer_for_valid_scoped_promotion(tmp_path):
+    deps, run, action, spec, experiment, variant, metric = _lab_action(tmp_path)
+    approved = _approve(deps, run, action)
+    executing = deps.agent_actions.transition_agent_action_status(
+        action_id=action["id"], from_status="approved", to_status="executing"
+    )
+    authorization = _commit_effect(deps, run, executing, spec)
+    _commit_with_previous_lab_writer(
+        deps=deps,
+        run=run,
+        action=action,
+        approval_id=approved["approval"]["approval_id"],
+        execution_id=authorization.execution_id,
+        experiment=experiment,
+        variant=variant,
+        metric=metric,
+    )
+
+    receipt = deps.governed_effect_receipts.get_receipt_for_effect_execution(
+        approval_effect_execution_id=authorization.execution_id,
+        tenant_id="client-a",
+    )
+    assert receipt is not None
+    assert receipt["scope_status"] == "validated"
+    assert receipt["source_metric_id"] == metric["id"]
+
+
+def test_migration_048_previous_writer_still_rejects_cross_tenant_scope(tmp_path):
+    deps, run, action, spec, experiment, variant, metric = _cross_tenant_lab_action(
+        tmp_path
+    )
+    approved = _approve(deps, run, action)
+    executing = deps.agent_actions.transition_agent_action_status(
+        action_id=action["id"], from_status="approved", to_status="executing"
+    )
+    authorization = _commit_effect(deps, run, executing, spec)
+
+    with pytest.raises(
+        sqlite3.IntegrityError, match="governed effect receipt scope is invalid"
+    ):
+        _commit_with_previous_lab_writer(
+            deps=deps,
+            run=run,
+            action=action,
+            approval_id=approved["approval"]["approval_id"],
+            execution_id=authorization.execution_id,
+            experiment=experiment,
+            variant=variant,
+            metric=metric,
+        )
+
+    _assert_no_lab_promotion_projection(deps)
 
 
 def test_lab_promotion_rejects_cross_tenant_variant_before_effect(tmp_path):

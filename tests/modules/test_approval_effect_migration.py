@@ -84,9 +84,20 @@ def test_migration_048_upgrades_applied_047_with_relational_receipt_scope(tmp_pa
         ("048_governed_receipt_scope.sql",),
     ).fetchone()
     assert conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name = ?",
+        ("049_governed_receipt_writer_compatibility.sql",),
+    ).fetchone()
+    assert conn.execute(
         """
         SELECT 1 FROM sqlite_master
         WHERE type = 'trigger' AND name = 'governed_effect_receipt_validated_scope'
+        """
+    ).fetchone()
+    assert conn.execute(
+        """
+        SELECT 1 FROM sqlite_master
+        WHERE type = 'trigger'
+          AND name = 'governed_effect_receipt_previous_writer_compatibility'
         """
     ).fetchone()
     legacy = conn.execute(
