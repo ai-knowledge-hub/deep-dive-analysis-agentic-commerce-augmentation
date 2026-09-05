@@ -1,7 +1,7 @@
 # Security Analysis
 
 Status: current
-Last updated: 2026-08-25
+Last updated: 2026-08-30
 
 The Phase 1 agent-workflow security baseline has three synchronized artifacts:
 
@@ -33,3 +33,12 @@ implemented verifications. Runtime admission and pre-effect policy consume the
 domain contract directly. Releasing a schema-v1 block requires implemented
 prerequisites and a new versioned contract rather than an in-place projection
 edit.
+
+SEC-06/SVT-06 are implemented for the current sequential runtime. Governed
+effects require the canonical approval ID and envelope digest, exact binding
+revalidation at admission, and a transactional single-use authorization commit
+immediately before the capability call. The durable effect record distinguishes
+started, uncertain, and succeeded outcomes and links the final receipt to
+approval fulfillment and the compatibility action projection. SEC-16 remains
+planned, so production publishing and write-capable dynamic delegation remain
+blocked by the immutable beta release contract.

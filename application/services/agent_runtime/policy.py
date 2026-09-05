@@ -23,6 +23,28 @@ _GOVERNED_APPROVAL_EFFECT_CLASSES = {"external_side_effect", "write_high_risk"}
 
 
 class PolicyEnforcer:
+    def validate_action_preflight(
+        self,
+        *,
+        run: Mapping[str, Any],
+        action: Mapping[str, Any],
+        spec: CapabilitySpec,
+    ) -> None:
+        """Apply immutable allow-list and beta blocks before approval lookup."""
+
+        self._assert_capability_allowed(run=run, capability_name=spec.name)
+        self._assert_beta_release_gate(spec=spec)
+        if (
+            str(run.get("policy_profile_id") or "").strip().lower()
+            != "human_approval_required"
+        ):
+            self._assert_effect_class_allowed(
+                run=run,
+                action=action,
+                effect_class=spec.effect_class,
+                approval_authorized=False,
+            )
+
     def validate_action_execution(
         self,
         *,
@@ -31,6 +53,7 @@ class PolicyEnforcer:
         spec: CapabilitySpec,
         all_actions: Iterable[Mapping[str, Any]],
         inputs: Mapping[str, Any],
+        approval_authorized: bool = False,
     ) -> None:
         self._assert_capability_allowed(run=run, capability_name=spec.name)
         self._assert_beta_release_gate(spec=spec)
@@ -38,6 +61,7 @@ class PolicyEnforcer:
             run=run,
             action=action,
             effect_class=spec.effect_class,
+            approval_authorized=approval_authorized,
         )
         self._assert_required_inputs(spec=spec, inputs=inputs)
         self._assert_input_schema(spec=spec, inputs=inputs)
@@ -94,6 +118,7 @@ class PolicyEnforcer:
         run: Mapping[str, Any],
         action: Mapping[str, Any],
         effect_class: str,
+        approval_authorized: bool,
     ) -> None:
         profile = str(run.get("policy_profile_id") or "").strip().lower()
         if not profile:
@@ -101,6 +126,8 @@ class PolicyEnforcer:
         allowed = _PROFILE_AUTO_EFFECT_CLASSES.get(profile)
         if allowed is None:
             raise PolicyError(f"Unsupported policy profile '{profile}'")
+        if approval_authorized and profile == "human_approval_required":
+            return
         if effect_class not in allowed:
             tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
             raise PolicyError(
@@ -120,11 +147,14 @@ class PolicyEnforcer:
         tool_id = str(action.get("tool_id") or "").strip() or "<unknown>"
         if profile not in _PROFILE_AUTO_EFFECT_CLASSES:
             raise PolicyError(f"Unsupported policy profile '{profile}'")
-        if profile == "observe" and effect_class not in _PROFILE_AUTO_EFFECT_CLASSES["observe"]:
+        if (
+            profile == "observe"
+            and effect_class not in _PROFILE_AUTO_EFFECT_CLASSES["observe"]
+        ):
             raise PolicyError(
                 f"Policy profile '{profile}' forbids approval of effect class '{effect_class}' for tool '{tool_id}'"
             )
-        if profile in {"human_approval_required", "safe_auto"} and effect_class in _GOVERNED_APPROVAL_EFFECT_CLASSES:
+        if profile == "safe_auto" and effect_class in _GOVERNED_APPROVAL_EFFECT_CLASSES:
             raise PolicyError(
                 f"Policy profile '{profile}' requires governed approval for effect class '{effect_class}' on tool '{tool_id}'"
             )

@@ -38,79 +38,146 @@ def create_agent_action(
     retry_count: int = 0,
     dedupe_key: Optional[str] = None,
     error: Optional[str] = None,
+    client_id: Optional[str] = None,
+    admissible_run_statuses: tuple[str, ...] | None = None,
+    allocate_run_sequence: bool = False,
+    retry_identity_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
     action_id = str(uuid.uuid4())
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO agent_actions (
-            id,
-            agent_run_id,
-            sequence,
-            status,
-            capability_name,
-            capability_version,
-            inputs_json,
-            outputs_json,
-            inputs_hash,
-            outputs_hash,
-            rationale_text,
-            confidence,
-            snapshot_version,
-            hypothesis_id,
-            variant_id,
-            validation_job_id,
-            tool_id,
-            skill_id,
-            registry_version,
-            registry_fingerprint,
-            tool_version,
-            skill_version,
-            effect_class,
-            side_effects_json,
-            rollback_guidance,
-            compensating_actions_json,
-            receipt_id,
-            retry_count,
-            dedupe_key,
-            error_text
+    guarded = admissible_run_statuses is not None
+    assigned_sequence = int(sequence)
+    assigned_retry_count = int(retry_count)
+    assigned_dedupe_key = dedupe_key
+    try:
+        if allocate_run_sequence and not guarded:
+            raise ValueError("run sequence allocation requires guarded action creation")
+        if retry_identity_prefix is not None and not allocate_run_sequence:
+            raise ValueError(
+                "retry identity allocation requires guarded run sequence allocation"
+            )
+        if retry_identity_prefix is not None and not retry_identity_prefix:
+            raise ValueError("retry identity prefix must not be empty")
+        if guarded:
+            if not client_id:
+                raise ValueError("client_id is required for guarded action creation")
+            conn.execute("BEGIN IMMEDIATE")
+            run_row = conn.execute(
+                "SELECT status FROM agent_runs WHERE id = ? AND client_id = ?",
+                (agent_run_id, client_id),
+            ).fetchone()
+            allowed = {item.strip().lower() for item in admissible_run_statuses}
+            current_status = (
+                str(run_row["status"] or "").strip().lower() if run_row else ""
+            )
+            if current_status not in allowed:
+                conn.rollback()
+                return {}
+            if allocate_run_sequence:
+                assigned_sequence = int(
+                    conn.execute(
+                        """
+                        SELECT COALESCE(MAX(sequence), 0) + 1
+                        FROM agent_actions
+                        WHERE agent_run_id = ?
+                        """,
+                        (agent_run_id,),
+                    ).fetchone()[0]
+                )
+            if retry_identity_prefix is not None:
+                latest_retry_count = int(
+                    conn.execute(
+                        """
+                        SELECT COALESCE(MAX(retry_count), 0)
+                        FROM agent_actions
+                        WHERE agent_run_id = ?
+                          AND substr(dedupe_key, 1, length(?)) = ?
+                        """,
+                        (
+                            agent_run_id,
+                            retry_identity_prefix,
+                            retry_identity_prefix,
+                        ),
+                    ).fetchone()[0]
+                )
+                assigned_retry_count = max(
+                    assigned_retry_count,
+                    latest_retry_count + 1,
+                )
+                assigned_dedupe_key = f"{retry_identity_prefix}{assigned_retry_count}"
+        conn.execute(
+            """
+            INSERT INTO agent_actions (
+                id,
+                agent_run_id,
+                sequence,
+                status,
+                capability_name,
+                capability_version,
+                inputs_json,
+                outputs_json,
+                inputs_hash,
+                outputs_hash,
+                rationale_text,
+                confidence,
+                snapshot_version,
+                hypothesis_id,
+                variant_id,
+                validation_job_id,
+                tool_id,
+                skill_id,
+                registry_version,
+                registry_fingerprint,
+                tool_version,
+                skill_version,
+                effect_class,
+                side_effects_json,
+                rollback_guidance,
+                compensating_actions_json,
+                receipt_id,
+                retry_count,
+                dedupe_key,
+                error_text
+            )
+            VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
+            """,
+            (
+                action_id,
+                agent_run_id,
+                assigned_sequence,
+                status,
+                capability_name,
+                capability_version,
+                to_json(inputs) or to_json({}),
+                to_json(outputs) or to_json({}),
+                inputs_hash,
+                outputs_hash,
+                rationale,
+                confidence,
+                snapshot_version,
+                hypothesis_id,
+                variant_id,
+                validation_job_id,
+                tool_id,
+                skill_id,
+                registry_version,
+                registry_fingerprint,
+                tool_version,
+                skill_version,
+                effect_class,
+                to_json(side_effects or []) or to_json([]),
+                rollback_guidance,
+                to_json(compensating_actions or []) or to_json([]),
+                receipt_id,
+                assigned_retry_count,
+                assigned_dedupe_key,
+                error,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
-        """,
-        (
-            action_id,
-            agent_run_id,
-            int(sequence),
-            status,
-            capability_name,
-            capability_version,
-            to_json(inputs) or to_json({}),
-            to_json(outputs) or to_json({}),
-            inputs_hash,
-            outputs_hash,
-            rationale,
-            confidence,
-            snapshot_version,
-            hypothesis_id,
-            variant_id,
-            validation_job_id,
-            tool_id,
-            skill_id,
-            registry_version,
-            registry_fingerprint,
-            tool_version,
-            skill_version,
-            effect_class,
-            to_json(side_effects or []) or to_json([]),
-            rollback_guidance,
-            to_json(compensating_actions or []) or to_json([]),
-            receipt_id,
-            int(retry_count),
-            dedupe_key,
-            error,
-        ),
-    )
-    conn.commit()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return get_agent_action(action_id) or {}
 
 
@@ -184,7 +251,9 @@ def get_agent_action(
             (action_id, client_id),
         ).fetchone()
     else:
-        row = conn.execute("SELECT * FROM agent_actions WHERE id = ?", (action_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM agent_actions WHERE id = ?", (action_id,)
+        ).fetchone()
     return _row(row) if row else None
 
 
@@ -312,7 +381,9 @@ def _row(row) -> Dict[str, Any]:
         if "registry_fingerprint" in row.keys()
         else None,
         "tool_version": row["tool_version"] if "tool_version" in row.keys() else None,
-        "skill_version": row["skill_version"] if "skill_version" in row.keys() else None,
+        "skill_version": row["skill_version"]
+        if "skill_version" in row.keys()
+        else None,
         "effect_class": row["effect_class"] if "effect_class" in row.keys() else None,
         "side_effects": from_json(row["side_effects_json"], default=[])
         if "side_effects_json" in row.keys()
@@ -328,6 +399,10 @@ def _row(row) -> Dict[str, Any]:
         if "retry_count" in row.keys()
         else 0,
         "dedupe_key": row["dedupe_key"] if "dedupe_key" in row.keys() else None,
+        "approval_id": row["approval_id"] if "approval_id" in row.keys() else None,
+        "approval_envelope_digest": row["approval_envelope_digest"]
+        if "approval_envelope_digest" in row.keys()
+        else None,
         "error": row["error_text"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],

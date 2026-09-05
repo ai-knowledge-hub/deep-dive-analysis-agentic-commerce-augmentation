@@ -36,6 +36,7 @@ from application.services.agent_runtime.registry import (
     version_context_for_capability,
 )
 
+
 def create_agent_run_with_initial_plan(
     *,
     deps: AppDeps,
@@ -79,9 +80,11 @@ def create_agent_run_with_initial_plan(
     )
     if not harness_profile:
         raise AgentRunPlanError(f"Unsupported harness_id: {resolved_harness_id}")
-    normalized_run_mode = str(
-        run_mode or harness_profile.get("default_run_mode") or "plan_only"
-    ).strip().lower()
+    normalized_run_mode = (
+        str(run_mode or harness_profile.get("default_run_mode") or "plan_only")
+        .strip()
+        .lower()
+    )
     if not run_mode_supported(normalized_run_mode):
         raise AgentRunPlanError(f"Unsupported run_mode: {normalized_run_mode}")
     resolved_policy_profile_id = (
@@ -156,7 +159,11 @@ def _harness_profile_from_registry_payload(
     for profile in list(registry_payload.get("harness_profiles") or []):
         if str(profile.get("id") or "").strip() == normalized:
             return dict(profile)
-    return get_harness_profile(normalized) if harness_profile_supported(normalized) else None
+    return (
+        get_harness_profile(normalized)
+        if harness_profile_supported(normalized)
+        else None
+    )
 
 
 def _seed_initial_plan(
@@ -175,7 +182,9 @@ def _seed_initial_plan(
         experiment_id=experiment_id,
         allowed_capabilities=allowed_capabilities,
         capability_versions=capability_versions,
-        objective=run.get("objective") if isinstance(run.get("objective"), dict) else {},
+        objective=run.get("objective")
+        if isinstance(run.get("objective"), dict)
+        else {},
         planner_mode=str(harness_profile.get("planner_mode") or ""),
     )
     for idx, action in enumerate(plan, start=1):
@@ -195,7 +204,9 @@ def _seed_initial_plan(
             sequence=idx,
             status="proposed",
             capability_name=action.capability_name,
-            capability_version=action.capability_version,
+            capability_version=(
+                action.capability_version or version_context["tool_version"]
+            ),
             inputs=action.inputs,
             outputs={},
             inputs_hash=_hash_payload(action.inputs),

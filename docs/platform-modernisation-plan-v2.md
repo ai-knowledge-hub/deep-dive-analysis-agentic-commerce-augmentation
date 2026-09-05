@@ -159,18 +159,22 @@ schema-v1 security authority independently pins all threat closure requirements
 and mandatory blocked beta capabilities; runtime policy and the security
 catalog are validated projections of that authority.
 
-The exact, framework-neutral approval envelope, lifecycle, and canonical digest
-are now executable domain contracts. Approval requests and decisions are also
-persisted as canonical snapshots with append-only event history and independent
-idempotent command receipts. Current action statuses and agent events are fed as
-compatibility projections from the same transaction, and ledger reads verify
-the projection against immutable history. New approval commands require verified
-bearer authority, compare the source action lifecycle again inside the commit,
-and validate complete history-backed supersession chains under the write lock.
-The complete task, attempt, and result transition contracts are not implemented,
-however. Pre-effect approval revalidation, evidence and completion semantics,
-recovery, and broader workflow concurrency controls therefore remain
-prerequisites for chat-issued governed effects, parallel execution, joins, and
+The exact, framework-neutral approval envelope, lifecycle, canonical digest,
+durable ledger, and runtime consumption boundary are now executable contracts.
+Approval requests and decisions persist as canonical snapshots with append-only
+event history and independent idempotent command receipts. Current action
+statuses and agent events are compatibility projections from the same
+transaction, and ledger reads verify the projection against immutable history.
+New approval commands require verified bearer authority, compare the source
+action lifecycle again inside the commit, and validate complete history-backed
+supersession chains under the write lock. Governed execution then recomputes the
+exact binding at admission and atomically consumes it immediately before the
+effect. A single-use effect identity, durable started/uncertain/succeeded state,
+receipt linkage, and approval fulfillment prevent status-only authority,
+substitution, stale execution, and blind replay. The complete task, attempt,
+result, and objective-completion contracts are not implemented, however.
+Recovery and broader workflow concurrency controls therefore remain
+prerequisites for chat-issued dynamic workflows, parallel execution, joins, and
 compensation.
 
 ## Target Runtime Model
@@ -259,9 +263,9 @@ Status: completed on 2026-08-03.
 
 ### Phase 1: Contracts and safety model
 
-Status: open. Slices 1–4 established the first contract baseline; exact
-approval, evidence/completion contracts, and the working framework-comparison
-spike remain.
+Status: open. Slices 1–5 established the contract, safety, security, and exact
+approval baseline; evidence/completion contracts and the working
+framework-comparison spike remain.
 
 Deliverables:
 
@@ -397,7 +401,7 @@ stable contracts.
 
 ## Immediate Next Slices
 
-Phase 1 established its first contract baseline through four small, reviewable
+Phase 1 established its first contract baseline through five reviewable
 changes:
 
 1. Add a domain-level workflow lifecycle contract and transition tests.
@@ -406,6 +410,7 @@ changes:
    `plan -> approve -> execute -> observe -> update belief`.
 4. Establish an executable adversarial threat model across the complete
    objective-to-belief-or-memory workflow.
+5. Define, persist, and consume exact approval at the governed-effect boundary.
 
 Progress:
 
@@ -427,6 +432,19 @@ Progress:
   contracts, and explicitly owned gaps. Security threats cross-resolve to STPA
   hazards and constraints, and CI executes tests claimed by implemented
   controls.
+- Slice 5 now has an immutable exact approval contract, a normalized executable
+  payload governed by the complete fingerprinted capability contract, durable
+  decision and effect ledgers with immutable start evidence, atomic
+  cancellation/lease/count-budget pre-effect authorization, single-use effect
+  identity, shared normal/recovery provider-provenance verification,
+  auto-run outcome/result parity, immutable requested-model binding, exact
+  effect-bound receipt-linked fulfillment, immutable audit authority, and
+  executable mismatch, catalog-drift, historical-receipt reuse, migration
+  upgrades through already-applied 044 and 045 databases, coordinated model
+  substitution, race, replay, projection-mutation, and late-reconciliation
+  evidence
+  for the current sequential runtime. Legacy effect starts without the new
+  immutable evidence remain quarantined for operator resolution.
 
 Focused research on OpenAI, Claude Code, recursive language and agent harness
 papers, and the local Hermes and Prime Agent implementations is recorded in
@@ -440,15 +458,29 @@ trust boundaries, and failure semantics.
 
 Phase 1 remains open. The next reviewable sequence is:
 
-5. **Exact approval and effect authorization** ([#112](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/112),
+5. **Exact approval and effect authorization — completed** ([#112](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/112),
    [#114](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/114),
    [#115](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/115),
    and [#116](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/116)).
    The immutable approval envelope and independent lifecycle are defined in
-   #114, and #115 adds the durable ledger plus retry-safe operator commands.
-   Revalidate the exact authorization immediately before a governed effect in
-   #116. Action status alone is not execution authority, and this sequence does
-   not release any blocked production capability.
+   #114, #115 adds the durable ledger plus retry-safe operator commands, and
+   #116 revalidates and consumes exact authorization at the pre-effect commit.
+   The fingerprinted capability contract canonicalizes executable inputs before
+   approval; governed execution consumes the frozen values unchanged, and any
+   unexpected post-start failure becomes an uncertain outcome. A bearer-authorized,
+   tenant-scoped `reconcile_effect` command discovers immutable bound provider
+   evidence, reconciles without re-execution, restores failed projections,
+   preserves cancellation, and retries projection derivation when concurrent
+   replanning changes the action set. Recovery-action writes recheck terminal
+   status under the database write lock, so stale preflight cannot append work
+   after reconciliation completes. They allocate their action sequence under
+   that same lock, so concurrent retry and change-plan commands cannot collide
+   or silently lose an accepted recovery request. Retry ordinal and effect
+   identity are allocated there too, preventing concurrent retries from sharing
+   a single-use authorization identity; further work starts in a new run.
+   Action status alone is not execution authority. The implemented SEC-06
+   boundary does not release production publishing because SEC-16 and its
+   versioned release decision remain unresolved.
 6. **Evidence, result, and completion contracts.** Make completeness,
    freshness, provenance, missing coverage, partial failure, receipt status,
    and projection lag explicit. A successful tool call, child result, exhausted

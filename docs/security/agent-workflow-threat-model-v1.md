@@ -146,7 +146,36 @@ detections, verifications, and gaps are in `security-controls-v1.yaml`.
   claims. Existing API tests certify the implemented subset.
 - SEC-02 enforces host capability, effect, approval, and budget policy. Existing
   policy and API tests certify the implemented subset.
-- SEC-06 will bind approval to the exact execution envelope.
+- SEC-06 uses the complete fingerprinted capability contract—including defaults,
+  schemas, and field canonicalizers—to canonicalize every executable value before
+  approval and hashing. Governed execution consumes that frozen payload without
+  further normalization, and same-version live-catalog drift fails closed. Its
+  atomic pre-effect commit rechecks
+  cancellation, lease ownership, expiry, action state, and count budgets, then
+  freezes the approved payload and contract in an immutable start snapshot.
+  Normal completion and reconciliation both require the same tenant-scoped,
+  provenance-checked durable evidence bound to the exact action, approval,
+  effect idempotency key, and effect-execution row. Lab promotion atomically
+  commits its analytics projection, decision projection, and immutable receipt;
+  a partial write cannot certify the effect, and recovery consumes that receipt
+  without invoking promotion again. When a frozen validation payload
+  requires an in-app auto-run, that evidence must be a completed job with a
+  durable matching result. The job's immutable requested model is checked
+  against the frozen effect-start inputs, drives provider execution, and remains
+  the result-model oracle even if mutable observed job fields drift; a queued
+  bound job is sufficient only when the approved effect disabled auto-run.
+  Completion audit authority is projected
+  from immutable start evidence. Databases upgraded from the
+  published migration 044 receive effect-start fields through migration 045;
+  databases that already applied 045 receive immutable requested-model recovery
+  through migration 046. Legacy starts without reconstructable evidence remain
+  quarantined and fail closed. Any unexpected failure after the effect-start
+  commit records an uncertain effect and failed action/run for reconciliation;
+  it cannot leave a silent `started`/`executing` projection. A verified-bearer,
+  tenant-scoped `reconcile_effect` operator command discovers the uniquely bound
+  validation job from durable provenance, applies the same receipt verifier,
+  restores the action/workflow projections, and is idempotent. It never invokes
+  the capability again or resurrects a canceled run.
 - SEC-09 will create minimal tenant-scoped context capsules in which untrusted
   data and opaque secret handles cannot grant authority.
 
@@ -269,10 +298,11 @@ be implemented, an explicit security approval, and a new versioned domain
 contract and catalog migration. This keeps a projection edit from masquerading
 as a release decision.
 
-The initial implemented controls cover authenticated scoped principals,
-host-side capability and effect policy, external-job idempotency, single-use
-provider callbacks, and signed external-job receipts. They do not certify the
-future workflow kernel, worker fencing, parallel messages, context capsules,
+The implemented controls cover authenticated scoped principals, host-side
+capability and effect policy, external-job idempotency, single-use provider
+callbacks, signed external-job receipts, and exact approval consumption for the
+current governed runtime. They do not certify the future workflow kernel,
+worker fencing, parallel messages, context capsules,
 harness promotion, egress control, or cross-infrastructure isolation.
 
 ## Beta boundaries

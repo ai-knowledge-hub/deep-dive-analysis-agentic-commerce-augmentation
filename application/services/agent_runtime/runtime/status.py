@@ -11,7 +11,9 @@ from application.services.agent_runtime.runtime.stopping import (
 )
 
 
-def apply_stopping_condition(*, deps: AppDeps, run: Dict[str, Any]) -> StopDecision | None:
+def apply_stopping_condition(
+    *, deps: AppDeps, run: Dict[str, Any]
+) -> StopDecision | None:
     run_id = str(run.get("id") or "")
     actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
     stop = evaluate_stopping_conditions(run=run, actions=actions)
@@ -43,20 +45,34 @@ def record_operator_pause_condition(*, deps: AppDeps, run: Dict[str, Any]) -> No
 
 def compute_next_run_status(*, deps: AppDeps, run: Dict[str, Any], run_id: str) -> str:
     actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
+    status, stop = derive_next_run_status(run=run, actions=actions)
+    if stop:
+        record_stopping_decision(deps=deps, run_id=run_id, stop=stop)
+    return status
+
+
+def derive_next_run_status(
+    *, run: Dict[str, Any], actions: list[Dict[str, Any]]
+) -> tuple[str, StopDecision | None]:
+    """Derive status from one caller-owned action snapshot without side effects."""
+
     stop = evaluate_stopping_conditions(run=run, actions=actions)
     if stop:
-        _record_stop(deps=deps, run_id=run_id, stop=stop)
-        return stop.status
+        return stop.status, stop
     statuses = {str(item.get("status") or "").lower() for item in actions}
     if "failed" in statuses:
-        return "failed"
+        return "failed", None
     if "approved" in statuses or "executing" in statuses:
-        return "running"
+        return "running", None
     if "proposed" in statuses:
-        return "planned"
+        return "planned", None
     if statuses and statuses.issubset({"executed", "rejected"}):
-        return "completed"
-    return "planned"
+        return "completed", None
+    return "planned", None
+
+
+def record_stopping_decision(*, deps: AppDeps, run_id: str, stop: StopDecision) -> None:
+    _record_stop(deps=deps, run_id=run_id, stop=stop)
 
 
 def _record_stop(*, deps: AppDeps, run_id: str, stop: StopDecision) -> None:
@@ -74,5 +90,7 @@ def _record_stop(*, deps: AppDeps, run_id: str, stop: StopDecision) -> None:
 __all__ = [
     "apply_stopping_condition",
     "compute_next_run_status",
+    "derive_next_run_status",
     "record_operator_pause_condition",
+    "record_stopping_decision",
 ]

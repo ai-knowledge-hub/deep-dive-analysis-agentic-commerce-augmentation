@@ -5,17 +5,27 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from application.ports.deps import AppDeps
-from application.services.agent_runtime.capabilities import (
-    CapabilityContext,
-    CapabilityExecutionError,
+from application.services.agent_runtime.capabilities import CapabilityExecutionError
+from application.services.agent_runtime.approval_authorization import (
+    ApprovalAuthorizationError,
+    validate_exact_action_approval,
+)
+from application.services.agent_runtime.runtime.authorized_execution import (
+    AuthorizedExecutionState,
+    execute_with_exact_authorization,
 )
 from application.services.agent_runtime.runtime.audit import (
     record_action_event,
     record_run_event,
 )
-from application.services.agent_runtime.runtime.execution import execute_runtime_capability
+from application.services.agent_runtime.runtime.action_claims import (
+    claim_next_approved_action,
+)
 from application.services.agent_runtime.runtime.failures import (
+    record_approval_authorization_failure,
+    record_capability_failure,
     record_policy_failure_and_stop,
+    record_runtime_failure,
 )
 from application.services.agent_runtime.runtime.payloads import hash_payload
 from application.services.agent_runtime.runtime.status import (
@@ -33,7 +43,6 @@ from application.services.agent_runtime.registry import (
     get_harness_profile,
     next_state_for_capability,
     run_mode_supported,
-    validate_outputs,
 )
 
 
@@ -169,7 +178,7 @@ class AgentRuntimeService:
             stop = apply_stopping_condition(deps=self._deps, run=run)
             if stop:
                 raise NoApprovedActionError(stop.note)
-            action = self._claim_next_approved_action(run_id=run_id)
+            action = claim_next_approved_action(deps=self._deps, run_id=run_id)
             if not action:
                 status = compute_next_run_status(
                     deps=self._deps, run=run, run_id=run_id
@@ -197,37 +206,62 @@ class AgentRuntimeService:
             all_actions = self._deps.agent_actions.list_agent_actions(
                 agent_run_id=run_id, limit=500
             )
+            execution_state = AuthorizedExecutionState()
             try:
                 if not spec:
-                    raise AgentRuntimeError(f"Unsupported capability: {capability_name}")
+                    raise AgentRuntimeError(
+                        f"Unsupported capability: {capability_name}"
+                    )
                 try:
                     validate_harness_memory_policy(
-                        harness_profile=get_harness_profile(run.get("harness_id")) or {},
+                        harness_profile=get_harness_profile(run.get("harness_id"))
+                        or {},
                         allowed_capabilities=[capability_name],
                     )
                 except HarnessPostureError as exc:
                     raise AgentRuntimeError(str(exc)) from exc
-                inputs = spec.normalize_inputs(action.get("inputs") or {})
+                action_inputs = dict(action.get("inputs") or {})
+                self._policy.validate_action_preflight(
+                    run=run, action=action, spec=spec
+                )
+                execution_state.authorization = validate_exact_action_approval(
+                    deps=self._deps,
+                    run=run,
+                    action=action,
+                    spec=spec,
+                )
+                inputs = (
+                    action_inputs
+                    if execution_state.authorization is not None
+                    else spec.normalize_inputs(action_inputs)
+                )
                 self._policy.validate_action_execution(
                     run=run,
                     action=action,
                     spec=spec,
                     all_actions=all_actions,
                     inputs=inputs,
+                    approval_authorized=execution_state.authorization is not None,
                 )
-                context = CapabilityContext(
-                    client_id=str(run.get("client_id") or ""),
-                    user_id=user_id,
-                )
-                outputs = execute_runtime_capability(
+                outputs = execute_with_exact_authorization(
                     deps=self._deps,
-                    context=context,
-                    capability_name=capability_name,
+                    run=run,
+                    action=action,
+                    spec=spec,
                     inputs=inputs,
+                    lock_token=lock_token,
+                    user_id=user_id,
+                    state=execution_state,
                 )
-                output_errors = validate_outputs(spec, outputs)
-                if output_errors:
-                    raise CapabilityExecutionError("; ".join(output_errors))
+            except ApprovalAuthorizationError as exc:
+                record_approval_authorization_failure(
+                    deps=self._deps,
+                    run=run,
+                    action=action,
+                    error=exc,
+                    state=execution_state,
+                )
+                raise AgentRuntimeError(str(exc)) from exc
             except PolicyError as exc:
                 stop = record_policy_failure_and_stop(
                     deps=self._deps,
@@ -244,89 +278,68 @@ class AgentRuntimeService:
                 )
                 raise AgentRuntimeError(str(exc)) from exc
             except AgentRuntimeError as exc:
-                self._deps.agent_actions.update_agent_action_status(
-                    action_id=str(action.get("id") or ""),
-                    status="failed",
-                    outputs={},
-                    outputs_hash=hash_payload({}),
-                    error=str(exc),
-                )
-                self._deps.agent_runs.update_agent_run(
-                    run_id=run_id,
-                    status="failed",
-                    error=str(exc),
-                )
-                record_action_event(
+                record_runtime_failure(
                     deps=self._deps,
-                    run_id=run_id,
+                    run=run,
                     action=action,
-                    event_type="action_failed",
-                    status="failed",
-                    note=str(exc),
-                    is_policy_event=True,
+                    error=str(exc),
                 )
                 raise AgentRuntimeError(str(exc)) from exc
             except CapabilityExecutionError as exc:
-                self._deps.agent_actions.update_agent_action_status(
-                    action_id=str(action.get("id") or ""),
-                    status="failed",
-                    outputs={},
-                    outputs_hash=hash_payload({}),
-                    error=str(exc),
-                )
-                self._deps.agent_runs.update_agent_run(
-                    run_id=run_id,
-                    status="failed",
-                    error=str(exc),
-                )
-                record_action_event(
+                record_capability_failure(
                     deps=self._deps,
-                    run_id=run_id,
+                    run=run,
                     action=action,
-                    event_type="action_failed",
-                    status="failed",
-                    note=str(exc),
-                    is_policy_event=False,
+                    state=execution_state,
+                    error=str(exc),
+                    error_code="capability_execution_error",
                 )
                 raise
             except ValueError as exc:
-                self._deps.agent_actions.update_agent_action_status(
-                    action_id=str(action.get("id") or ""),
-                    status="failed",
-                    outputs={},
-                    outputs_hash=hash_payload({}),
+                record_capability_failure(
+                    deps=self._deps,
+                    run=run,
+                    action=action,
+                    state=execution_state,
                     error=str(exc),
+                    error_code="capability_value_error",
                 )
-                self._deps.agent_runs.update_agent_run(
-                    run_id=run_id,
-                    status="failed",
+                raise CapabilityExecutionError(str(exc)) from exc
+            except Exception as exc:
+                # Once exact authorization has committed, any unexpected failure
+                # may have happened after the external effect was invoked. Fail
+                # closed and preserve the durable effect as uncertain so receipt
+                # reconciliation, rather than an unsafe retry, owns recovery.
+                record_capability_failure(
+                    deps=self._deps,
+                    run=run,
+                    action=action,
+                    state=execution_state,
                     error=str(exc),
+                    error_code="unexpected_capability_failure",
+                )
+                raise CapabilityExecutionError(str(exc)) from exc
+
+            if execution_state.authorization is None:
+                executed = self._deps.agent_actions.update_agent_action_status(
+                    action_id=str(action.get("id") or ""),
+                    status="executed",
+                    outputs=outputs,
+                    outputs_hash=hash_payload(outputs),
                 )
                 record_action_event(
                     deps=self._deps,
                     run_id=run_id,
-                    action=action,
-                    event_type="action_failed",
-                    status="failed",
-                    note=str(exc),
-                    is_policy_event=False,
+                    action=executed or action,
+                    event_type="action_executed",
+                    status="executed",
+                    note=(executed or action).get("rationale"),
                 )
-                raise CapabilityExecutionError(str(exc)) from exc
-
-            executed = self._deps.agent_actions.update_agent_action_status(
-                action_id=str(action.get("id") or ""),
-                status="executed",
-                outputs=outputs,
-                outputs_hash=hash_payload(outputs),
-            )
-            record_action_event(
-                deps=self._deps,
-                run_id=run_id,
-                action=executed or action,
-                event_type="action_executed",
-                status="executed",
-                note=(executed or action).get("rationale"),
-            )
+            else:
+                executed = self._deps.agent_actions.get_agent_action(
+                    action_id=str(action.get("id") or ""),
+                    client_id=str(run.get("client_id") or ""),
+                )
             next_state = next_state_for_capability(capability_name)
             if next_state:
                 self._deps.agent_runs.update_agent_run(run_id=run_id, state=next_state)
@@ -374,20 +387,6 @@ class AgentRuntimeService:
         if self._normalized_status(run) in _TERMINAL_STATUSES:
             raise AgentRuntimeError(f"Terminal runs cannot be {action}")
 
-    def _claim_next_approved_action(self, *, run_id: str) -> Dict[str, Any] | None:
-        actions = self._deps.agent_actions.list_agent_actions(
-            agent_run_id=run_id, limit=500
-        )
-        approved = [item for item in actions if item.get("status") == "approved"]
-        for item in approved:
-            claimed = self._deps.agent_actions.transition_agent_action_status(
-                action_id=str(item.get("id") or ""),
-                from_status="approved",
-                to_status="executing",
-            )
-            if claimed:
-                return claimed
-        return None
 
 __all__ = [
     "AgentRuntimeService",

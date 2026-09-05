@@ -10,6 +10,17 @@ Implemented now:
 - Runtime step execution service with short lease locking and heartbeat refresh
 - Route-level runtime controls (`start`, `pause`, `cancel`, `step`)
 - Operator UX in `/agent-runs` with queue approvals and action explainability
+- Exact governed-effect authorization backed by the canonical approval ledger,
+  registry-authoritative pre-approval canonical payloads consumed unchanged,
+  admission revalidation, atomic
+  lease/status/budget checks at pre-effect consumption, single-use effect
+  identity, durable uncertain outcomes, provenance- and outcome-checked
+  reconciliation with immutable requested-model binding, fail-closed recovery
+  from unexpected post-start errors, a bearer-authorized tenant-scoped
+  `reconcile_effect` operator command with cancellation- and concurrent-replan-safe
+  compare-and-swap projection recovery, and write-locked recovery-action sequence
+  plus retry-identity allocation that preserves concurrent valid operator commands,
+  and linked fulfillment receipts
 - Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution
@@ -172,8 +183,8 @@ Each capability definition includes:
 | `review_validation_readiness` | Evaluate observed/synthetic coverage and readiness gates | **Implemented (executable)** |
 | `recommend_next_action` | Emit ranked next-step recommendations under constraints | **Implemented (executable)** |
 | `promote_variant_lab` | Promote variant for lab progression | **Implemented (executable)** |
-| `promote_variant_prod` | Promote variant for production/publish path | **Implemented (executable, approval-gated)** |
-| `publish_copy_revision` | Publish selected revision to product copy | **Implemented (executable, approval-gated)** |
+| `promote_variant_prod` | Promote variant for production/publish path | **Implemented adapter; beta runtime execution blocked by the versioned release contract** |
+| `publish_copy_revision` | Publish selected revision to product copy | **Implemented adapter; beta runtime execution blocked by the versioned release contract** |
 
 Notes:
 - `action only` means the planner seeds it as a proposed action, but execution is not wired yet.
@@ -401,7 +412,8 @@ Operator steering is exposed via:
 - `POST /agent-runs/{run_id}/commands/preflight`
 - mutating commands: `approve`, `reject`, `retry`, `start`, `pause`, `cancel`, `step`
 - non-mutating command receipts: `explain`, `focus`
-- structured recovery command: `change_plan`
+- structured recovery command: `change_plan`; terminal runs require a new run,
+  with the terminal boundary rechecked atomically when the action is inserted
 - command receipts are stored as immutable `operator_command_*` events with principal, action, tool, skill, effect, trace, and message context where available
 - high-risk command preflight requires explicit confirmation in the operator chat before submission
 - step commands require explicit confirmation before execution

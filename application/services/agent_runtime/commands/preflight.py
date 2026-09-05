@@ -5,15 +5,20 @@ from typing import Any, Dict, List, Optional
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.agent_first import skill_id_for_tool_id
 from application.services.agent_runtime.policy import PolicyEnforcer, PolicyError
-from application.services.agent_runtime.registry import (
-    get_capability_spec,
-)
+from application.services.agent_runtime.registry import get_capability_spec
 from application.services.agent_runtime.commands.recovery import (
     _default_retry_strategy,
     _harness_context,
     _requested_recovery_capability,
     _rollback_guidance,
 )
+from application.services.agent_runtime.commands.reconciliation_preflight import (
+    effect_reconciliation_preflight,
+)
+from application.services.agent_runtime.commands.lifecycle_preflight import (
+    command_lifecycle_blockers,
+)
+from domain.workflow.approval import ApprovalAuthority
 
 
 def _record_command_event(
@@ -25,6 +30,7 @@ def _record_command_event(
     action: Optional[Dict[str, Any]] = None,
     note: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    command_authority: ApprovalAuthority | None = None,
 ) -> Dict[str, Any]:
     return deps.agent_events.create_agent_event(
         agent_run_id=str(run.get("id") or ""),
@@ -36,8 +42,16 @@ def _record_command_event(
         capability_version=str(action.get("capability_version") or "")
         if action
         else None,
-        principal_type=run.get("principal_type"),
-        principal_id=run.get("principal_id"),
+        principal_type=(
+            command_authority.principal_type.value
+            if command_authority
+            else run.get("principal_type")
+        ),
+        principal_id=(
+            command_authority.principal_id
+            if command_authority
+            else run.get("principal_id")
+        ),
         tool_id=action.get("tool_id") if action else None,
         skill_id=(
             action.get("skill_id") or skill_id_for_tool_id(action.get("tool_id"))
@@ -56,6 +70,12 @@ def _record_command_event(
             "snapshot_version": action.get("snapshot_version") if action else None,
             "metric_id": None,
             "command_type": command_type,
+            "command_authority_source": (
+                command_authority.authority_source if command_authority else None
+            ),
+            "command_authority_version": (
+                command_authority.authority_version if command_authority else None
+            ),
             "metadata": metadata or {},
         },
     )
@@ -83,7 +103,10 @@ def _command_preflight(
     warnings: List[str] = []
     side_effects = list(spec.side_effects) if spec else []
 
-    if command_type in {"approve", "reject", "retry"} and not action:
+    if (
+        command_type in {"approve", "reject", "retry", "reconcile_effect"}
+        and not action
+    ):
         blockers.append("This command requires an action_id.")
     if command_type == "approve" and action:
         if str(action.get("status") or "").lower() != "proposed":
@@ -94,15 +117,13 @@ def _command_preflight(
     if command_type == "retry" and action:
         if str(action.get("status") or "").lower() != "failed":
             blockers.append("Retry is only available for failed actions.")
-    if command_type == "step":
-        if run_mode == "plan_only":
-            blockers.append("Run is plan-only. Switch mode before executing steps.")
-        if run_status in {"canceled", "completed"}:
-            blockers.append("Run is not executable in its current status.")
-    if command_type == "start" and run_status in {"canceled", "completed"}:
-        blockers.append("Canceled or completed runs cannot be started.")
-    if command_type == "cancel" and run_status in {"canceled", "completed"}:
-        blockers.append("Run is already terminal.")
+    blockers.extend(
+        command_lifecycle_blockers(
+            command_type=command_type,
+            run_status=run_status,
+            run_mode=run_mode,
+        )
+    )
     if command_type == "change_plan":
         allowed = [
             str(item).strip()
@@ -152,6 +173,16 @@ def _command_preflight(
                 blockers.append(
                     f"Recovery capability '{requested_capability}' has no executable registry spec."
                 )
+    reconciliation = effect_reconciliation_preflight(
+        deps=deps,
+        run=run,
+        action=action,
+        command_type=command_type,
+        current_side_effects=side_effects,
+    )
+    blockers.extend(reconciliation["blockers"])
+    warnings.extend(reconciliation["warnings"])
+    side_effects = reconciliation["side_effects"]
 
     if action and spec and command_type in {"approve", "retry"}:
         inputs = spec.normalize_inputs(action.get("inputs") or {})
@@ -220,6 +251,7 @@ def _command_preflight(
         risk_level = "high"
     elif effect_class == "external_side_effect" or command_type in {
         "change_plan",
+        "reconcile_effect",
         "retry",
         "step",
     }:
@@ -229,7 +261,7 @@ def _command_preflight(
         "allowed": not blockers,
         "command_type": command_type,
         "risk_level": risk_level,
-        "requires_confirmation": command_type in {"retry", "step"}
+        "requires_confirmation": command_type in {"reconcile_effect", "retry", "step"}
         or risk_level == "high"
         or bool(blockers),
         "requires_approval": bool(run.get("requires_approval")) or risk_level == "high",

@@ -358,8 +358,71 @@ data but do not authenticate a human and cannot populate the authority record.
 Human session approval remains fail-closed until a verified session or token
 contract is available. Legacy action `approved` and `rejected` values are
 written only after the corresponding durable decision commits; they remain
-projections and cannot authorize execution. Pre-effect consumption of the
-ledger remains a separate Slice 1.5d responsibility.
+projections and cannot authorize execution.
+
+Slice 1.5d consumes this ledger through a two-check runtime boundary. Before the
+first approval snapshot is written, the fingerprinted registry contract applies
+its defaults and field canonicalizers to produce one persisted executable payload
+under the approval transaction. Governed execution consumes those frozen values
+without further transformation. Capability, tool,
+effect, version, registry, harness, and policy identity come from the
+fingerprinted registry record rather than the mutable action. Admission loads
+the authoritative projection and append-only tail, verifies the pinned digest
+and active lifecycle, and rebuilds every binding dimension against those
+independent authorities. Immediately before a governed capability call, a
+`BEGIN IMMEDIATE` transaction repeats the history, expiry, action state,
+approval pin, source-snapshot, executable run-status, current lease-token, and
+lease-expiry checks. It reserves count-based action and variant budgets and
+commits one single-use `approval_effect_executions` identity in the same write.
+The transaction is the cancellation, lease, budget, revocation, and effect
+linearization point: a conflicting control-plane write committed first prevents
+execution; an effect-start committed first is the durable reservation and
+prevents later revocation from pretending the effect never began. The start row
+immutably snapshots the then-valid approval, normalized executable inputs, and
+complete fingerprinted capability contract. Started or uncertain effects
+reconcile from that snapshot rather than mutable run/action projections or
+present-time expiry. Both normal and recovery completion independently verify
+the frozen output schema, canonical output hash, and tenant-scoped provider-job
+provenance bound to the exact action, approval, effect key, and effect-execution
+row before a receipt can fulfill the approval. Frozen in-app `auto_run=true`
+inputs additionally require a completed job and durable matching result; queued
+job evidence is sufficient only when the approved payload does not require the
+provider run. The requested model is immutable, must match the effect-start
+inputs, drives in-app provider execution, and—not a mutable observed model—is
+the result-model reconciliation oracle. Completion audit authority is also
+derived from the frozen binding rather than mutable run/action projections.
+Migration 045 upgrades databases that already applied the original migration
+044, and migration 046 reconstructs immutable requested models from effect-start
+snapshots for databases that already applied 045. Legacy starts lacking a
+reconstructable snapshot remain uncertain and require operator handling rather
+than inferred authorization. An unexpected error after the effect-start commit
+also moves the effect to `uncertain` and the action/run to `failed`, preserving a
+recoverable receipt-reconciliation path instead of a stranded execution.
+That path is exposed through the authenticated, tenant-scoped
+`reconcile_effect` operator command. The command accepts only workflow/action
+identity, discovers the unique validation job bound to the immutable effect
+start, verifies it through the normal receipt contract, and projects the
+result idempotently without re-invoking the capability. A canceled run retains
+its terminal control-plane state even when its late external outcome is recorded.
+Run-projection recovery compares the observed run state and complete
+status-relevant action snapshot under the database write lock. If concurrent
+replanning changes either, recovery reloads and re-derives the projection rather
+than committing a stale terminal status. Conversely, `change_plan` and `retry`
+reject terminal runs at preflight and recheck that boundary under the action
+insert write lock. A command whose stale preflight races reconciliation cannot
+append work after completion; continuing a terminal workflow requires a new run.
+The same guarded insert allocates `MAX(sequence) + 1` only after acquiring the
+database write lock. Concurrent `change_plan` and `retry` commands therefore
+serialize sequence allocation and cannot lose a valid recovery request to a
+uniqueness collision. For retries, that transaction also allocates the next
+retry ordinal for the source action and strategy and derives the final effect
+idempotency key from it. Concurrent retries consequently remain distinct
+authorized effects instead of sharing a single-use identity.
+Successful completion atomically records the
+effect receipt, marks the approval fulfilled, updates the compatibility action
+projection, and appends linked audit events. Low-risk sequential actions retain
+their existing path; versioned beta capability blocks are checked before this
+approval boundary and remain in force.
 
 ### `task_results`
 
@@ -576,3 +639,13 @@ acyclic under the commit lock, projection rollback cannot hide immutable graph
 history, terminal actions cannot be resurrected, and approval authority comes
 only from verified claims. It does not make any approval executable; Slice 1.5d
 owns admission and pre-effect checks.
+
+The Slice 1.5d amendment is complete when status alone cannot authorize a
+governed effect; tenant, principal, action, capability/tool/effect identity and
+version, payload, evidence, authority, revision, registry, harness, policy,
+expiry, revocation, and supersession are revalidated at admission and under the
+pre-effect write lock; each approval/effect identity is single use; both
+revocation race orders are deterministic; uncertain outcomes reconcile without
+blind re-execution; and receipt, fulfillment, action, and audit projections
+commit as one outcome. SEC-06/CTRL-03 are executable, while independent beta
+release prerequisites remain blocked.

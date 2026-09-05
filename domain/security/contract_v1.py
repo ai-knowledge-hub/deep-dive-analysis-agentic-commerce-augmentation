@@ -9,7 +9,7 @@ SECURITY_CONTRACT_VERSION = "1.0"
 BLOCKING_DISPOSITION = "excluded_until_required_controls_implemented"
 AUTHORIZED_CLOSURE_AUTHORITY_IDS = frozenset({"security-review-board"})
 IMPLEMENTED_CONTROL_IDS = frozenset(
-    {"SEC-01", "SEC-02", "SEC-03", "SEC-04", "SEC-05"}
+    {"SEC-01", "SEC-02", "SEC-03", "SEC-04", "SEC-05", "SEC-06"}
 )
 IMPLEMENTED_VERIFICATION_TEST_REFS = {
     "SVT-01": (
@@ -50,6 +50,62 @@ IMPLEMENTED_VERIFICATION_TEST_REFS = {
     "SVT-05": (
         "tests/test_external_agent_jobs_api.py::test_external_agent_job_receipt_is_signed_and_tracks_run_status",
         "tests/test_agent_runs_api.py::test_operator_command_endpoint_records_receipt_and_delegates_approval",
+    ),
+    "SVT-06": (
+        "tests/modules/test_approval_effect_authorization.py::test_governed_effect_cannot_execute_from_action_status_alone",
+        "tests/modules/test_approval_effect_authorization.py::test_exact_approval_is_consumed_fulfilled_and_linked_to_receipt",
+        "tests/modules/test_approval_effect_authorization.py::test_approval_persists_and_executes_one_normalized_payload",
+        "tests/modules/test_approval_effect_authorization.py::test_same_version_live_registry_semantic_drift_fails_closed",
+        "tests/modules/test_approval_effect_authorization.py::test_post_approval_live_registry_semantic_drift_cannot_reach_effect",
+        "tests/modules/test_approval_effect_authorization.py::test_normal_completion_rejects_nonexistent_provider_receipt",
+        "tests/modules/test_approval_effect_authorization.py::test_normal_completion_rejects_matching_historical_provider_job",
+        "tests/modules/test_approval_effect_authorization.py::test_coordinated_preapproval_identity_substitution_fails_registry_oracle",
+        "tests/modules/test_approval_effect_authorization.py::test_coordinated_preapproval_registry_substitution_requires_a_real_payload",
+        "tests/modules/test_approval_effect_authorization.py::test_every_mutable_binding_dimension_fails_closed",
+        "tests/modules/test_approval_effect_authorization.py::test_expiry_is_checked_again_at_execution_time",
+        "tests/modules/test_approval_effect_authorization.py::test_approval_cannot_cross_tenant_or_action_scope",
+        "tests/modules/test_approval_effect_authorization.py::test_superseded_approval_stays_terminal_at_execution_boundary",
+        "tests/modules/test_approval_effect_authorization.py::test_revocation_wins_when_it_commits_before_pre_effect_authorization",
+        "tests/modules/test_approval_effect_authorization.py::test_pre_effect_commit_wins_race_and_prevents_late_revocation",
+        "tests/modules/test_approval_effect_authorization.py::test_cancellation_committed_before_effect_start_fails_closed",
+        "tests/modules/test_approval_effect_authorization.py::test_stale_worker_token_cannot_commit_an_effect",
+        "tests/modules/test_approval_effect_authorization.py::test_pre_effect_start_atomically_reserves_shared_action_budget",
+        "tests/modules/test_approval_effect_authorization.py::test_effect_identity_and_outcome_state_cannot_be_rewritten",
+        "tests/modules/test_approval_effect_migration.py::test_migration_045_upgrades_applied_044_and_quarantines_legacy_starts",
+        "tests/modules/test_approval_effect_migration.py::test_migration_046_upgrades_applied_045_from_immutable_effect_start",
+        "tests/modules/test_approval_effect_authorization.py::test_uncertain_same_effect_reconciles_after_restart_without_second_execution",
+        "tests/modules/test_approval_effect_authorization.py::test_receipt_started_while_valid_reconciles_after_approval_expiry",
+        "tests/modules/test_approval_effect_authorization.py::test_reconciliation_uses_immutable_start_after_current_policy_mutation",
+        "tests/modules/test_approval_effect_authorization.py::test_reconciliation_rejects_malformed_or_mishashed_outputs",
+        "tests/modules/test_approval_effect_authorization.py::test_reconciliation_rejects_provider_job_from_different_approved_target",
+        "tests/modules/test_approval_effect_authorization.py::test_same_effect_identity_cannot_be_reused_by_a_second_action",
+        "tests/modules/test_approval_effect_outcomes.py::test_reconciliation_rejects_noncompleted_auto_run_job",
+        "tests/modules/test_approval_effect_outcomes.py::test_reconciliation_requires_matching_durable_auto_run_result",
+        "tests/modules/test_approval_effect_outcomes.py::test_normal_completion_rejects_failed_auto_run_job",
+        "tests/modules/test_approval_effect_outcomes.py::test_reconciliation_accepts_bound_queued_job_when_auto_run_is_disabled",
+        "tests/modules/test_agent_capability_registry.py::test_synthetic_validation_registry_canonicalizes_every_executable_string",
+        "tests/modules/test_approval_effect_outcomes.py::test_approval_canonicalizes_payload_before_effect_start",
+        "tests/modules/test_approval_effect_outcomes.py::test_unexpected_post_start_failure_is_recoverable_not_stranded",
+        "tests/test_agent_runs_api.py::test_operator_reconciles_uncertain_effect_through_authenticated_command",
+        "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_records_receipt_without_resurrecting_canceled_run",
+        "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_cannot_overwrite_concurrent_cancellation",
+        "tests/modules/test_approval_effect_outcomes.py::test_effect_recovery_retries_projection_after_concurrent_replan",
+        "tests/modules/test_approval_effect_outcomes.py::test_terminal_run_rejects_stale_recovery_action_commit",
+        "tests/modules/test_approval_effect_outcomes.py::test_concurrent_recovery_commands_allocate_unique_sequences_under_write_lock",
+        "tests/modules/test_approval_effect_outcomes.py::test_concurrent_retries_allocate_unique_ordinals_and_effect_identities",
+        "tests/modules/test_approval_effect_outcomes.py::test_governed_capability_consumes_canonical_strings_without_rewriting",
+        "tests/modules/test_approval_effect_outcomes.py::test_coordinated_job_result_model_substitution_cannot_fulfill_approval",
+        "tests/modules/test_approval_effect_outcomes.py::test_governed_auto_run_uses_immutable_requested_model",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_commits_effect_and_receipt_atomically",
+        "tests/modules/test_governed_effect_receipts.py::test_migration_048_accepts_previous_writer_for_valid_scoped_promotion",
+        "tests/modules/test_governed_effect_receipts.py::test_migration_048_previous_writer_still_rejects_cross_tenant_scope",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_write_failure_rolls_back_events_and_receipt",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_recovers_from_durable_receipt_without_reexecution",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_reconciliation_rejects_substituted_outputs",
+        "tests/modules/test_governed_effect_receipts.py::test_governed_effect_receipt_is_immutable",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_rejects_cross_tenant_variant_before_effect",
+        "tests/modules/test_governed_effect_receipts.py::test_lab_promotion_commit_revalidates_tenant_variant_metric_scope",
+        "tests/modules/test_approval_effect_migration.py::test_migration_048_upgrades_applied_047_with_relational_receipt_scope",
     ),
 }
 
@@ -101,12 +157,8 @@ REQUIRED_CAPABILITY_EXCLUSIONS_BY_THREAT = {
     ),
     "THR-04": frozenset({"public_durable_workflow_and_peer_messages"}),
     "THR-05": frozenset({"parallel_multi_tenant_worker_execution"}),
-    "THR-10": frozenset(
-        {"expanded_connectors_without_secret_egress_ssrf_controls"}
-    ),
-    "THR-16": frozenset(
-        {"expanded_production_telemetry_and_parallel_context_logging"}
-    ),
+    "THR-10": frozenset({"expanded_connectors_without_secret_egress_ssrf_controls"}),
+    "THR-16": frozenset({"expanded_production_telemetry_and_parallel_context_logging"}),
 }
 
 THREAT_CLOSURE_REQUIREMENTS = {

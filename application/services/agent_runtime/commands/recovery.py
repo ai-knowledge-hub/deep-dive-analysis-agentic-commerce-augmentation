@@ -17,6 +17,13 @@ from application.services.agent_runtime.registry import (
 )
 
 
+class RecoveryActionCreationError(RuntimeError):
+    """Raised when recovery action admission loses a terminal-state race."""
+
+
+_RECOVERY_ACTION_RUN_STATUSES = ("planned", "running", "failed", "paused")
+
+
 def _hash_payload(value: Any) -> str:
     try:
         encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode(
@@ -37,6 +44,11 @@ def _rollback_guidance(
     if command_type == "cancel":
         return (
             "Cancel is terminal. Create a new run to continue from the same objective."
+        )
+    if command_type == "reconcile_effect":
+        return (
+            "Reconciliation does not invoke the provider. Invalid or incomplete "
+            "evidence leaves the effect uncertain for later recovery."
         )
     if effect_class == "write_high_risk":
         return "High-risk writes may need a compensating action or manual rollback after execution."
@@ -261,7 +273,9 @@ def _fallback_capability_for_run(
     if requested_capability in allowed:
         return requested_capability
     harness = _active_harness(run)
-    fallback_order = [str(item).strip() for item in list(harness.get("fallback_order") or [])]
+    fallback_order = [
+        str(item).strip() for item in list(harness.get("fallback_order") or [])
+    ]
     if "registry_recovery_template" in fallback_order:
         for candidate in (
             "review_validation_readiness",
@@ -286,11 +300,6 @@ def create_change_plan_recovery_action(
     message: Optional[str],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    actions = deps.agent_actions.list_agent_actions(
-        agent_run_id=run_id,
-        limit=500,
-    )
-    next_sequence = max([int(item.get("sequence") or 0) for item in actions] or [0]) + 1
     allowed = [
         str(item).strip()
         for item in list(run.get("allowed_capabilities") or [])
@@ -342,7 +351,7 @@ def create_change_plan_recovery_action(
     ) or _capability_rollback_guidance(capability_name, effect_class)
     recovery_action = deps.agent_actions.create_agent_action(
         agent_run_id=run_id,
-        sequence=next_sequence,
+        sequence=0,
         status="proposed",
         capability_name=capability_name,
         capability_version=None,
@@ -377,7 +386,15 @@ def create_change_plan_recovery_action(
             allowed_capabilities=allowed,
         ),
         dedupe_key=f"change_plan:{command_receipt.get('id')}",
+        client_id=str(run.get("client_id") or ""),
+        admissible_run_statuses=_RECOVERY_ACTION_RUN_STATUSES,
+        allocate_run_sequence=True,
     )
+    if not recovery_action:
+        raise RecoveryActionCreationError(
+            "Run became terminal before the recovery action could be committed; "
+            "create a new run to continue."
+        )
     deps.agent_events.create_agent_event(
         agent_run_id=run_id,
         action_id=str(recovery_action.get("id") or ""),
@@ -426,13 +443,10 @@ def create_retry_action(
     action: Dict[str, Any],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    actions = deps.agent_actions.list_agent_actions(
-        agent_run_id=run_id,
-        limit=500,
-    )
-    next_sequence = max([int(item.get("sequence") or 0) for item in actions] or [0]) + 1
     retry_count = int(action.get("retry_count") or 0) + 1
-    retry_strategy = str(metadata.get("retry_strategy") or _default_retry_strategy(run)).strip()
+    retry_strategy = str(
+        metadata.get("retry_strategy") or _default_retry_strategy(run)
+    ).strip()
     allowed = [
         str(item).strip()
         for item in list(run.get("allowed_capabilities") or [])
@@ -491,7 +505,7 @@ def create_retry_action(
     ) or _capability_rollback_guidance(capability_name, effect_class)
     retry_action = deps.agent_actions.create_agent_action(
         agent_run_id=run_id,
-        sequence=next_sequence,
+        sequence=0,
         status="proposed",
         capability_name=capability_name,
         capability_version=(
@@ -527,8 +541,17 @@ def create_retry_action(
             allowed_capabilities=allowed,
         ),
         retry_count=retry_count,
-        dedupe_key=f"retry:{action.get('id')}:{retry_strategy}:{retry_count}",
+        dedupe_key=None,
+        client_id=str(run.get("client_id") or ""),
+        admissible_run_statuses=_RECOVERY_ACTION_RUN_STATUSES,
+        allocate_run_sequence=True,
+        retry_identity_prefix=f"retry:{action.get('id')}:{retry_strategy}:",
     )
+    if not retry_action:
+        raise RecoveryActionCreationError(
+            "Run became terminal before the retry action could be committed; "
+            "create a new run to continue."
+        )
     deps.agent_events.create_agent_event(
         agent_run_id=run_id,
         action_id=str(retry_action.get("id") or ""),
@@ -557,7 +580,7 @@ def create_retry_action(
             "snapshot_version": retry_action.get("snapshot_version"),
             "metric_id": None,
             "original_action_id": action.get("id"),
-            "retry_count": retry_count,
+            "retry_count": retry_action.get("retry_count"),
             "retry_strategy": retry_strategy,
             "recovery_template_id": recovery_template.get("id"),
             "harness_id": run.get("harness_id"),
@@ -569,3 +592,10 @@ def create_retry_action(
         },
     )
     return retry_action
+
+
+__all__ = [
+    "RecoveryActionCreationError",
+    "create_change_plan_recovery_action",
+    "create_retry_action",
+]

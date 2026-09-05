@@ -23,6 +23,10 @@ def create_job(
     integration_type: Optional[str] = None,
     provider_run_id: Optional[str] = None,
     callback_verified: Optional[bool] = None,
+    agent_action_id: Optional[str] = None,
+    approval_id: Optional[str] = None,
+    effect_idempotency_key: Optional[str] = None,
+    approval_effect_execution_id: Optional[str] = None,
     input_payload: Dict[str, Any],
     requested_by: Optional[str],
 ) -> Dict[str, Any]:
@@ -41,15 +45,20 @@ def create_job(
             provider,
             mode,
             model,
+            requested_model,
             prompt_version,
             status,
             integration_type,
             provider_run_id,
             callback_verified,
+            agent_action_id,
+            approval_id,
+            effect_idempotency_key,
+            approval_effect_execution_id,
             input_payload_json,
             requested_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?), ?)
         """,
         (
             job_id,
@@ -61,11 +70,16 @@ def create_job(
             provider,
             mode,
             model,
+            model,
             prompt_version,
             status,
             integration_type,
             provider_run_id,
             None if callback_verified is None else (1 if callback_verified else 0),
+            agent_action_id,
+            approval_id,
+            effect_idempotency_key,
+            approval_effect_execution_id,
             to_json(input_payload) or to_json({}),
             requested_by,
         ),
@@ -128,6 +142,23 @@ def get_job(job_id: str, *, client_id: Optional[str] = None) -> Dict[str, Any] |
     return _row(row) if row else None
 
 
+def get_job_for_effect_execution(
+    *, approval_effect_execution_id: str, client_id: str
+) -> Dict[str, Any] | None:
+    row = (
+        get_connection()
+        .execute(
+            """
+            SELECT * FROM validation_jobs
+            WHERE approval_effect_execution_id = ? AND client_id = ?
+            """,
+            (approval_effect_execution_id, client_id),
+        )
+        .fetchone()
+    )
+    return _row(row) if row else None
+
+
 def list_jobs(
     *,
     client_id: str,
@@ -169,11 +200,18 @@ def _row(row) -> Dict[str, Any]:
         "provider": row["provider"],
         "mode": row["mode"],
         "model": row["model"],
+        "requested_model": row["requested_model"],
         "prompt_version": row["prompt_version"],
         "status": row["status"],
         "integration_type": row["integration_type"],
         "provider_run_id": row["provider_run_id"],
-        "callback_verified": bool(row["callback_verified"]) if row["callback_verified"] is not None else None,
+        "callback_verified": bool(row["callback_verified"])
+        if row["callback_verified"] is not None
+        else None,
+        "agent_action_id": row["agent_action_id"],
+        "approval_id": row["approval_id"],
+        "effect_idempotency_key": row["effect_idempotency_key"],
+        "approval_effect_execution_id": row["approval_effect_execution_id"],
         "input_payload": from_json(row["input_payload_json"], default={}),
         "requested_by": row["requested_by"],
         "created_at": row["created_at"],
