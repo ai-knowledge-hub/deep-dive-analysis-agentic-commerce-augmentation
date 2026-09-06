@@ -1,5 +1,9 @@
 # Terminology Glossary
 
+Status: current
+Last verified: 2026-09-05
+Baseline: `origin/main@96a1c23` (includes PR #120)
+
 This document defines the core terms used across the agentic commerce codebase.
 
 The goal is to ensure **conceptual precision**, prevent semantic drift, and align architecture with implementation.
@@ -21,6 +25,62 @@ application/services/agent_runtime/*
 web/app/agent-runs/page.tsx
 web/app/interventions/page.tsx
 ```
+
+---
+
+## Exact Approval
+
+**Definition**
+An immutable decision that authorizes one canonical executable payload, target,
+capability contract, effect class, authority, policy, revision, and validity
+window. Approval status alone is not execution authority.
+
+**Key Property**
+The payload approved is byte-for-byte the canonical payload consumed by
+governed execution; defaults or normalization cannot be added afterward.
+
+---
+
+## Effect-Start Snapshot
+
+**Definition**
+Immutable evidence committed immediately before a governed effect begins,
+binding the single-use effect identity to its exact approval, payload,
+authority, lease, budget reservation, and registry contract.
+
+**Key Property**
+Reconciliation uses this snapshot, not mutable run or action projections.
+
+---
+
+## Governed Effect Receipt
+
+**Definition**
+A durable, effect-bound record proving the committed outcome of a governed
+capability. A lab-promotion receipt binds tenant, experiment, variant, and
+source metric after their relationship is revalidated transactionally.
+
+**Key Property**
+A receipt is evidence of the exact committed effect; a successful function
+return or internally consistent but cross-tenant identifier set is not.
+
+---
+
+## Uncertain Effect
+
+**Definition**
+A governed effect that started but whose authoritative outcome was not safely
+committed locally. It must not be retried as though no effect occurred.
+
+---
+
+## Effect Reconciliation
+
+**Definition**
+A tenant-authorized recovery command that discovers durable provider or local
+evidence, verifies it against the immutable effect-start snapshot, commits the
+outcome without re-executing the effect, and restores non-terminal projections
+without overwriting cancellation or concurrent replanning.
 
 ---
 

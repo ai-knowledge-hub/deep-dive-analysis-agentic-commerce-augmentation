@@ -1,5 +1,9 @@
 # App Architecture (Current State + Planned Extensions)
 
+Status: current
+Last verified: 2026-09-05
+Baseline: `origin/main@96a1c23` (includes PR #120)
+
 This document reflects what is currently implemented and marks future items as **Planned (not built)**.
 
 ---
@@ -81,6 +85,7 @@ Admin onboarding is section-based (collapsible panels):
 - `api/routes/simulation.py`
 - `api/routes/validation.py`
 - `api/routes/agent_runs.py`
+- `api/routes/agent_approvals.py`
 - `api/routes/beliefs.py`
 - `api/routes/loop.py`
 - `api/routes/admin.py`
@@ -109,7 +114,8 @@ Admin onboarding is section-based (collapsible panels):
   - `catalog/`
   - `session/`
   - `search/`
-- Flat adapter modules under `infrastructure/db/*.py` (except `__init__.py`) were removed.
+- Flat adapter modules under `infrastructure/db/*.py` (except package initializer
+  files named **__init__.py**) were removed.
 
 ---
 
@@ -124,7 +130,9 @@ Core entities in active use:
 - learning loop: world_states, belief_revisions, decision_events, memory_artifacts, calibration_profiles, loop_maintenance_runs
 - intelligence: brand_beliefs, audience_archetypes, analytics_events
 - operations: skills, skills_history, llm_provider_configs
-- agent runtime: agent_runs, agent_actions
+- agent runtime: agent_runs, agent_actions, agent_events, approval_records,
+  approval_commands, approval_events, approval_effect_executions, and
+  governed_effect_receipts
 
 Canonical spec fields are stored in:
 - `products.metadata.canonical_intent_spec`
@@ -200,6 +208,12 @@ The agentic module is implemented as an orchestration layer over the same experi
 - Capability execution boundary: `application/services/agent_runtime/capabilities/executor.py`
 - Capability contract registry: `application/services/agent_runtime/registry/contracts.py`
 - Policy checks: `application/services/agent_runtime/policy.py`
+- Approval decisions and canonical payloads:
+  `application/services/agent_runtime/approval_ledger.py`
+- Exact admission, effect-start, completion, and reconciliation:
+  `application/services/agent_runtime/approval_authorization.py`
+- Public durable-evidence recovery:
+  `application/services/agent_runtime/effect_recovery.py`
 
 ### Runtime behavior
 - `run_mode=plan_only` is default (no side-effect execution).
@@ -220,7 +234,8 @@ The agentic module is implemented as an orchestration layer over the same experi
   - default inputs
   - side effects (documentation-level effect surface)
   - optional next-state mapping
-- Policy is enforced before execution:
+- Policy and exact authority are enforced at admission and again immediately
+  before a governed effect:
   - capability allow-list
   - required inputs present
   - action budget (`max_actions`)
@@ -231,6 +246,26 @@ The agentic module is implemented as an orchestration layer over the same experi
 - `agent_runs` stores scope, objective, capability allow-list, versions, budgets, approval policy, state/status, and lock/heartbeat metadata.
 - `agent_actions` stores ordered action queue entries with status, rationale, confidence, inputs/outputs hashes, and artifact anchors.
 - `agent_events` stores immutable lifecycle events for audit/replay (`proposed/approved/rejected/executing/executed/failed` + run control events).
+- approval decision rows preserve the immutable approved binding, canonical
+  executable payload, deciding authority, expiry, revocation, and fulfillment.
+- approval effect execution rows preserve single-use effect identity and an
+  immutable effect-start snapshot. A post-start acknowledgement failure becomes
+  `uncertain`, not a retryable success or silent failure.
+- governed effect receipts bind committed lab promotions to the exact approval,
+  tenant, experiment, variant, and source metric. Those relationships are
+  re-read under the final write transaction.
+
+### Recovery and projection integrity
+
+- `reconcile_effect` is a bearer-authorized, tenant-scoped operator command.
+- Recovery discovers durable provider or governed-effect evidence and never
+  re-executes the external effect.
+- Late evidence is checked against the immutable effect-start snapshot rather
+  than mutable run projections.
+- Run projection restoration uses compare-and-swap/retry when concurrent
+  replanning changes the action set.
+- Retry and change-plan allocate sequence and retry identity under the write
+  lock; terminal runs remain closed.
 
 ### UX integration points
 - Sidebar includes **Agent runs** as a first-class module.

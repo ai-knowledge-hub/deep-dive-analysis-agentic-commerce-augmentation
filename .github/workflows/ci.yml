@@ -51,6 +51,8 @@ jobs:
         run: make safety-traceability-check
       - name: Security Traceability Check
         run: make security-traceability-check
+      - name: Documentation Check
+        run: make docs-check
       - name: Tests
         env:
           CATALOG_SOURCE: mock

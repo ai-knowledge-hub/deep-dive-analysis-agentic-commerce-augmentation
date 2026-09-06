@@ -2,7 +2,7 @@
 
 Status: historical/reference
 Current UX guide: `../operator-experience.md`
-Current build checkpoint: `../agentification-checkpoint.md`
+Current execution plan: `../platform-modernisation-plan-v2.md`
 
 This document maps older lab-first workflows. Keep it as reference context, but do not treat it as the active product navigation model.
 

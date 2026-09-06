@@ -203,7 +203,9 @@ Admin surface:
 
 The older complete user guide and app workflow documents live under `docs/history/`. They are retained for context and rationale, but they describe the older lab-first product shape and should not be used as the current operator guide.
 
-Use this document, `docs/agentification-checkpoint.md`, and `docs/ui-control-plane-simplification-plan.md` for current UX direction.
+Use this document for current behavior, `docs/usability-simplification-gate.md`
+for acceptance rules, and `docs/ui-control-plane-simplification-plan.md` only
+for remaining UX roadmap.
 
 Before the next major backend/platform slice, use `docs/user-testing-plan.md`
 to validate whether new operators can complete the primary loop without

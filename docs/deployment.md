@@ -1,11 +1,15 @@
 # Deployment & Runtime Guide
 
+Status: current
+Last verified: 2026-09-05
+Baseline: `origin/main@96a1c23` (includes PR #120)
+
 ## 1. Environment Profiles
 
 | Environment | LLM Provider | DB Path | Notes |
 |-------------|--------------|---------|-------|
-| **Local** | `openrouter` | `./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
-| **Dev / Preview** | `gemini` | `./tmp/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
+| **Local** | `openrouter` | `runtime-path:./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
+| **Dev / Preview** | `gemini` | `runtime-path:./tmp/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
 | **Production** | `gemini` | `/var/lib/app/prod.db` | Full telemetry, rate-limit logging. |
 
 Copy the relevant section from `.env.example` into `.env.local` (local) or configure as platform secrets (dev/prod).
@@ -61,6 +65,134 @@ Notes:
 - Use the same `DATABASE_PATH` for init/seed/run to keep tenant data consistent.
 - Canonical schema and migrations are under `shared/db/schema.sql` and `shared/db/migrations/*.sql`.
 - Runtime DB adapters are grouped under `infrastructure/db/{core,agent,experiment,validation,loop,catalog,session,search}`.
+
+### Approval and governed-effect migrations
+
+Migrations 044-049 are one ordered compatibility sequence:
+
+- 044 creates durable approval effect execution;
+- 045 adds immutable start/provenance snapshots and quarantines legacy starts;
+- 046 binds validation jobs to the frozen requested model;
+- 047 creates governed effect receipts;
+- 048 expands receipt scope and relationship validation; and
+- 049 preserves a relationship-validating compatibility path for the previous
+  application writer before strict scope enforcement.
+
+Apply migrations before deploying the current writer. Do not skip directly to
+strict receipt enforcement, edit an already-applied migration, or roll the app
+back to a writer older than the 049 compatibility contract without quiescing
+governed effects. After rollout, inspect uncertain effects and use the
+tenant-authorized `reconcile_effect` command; do not repair approval/effect
+rows directly.
+
+#### Post-migration inspection
+
+Run these read-only checks against the deployed database immediately after
+migration, after application rollout, and before rollback:
+
+```bash
+sqlite3 "$(make -s db-path)" <<'SQL'
+SELECT status, COUNT(*) AS total
+FROM approval_effect_executions
+GROUP BY status;
+
+SELECT execution_id, tenant_id, workflow_id, action_id, status, started_at,
+       error_code
+FROM approval_effect_executions
+WHERE status = 'uncertain'
+   OR (status = 'started'
+       AND julianday(started_at) <= julianday('now', '-15 minutes'))
+ORDER BY started_at;
+
+SELECT scope_status, COUNT(*) AS total
+FROM governed_effect_receipts
+GROUP BY scope_status;
+
+SELECT receipt_id, tenant_id, workflow_id, action_id, source_metric_id,
+       scope_status, created_at
+FROM governed_effect_receipts
+WHERE scope_status IN ('invalid_legacy', 'unverified_legacy')
+ORDER BY created_at;
+
+SELECT execution_id, tenant_id, workflow_id, action_id, started_at
+FROM approval_effect_executions
+WHERE authorization_snapshot_json IS NULL
+   OR authorization_snapshot_digest IS NULL
+ORDER BY started_at;
+
+SELECT effect.execution_id, effect.tenant_id, effect.workflow_id,
+       effect.action_id, effect.started_at,
+       MAX(command.created_at) AS last_reconcile_requested_at
+FROM approval_effect_executions AS effect
+LEFT JOIN agent_events AS command
+  ON command.agent_run_id = effect.workflow_id
+ AND command.action_id = effect.action_id
+ AND command.event_type = 'operator_command_reconcile_effect'
+WHERE effect.status = 'uncertain'
+GROUP BY effect.execution_id, effect.tenant_id, effect.workflow_id,
+         effect.action_id, effect.started_at
+ORDER BY effect.started_at;
+SQL
+```
+
+Alert on any `invalid_legacy` or `unverified_legacy` receipt, any effect
+remaining `started` for more than 15 minutes, or any `uncertain` effect
+older than 15 minutes. The threshold is an initial operational default, not
+proof that an external effect failed. The final query shows whether a
+`reconcile_effect` command was received for the same workflow and action; it
+is a request signal, not acknowledgement or proof of recovery. The durable
+`approval_effect_executions` row remains the outcome authority.
+
+There is no persisted operator-acknowledgement contract yet. Command events do
+not carry approval or effect-execution identity, and effect events do not carry
+the execution ID needed for a complete event-only join. Durable acknowledgement
+is planned under SEC-17. Until that control is implemented, alert resolution
+must be recorded in the external incident/on-call system and closed only after
+the durable effect row becomes `succeeded` or an explicit operator disposition
+is recorded outside this application.
+
+#### Recovery and disposition
+
+1. For an `uncertain` effect, inspect the exact effect-start record and bound
+   provider or governed-effect evidence. Preflight recovery through:
+
+   ```bash
+   curl -X POST "$BACKEND_URL/agent-runs/$RUN_ID/commands/preflight" \
+     -H "Authorization: Bearer $AGENT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"client_id":"'"$CLIENT_ID"'","command_type":"reconcile_effect","action_id":"'"$ACTION_ID"'"}'
+   ```
+
+2. If preflight is allowed and the evidence identifiers match, submit the same
+   payload to `POST /agent-runs/{run_id}/commands` with a unique
+   `idempotency_key`. Reconciliation records an existing outcome; it does not
+   execute the effect again.
+3. Treat `invalid_legacy` as quarantined evidence. Do not promote it to
+   `validated`, use it to fulfill approval, or delete it. Investigate the
+   tenant/experiment/variant/source-metric relationship and retain the record
+   for audit or incident response.
+4. `unverified_legacy` is only a migration/previous-writer input state. The
+   compatibility trigger promotes it to `validated` only when the complete
+   relationship is authoritative. A row that remains unverified blocks rollout
+   completion and requires investigation; do not update it manually.
+5. An effect start without an authorization snapshot is legacy quarantined
+   state and cannot be automatically reconciled. Confirm the provider outcome,
+   prevent re-execution, and escalate for an explicit operator disposition.
+
+#### Rollout and rollback decision
+
+- Before rollout, record the query result sets above and quiesce governed
+  workers if any migration is pending.
+- Deploy migrations 044-049 in filename order, run the inspection, then deploy
+  the current writer and inspect again.
+- Migration 049 supports the immediately previous receipt writer only when its
+  output contains a valid source metric and the full relationship resolves.
+- Keep schema migrations in place during application rollback. If the rollback
+  target predates that compatibility contract, quiesce governed effects first;
+  otherwise it may create uncertain work or fail every promotion.
+- Do not complete rollout or rollback while there are unexplained invalid,
+  unverified, stale-started, or uncertain records. Preserve their rows and
+  correlated events as the recovery audit trail.
 
 ---
 

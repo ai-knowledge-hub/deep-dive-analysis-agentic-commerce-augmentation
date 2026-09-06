@@ -10,11 +10,11 @@ Implementation notes:
 - The runtime registry is exposed through `GET /agent-runs/registry`.
 - The Runs UI surfaces skills/tools for the selected run.
 
-For the current checkpoint and follow-up tracks, see [docs/agentification-checkpoint.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/agentification-checkpoint.md).
+For current work, see [the platform modernisation plan](../platform-modernisation-plan-v2.md).
 
 Do not use this RFC as the active backlog. It is retained to explain why the first agent-first data/runtime slice was shaped the way it was.
 
-This RFC defines the first implementation slice for the agent-first modular architecture described in [docs/agent-first-modular-architecture-v1.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/agent-first-modular-architecture-v1.md).
+This RFC defines the first implementation slice for the [agent-first modular architecture](../agent-first-modular-architecture-v1.md).
 
 The goal of this slice is not to complete the pivot. The goal is to introduce the minimum structural changes that unblock the pivot safely.
 
@@ -59,12 +59,12 @@ The current persistence layer gives us:
 
 Relevant files:
 
-- [shared/db/migrations/023_agent_runtime.sql](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/shared/db/migrations/023_agent_runtime.sql)
-- [shared/db/migrations/026_agent_events.sql](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/shared/db/migrations/026_agent_events.sql)
-- [shared/db/schema.sql](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/shared/db/schema.sql)
-- [api/routes/agent_runs.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/api/routes/agent_runs.py)
-- [application/services/agent_runtime/runtime/service.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/application/services/agent_runtime/runtime/service.py)
-- [application/services/agent_runtime/policy.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/application/services/agent_runtime/policy.py)
+- [agent runtime migration](../../shared/db/migrations/023_agent_runtime.sql)
+- [agent events migration](../../shared/db/migrations/026_agent_events.sql)
+- [canonical schema](../../shared/db/schema.sql)
+- [agent run routes](../../api/routes/agent_runs.py)
+- [runtime service](../../application/services/agent_runtime/runtime/service.py)
+- [runtime policy](../../application/services/agent_runtime/policy.py)
 
 ## Slice Goals
 
@@ -418,9 +418,9 @@ Backfill:
 
 Update:
 
-- [application/ports/deps.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/application/ports/deps.py)
+- [application ports](../../application/ports/deps.py)
 - runtime repositories under `infrastructure/db/agent/`
-- route request/response models in [api/routes/agent_runs.py](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/api/routes/agent_runs.py)
+- route request/response models in [agent run routes](../../api/routes/agent_runs.py)
 
 ### Migration D: tool-registry shim
 
@@ -471,7 +471,7 @@ This slice is complete when:
 After this slice, the next RFCs should be:
 
 1. machine authentication and scoped credentials
-2. skill registry and `SKILL.md` execution model
+2. skill registry and **SKILL.md** execution model
 3. harness profile execution model
 4. operator control-plane UX simplification
 5. protocol transport and browser/CLI fallback policy

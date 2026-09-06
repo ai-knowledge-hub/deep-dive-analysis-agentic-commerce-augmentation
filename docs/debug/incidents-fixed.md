@@ -54,7 +54,8 @@ Scope: incidents discovered during iterative dev/test in this cycle and already 
 - Symptom:
   - API error path:
     - `/brands/{brand_id}/products`
-    - stack ended in `infrastructure/db/clients.py:list_products`
+    - stack ended in
+      `historical-path:infrastructure/db/clients.py:list_products`
   - intermittent `sqlite3.InterfaceError`.
 - Root cause:
   - Shared singleton sqlite connection used across worker threads (`check_same_thread=False`) caused unsafe concurrent access.
@@ -170,7 +171,7 @@ Scope: incidents discovered during iterative dev/test in this cycle and already 
   - Added admin UI section to execute and review recent runs.
 - Key files:
   - `shared/db/migrations/018_loop_maintenance_runs.sql`
-  - `infrastructure/db/loop_maintenance_runs.py`
+  - `infrastructure/db/loop/loop_maintenance_runs.py`
   - `api/routes/admin.py`
   - `web/app/admin/page.tsx`
 - Pattern:
