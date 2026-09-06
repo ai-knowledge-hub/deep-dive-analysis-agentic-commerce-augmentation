@@ -1,5 +1,9 @@
 # Chat-Led Operator Console Spec
 
+Status: future reference specification
+Last verified: 2026-09-05
+Current behavior: `docs/operator-experience.md`
+
 This document defines the recommended operator experience for the platform as it evolves into an agent-first execution system.
 
 The core idea is:
@@ -211,7 +215,7 @@ On mobile, the chat becomes a bottom sheet or secondary tab.
 
 ## Route Strategy
 
-This spec builds on [docs/ui-control-plane-simplification-plan.md](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/docs/ui-control-plane-simplification-plan.md).
+This spec builds on [the UI simplification roadmap](ui-control-plane-simplification-plan.md).
 
 ### Primary routes
 
@@ -297,20 +301,20 @@ Chat behavior:
 
 ### Best current base for structured execution
 
-- [web/app/agent-runs/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/agent-runs/page.tsx)
+- [agent runs page](../web/app/agent-runs/page.tsx)
 
 This should become the foundation of `/runs`.
 
 ### Best current base for chat
 
-- [web/app/page.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/app/page.tsx)
-- [web/components/chat/ChatWindow.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/chat/ChatWindow.tsx)
+- [chat page](../web/app/page.tsx)
+- [chat window](../web/components/chat/ChatWindow.tsx)
 
 The chat UI should be reused, but repurposed from "consumer-style exploration chat" into "operator execution chat".
 
 ### Best current base for shared navigation
 
-- [web/components/layout/Sidebar.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/Sidebar.tsx)
+- [sidebar](../web/components/layout/Sidebar.tsx)
 
 This should be updated to reflect:
 
@@ -319,7 +323,7 @@ This should be updated to reflect:
 
 ### Best current base for summary header
 
-- [web/components/layout/DetailHeader.tsx](/Users/dessigeorgieva/Desktop/projects/deep-dive-analysis-agentic-commerce-augmentation/web/components/layout/DetailHeader.tsx)
+- [detail header](../web/components/layout/DetailHeader.tsx)
 
 This can evolve into the `Agent Briefing` area.
 

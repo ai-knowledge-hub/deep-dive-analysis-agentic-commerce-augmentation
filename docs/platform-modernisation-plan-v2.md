@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-08-25
+Last updated: 2026-09-05
 
 ## Purpose
 
@@ -440,11 +440,13 @@ Progress:
   auto-run outcome/result parity, immutable requested-model binding, exact
   effect-bound receipt-linked fulfillment, immutable audit authority, and
   executable mismatch, catalog-drift, historical-receipt reuse, migration
-  upgrades through already-applied 044 and 045 databases, coordinated model
-  substitution, race, replay, projection-mutation, and late-reconciliation
-  evidence
-  for the current sequential runtime. Legacy effect starts without the new
-  immutable evidence remain quarantined for operator resolution.
+  upgrades through migrations 044-049, coordinated model substitution, race,
+  replay, projection-mutation, and late-reconciliation evidence for the current
+  sequential runtime. PR #120 also adds immutable governed lab-promotion
+  receipts, transaction-time tenant/experiment/variant/metric relationship
+  checks, and an old-writer compatibility window before strict receipt-scope
+  enforcement. Legacy effect starts without the new immutable evidence remain
+  quarantined for operator resolution.
 
 Focused research on OpenAI, Claude Code, recursive language and agent harness
 papers, and the local Hermes and Prime Agent implementations is recorded in

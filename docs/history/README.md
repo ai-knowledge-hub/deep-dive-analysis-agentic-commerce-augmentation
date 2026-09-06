@@ -3,7 +3,10 @@
 Status: historical
 Last updated: 2026-05-06
 
-These documents are retained for rationale, prior UX assumptions, and migration context. They are not the active implementation plan. For current build direction, start with `../README.md` and `../agentification-checkpoint.md`.
+These documents are retained for rationale, prior UX assumptions, and
+migration context. They are not the active implementation plan. For current
+build direction, start with `../README.md` and
+`../platform-modernisation-plan-v2.md`.
 
 ## Retained History
 
@@ -14,4 +17,6 @@ These documents are retained for rationale, prior UX assumptions, and migration 
 - `pitch-deck.html`: presentation artifact, not engineering guidance.
 
 Removed obsolete history:
-- `future-roadmap.md`: deleted on 2026-05-04 because the active backlog now lives in `../agentification-checkpoint.md`.
+- `historical-path:docs/history/future-roadmap.md`: deleted on 2026-05-04; the
+  active backlog now lives in
+  `../platform-modernisation-plan-v2.md`.

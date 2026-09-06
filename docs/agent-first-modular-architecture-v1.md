@@ -194,7 +194,7 @@ operator_summary_template: >
   Optimized representation for product {product_id} and requested validation.
 ```
 
-Skills should live in versioned specs plus optional `SKILL.md` instructions where a model needs procedural guidance.
+Skills should live in versioned specs plus optional **SKILL.md** instructions where a model needs procedural guidance.
 
 ### 5. Tools
 
@@ -439,7 +439,7 @@ OpenClaw skills are not just metadata; they contain execution guidance, constrai
 
 We should adopt:
 
-- `SKILL.md` as a durable operator/model instruction artifact
+- **SKILL.md** as a durable operator/model instruction artifact
 - explicit requirements and install prerequisites
 - versioned, reviewable skill definitions
 

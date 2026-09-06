@@ -392,25 +392,25 @@ Remaining build tracks:
 
 Start with `docs/README.md` for the canonical documentation index and status map.
 
-Current planning references:
+Canonical plan and current implementation guides:
 
-- `docs/agentification-checkpoint.md`
+- `docs/platform-modernisation-plan-v2.md`
+- `docs/agentic-layer.md`
+- `docs/app-architecture.md`
+- `docs/operator-experience.md`
+
+Reference designs and evaluation:
+
 - `docs/agent-first-modular-architecture-v1.md`
 - `docs/agent-capability-map.md`
 - `docs/external-agent-job-contracts.md`
-- `docs/codebase-cleanup-and-modularisation-plan.md`
-- `docs/agentic-layer.md`
-- `docs/operator-experience.md`
-- `docs/user-testing-plan.md`
+- `docs/chat-led-operator-console-spec.md`
 - `docs/ui-control-plane-simplification-plan.md`
+- `docs/user-testing-plan.md`
 - `docs/ui-style-direction.md`
 
-Reference specs:
-
-- `docs/chat-led-operator-console-spec.md`
-
-Historical or candidate-historical docs are still retained, but should not be treated
-as the current implementation plan without checking the checkpoint first.
+Historical documents remain available for rationale but are not current
+authority. The index records their supersession explicitly.
 
 ---
 

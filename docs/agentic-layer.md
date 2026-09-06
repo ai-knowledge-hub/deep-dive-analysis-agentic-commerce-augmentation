@@ -3,6 +3,7 @@
 This document describes the **agent operator mode**: a governed orchestration layer that can run the lab protocol end-to-end (or partially) under explicit constraints.
 
 Status: **Partially implemented (v0 Runtime Core complete; end-to-end autonomy still in progress)**.
+Last verified: 2026-09-05 against `origin/main@96a1c23` (includes PR #120).
 Implemented now:
 - Agent run and action persistence (`agent_runs`, `agent_actions`)
 - Immutable event persistence (`agent_events`) for runtime + operator lifecycle events
@@ -21,6 +22,12 @@ Implemented now:
   compare-and-swap projection recovery, and write-locked recovery-action sequence
   plus retry-identity allocation that preserves concurrent valid operator commands,
   and linked fulfillment receipts
+- Governed lab promotion commits analytics and decision projections with one
+  immutable receipt after revalidating tenant, experiment, variant, and source
+  metric relationships inside the final write transaction
+- Approval/effect schema evolution through migrations 044-049, including
+  upgrade paths for already-applied migrations and an old-writer compatibility
+  window before strict governed-receipt scope enforcement
 - Run-level event feed API and timeline deep-links in Agent Runs
 - Experiment entry integration (`Experiments` -> `Agent operator mode` panel)
 - Autonomous tick worker service (`AgentRuntimeWorkerService`) for bounded batch execution

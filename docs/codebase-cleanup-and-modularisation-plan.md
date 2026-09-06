@@ -1,9 +1,12 @@
 # Codebase Cleanup And Modularisation Plan
 
-Status: current
+Status: historical
 Last updated: 2026-05-06
+Superseded by: `docs/platform-modernisation-plan-v2.md`
 
-This is the working plan for reducing source entanglement and making the agent-first platform easier for humans and coding agents to change safely. The goal is not a decorative refactor. The goal is less context drag, clearer ownership, smaller active files, and fewer stale paths for future work to trip over.
+This is the completed cleanup sequence retained for rationale. New
+modularisation work belongs in the canonical modernisation plan or a scoped
+ticket, not in this historical backlog.
 
 ## Principles
 
@@ -35,7 +38,7 @@ Use these labels when auditing files and folders:
 | `scripts/seed/*` | `canonical` | Real seed implementations. | Make Makefile/docs call these directly. |
 | `scripts/ops/*` | `canonical` | Real runtime worker/scheduler/maintenance implementations. | Make Makefile/docs call these directly. |
 | root `scripts/*.py` wrappers | `delete-now` | Thin wrappers around canonical modules with references migrated. | Removed in PR2 after Makefile/docs/CI were canonicalized; `make script-entrypoint-check` blocks reintroduction. |
-| `docs/agentification-checkpoint.md` | `current` | Active execution checkpoint. | Keep concise; split history out if it grows. |
+| `docs/agentification-checkpoint.md` | `historical` | First agentification checkpoint. | Superseded by Plan v2. |
 | `docs/agent-first-modular-architecture-v1.md` | `current` | Active target architecture. | Keep. |
 | `docs/operator-experience.md` | `current` | Current operator/user guide for the agentic control plane. | Keep as the canonical UX guide and update after each major UI slice. |
 | `docs/chat-led-operator-console-spec.md` | `current/reference` | Still relevant to control-plane UX. | Keep as design reference; trim only after UI settles. |
@@ -98,7 +101,7 @@ Docs target:
 ```text
 docs/
   README.md                      # canonical doc index and statuses
-  agentification-checkpoint.md    # active checkpoint only
+  agentification-checkpoint.md    # historical first-pass checkpoint
   agent-first-modular-architecture-v1.md
   operator-experience.md          # current operator/user guide
   agentic-layer.md
@@ -142,7 +145,10 @@ docs/
 - The next Agent Runs slice extracted budget guardrails, counters, and the action table into `web/components/agent-runs/RunActionsPanel.tsx`.
 - The final slice in this PR extracted registry-aware selected-action details into `web/components/agent-runs/SelectedActionDetailPanel.tsx`.
 - The Operator Chat split extracted summary, quick prompts, transcript rendering, command/recovery controls, and navigation/focus controls into smaller components under `web/components/agent/`.
-- The follow-up Operator Chat cleanup moved reusable chat labels, risk labels, recovery preferences, and command outcome formatting into `operatorChatLogic.ts`, removed unused duplicate prompt/type modules, and lowered the parent bloat cap.
+- The follow-up Operator Chat cleanup moved reusable chat labels, risk labels,
+  recovery preferences, and command outcome formatting into
+  `web/components/agent/operatorChatLogic.ts`, removed unused duplicate
+  prompt/type modules, and lowered the parent bloat cap.
 - The Interventions cleanup moved queue item types, risk/priority classification, and queue rendering sections into `web/components/interventions/`, reducing the page to routing, loading, command handlers, and layout.
 - Continue extracting deeper chat orchestration helpers only if the parent starts growing again.
 - Keep behavior unchanged and rely on existing Vitest coverage.

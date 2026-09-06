@@ -1,12 +1,15 @@
 # Agentification Checkpoint
 
-Status date: 2026-06-17
+Status: historical
+Snapshot date: 2026-06-17
+Superseded by: `docs/platform-modernisation-plan-v2.md`
 
 > This remains the detailed implementation snapshot for the first agentification
 > pass. The canonical forward execution plan is now
 > `docs/platform-modernisation-plan-v2.md`.
 
-This checkpoint is the working reference for the platform pivot from a primarily human-led experimentation lab into an agent-first commerce execution platform with a human control plane.
+This checkpoint preserves the first agentification pass. It is not a current
+backlog or implementation authority.
 
 ## Product Direction
 
@@ -83,7 +86,7 @@ The current implementation is still not a full OpenClaw-style autonomous assista
 
 Use these docs together:
 
-- `docs/agentification-checkpoint.md`: current checkpoint and next implementation tracks
+- `docs/agentification-checkpoint.md`: this historical checkpoint
 - `docs/README.md`: documentation index and active/historical status map
 - `docs/codebase-cleanup-and-modularisation-plan.md`: cleanup and modularisation sequence
 - `docs/agent-first-modular-architecture-v1.md`: target architecture

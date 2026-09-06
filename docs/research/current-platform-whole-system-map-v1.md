@@ -1,10 +1,35 @@
 # Current Platform Whole-System Map v1
 
-Status: ratified evidence-led architecture baseline
+Status: research snapshot; no longer the current implementation authority
 
 Date: 2026-08-25
+Last verified: 2026-09-05
+Current authority: `docs/platform-modernisation-plan-v2.md`,
+`docs/app-architecture.md`, and accepted governance contracts
 
-Scope: current repository, active refactor, and canonical planned architecture
+Scope: repository baseline at 2026-08-25 plus the bounded post-PR #120 delta
+below
+
+## Post-PR #120 architecture delta
+
+PR #120 completed the Slice 5 execution boundary that this map described as
+planned. The current sequential runtime now canonicalizes executable inputs
+before approval; persists exact approval decisions and immutable effect-start
+snapshots; consumes authorization atomically with lease, status, and action
+budget checks; records durable provider and governed-effect receipts; exposes
+tenant-authorized reconciliation for uncertain outcomes; and protects
+projection recovery and retry/change-plan identity under concurrent writes.
+
+Migrations 044-049 carry that authority and receipt model across old/new writer
+skew. Governed lab promotion additionally revalidates tenant, experiment,
+variant, and source-metric relationships at the final commit boundary. The
+runtime remains sequential: workflow graph execution, task attempts, parallel
+subagents, general evidence/result/completion semantics, and automatic harness
+promotion are not implemented by this delta.
+
+The remainder of this document is the ratified 2026-08-25 snapshot. Where it
+calls exact approval planned or treats the agentification checkpoint as current,
+the delta above and the authoritative documentation index take precedence.
 
 ## 1. Executive decision
 
@@ -804,7 +829,7 @@ The architecture is ready for the next autonomy tier only when:
 - Product purpose and current capability: `README.md`
 - Current module map: `docs/app-architecture.md`
 - Canonical target and delivery sequence: `docs/platform-modernisation-plan-v2.md`
-- Current refactor/build checkpoint: `docs/agentification-checkpoint.md`
+- Current execution plan: `docs/platform-modernisation-plan-v2.md`
 - Agent runtime direction: `docs/agentic-layer.md`
 - Learning loop: `docs/architecture-learning-loop.md`
 - External integrations and deployment: `docs/external-integrations.md`,
