@@ -10,7 +10,7 @@ Baseline: `origin/main@96a1c23` (includes PR #120)
 |-------------|--------------|---------|-------|
 | **Local** | `openrouter` | `runtime-path:./tmp/local.db` | Requires `OPENROUTER_API_KEY`. Avoids Gemini quota. |
 | **Dev / Preview** | `gemini` | `runtime-path:./tmp/empowerment.dev.db` | Limited `GOOGLE_API_KEY`, telemetry optional. |
-| **Production** | `gemini` | `/var/lib/app/prod.db` | Full telemetry, rate-limit logging. |
+| **Production** | `gemini` | `runtime-path:/var/lib/app/prod.db` | Full telemetry, rate-limit logging. |
 
 Copy the relevant section from `.env.example` into `.env.local` (local) or configure as platform secrets (dev/prod).
 

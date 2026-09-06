@@ -245,7 +245,12 @@ The agentic module is implemented as an orchestration layer over the same experi
 ### Data model
 - `agent_runs` stores scope, objective, capability allow-list, versions, budgets, approval policy, state/status, and lock/heartbeat metadata.
 - `agent_actions` stores ordered action queue entries with status, rationale, confidence, inputs/outputs hashes, and artifact anchors.
-- `agent_events` stores immutable lifecycle events for audit/replay (`proposed/approved/rejected/executing/executed/failed` + run control events).
+- `agent_events` stores lifecycle events for audit/replay
+  (`proposed/approved/rejected/executing/executed/failed` plus run-control
+  events). Normal application repositories append rather than update these
+  rows, but the database does not prevent update or deletion and run deletion
+  cascades to its events. Database-enforced tamper-evident, append-only audit
+  remains planned under `SEC-18`.
 - approval decision rows preserve the immutable approved binding, canonical
   executable payload, deciding authority, expiry, revocation, and fulfillment.
 - approval effect execution rows preserve single-use effect identity and an
