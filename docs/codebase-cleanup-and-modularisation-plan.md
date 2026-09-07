@@ -162,12 +162,12 @@ docs/
 - The command service slice moved reusable command preflight helpers into `application/services/agent_runtime/commands/preflight.py` and recovery template, retry metadata, rollback, and compensating-action helpers into `application/services/agent_runtime/commands/recovery.py`.
 - The route-thinning slice wired command routes to the command service for change-plan proposals, retry proposals, and action decisions, then lowered the route bloat cap to prevent regression.
 - The recovery split moved recovery templates, rollback guidance, compensating actions, change-plan proposal creation, and retry proposal creation into `application/services/agent_runtime/commands/recovery.py`, with dedicated bloat caps for both command and recovery services.
-- The decision split moved action approve/reject mutation and audit-event writing into `application/services/agent_runtime/commands/decisions.py`, leaving `commands/preflight.py` focused on preflight and command receipts.
+- The decision split moved action approve/reject mutation and audit-event writing into `application/services/agent_runtime/commands/decisions.py`, leaving `application/services/agent_runtime/commands/preflight.py` focused on preflight and command receipts.
 - The run-creation split moved initial plan/action seeding into `application/services/agent_runtime/runs.py`, kept registry materialization in `api/utils/agent_registry_runtime.py` because it touches infrastructure, and left `api/routes/agent_runs.py` as request/principal handling plus read endpoints.
 - The registry approval split moved receipt signing, receipt verification, and ownership preflight into `api/utils/agent_registry_approvals.py`, leaving `api/routes/agent_runs_registry.py` focused on registry endpoints.
-- The capability support split moved shared variant selection, validation readiness, copy-revision lookup, and numeric helpers into `application/services/agent_runtime/capabilities/support.py`, with shared runtime types in `capabilities/types.py`.
-- The registry catalog split moved static tool/capability specs, policy profiles, and recovery template definitions into `application/services/agent_runtime/registry/catalog.py`, leaving `registry/contracts.py` focused on contract serialization, fingerprinting, version context, and schema validation.
-- The runtime audit split moved run/action event construction into `application/services/agent_runtime/runtime/audit.py`, leaving `runtime/service.py` focused on lock, policy, execution, and status transitions.
+- The capability support split moved shared variant selection, validation readiness, copy-revision lookup, and numeric helpers into `application/services/agent_runtime/capabilities/support.py`, with shared runtime types in `application/services/agent_runtime/capabilities/types.py`.
+- The registry catalog split moved static tool/capability specs, policy profiles, and recovery template definitions into `application/services/agent_runtime/registry/catalog.py`, leaving `application/services/agent_runtime/registry/contracts.py` focused on contract serialization, fingerprinting, version context, and schema validation.
+- The runtime audit split moved run/action event construction into `application/services/agent_runtime/runtime/audit.py`, leaving `application/services/agent_runtime/runtime/service.py` focused on lock, policy, execution, and status transitions.
 - The package reorganisation moved capability, command, registry, and runtime modules into subpackages while preserving package-level re-exports for existing imports.
 - The command orchestration split moved command context loading, preflight response assembly, command receipt writing, recovery/retry mutation dispatch, decisions, and runtime command dispatch into `application/services/agent_runtime/commands/service.py`, leaving `api/routes/agent_runs_commands.py` as HTTP translation only.
 - Continue extracting only if command-specific flows grow enough to need separate services.
@@ -177,7 +177,7 @@ docs/
 
 - Lower bloat thresholds after hotspots are split.
 - Add a duplicate-script check once wrappers are removed.
-- Add an architecture guardrail that keeps command routes behind `commands/service.py` instead of re-importing low-level command internals.
+- Add an architecture guardrail that keeps command routes behind `application/services/agent_runtime/commands/service.py` instead of re-importing low-level command internals.
 - Add doc status enforcement if docs continue growing.
 
 ## Verification Baseline

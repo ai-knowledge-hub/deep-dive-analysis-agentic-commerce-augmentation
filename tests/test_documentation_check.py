@@ -111,6 +111,25 @@ def test_historical_document_cannot_declare_current(tmp_path: Path):
     assert "docs/old.md: historical document declares current status" in errors
 
 
+def test_historical_html_document_cannot_declare_current(tmp_path: Path):
+    row = _inventory_row(
+        "docs/history/old.html", category="historical", status="historical"
+    )
+    _minimal_root(tmp_path)
+    _append_inventory_rows(tmp_path, row)
+    _write(
+        tmp_path,
+        "docs/history/old.html",
+        "<html><body><p><strong>Status:</strong> current canonical plan</p></body></html>",
+    )
+
+    errors = documentation_check.check_documentation(tmp_path)
+
+    assert (
+        "docs/history/old.html: historical document declares current status" in errors
+    )
+
+
 def test_non_historical_document_requires_verification_metadata(tmp_path: Path):
     row = _inventory_row("docs/current.md", verified="—")
     _minimal_root(tmp_path)
@@ -363,6 +382,8 @@ def test_code_spanned_missing_repository_path_fails(tmp_path: Path):
     [
         ("application/removed.py:handler", "application/removed.py"),
         ("data/removed.json", "data/removed.json"),
+        ("new_package/Makefile", "new_package/Makefile"),
+        ("new_package/missing.py", "new_package/missing.py"),
         ("scripts/removed.sh", "scripts/removed.sh"),
         ("application/removed_directory", "application/removed_directory"),
         ("Makefile", "Makefile"),
@@ -452,6 +473,25 @@ def test_document_relative_code_spanned_path_resolves_from_source(tmp_path: Path
     assert documentation_check.check_documentation(tmp_path) == []
 
 
+def test_absolute_code_spanned_path_requires_explicit_notation(tmp_path: Path):
+    row = _inventory_row("docs/deployment-guide.md")
+    _minimal_root(tmp_path)
+    _append_inventory_rows(tmp_path, row)
+    _write(
+        tmp_path,
+        "docs/deployment-guide.md",
+        "`/missing/runtime/database.db`\n",
+    )
+
+    errors = documentation_check.check_documentation(tmp_path)
+
+    assert any(
+        "absolute code-spanned path requires runtime-path:" in error
+        and "/missing/runtime/database.db" in error
+        for error in errors
+    )
+
+
 def test_document_relative_directory_resolves_from_source(tmp_path: Path):
     row = _inventory_row("docs/guide/current.md")
     _minimal_root(tmp_path)
@@ -487,14 +527,20 @@ def test_intentional_historical_code_path_has_explicit_notation(tmp_path: Path):
     assert not any("application/removed.py" in error for error in errors)
 
 
-def test_runtime_code_path_has_explicit_non_repository_notation(tmp_path: Path):
+@pytest.mark.parametrize(
+    "runtime_path",
+    ["runtime-path:./tmp/generated.db", "runtime-path:/var/lib/app/prod.db"],
+)
+def test_runtime_code_path_has_explicit_non_repository_notation(
+    tmp_path: Path, runtime_path: str
+):
     row = _inventory_row("docs/deployment-guide.md")
     _minimal_root(tmp_path)
     _append_inventory_rows(tmp_path, row)
     _write(
         tmp_path,
         "docs/deployment-guide.md",
-        "`runtime-path:./tmp/generated.db`\n",
+        f"`{runtime_path}`\n",
     )
 
     assert documentation_check.check_documentation(tmp_path) == []

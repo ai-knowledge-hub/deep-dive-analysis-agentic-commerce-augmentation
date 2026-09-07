@@ -6,6 +6,7 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -105,6 +106,17 @@ REPOSITORY_FILE_SUFFIXES = frozenset(
     }
 )
 NON_REPOSITORY_CODE_PATH_PREFIXES = ("historical-path:", "runtime-path:")
+EXTERNAL_FILESYSTEM_ROOTS = (
+    "/etc/",
+    "/home/",
+    "/opt/",
+    "/private/",
+    "/tmp/",
+    "/Users/",
+    "/usr/",
+    "/var/",
+)
+STATUS_TEXT_SUFFIXES = frozenset({".htm", ".html", ".md", ".txt"})
 INVENTORY_ROW = re.compile(r"^\|\s*`(docs/[^`]+)`\s*\|")
 INLINE_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 REFERENCE_LINK = re.compile(r"(?m)^\s*\[[^\]]+\]:\s*(<[^>]+>|\S+)")
@@ -115,6 +127,55 @@ STATUS_FIELD = re.compile(
     r"(?:\*\*|__)?\s*:\s*(.+?)\s*$"
 )
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+HTML_BLOCK_TAGS = frozenset(
+    {
+        "article",
+        "aside",
+        "body",
+        "br",
+        "div",
+        "footer",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "li",
+        "main",
+        "p",
+        "section",
+        "tr",
+    }
+)
+
+
+class _HtmlVisibleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag in {"script", "style"}:
+            self._ignored_depth += 1
+        elif self._ignored_depth == 0 and tag in HTML_BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"} and self._ignored_depth:
+            self._ignored_depth -= 1
+        elif self._ignored_depth == 0 and tag in HTML_BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth == 0:
+            self.parts.append(data)
+
+    def text(self) -> str:
+        return "".join(self.parts)
 
 
 @dataclass(frozen=True)
@@ -186,6 +247,16 @@ def _normalized_statuses(content: str) -> list[str]:
     ]
 
 
+def _status_text(document_path: Path) -> str:
+    content = document_path.read_text(encoding="utf-8")
+    if document_path.suffix.lower() not in {".htm", ".html"}:
+        return content
+    parser = _HtmlVisibleTextParser()
+    parser.feed(content)
+    parser.close()
+    return parser.text()
+
+
 def _repository_code_path(
     root: Path, source: Path, value: str
 ) -> tuple[str, Path] | None:
@@ -195,15 +266,31 @@ def _repository_code_path(
     if any(token in candidate for token in ("*", "{", "}", " ", "->")):
         return None
     explicit_relative = candidate.startswith(("./", "../"))
+    trailing_slash = candidate.endswith("/")
     candidate = re.split(r"[:#]", candidate, maxsplit=1)[0].rstrip("/")
     if not candidate:
         return None
     candidate_path = Path(candidate)
-    if candidate in ROOT_REPOSITORY_FILES or candidate.startswith(
+    file_like = bool(candidate_path.suffix) or (
+        candidate_path.name in ROOT_REPOSITORY_FILES
+    )
+    if candidate_path.is_absolute():
+        if not (
+            candidate.startswith(EXTERNAL_FILESYSTEM_ROOTS)
+            or file_like
+            or trailing_slash
+        ):
+            return None
+        target = candidate_path
+    elif candidate in ROOT_REPOSITORY_FILES or candidate.startswith(
         tuple(f"{part}/" for part in REPOSITORY_DIRECTORIES)
     ):
         target = root / candidate_path
-    elif explicit_relative or (
+    elif explicit_relative:
+        target = source.parent / candidate_path
+    elif "/" in candidate and (file_like or trailing_slash):
+        target = root / candidate_path
+    elif (
         "/" not in candidate
         and candidate_path.suffix.lower() in REPOSITORY_FILE_SUFFIXES
     ):
@@ -300,13 +387,11 @@ def check_documentation(root: Path) -> list[str]:
         document_path = root / entry.path
         if (
             entry.category == "historical"
-            and document_path.suffix == ".md"
+            and document_path.suffix.lower() in STATUS_TEXT_SUFFIXES
             and document_path.is_file()
             and any(
                 status.startswith("current")
-                for status in _normalized_statuses(
-                    document_path.read_text(encoding="utf-8")
-                )
+                for status in _normalized_statuses(_status_text(document_path))
             )
         ):
             errors.append(f"{entry.path}: historical document declares current status")
@@ -353,16 +438,22 @@ def check_documentation(root: Path) -> list[str]:
                 root
             ):
                 relative_source = source.relative_to(root).as_posix()
-                errors.append(
-                    f"{relative_source}: referenced repository path escapes the "
-                    f"repository {repository_path!r}"
-                )
+                if Path(repository_path).is_absolute():
+                    errors.append(
+                        f"{relative_source}: absolute code-spanned path requires "
+                        f"runtime-path: or historical-path: notation {repository_path!r}"
+                    )
+                else:
+                    errors.append(
+                        f"{relative_source}: referenced repository path escapes the "
+                        f"repository {repository_path!r}"
+                    )
             elif repository_target is not None and not repository_target.exists():
                 relative_source = source.relative_to(root).as_posix()
                 errors.append(
                     f"{relative_source}: referenced repository path does not exist "
                     f"{repository_path!r}; use historical-path: for an intentional "
-                    "former location"
+                    "former location or runtime-path: for a non-repository location"
                 )
     return errors
 
