@@ -426,6 +426,12 @@ approval boundary and remain in force.
 
 ### `task_results`
 
+ADR 0002 refines this logical record into the normative
+`workflow.task-result` schema and defines the associated evidence, independent
+completion-criteria, completion-decision, and projection contracts. The fields
+below remain the persistence target; adapters must preserve the stronger ADR
+0002 scope, freshness, receipt, coverage, and authority semantics.
+
 | Field | Contract |
 | --- | --- |
 | `id`, `tenant_id`, `workflow_id`, `task_id`, `attempt_id` | Provenance chain. |
