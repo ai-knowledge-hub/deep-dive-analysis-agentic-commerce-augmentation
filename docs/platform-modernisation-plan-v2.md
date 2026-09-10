@@ -487,6 +487,11 @@ Phase 1 remains open. The next reviewable sequence is:
    freshness, provenance, missing coverage, partial failure, receipt status,
    and projection lag explicit. A successful tool call, child result, exhausted
    limit, or UI summary cannot imply objective completion.
+   Slice 6a is defined in ADR 0002 with executable pure-domain contracts for
+   exact evidence provenance and freshness, coordinator-validated task results,
+   independently authoritative completion criteria, deterministic completion
+   evaluation, canonical fingerprints, and lag-aware projections. Durable
+   ledgers, runtime integration, and product projections remain Slices 6b–6d.
 7. **Sequential workflow compatibility and framework spike.** Represent one
    existing ordered agent run as an immutable workflow revision and tasks,
    dual-project its events to current APIs, and compare an internal kernel,
