@@ -22,9 +22,10 @@ durable agent workflow. If those representations become completion authority,
 the system can report success while evidence is partial, stale, unavailable,
 cross-scoped, contradictory, or still awaiting an external receipt.
 
-This ADR defines the framework-independent Slice 6a domain boundary. Durable
-ledgers, coordinator integration, legacy projection migration, and APIs follow
-in later Slice 6 increments.
+This ADR defines the framework-independent Slice 6a domain boundary. Slice 6b
+adds its append-only SQLite ledgers and trusted host issuance path. Coordinator
+lifecycle integration, legacy projection migration, and APIs follow in later
+Slice 6 increments.
 
 ## Decision
 
@@ -133,6 +134,15 @@ resolves them against the independently supplied criteria and evidence records.
 Rejected and superseded attempt results remain audit evidence but cannot become
 inputs to completion.
 
+Result evidence is also causally ordered. An available observation must occur
+no later than result creation; a result cannot retrospectively claim an
+observation that did not yet exist. Coordinator validation, whether acceptance
+or rejection, must occur no earlier than the durable recording time of every
+cited evidence record. Equality at either boundary is valid. This permits a
+source observation and result to be ingested together while preventing a
+coordinator attestation from depending on evidence absent from durable host
+state at validation time.
+
 ## Completion Criteria and Decision
 
 `CompletionCriteria` is the independent oracle. It pins:
@@ -154,7 +164,8 @@ pins the exact criteria digest and authority hash plus one task definition for
 every required task. Accepted-result attestations are a separate optional set;
 their absence represents a genuinely missing result rather than invalid host
 state. There is intentionally no worker-payload parser for this host object.
-Durable issuance and storage follow in Slice 6b/6c.
+Slice 6b persists and issues this snapshot only from host-read contracts and
+accepted durable results.
 
 The deterministic evaluator fails closed unless:
 
@@ -165,13 +176,16 @@ The deterministic evaluator fails closed unless:
    task and attempt.
 4. The result's evidence-set digest matches the canonical content of every
    referenced evidence record; same-ID content substitution fails closed.
-5. The evidence source is permitted, the minimum count is met using distinct
+5. Every available evidence observation predates or equals result creation,
+   and every coordinator-validated result postdates or equals durable recording
+   of all evidence it cites.
+6. The evidence source is permitted, the minimum count is met using distinct
    source observations, the observation is current under both validity and
    maximum-age rules, and any required receipt is verified. Receipt-bearing
    records sharing one receipt within the same source type, source identity,
    and source version are rejected as duplicates even when their evidence IDs
    differ; locally scoped receipt values may repeat across source namespaces.
-6. No required coverage is missing, unavailable, contradictory, stale, or
+7. No required coverage is missing, unavailable, contradictory, stale, or
    unverified.
 
 The resulting `CompletionDecision` records accepted result IDs, evidence IDs,
@@ -218,6 +232,9 @@ not infer completion from action, attempt, job, receipt, or run projections.
     values; completion must match the host-read authority snapshot.
 15. Multiple records of one source observation cannot inflate an evidence
     cardinality requirement.
+16. A result cannot cite an observation made after result creation, and a
+    coordinator cannot validate a result before all cited evidence is durably
+    recorded.
 
 ## Failure-Space Baseline
 
@@ -228,15 +245,16 @@ not infer completion from action, attempt, job, receipt, or run projections.
 | Receipt | not required, pending, verified, rejected, uncertain |
 | Result | pending, accepted, rejected; succeeded, partial, failed, canceled |
 | Relationship | missing edge, coordinated deletion, valid substitution, duplicate |
-| Time | before observation, within validity, at expiry, after expiry, late arrival |
+| Time | observation before/at/after result creation; record before/at/after validation; within validity, at expiry, after expiry, late arrival |
 | Concurrency | duplicate result, competing accepted attempts, replan during evaluation |
 | Projection | current, lagging, leading, decision-digest mismatch |
 | Version | supported, unknown, old/new producer-consumer skew |
 | Representation | canonical, omitted/unknown field, hostile leaf subtype |
 
-The current Slice 6a tests cover the pure-domain portions of this space.
-Persistence interleavings, migration compatibility, concurrent commits, and API
-projection behavior remain acceptance requirements for Slices 6b–6d.
+Slice 6a tests cover the pure-domain portions of this space. Slice 6b adds
+restart, idempotency, migration, immutable-ledger, relationship, corruption,
+and host-issuance coverage. Coordinator commit concurrency and API projection
+behavior remain acceptance requirements for Slices 6c–6d.
 
 ## Representative Scenarios
 
@@ -289,9 +307,6 @@ event makes the projection current without changing the completion decision.
 
 ## Deferred Work
 
-- Slice 6b: append-only evidence, result, criteria, authority snapshot, and
-  decision persistence; trusted snapshot issuance, command idempotency,
-  migrations, and rollback compatibility.
 - Slice 6c: coordinator validation, atomic completion commit, task/workflow
   lifecycle integration, replanning and cancellation concurrency.
 - Slice 6d: API and UI projections, projection repair, metrics, mutation tests,
@@ -303,6 +318,37 @@ event makes the projection current without changing the completion decision.
 - Dynamic fan-out, parallel workers, deterministic joins, and subagent context
   capsules remain out of scope until the sequential compatibility spike.
 
+## Slice 6b implementation record
+
+As of 2026-09-12, SQLite migration
+`shared/db/migrations/050_workflow_outcome_ledger.sql` stores
+append-only command receipts, evidence, results, completion contracts,
+host-issued authority snapshots, deterministic decisions, and their exact
+input bindings. Application ports remain storage-agnostic. Reads reconstruct
+canonical domain values and fail on digest, scope, relationship, or denormalized
+column disagreement. This ledger does not reinterpret or mutate the current
+`agent_runs.status`; lifecycle integration remains Slice 6c.
+
+Privileged outcome writes are not exposed through the general `AppDeps`
+container. The SQLite adapter must be constructed with an exact host authority
+policy, and it rechecks command authority for coordinator-validated results,
+criteria publication, snapshot issuance, and completion decisions at the
+transaction boundary. Normal worker composition therefore cannot obtain an
+unbound authority writer.
+
+Migration 050 is an expand-only migration: the previous application version
+ignores the new tables, so application rollback does not require dropping
+evidence. Once outcome artifacts exist, their workflow row is intentionally
+protected by `ON DELETE RESTRICT`; rollback procedures must retain the ledger
+and must not restore destructive run deletion. SQLite serializes each artifact,
+its command receipt, and relationship bindings with `BEGIN IMMEDIATE`.
+
+A future PostgreSQL adapter must preserve the same port and canonical payloads,
+digests, uniqueness keys, foreign-key relationships, immutable-write guards,
+and transaction boundaries. PostgreSQL row or advisory locking may replace
+SQLite's single-writer lock, but it may not weaken exact idempotency, trusted
+snapshot issuance, or read-time reconstruction checks.
+
 ## Acceptance Criteria
 
 - Canonical round-trip fixtures and stable digests exist for all authoritative
@@ -310,6 +356,8 @@ event makes the projection current without changing the completion decision.
 - Unknown/omitted fields, hostile leaf subtypes, mutable timezones, invalid
   lifecycle combinations, and relationship substitutions fail closed.
 - Removing required coverage from a result cannot shrink independent criteria.
+- Evidence observed after result creation or recorded after coordinator
+  validation cannot be persisted as support or produce `complete`.
 - Missing, stale, unavailable, contradictory, partial, failed, canceled,
   unverified, duplicate, and cross-scope states cannot produce `complete`.
 - A lagging projection cannot display completion.

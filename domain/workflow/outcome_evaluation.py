@@ -241,6 +241,7 @@ def _index_results(
             raise OutcomeContractError(
                 "result evidence_digest must match exact evidence contents"
             )
+        _require_causal_result_evidence(result, bound_evidence)
         if result.created_at > evaluated_at or (
             result.validated_at is not None and result.validated_at > evaluated_at
         ):
@@ -282,6 +283,20 @@ def _resolve_result_evidence(
             )
         resolved.append(item)
     return tuple(resolved)
+
+
+def _require_causal_result_evidence(
+    result: TaskResult, evidence: tuple[EvidenceRecord, ...]
+) -> None:
+    for item in evidence:
+        if item.observed_at is not None and item.observed_at > result.created_at:
+            raise OutcomeContractError(
+                "result cannot cite evidence observed after result creation"
+            )
+        if result.validated_at is not None and item.recorded_at > result.validated_at:
+            raise OutcomeContractError(
+                "result cannot cite evidence recorded after result validation"
+            )
 
 
 def _require_authoritative_result(

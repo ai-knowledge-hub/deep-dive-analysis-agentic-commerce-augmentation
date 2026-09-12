@@ -59,6 +59,13 @@ from domain.workflow.outcome_serialization import (
     task_result_payload,
 )
 from domain.workflow.outcome_evaluation import evaluate_completion
+from domain.workflow.outcome_authority_serialization import (
+    COMPLETION_AUTHORITY_SNAPSHOT_CONTRACT,
+    completion_authority_snapshot_digest,
+    completion_authority_snapshot_from_payload,
+    completion_authority_snapshot_payload,
+)
+from domain.workflow.outcome_authority import HostCompletionAuthority
 from domain.workflow.outcomes import (
     COMPLETION_CRITERIA_CONTRACT,
     COMPLETION_DECISION_CONTRACT,
@@ -93,6 +100,7 @@ __all__ = [
     "APPROVAL_ENVELOPE_SCHEMA_VERSION",
     "COMPLETION_CRITERIA_CONTRACT",
     "COMPLETION_DECISION_CONTRACT",
+    "COMPLETION_AUTHORITY_SNAPSHOT_CONTRACT",
     "EVIDENCE_CONTRACT",
     "OUTCOME_SCHEMA_VERSION",
     "RESULT_CONTRACT",
@@ -121,6 +129,7 @@ __all__ = [
     "EvidenceProvenance",
     "EvidenceRecord",
     "EvidenceRequirement",
+    "HostCompletionAuthority",
     "NativeTargetIdentity",
     "OutcomeContractError",
     "PrincipalType",
@@ -149,6 +158,9 @@ __all__ = [
     "completion_decision_digest",
     "completion_decision_from_payload",
     "completion_decision_payload",
+    "completion_authority_snapshot_digest",
+    "completion_authority_snapshot_from_payload",
+    "completion_authority_snapshot_payload",
     "create_approval_request",
     "evidence_digest",
     "evidence_from_payload",
