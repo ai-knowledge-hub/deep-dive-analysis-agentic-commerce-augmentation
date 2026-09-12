@@ -6,7 +6,8 @@ from typing import Any
 
 from domain.workflow.outcome_authority import HostCompletionAuthority
 from infrastructure.db.core.connection import get_connection
-from infrastructure.db.workflow import outcome_reads, outcome_writes
+import infrastructure.db.workflow.outcome_reads as outcome_reads
+import infrastructure.db.workflow.outcome_writes as outcome_writes
 
 
 class SQLiteWorkflowOutcomeLedger:

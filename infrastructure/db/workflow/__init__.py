@@ -1,5 +1,5 @@
 """Workflow persistence adapters."""
 
-from infrastructure.db.workflow import outcome_ledger
+import infrastructure.db.workflow.outcome_ledger as outcome_ledger
 
 __all__ = ["outcome_ledger"]
