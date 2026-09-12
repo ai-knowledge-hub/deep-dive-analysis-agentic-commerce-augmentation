@@ -259,6 +259,16 @@ The agentic module is implemented as an orchestration layer over the same experi
 - governed effect receipts bind committed lab promotions to the exact approval,
   tenant, experiment, variant, and source metric. Those relationships are
   re-read under the final write transaction.
+- `workflow_*` outcome-ledger tables append canonical evidence, validated task
+  results, completion criteria and task definitions, host-issued authority
+  snapshots, deterministic completion decisions, and exact decision inputs.
+  Each artifact and its command receipt commit atomically; SQLite triggers
+  prevent update/delete and reject cross-scope relationship bindings.
+- The outcome ledger is not yet wired to the agent-run lifecycle or product
+  projection. A stored completion decision therefore does not change
+  `agent_runs.status`; that compatibility boundary remains Slice 6c. Its
+  privileged writer is deliberately absent from general `AppDeps` and is
+  created only with a host-owned authority policy.
 
 ### Recovery and projection integrity
 

@@ -30,6 +30,9 @@ from domain.workflow import (
     completion_criteria_digest,
     completion_criteria_from_payload,
     completion_criteria_payload,
+    completion_authority_snapshot_digest,
+    completion_authority_snapshot_from_payload,
+    completion_authority_snapshot_payload,
     completion_decision_digest,
     completion_decision_from_payload,
     completion_decision_payload,
@@ -526,6 +529,12 @@ def test_current_projection_reports_authoritative_completion():
             completion_decision_from_payload,
             completion_decision_digest,
         ),
+        (
+            _authority_snapshot(_criteria(), (_result(),)),
+            completion_authority_snapshot_payload,
+            completion_authority_snapshot_from_payload,
+            completion_authority_snapshot_digest,
+        ),
     ],
 )
 def test_schema_v1_round_trip_and_digest_are_stable(value, payload, parser, digest):
@@ -548,6 +557,12 @@ def test_schema_v1_round_trip_and_digest_are_stable(value, payload, parser, dige
         (
             lambda: completion_decision_payload(_decision()),
             completion_decision_from_payload,
+        ),
+        (
+            lambda: completion_authority_snapshot_payload(
+                _authority_snapshot(_criteria(), (_result(),))
+            ),
+            completion_authority_snapshot_from_payload,
         ),
     ],
 )
@@ -652,6 +667,62 @@ def test_result_producer_cannot_validate_its_own_result():
 def test_future_evidence_cannot_be_used_by_an_earlier_decision():
     with pytest.raises(OutcomeContractError, match="recorded after evaluation"):
         _decision(evidence=(_evidence(recorded_at=NOW + timedelta(hours=1)),))
+
+
+@pytest.mark.parametrize(
+    ("evidence_value", "result_times", "message"),
+    [
+        (
+            _evidence(
+                observed_at=NOW + timedelta(minutes=10),
+                recorded_at=NOW + timedelta(minutes=11),
+            ),
+            {
+                "created_at": NOW + timedelta(minutes=3),
+                "validated_at": NOW + timedelta(minutes=12),
+            },
+            "observed after result creation",
+        ),
+        (
+            _evidence(recorded_at=NOW + timedelta(minutes=10)),
+            {
+                "created_at": NOW + timedelta(minutes=3),
+                "validated_at": NOW + timedelta(minutes=4),
+            },
+            "recorded after result validation",
+        ),
+    ],
+)
+def test_result_cannot_cite_evidence_outside_its_causal_window(
+    evidence_value, result_times, message
+):
+    result_value = _result(
+        evidence_digest=evidence_set_digest((evidence_value,)),
+        **result_times,
+    )
+
+    with pytest.raises(OutcomeContractError, match=message):
+        _decision(
+            results=(result_value,),
+            evidence=(evidence_value,),
+            evaluated_at=NOW + timedelta(minutes=20),
+        )
+
+
+def test_result_evidence_causal_boundaries_are_inclusive():
+    evidence_value = _evidence(
+        observed_at=NOW + timedelta(minutes=3),
+        recorded_at=NOW + timedelta(minutes=4),
+    )
+    result_value = _result(
+        evidence_digest=evidence_set_digest((evidence_value,)),
+        created_at=evidence_value.observed_at,
+        validated_at=evidence_value.recorded_at,
+    )
+
+    decision = _decision(results=(result_value,), evidence=(evidence_value,))
+
+    assert decision.status is CompletionStatus.COMPLETE
 
 
 def test_projection_rejects_a_self_certified_decision_hash():
