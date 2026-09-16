@@ -14,6 +14,10 @@ from domain.workflow.outcome_authority_serialization import (
     completion_authority_snapshot_digest,
     completion_authority_snapshot_payload,
 )
+from domain.workflow.outcome_lifecycle import (
+    CompletionProjectionFence,
+    TaskAttemptAuthority,
+)
 from domain.workflow.outcome_evaluation import evaluate_completion
 from domain.workflow.outcome_serialization import (
     completion_criteria_digest,
@@ -43,6 +47,11 @@ from infrastructure.db.workflow.outcome_reads import (
     get_task_result_by_digest_locked,
     list_accepted_task_results_locked,
 )
+from infrastructure.db.workflow.outcome_lifecycle_commit import (
+    CompletionLifecycleConflict,
+    commit_completion_lifecycle_locked,
+)
+from infrastructure.db.workflow.outcome_attempts import validate_attempt_result_locked
 from infrastructure.db.workflow.outcome_rows import canonical_json
 
 
@@ -105,11 +114,19 @@ def append_task_result(
     result: TaskResult,
     request_hash: str,
     host_authority: HostCompletionAuthority,
+    attempt_authority: TaskAttemptAuthority | None = None,
 ) -> dict[str, Any]:
     payload = task_result_payload(result)
     digest = task_result_digest(result)
 
     def operation() -> None:
+        if attempt_authority is not None:
+            try:
+                validate_attempt_result_locked(
+                    conn, result=result, attempt_authority=attempt_authority
+                )
+            except ValueError as exc:
+                raise _WriteConflict(str(exc)) from exc
         evidence_records = []
         for evidence_id in result.evidence_ids:
             record = get_evidence_locked(
@@ -225,6 +242,26 @@ def publish_completion_contract(
     definitions_hash = _definitions_digest(task_definitions)
 
     def operation() -> None:
+        run = conn.execute(
+            """
+            SELECT status, active_graph_revision FROM agent_runs
+            WHERE client_id = ? AND id = ?
+            """,
+            (criteria.tenant_id, criteria.workflow_id),
+        ).fetchone()
+        if run is None:
+            raise _WriteConflict("completion contract workflow does not exist")
+        if str(run["status"]).lower() in {
+            "completed",
+            "failed",
+            "canceled",
+            "cancelled",
+        }:
+            raise _WriteConflict("terminal workflow cannot acquire completion criteria")
+        if int(run["active_graph_revision"]) != criteria.graph_revision:
+            raise _WriteConflict(
+                "completion criteria must target the active graph revision"
+            )
         if (
             tuple(item.task_id for item in task_definitions)
             != criteria.required_task_ids
@@ -271,6 +308,28 @@ def publish_completion_contract(
                     item.result_schema_hash,
                 )
                 for item in task_definitions
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO workflow_completion_governance (
+                tenant_id, workflow_id, graph_revision, criteria_digest,
+                activation_command_id, activated_at, governance_version
+            ) VALUES (?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT (tenant_id, workflow_id) DO UPDATE SET
+                graph_revision = excluded.graph_revision,
+                criteria_digest = excluded.criteria_digest,
+                activation_command_id = excluded.activation_command_id,
+                activated_at = excluded.activated_at,
+                governance_version = workflow_completion_governance.governance_version + 1
+            """,
+            (
+                criteria.tenant_id,
+                criteria.workflow_id,
+                criteria.graph_revision,
+                digest,
+                command["command_id"],
+                payload["created_at"],
             ),
         )
         persisted = get_completion_contract_locked(
@@ -475,6 +534,8 @@ def commit_completion_decision(
     evidence_bindings: tuple[tuple[str, str], ...],
     request_hash: str,
     host_authority: HostCompletionAuthority,
+    completion_fence: CompletionProjectionFence | None = None,
+    projected_run_state: str | None = None,
 ) -> dict[str, Any]:
     payload = completion_decision_payload(decision)
     digest = completion_decision_digest(decision)
@@ -586,6 +647,16 @@ def commit_completion_decision(
                 for item in evidence
             ),
         )
+        if completion_fence is not None:
+            commit_completion_lifecycle_locked(
+                conn,
+                command=command,
+                decision=decision,
+                decision_digest=digest,
+                completion_fence=completion_fence,
+                payload=payload,
+                projected_run_state=projected_run_state,
+            )
 
     snapshot_record = get_authority_snapshot_locked(
         conn,
@@ -603,6 +674,7 @@ def commit_completion_decision(
             "snapshot_id": snapshot_id,
             "snapshot_digest": snapshot_record["snapshot_digest"],
             "decision_digest": digest,
+            "projected_run_state": projected_run_state,
         },
         artifact_type="completion_decision",
         artifact_id=decision.decision_id,
@@ -702,7 +774,12 @@ def _write(
             "artifact_id": artifact_id,
             "artifact_digest": artifact_digest,
         }
-    except (_WriteConflict, sqlite3.IntegrityError, sqlite3.OperationalError) as exc:
+    except (
+        _WriteConflict,
+        CompletionLifecycleConflict,
+        sqlite3.IntegrityError,
+        sqlite3.OperationalError,
+    ) as exc:
         conn.rollback()
         return {"outcome": "conflict", "reason": str(exc)}
 
@@ -1010,10 +1087,4 @@ def _require_digest(field_name: str, value: object) -> None:
         raise _WriteConflict(f"{field_name} must be a lowercase SHA-256 digest")
 
 
-__all__ = [
-    "append_evidence",
-    "append_task_result",
-    "commit_authority_snapshot",
-    "commit_completion_decision",
-    "publish_completion_contract",
-]
+__all__ = ["append_evidence", "append_task_result", "commit_authority_snapshot", "commit_completion_decision", "publish_completion_contract"]

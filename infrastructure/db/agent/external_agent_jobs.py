@@ -79,6 +79,54 @@ def create_external_agent_job(
         raise
 
 
+def release_linked_external_agent_run(
+    *, job_id: str, run_id: str, client_id: str, principal_id: str
+) -> bool:
+    """Publish a governed run only after its exact external job is durable."""
+
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        linked = conn.execute(
+            """
+            SELECT run.status
+            FROM external_agent_jobs job
+            JOIN agent_runs run
+              ON run.id = job.run_id
+             AND run.client_id = job.client_id
+             AND run.principal_id = job.principal_id
+             AND run.principal_type = 'external_agent'
+             AND run.agent_profile_id IS job.agent_profile_id
+            JOIN workflow_completion_governance governance
+              ON governance.workflow_id = run.id
+             AND governance.tenant_id = run.client_id
+            WHERE job.id = ? AND job.run_id = ? AND job.client_id = ?
+              AND job.principal_id = ?
+            """,
+            (job_id, run_id, client_id, principal_id),
+        ).fetchone()
+        if linked is None or linked["status"] not in {"planning", "planned"}:
+            conn.rollback()
+            return False
+        if linked["status"] == "planning":
+            cursor = conn.execute(
+                """
+                UPDATE agent_runs
+                SET status = 'planned', updated_at = datetime('now')
+                WHERE id = ? AND client_id = ? AND status = 'planning'
+                """,
+                (run_id, client_id),
+            )
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return False
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+
+
 def reserve_external_agent_job_idempotency(
     *, client_id: str, principal_id: str, idempotency_key: str, request_hash: str
 ) -> bool:
@@ -162,14 +210,18 @@ def delete_external_agent_job_idempotency_reservation(
     *, client_id: str, principal_id: str, idempotency_key: str
 ) -> None:
     conn = get_connection()
-    conn.execute(
-        """
-        DELETE FROM external_agent_job_idempotency_reservations
-        WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
-        """,
-        (client_id, principal_id, idempotency_key),
-    )
-    conn.commit()
+    try:
+        conn.execute(
+            """
+            DELETE FROM external_agent_job_idempotency_reservations
+            WHERE client_id = ? AND principal_id = ? AND idempotency_key = ?
+            """,
+            (client_id, principal_id, idempotency_key),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def get_external_agent_job(
@@ -497,6 +549,7 @@ __all__ = [
     "get_external_agent_job_receipt_for_status",
     "IDEMPOTENCY_RESERVATION_STALE_AFTER_SECONDS",
     "list_external_agent_job_receipts",
+    "release_linked_external_agent_run",
     "reserve_external_agent_job_idempotency",
     "update_external_agent_job_receipt",
     "update_external_agent_job_status",

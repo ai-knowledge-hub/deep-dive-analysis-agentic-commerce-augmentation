@@ -264,11 +264,23 @@ The agentic module is implemented as an orchestration layer over the same experi
   snapshots, deterministic completion decisions, and exact decision inputs.
   Each artifact and its command receipt commit atomically; SQLite triggers
   prevent update/delete and reject cross-scope relationship bindings.
-- The outcome ledger is not yet wired to the agent-run lifecycle or product
-  projection. A stored completion decision therefore does not change
-  `agent_runs.status`; that compatibility boundary remains Slice 6c. Its
-  privileged writer is deliberately absent from general `AppDeps` and is
-  created only with a host-owned authority policy.
+- `workflow_completion_lifecycle_events` and
+  `workflow_completion_projections` connect the production sequential runtime
+  to the agent-run compatibility projection. A separately composed host
+  coordinator publishes the action-derived task contract, records runtime
+  evidence, validates results against durable attempt/lease authority, and
+  evaluates completion. Production creation first persists the plan in the
+  non-runnable `planning` state and activates governance. Normal agent runs are
+  then exposed as `planned`; external-agent runs remain behind the barrier until
+  their exact durable job linkage is verified under a database write lock. The
+  same guarded write
+  stores the decision, exact bindings, lifecycle event, audit event, projection,
+  post-capability state, and terminal run status. SQLite rejects governed
+  `completed` status without the current exact `COMPLETE` decision. An
+  all-rejected plan records `INCOMPLETE` and becomes durably canceled.
+- The completion writer is deliberately absent from general `AppDeps` and is
+  created only with a host-owned authority policy. Public API and UI completion
+  views and projection-repair operations remain Slice 6d.
 
 ### Recovery and projection integrity
 
@@ -279,8 +291,26 @@ The agentic module is implemented as an orchestration layer over the same experi
   than mutable run projections.
 - Run projection restoration uses compare-and-swap/retry when concurrent
   replanning changes the action set.
+- Completion uses a run-state, active-revision, active-lease, and
+  complete-action-set fence;
+  cancellation or recovery-action insertion cannot be overwritten by a stale
+  terminal projection.
+- Action status is a closed compatibility contract. Unknown values fail at the
+  application and database boundaries, completed governed runs cannot acquire
+  or mutate actions, and projection freshness recomputes the canonical output
+  hash rather than trusting a caller-supplied hash.
+- The host ledger allocates a gap-free completion-event cursor. Projection
+  freshness recomputes action state and compares run status, run state,
+  criteria, graph revision, and the independent cursor rather than trusting
+  stored labels. Historical decision verification reads projected state from
+  its immutable lifecycle event, never from the replaceable current projection.
 - Retry and change-plan allocate sequence and retry identity under the write
   lock; terminal runs remain closed.
+- If external-job persistence fails after governance activation, the governed
+  run remains non-runnable even if cancellation also fails. Reservation cleanup
+  runs independently, a retry creates no duplicate runnable work, and governed
+  records are never deleted as rollback. Replaying a committed job safely
+  releases its linked run if a crash occurred before publication.
 
 ### UX integration points
 - Sidebar includes **Agent runs** as a first-class module.

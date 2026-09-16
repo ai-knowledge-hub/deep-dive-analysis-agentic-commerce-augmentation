@@ -7,6 +7,10 @@ import json
 import sqlite3
 from typing import Any
 
+from domain.workflow.outcome_lifecycle import (
+    CompletionProjectionFence,
+    TaskAttemptAuthority,
+)
 from domain.workflow.outcomes import ResultValidationStatus, evidence_set_digest
 from infrastructure.db.workflow.outcome_rows import (
     OutcomeLedgerDataError,
@@ -256,6 +260,13 @@ def get_completion_decision_locked(
         return None
     decision = decision_record(row)
     value = decision["decision"]
+    lifecycle = conn.execute(
+        """
+        SELECT projected_run_state FROM workflow_completion_lifecycle_events
+        WHERE tenant_id = ? AND workflow_id = ? AND decision_id = ?
+        """,
+        (tenant_id, workflow_id, decision_id),
+    ).fetchone()
     _verify_command_binding(
         conn,
         artifact_row=row,
@@ -267,6 +278,9 @@ def get_completion_decision_locked(
             "snapshot_id": decision["snapshot_id"],
             "snapshot_digest": decision["snapshot_digest"],
             "decision_digest": decision["decision_digest"],
+            "projected_run_state": (
+                lifecycle["projected_run_state"] if lifecycle is not None else None
+            ),
         },
         authority=(
             value.evaluation_authority.principal_id,
@@ -275,6 +289,223 @@ def get_completion_decision_locked(
         ),
     )
     return decision
+
+
+def get_completion_projection_fence_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+) -> CompletionProjectionFence | None:
+    """Read the exact compatibility projection used as the completion CAS."""
+
+    run = conn.execute(
+        """
+        SELECT state, status, active_graph_revision,
+               CASE
+                 WHEN lock_token IS NOT NULL
+                  AND lock_expires_at IS NOT NULL
+                  AND lock_expires_at > datetime('now')
+                 THEN lock_token
+                 ELSE NULL
+               END AS active_lock_token
+        FROM agent_runs
+        WHERE client_id = ? AND id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    if run is None:
+        return None
+    return CompletionProjectionFence(
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        active_graph_revision=int(run["active_graph_revision"]),
+        run_status=str(run["status"]),
+        run_state=str(run["state"]),
+        active_lock_token=run["active_lock_token"],
+        action_projection_digest=_action_projection_digest(conn, workflow_id),
+    )
+
+
+def get_active_completion_contract_locked(
+    conn: sqlite3.Connection, *, tenant_id: str, workflow_id: str
+) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT criteria.criteria_id, governance.criteria_digest
+        FROM workflow_completion_governance governance
+        JOIN workflow_completion_criteria criteria
+          ON criteria.criteria_digest = governance.criteria_digest
+        WHERE governance.tenant_id = ? AND governance.workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return get_completion_contract_locked(
+        conn,
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        criteria_id=row["criteria_id"],
+        criteria_hash=row["criteria_digest"],
+    )
+
+
+def get_task_attempt_authority_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    task_id: str,
+) -> TaskAttemptAuthority | None:
+    row = conn.execute(
+        """
+        SELECT authority.graph_revision, authority.task_id, authority.attempt_id,
+               authority.assignment_id, authority.producer_principal_id,
+               authority.action_id, run.lock_token
+        FROM workflow_completion_attempt_authorities authority
+        JOIN agent_runs run
+          ON run.client_id = authority.tenant_id
+         AND run.id = authority.workflow_id
+        JOIN agent_actions action
+          ON action.id = authority.action_id
+         AND action.agent_run_id = authority.workflow_id
+        WHERE authority.tenant_id = ?
+          AND authority.workflow_id = ?
+          AND authority.task_id = ?
+          AND action.status = 'executed'
+          AND run.active_graph_revision = authority.graph_revision
+          AND run.lock_token IS NOT NULL
+          AND run.lock_expires_at > datetime('now')
+        """,
+        (tenant_id, workflow_id, task_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return TaskAttemptAuthority(
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        graph_revision=int(row["graph_revision"]),
+        task_id=row["task_id"],
+        attempt_id=row["attempt_id"],
+        assignment_id=row["assignment_id"],
+        producer_principal_id=row["producer_principal_id"],
+        action_id=row["action_id"],
+        active_lock_token=row["lock_token"],
+    )
+
+
+def get_completion_projection_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT * FROM workflow_completion_projections
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "tenant_id": row["tenant_id"],
+        "workflow_id": row["workflow_id"],
+        "graph_revision": int(row["graph_revision"]),
+        "decision_id": row["decision_id"],
+        "decision_digest": row["decision_digest"],
+        "criteria_digest": row["criteria_digest"],
+        "completion_status": row["completion_status"],
+        "projected_run_status": row["projected_run_status"],
+        "projected_run_state": row["projected_run_state"],
+        "authoritative_event_sequence": int(row["authoritative_event_sequence"]),
+        "action_projection_digest": row["action_projection_digest"],
+        "blockers": json.loads(row["blockers_json"]),
+        "evaluated_at": row["evaluated_at"],
+        "projection_version": int(row["projection_version"]),
+        "updated_at": row["updated_at"],
+    }
+
+
+def resolve_completion_event_sequence_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    idempotency_key: str,
+    decision_id: str,
+) -> int:
+    """Return a replay sequence or the next host-owned lifecycle sequence."""
+
+    replay = conn.execute(
+        """
+        SELECT decision.authoritative_event_sequence
+        FROM workflow_outcome_commands command
+        JOIN workflow_completion_decisions decision
+          ON decision.decision_id = command.artifact_id
+        WHERE command.tenant_id = ?
+          AND command.workflow_id = ?
+          AND command.idempotency_key = ?
+          AND command.artifact_type = 'completion_decision'
+          AND command.artifact_id = ?
+        """,
+        (tenant_id, workflow_id, idempotency_key, decision_id),
+    ).fetchone()
+    if replay is not None:
+        return int(replay["authoritative_event_sequence"])
+    cursor = conn.execute(
+        """
+        SELECT current_sequence
+        FROM workflow_completion_event_cursors
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    return (int(cursor["current_sequence"]) if cursor is not None else -1) + 1
+
+
+def _action_projection_digest(conn: sqlite3.Connection, workflow_id: str) -> str:
+    rows = conn.execute(
+        """
+        SELECT id, sequence, status, capability_name, outputs_json, outputs_hash,
+               error_text
+        FROM agent_actions
+        WHERE agent_run_id = ?
+        ORDER BY sequence ASC, id ASC
+        """,
+        (workflow_id,),
+    ).fetchall()
+    projection = [
+        {
+            "id": row["id"],
+            "sequence": int(row["sequence"]),
+            "status": row["status"],
+            "capability_name": row["capability_name"],
+            "outputs_hash": _stored_output_hash(row),
+            "error": row["error_text"],
+        }
+        for row in rows
+    ]
+    encoded = json.dumps(
+        projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _stored_output_hash(row) -> str:
+    payload = json.loads(row["outputs_json"] or "{}")
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def load_evaluation_bundle_locked(

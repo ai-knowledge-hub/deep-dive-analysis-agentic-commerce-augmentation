@@ -8,6 +8,7 @@ from domain.workflow.outcome_authority import HostCompletionAuthority
 from infrastructure.db.core.connection import get_connection
 import infrastructure.db.workflow.outcome_reads as outcome_reads
 import infrastructure.db.workflow.outcome_writes as outcome_writes
+import infrastructure.db.workflow.outcome_attempts as outcome_attempts
 
 
 class SQLiteWorkflowOutcomeLedger:
@@ -26,6 +27,11 @@ class SQLiteWorkflowOutcomeLedger:
     def append_task_result(self, **kwargs: Any) -> dict[str, Any]:
         return outcome_writes.append_task_result(
             get_connection(), host_authority=self._host_authority, **kwargs
+        )
+
+    def register_sequential_attempt_authority(self, **kwargs: Any) -> dict[str, str]:
+        return outcome_attempts.register_sequential_attempt_authority(
+            get_connection(), **kwargs
         )
 
     def publish_completion_contract(self, **kwargs: Any) -> dict[str, Any]:
@@ -49,6 +55,11 @@ class SQLiteWorkflowOutcomeLedger:
     def get_task_result(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.get_task_result_locked(get_connection(), **kwargs)
 
+    def get_task_attempt_authority(self, **kwargs: Any):
+        return outcome_reads.get_task_attempt_authority_locked(
+            get_connection(), **kwargs
+        )
+
     def get_task_result_by_digest(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.get_task_result_by_digest_locked(
             get_connection(), **kwargs
@@ -62,11 +73,31 @@ class SQLiteWorkflowOutcomeLedger:
     def get_completion_contract(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.get_completion_contract_locked(get_connection(), **kwargs)
 
+    def get_active_completion_contract(self, **kwargs: Any) -> dict[str, Any] | None:
+        return outcome_reads.get_active_completion_contract_locked(
+            get_connection(), **kwargs
+        )
+
     def get_authority_snapshot(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.get_authority_snapshot_locked(get_connection(), **kwargs)
 
     def get_completion_decision(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.get_completion_decision_locked(get_connection(), **kwargs)
+
+    def get_completion_projection_fence(self, **kwargs: Any):
+        return outcome_reads.get_completion_projection_fence_locked(
+            get_connection(), **kwargs
+        )
+
+    def get_completion_projection(self, **kwargs: Any) -> dict[str, Any] | None:
+        return outcome_reads.get_completion_projection_locked(
+            get_connection(), **kwargs
+        )
+
+    def resolve_completion_event_sequence(self, **kwargs: Any) -> int:
+        return outcome_reads.resolve_completion_event_sequence_locked(
+            get_connection(), **kwargs
+        )
 
     def load_evaluation_bundle(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.load_evaluation_bundle_locked(get_connection(), **kwargs)

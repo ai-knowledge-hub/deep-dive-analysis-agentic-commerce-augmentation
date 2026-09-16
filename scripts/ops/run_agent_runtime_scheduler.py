@@ -12,6 +12,7 @@ import os
 from typing import Any, Dict
 
 from api.composition import default_deps
+from api.runtime_composition import default_completion_coordinator
 from application.services.agent_runtime.scheduler import AgentRuntimeSchedulerService
 from shared.db.connection import DEFAULT_DB_PATH
 
@@ -38,7 +39,9 @@ def main() -> None:
 
     deps = default_deps()
     deps.init_db()
-    service = AgentRuntimeSchedulerService(deps=deps)
+    service = AgentRuntimeSchedulerService(
+        deps=deps, completion_coordinator=default_completion_coordinator(deps)
+    )
 
     if args.once:
         summary = service.run_once(

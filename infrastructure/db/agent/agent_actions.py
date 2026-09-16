@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from typing import Any, Dict, List, Optional
 
 from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
+from domain.workflow.action_lifecycle import is_action_status
 
 
 def create_agent_action(
@@ -43,6 +46,8 @@ def create_agent_action(
     allocate_run_sequence: bool = False,
     retry_identity_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
+    if not is_action_status(status):
+        raise ValueError("status must use the closed agent-action lifecycle")
     action_id = str(uuid.uuid4())
     conn = get_connection()
     guarded = admissible_run_statuses is not None
@@ -189,12 +194,22 @@ def update_agent_action_status(
     outputs_hash: Optional[str] = None,
     error: Optional[str] = None,
 ) -> Dict[str, Any] | None:
+    if not is_action_status(status):
+        raise ValueError("status must use the closed agent-action lifecycle")
     conn = get_connection()
     updates: list[str] = ["status = ?"]
     params: list[Any] = [status]
     if outputs is not None:
+        canonical_outputs_hash = hashlib.sha256(
+            json.dumps(outputs, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        if outputs_hash is not None and outputs_hash != canonical_outputs_hash:
+            raise ValueError("outputs_hash must match the canonical outputs payload")
         updates.append("outputs_json = json(?)")
         params.append(to_json(outputs) or to_json({}))
+        outputs_hash = canonical_outputs_hash
     if outputs_hash is not None:
         updates.append("outputs_hash = ?")
         params.append(outputs_hash)
@@ -221,6 +236,8 @@ def transition_agent_action_status(
     from_status: str,
     to_status: str,
 ) -> Dict[str, Any] | None:
+    if not is_action_status(from_status) or not is_action_status(to_status):
+        raise ValueError("action transition must use the closed lifecycle")
     conn = get_connection()
     cursor = conn.execute(
         """

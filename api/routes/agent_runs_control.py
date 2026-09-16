@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.composition import default_deps
+from api.runtime_composition import default_runtime, default_worker
 from api.utils.agent_run_authorization import require_agent_run_control_access
 from api.utils.tenancy import require_admin, require_client_id
 from application.ports.deps import AppDeps
@@ -29,11 +30,11 @@ def _deps() -> AppDeps:
 
 
 def _runtime(deps: AppDeps = Depends(_deps)) -> AgentRuntimeService:
-    return AgentRuntimeService(deps=deps)
+    return default_runtime(deps)
 
 
 def _worker(deps: AppDeps = Depends(_deps)) -> AgentRuntimeWorkerService:
-    return AgentRuntimeWorkerService(deps=deps)
+    return default_worker(deps)
 
 
 class AgentRunControlRequest(BaseModel):
@@ -173,7 +174,9 @@ def tick_agent_runs(
         client_id=client_id,
         limit=max(1, min(100, int(payload.max_runs))),
     )
-    if any(str(run.get("principal_type") or "") == "external_agent" for run in runnable):
+    if any(
+        str(run.get("principal_type") or "") == "external_agent" for run in runnable
+    ):
         require_admin(payload.user_id)
     summary = worker.tick_client(
         client_id=client_id,

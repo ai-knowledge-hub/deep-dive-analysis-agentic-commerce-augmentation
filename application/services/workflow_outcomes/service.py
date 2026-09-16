@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -17,6 +18,10 @@ from domain.workflow.outcome_authority_serialization import (
     completion_authority_snapshot_digest,
 )
 from domain.workflow.outcome_evaluation import evaluate_completion
+from domain.workflow.outcome_lifecycle import (
+    CompletionProjectionFence,
+    TaskAttemptAuthority,
+)
 from domain.workflow.outcome_serialization import (
     completion_criteria_digest,
     completion_decision_digest,
@@ -73,6 +78,15 @@ class WorkflowOutcomeService:
     def record_task_result(
         self, *, command: OutcomeLedgerCommand, result: TaskResult
     ) -> dict[str, Any]:
+        return self._record_task_result(command=command, result=result)
+
+    def _record_task_result(
+        self,
+        *,
+        command: OutcomeLedgerCommand,
+        result: TaskResult,
+        attempt_authority: TaskAttemptAuthority | None = None,
+    ) -> dict[str, Any]:
         _require_scope(command, result.tenant_id, result.workflow_id)
         _require_not_before("command issued_at", command.issued_at, result.created_at)
         if result.validated_at is not None:
@@ -105,6 +119,113 @@ class WorkflowOutcomeService:
             command_type="record_task_result",
             request_payload={"result_digest": digest},
             result=result,
+            attempt_authority=attempt_authority,
+        )
+
+    def validate_submitted_result(
+        self,
+        *,
+        command: OutcomeLedgerCommand,
+        submitted_result: TaskResult,
+        criteria_id: str,
+        criteria_hash: str,
+        validation_status: ResultValidationStatus,
+        lock_token: str,
+    ) -> dict[str, Any]:
+        """Cross a worker proposal into the host-attested result ledger."""
+
+        if type(submitted_result) is not TaskResult:
+            raise OutcomeContractError("submitted_result must be exact TaskResult")
+        if submitted_result.validation_status is not ResultValidationStatus.PENDING:
+            raise OutcomeContractError("only a pending worker result can be validated")
+        if type(
+            validation_status
+        ) is not ResultValidationStatus or validation_status not in {
+            ResultValidationStatus.ACCEPTED,
+            ResultValidationStatus.REJECTED,
+        }:
+            raise OutcomeContractError(
+                "validation_status must be exact accepted or rejected status"
+            )
+        _require_scope(
+            command, submitted_result.tenant_id, submitted_result.workflow_id
+        )
+        _require_identifier("lock_token", lock_token)
+        attempt_authority = self._store.get_task_attempt_authority(
+            tenant_id=command.tenant_id,
+            workflow_id=command.workflow_id,
+            task_id=submitted_result.task_id,
+        )
+        if attempt_authority is None:
+            raise OutcomeLedgerConflict(
+                "current durable task-attempt authority is unavailable"
+            )
+        if attempt_authority.active_lock_token != lock_token:
+            raise OutcomeLedgerConflict("task-attempt lease ownership changed")
+        if (
+            submitted_result.task_id,
+            submitted_result.attempt_id,
+            submitted_result.assignment_id,
+            submitted_result.producer_principal_id,
+        ) != (
+            attempt_authority.task_id,
+            attempt_authority.attempt_id,
+            attempt_authority.assignment_id,
+            attempt_authority.producer_principal_id,
+        ):
+            raise OutcomeContractError(
+                "submitted result does not match the host-selected task attempt"
+            )
+        authority = self._host_authority.result_validation_authority
+        _require_command_authority(
+            command,
+            principal_id=authority.principal_id,
+            authority_source=authority.authority_source,
+            authority_version=authority.authority_version,
+        )
+        publication = self._store.get_completion_contract(
+            tenant_id=command.tenant_id,
+            workflow_id=command.workflow_id,
+            criteria_id=criteria_id,
+            criteria_hash=criteria_hash,
+        )
+        if publication is None:
+            raise OutcomeLedgerConflict("completion contract does not exist")
+        criteria = publication["criteria"]
+        if submitted_result.graph_revision != criteria.graph_revision:
+            raise OutcomeContractError("result does not target the criteria revision")
+        definition = next(
+            (
+                item
+                for item in publication["task_definitions"]
+                if item.task_id == submitted_result.task_id
+            ),
+            None,
+        )
+        if definition is None or (
+            submitted_result.task_input_hash,
+            submitted_result.result_schema_id,
+            submitted_result.result_schema_version,
+            submitted_result.result_schema_hash,
+        ) != (
+            definition.task_input_hash,
+            definition.result_schema_id,
+            definition.result_schema_version,
+            definition.result_schema_hash,
+        ):
+            raise OutcomeContractError(
+                "submitted result does not match the authoritative task contract"
+            )
+        validated = replace(
+            submitted_result,
+            validation_status=validation_status,
+            validation_authority=authority,
+            validated_at=command.issued_at,
+        )
+        return self._record_task_result(
+            command=command,
+            result=validated,
+            attempt_authority=attempt_authority,
         )
 
     def publish_completion_contract(
@@ -233,6 +354,73 @@ class WorkflowOutcomeService:
         evaluated_at: datetime,
         authoritative_event_sequence: int,
     ) -> dict[str, Any]:
+        return self._evaluate_and_write(
+            command=command,
+            snapshot_id=snapshot_id,
+            decision_id=decision_id,
+            evaluated_at=evaluated_at,
+            authoritative_event_sequence=authoritative_event_sequence,
+            completion_fence=None,
+            projected_run_state=None,
+        )
+
+    def evaluate_and_commit_lifecycle(
+        self,
+        *,
+        command: OutcomeLedgerCommand,
+        snapshot_id: str,
+        decision_id: str,
+        evaluated_at: datetime,
+        authoritative_event_sequence: int | None = None,
+        lock_token: str | None = None,
+        projected_run_state: str | None = None,
+    ) -> dict[str, Any]:
+        """Atomically persist a decision and its guarded run projection."""
+
+        completion_fence = self._store.get_completion_projection_fence(
+            tenant_id=command.tenant_id,
+            workflow_id=command.workflow_id,
+        )
+        if completion_fence is None:
+            raise OutcomeLedgerConflict("workflow completion projection is unavailable")
+        if projected_run_state is None:
+            projected_run_state = completion_fence.run_state
+        if completion_fence.active_lock_token is not None:
+            if lock_token != completion_fence.active_lock_token:
+                raise OutcomeLedgerConflict("completion lease ownership changed")
+        elif lock_token is not None:
+            raise OutcomeLedgerConflict("completion lease is no longer active")
+        if authoritative_event_sequence is not None:
+            raise OutcomeContractError(
+                "completion event sequence is allocated by the host ledger"
+            )
+        sequence = self._store.resolve_completion_event_sequence(
+            tenant_id=command.tenant_id,
+            workflow_id=command.workflow_id,
+            idempotency_key=command.idempotency_key,
+            decision_id=decision_id,
+        )
+        return self._evaluate_and_write(
+            command=command,
+            snapshot_id=snapshot_id,
+            decision_id=decision_id,
+            evaluated_at=evaluated_at,
+            authoritative_event_sequence=sequence,
+            completion_fence=completion_fence,
+            projected_run_state=projected_run_state,
+        )
+
+    def _evaluate_and_write(
+        self,
+        *,
+        command: OutcomeLedgerCommand,
+        snapshot_id: str,
+        decision_id: str,
+        evaluated_at: datetime,
+        authoritative_event_sequence: int,
+        completion_fence: CompletionProjectionFence | None,
+        projected_run_state: str | None,
+    ) -> dict[str, Any]:
         _require_command_authority(
             command,
             principal_id=self._host_authority.evaluation_authority.principal_id,
@@ -281,6 +469,7 @@ class WorkflowOutcomeService:
                 "snapshot_id": snapshot_id,
                 "snapshot_digest": snapshot_record["snapshot_digest"],
                 "decision_digest": decision_hash,
+                "projected_run_state": projected_run_state,
             },
             decision=decision,
             snapshot_id=snapshot_id,
@@ -296,6 +485,8 @@ class WorkflowOutcomeService:
                     for item in evidence
                 )
             ),
+            completion_fence=completion_fence,
+            projected_run_state=projected_run_state,
         )
 
     def reproduce_decision(

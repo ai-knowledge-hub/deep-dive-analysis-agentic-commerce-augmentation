@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -134,15 +136,46 @@ def update_agent_run(
         params.append(policy_profile_id)
     updates.append("updated_at = datetime('now')")
     params.append(run_id)
-    conn.execute(
+    try:
+        conn.execute(
+            f"""
+            UPDATE agent_runs
+            SET {", ".join(updates)}
+            WHERE id = ?
+            """,
+            params,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return get_agent_run(run_id)
+
+
+def transition_agent_run_status(
+    *,
+    run_id: str,
+    expected_statuses: tuple[str, ...],
+    status: str,
+    error: Optional[str] = None,
+) -> Dict[str, Any] | None:
+    """Atomically move a run only while its observed lifecycle state still holds."""
+
+    if not expected_statuses:
+        return None
+    conn = get_connection()
+    placeholders = ", ".join("?" for _ in expected_statuses)
+    cursor = conn.execute(
         f"""
         UPDATE agent_runs
-        SET {", ".join(updates)}
-        WHERE id = ?
+        SET status = ?, error_text = ?, updated_at = datetime('now')
+        WHERE id = ? AND status IN ({placeholders})
         """,
-        params,
+        (status, error, run_id, *expected_statuses),
     )
     conn.commit()
+    if cursor.rowcount != 1:
+        return None
     return get_agent_run(run_id)
 
 
@@ -237,19 +270,136 @@ def get_agent_run(
         row = conn.execute(
             "SELECT * FROM agent_runs WHERE id = ?", (run_id,)
         ).fetchone()
-    return _row(row) if row else None
+    return _with_completion_projection(conn, _row(row)) if row else None
+
+
+def _with_completion_projection(conn, run: Dict[str, Any]) -> Dict[str, Any]:
+    governance = conn.execute(
+        """
+        SELECT graph_revision, criteria_digest FROM workflow_completion_governance
+        WHERE tenant_id = ? AND workflow_id = ?
+        LIMIT 1
+        """,
+        (run["client_id"], run["id"]),
+    ).fetchone()
+    projection = conn.execute(
+        """
+        SELECT graph_revision, decision_id, decision_digest, criteria_digest,
+               completion_status, projected_run_status, projected_run_state,
+               authoritative_event_sequence,
+               action_projection_digest, blockers_json, evaluated_at,
+               projection_version, updated_at
+        FROM workflow_completion_projections
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (run["client_id"], run["id"]),
+    ).fetchone()
+    event_cursor = conn.execute(
+        """
+        SELECT current_sequence FROM workflow_completion_event_cursors
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (run["client_id"], run["id"]),
+    ).fetchone()
+    action_rows = conn.execute(
+        """
+        SELECT id, sequence, status, capability_name, outputs_json, outputs_hash,
+               error_text
+        FROM agent_actions
+        WHERE agent_run_id = ?
+        ORDER BY sequence ASC, id ASC
+        """,
+        (run["id"],),
+    ).fetchall()
+    action_projection_digest = _completion_action_projection_digest(action_rows)
+    run["completion_authority_required"] = governance is not None
+    run["active_completion_criteria_digest"] = (
+        governance["criteria_digest"] if governance is not None else None
+    )
+    run["completion_projection"] = (
+        {
+            "tenant_id": run["client_id"],
+            "workflow_id": run["id"],
+            "graph_revision": int(projection["graph_revision"]),
+            "decision_id": projection["decision_id"],
+            "decision_digest": projection["decision_digest"],
+            "criteria_digest": projection["criteria_digest"],
+            "completion_status": projection["completion_status"],
+            "projected_run_status": projection["projected_run_status"],
+            "projected_run_state": projection["projected_run_state"],
+            "authoritative_event_sequence": int(
+                projection["authoritative_event_sequence"]
+            ),
+            "action_projection_digest": projection["action_projection_digest"],
+            "blockers": from_json(projection["blockers_json"], default={}),
+            "evaluated_at": projection["evaluated_at"],
+            "projection_version": int(projection["projection_version"]),
+            "updated_at": projection["updated_at"],
+        }
+        if projection is not None
+        else None
+    )
+    run["completion_projection_is_current"] = bool(
+        projection is not None
+        and governance is not None
+        and int(projection["graph_revision"]) == int(governance["graph_revision"])
+        and projection["criteria_digest"] == governance["criteria_digest"]
+        and projection["action_projection_digest"] == action_projection_digest
+        and projection["projected_run_status"] == run["status"]
+        and projection["projected_run_state"] == run["state"]
+        and event_cursor is not None
+        and int(projection["authoritative_event_sequence"])
+        == int(event_cursor["current_sequence"])
+    )
+    return run
+
+
+def _completion_action_projection_digest(rows) -> str:
+    projection = [
+        {
+            "id": row["id"],
+            "sequence": int(row["sequence"]),
+            "status": row["status"],
+            "capability_name": row["capability_name"],
+            "outputs_hash": _stored_output_hash(row),
+            "error": row["error_text"],
+        }
+        for row in rows
+    ]
+    encoded = json.dumps(
+        projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _stored_output_hash(row) -> str:
+    payload = from_json(row["outputs_json"], default={})
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def delete_agent_run(*, run_id: str, client_id: Optional[str] = None) -> bool:
     conn = get_connection()
-    if client_id:
-        cursor = conn.execute(
-            "DELETE FROM agent_runs WHERE id = ? AND client_id = ?",
-            (run_id, client_id),
-        )
-    else:
-        cursor = conn.execute("DELETE FROM agent_runs WHERE id = ?", (run_id,))
-    conn.commit()
+    try:
+        if client_id:
+            cursor = conn.execute(
+                "DELETE FROM agent_runs WHERE id = ? AND client_id = ?",
+                (run_id, client_id),
+            )
+        else:
+            cursor = conn.execute("DELETE FROM agent_runs WHERE id = ?", (run_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return bool(cursor.rowcount and cursor.rowcount > 0)
 
 
@@ -500,6 +650,7 @@ def _row(row) -> Dict[str, Any]:
 __all__ = [
     "create_agent_run",
     "update_agent_run",
+    "transition_agent_run_status",
     "get_agent_run",
     "delete_agent_run",
     "list_agent_runs",
