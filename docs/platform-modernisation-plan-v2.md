@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 ## Purpose
 
@@ -510,8 +510,13 @@ Phase 1 remains open. The next reviewable sequence is:
    creation cannot become runnable before governance, and final capability
    state commits atomically with the decision. Cancellation, replanning,
    retries, all-rejected work, incomplete evidence, and duplicate delivery
-   remain fail-closed and recoverable. Public API/control-plane
-   projections, repair, and operational metrics remain Slice 6d.
+   remain fail-closed and recoverable. Slice 6d.1 exposes the verified,
+   tenant-scoped completion authority and explicit projection lag through the
+   agent-run API. Its bearer-authorized repair command rebuilds only from the
+   latest reproduced immutable decision and lifecycle event, records an
+   immutable idempotent receipt plus audit event, and refuses repair when live
+   workflow state has superseded the decision. Visible control-plane UI and
+   operational metrics remain Slice 6d.2.
 7. **Sequential workflow compatibility and framework spike.** Represent one
    existing ordered agent run as an immutable workflow revision and tasks,
    dual-project its events to current APIs, and compare an internal kernel,

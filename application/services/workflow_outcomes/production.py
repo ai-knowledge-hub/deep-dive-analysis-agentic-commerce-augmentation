@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -112,6 +113,45 @@ class SequentialCompletionCoordinator:
 
         run, _, _, _ = self._activate(run_id)
         return self._deps.agent_runs.get_agent_run(run_id=run_id) or run
+
+    def get_completion_read_model(
+        self, *, tenant_id: str, workflow_id: str
+    ) -> dict[str, Any] | None:
+        """Return the verified operator projection without granting authority."""
+
+        return self._store.get_completion_operational_view(
+            tenant_id=tenant_id, workflow_id=workflow_id
+        )
+
+    def repair_completion_read_model(
+        self,
+        *,
+        tenant_id: str,
+        workflow_id: str,
+        principal_id: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Replay immutable lifecycle authority into its compatibility view."""
+
+        command = {
+            "command_id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "workflow_id": workflow_id,
+            "principal_type": "human",
+            "principal_id": principal_id,
+            "authority_source": "agent-principal-token",
+            "authority_version": "agent-principal-signing-secret:v1",
+            "idempotency_key": idempotency_key,
+        }
+        result = self._store.repair_completion_projection(command=command)
+        if result.get("outcome") == "conflict":
+            raise OutcomeLedgerConflict(str(result.get("reason") or "repair failed"))
+        view = self.get_completion_read_model(
+            tenant_id=tenant_id, workflow_id=workflow_id
+        )
+        if view is None:
+            raise OutcomeLedgerConflict("completion workflow does not exist")
+        return {"command": result, "completion": view}
 
     def _activate(self, run_id: str):
         run = self._deps.agent_runs.get_agent_run(run_id=run_id)

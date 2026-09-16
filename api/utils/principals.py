@@ -125,6 +125,12 @@ def agent_principal_token_metadata() -> dict[str, Any]:
                 "required_for": ["agent-run write routes"],
             },
             {
+                "scope": "completion_projections:repair",
+                "kind": "endpoint",
+                "grants": "rebuild a run completion projection from immutable lifecycle authority",
+                "required_for": ["POST /agent-runs/{run_id}/completion/repair"],
+            },
+            {
                 "scope": "tool:<tool_id>",
                 "kind": "tool",
                 "grants": "request one registry tool through external-agent jobs",

@@ -279,8 +279,14 @@ The agentic module is implemented as an orchestration layer over the same experi
   `completed` status without the current exact `COMPLETE` decision. An
   all-rejected plan records `INCOMPLETE` and becomes durably canceled.
 - The completion writer is deliberately absent from general `AppDeps` and is
-  created only with a host-owned authority policy. Public API and UI completion
-  views and projection-repair operations remain Slice 6d.
+  created only with a host-owned authority policy. `GET
+  /agent-runs/{run_id}/completion` exposes the reproduced authoritative
+  decision, exact criteria/result/evidence bindings, blockers, cursor lag, and
+  repair eligibility without granting execution authority. `POST
+  /agent-runs/{run_id}/completion/repair` requires a tenant-scoped human bearer
+  principal with the dedicated repair scope and, for another principal's run,
+  supervision scope. Repair can only replay the latest exact immutable
+  lifecycle event into the compatibility projection.
 
 ### Recovery and projection integrity
 
@@ -304,6 +310,11 @@ The agentic module is implemented as an orchestration layer over the same experi
   criteria, graph revision, and the independent cursor rather than trusting
   stored labels. Historical decision verification reads projected state from
   its immutable lifecycle event, never from the replaceable current projection.
+- Projection repair runs under the SQLite write lock, reproduces the decision
+  and all relationship bindings, rechecks live revision/criteria/action/run
+  state, and writes its immutable idempotent receipt before an exact in-place
+  rebuild. Missing, lagging, leading, or semantically corrupt projections can
+  be repaired; superseded workflow state and corrupt authority fail closed.
 - Retry and change-plan allocate sequence and retry identity under the write
   lock; terminal runs remain closed.
 - If external-job persistence fails after governance activation, the governed

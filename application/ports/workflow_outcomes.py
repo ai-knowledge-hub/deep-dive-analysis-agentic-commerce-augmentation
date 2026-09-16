@@ -134,5 +134,13 @@ class WorkflowOutcomeLedgerStore(Protocol):
         self, *, tenant_id: str, workflow_id: str, decision_id: str
     ) -> dict[str, Any] | None: ...
 
+    def get_completion_operational_view(
+        self, *, tenant_id: str, workflow_id: str
+    ) -> dict[str, Any] | None: ...
+
+    def repair_completion_projection(
+        self, *, command: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
 
 __all__ = ["WorkflowOutcomeLedgerStore"]
