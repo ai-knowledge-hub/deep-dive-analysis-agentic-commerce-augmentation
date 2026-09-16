@@ -9,6 +9,7 @@ from infrastructure.db.core.connection import get_connection
 import infrastructure.db.workflow.outcome_reads as outcome_reads
 import infrastructure.db.workflow.outcome_writes as outcome_writes
 import infrastructure.db.workflow.outcome_attempts as outcome_attempts
+import infrastructure.db.workflow.outcome_projection_ops as outcome_projection_ops
 
 
 class SQLiteWorkflowOutcomeLedger:
@@ -101,6 +102,28 @@ class SQLiteWorkflowOutcomeLedger:
 
     def load_evaluation_bundle(self, **kwargs: Any) -> dict[str, Any] | None:
         return outcome_reads.load_evaluation_bundle_locked(get_connection(), **kwargs)
+
+    def get_completion_operational_view(self, **kwargs: Any) -> dict[str, Any] | None:
+        conn = get_connection()
+        owns_transaction = not conn.in_transaction
+        if owns_transaction:
+            conn.execute("BEGIN")
+        try:
+            view = outcome_projection_ops.get_completion_operational_view(
+                conn, **kwargs
+            )
+            if owns_transaction:
+                conn.commit()
+            return view
+        except Exception:
+            if owns_transaction:
+                conn.rollback()
+            raise
+
+    def repair_completion_projection(self, **kwargs: Any) -> dict[str, Any]:
+        return outcome_projection_ops.repair_completion_projection(
+            get_connection(), **kwargs
+        )
 
 
 __all__ = ["SQLiteWorkflowOutcomeLedger"]

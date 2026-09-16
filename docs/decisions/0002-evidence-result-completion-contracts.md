@@ -414,8 +414,37 @@ are audit evidence and are not deleted to mimic transactional rollback.
 
 The compatibility read model exposes whether durable completion authority is
 required, the current decision digest and revision, explicit blockers, and the
-projection version. It is not yet the public API or control-plane view; those
-operational projections and repair commands remain Slice 6d.
+projection version.
+
+## Slice 6d.1 implementation record
+
+As of 2026-09-16, `GET /agent-runs/{run_id}/completion` is the tenant-scoped
+operator read boundary. It reproduces the latest decision from immutable
+criteria, authority snapshot, result, evidence, decision, command, and
+lifecycle relationships before returning it. The view separately reports the
+independent stream-authority cursor, decision cursor, and projected cursor;
+signed lag (so a leading projection is visible); explicit `current` or `stale`
+freshness; display status; missing requirements; partial failures; receipt
+blockers; repair eligibility; and the last repair receipt. Legacy runs are
+explicitly `not_governed`; they are never presented as completion-authoritative.
+
+`POST /agent-runs/{run_id}/completion/repair` requires a verified human bearer
+principal with `completion_projections:repair`; repairing a run owned by another
+principal also requires `agent_runs:supervise`. The database transaction
+rechecks the registered principal, tenant, active governance, reproduced
+decision, latest lifecycle event, independent cursor, graph revision, action
+digest, and run status/state. It then records one immutable idempotent repair
+audit event followed by its relationally and operator-bound receipt in the same
+write transaction. Only that exact audited receipt permits the projection
+trigger to correct a same or leading cursor or evaluation time in place. Normal
+lifecycle publication keeps both event sequence and evaluation time monotonic.
+Repair-specific event triggers prevent later mutation or deletion of that audit
+evidence, including SQLite conflict-replacement when recursive delete triggers
+are disabled; this does not claim the broader append-only database control
+tracked under planned SEC-18. A changed workflow requires a new completion
+evaluation rather than repair.
+
+The control-plane UI and operational completion metrics remain Slice 6d.2.
 
 ## Acceptance Criteria
 

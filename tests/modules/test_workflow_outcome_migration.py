@@ -159,3 +159,54 @@ def test_migration_051_upgrades_an_applied_050_database_without_legacy_run_break
         == "completed"
     )
     conn.close()
+
+
+def test_migration_052_upgrades_an_applied_051_database(tmp_path):
+    old_migrations = tmp_path / "old-migrations-051"
+    old_migrations.mkdir()
+    for migration in sorted(MIGRATIONS_PATH.glob("*.sql")):
+        if migration.name <= "051_workflow_completion_lifecycle.sql":
+            shutil.copy2(migration, old_migrations / migration.name)
+
+    database_path = tmp_path / "applied-051.db"
+    conn = sqlite3.connect(database_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript((MIGRATIONS_PATH.parent / "schema.sql").read_text())
+    apply_migrations(conn, migrations_path=old_migrations)
+
+    assert (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("workflow_completion_projection_repairs",),
+        ).fetchone()
+        is None
+    )
+
+    apply_migrations(conn)
+
+    assert conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name = ?",
+        ("052_completion_projection_repair.sql",),
+    ).fetchone()
+    assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        ("workflow_completion_projection_repairs",),
+    ).fetchone()
+    assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+        ("workflow_completion_projection_decision_guard_update",),
+    ).fetchone()
+    assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+        ("completion_projection_repairs_guard_insert",),
+    ).fetchone()
+    assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+        ("completion_projection_repair_audits_no_delete",),
+    ).fetchone()
+    assert conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+        ("completion_projection_repair_audits_no_replace",),
+    ).fetchone()
+    conn.close()

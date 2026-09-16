@@ -43,6 +43,7 @@ from api.routes import agent_runs_control as agent_runs_control_route
 from api.routes import agent_runs_commands as agent_runs_commands_route
 from api.routes import agent_approvals as agent_approvals_route
 from api.routes import agent_runs as agent_runs_route
+from api.routes import agent_run_completion as agent_run_completion_route
 from api.routes import external_agent_credentials as external_agent_credentials_route
 from api.routes import external_agent_jobs as external_agent_jobs_route
 from api.routes import external_agent_job_operator as external_agent_job_operator_route
@@ -87,6 +88,7 @@ if FastAPI:
     app.include_router(agent_runs_commands_route.router)
     app.include_router(agent_approvals_route.router)
     app.include_router(agent_runs_route.router)
+    app.include_router(agent_run_completion_route.router)
     app.include_router(external_agent_credentials_route.router)
     app.include_router(external_agent_jobs_route.router)
     app.include_router(external_agent_job_operator_route.router)

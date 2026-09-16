@@ -685,6 +685,63 @@ def test_completion_projection_cannot_move_to_an_older_event_cursor(outcome_deps
     )
 
 
+def test_completion_projection_cannot_move_backward_in_evaluation_time(outcome_deps):
+    workflow_id = create_workflow(outcome_deps)
+    outcome_service = _prepare_snapshot(outcome_deps, workflow_id, with_result=False)
+    _commit(outcome_service, workflow_id)
+    outcome_deps.agent_actions.create_agent_action(
+        agent_run_id=workflow_id,
+        sequence=2,
+        status="proposed",
+        capability_name="review_validation_readiness",
+        capability_version="v1",
+        inputs={},
+        outputs={},
+        inputs_hash=None,
+        outputs_hash=None,
+        rationale="Attempt a backdated completion decision",
+        confidence=None,
+        snapshot_version=None,
+        hypothesis_id=None,
+        variant_id=None,
+        validation_job_id=None,
+    )
+
+    with pytest.raises(
+        OutcomeLedgerConflict, match="completion projection cannot move backward"
+    ):
+        outcome_service.evaluate_and_commit_lifecycle(
+            command=command(
+                workflow_id,
+                command_id="command-decision-backdated",
+                issued_at=NOW + timedelta(minutes=60),
+            ),
+            snapshot_id="snapshot-a",
+            decision_id="decision-backdated",
+            evaluated_at=NOW + timedelta(minutes=35),
+        )
+    conn = get_connection()
+    projection = conn.execute(
+        "SELECT decision_id, authoritative_event_sequence FROM workflow_completion_projections WHERE workflow_id = ?",
+        (workflow_id,),
+    ).fetchone()
+    assert tuple(projection) == ("decision-a", 0)
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM workflow_completion_decisions WHERE workflow_id = ?",
+            (workflow_id,),
+        ).fetchone()[0]
+        == 1
+    )
+    assert (
+        conn.execute(
+            "SELECT current_sequence FROM workflow_completion_event_cursors WHERE workflow_id = ?",
+            (workflow_id,),
+        ).fetchone()[0]
+        == 0
+    )
+
+
 def test_duplicate_completion_delivery_replays_without_duplicate_events(outcome_deps):
     workflow_id = create_workflow(outcome_deps)
     outcome_service = _prepare_snapshot(outcome_deps, workflow_id)
@@ -742,14 +799,18 @@ def test_historical_decision_reconstructs_after_projection_advances(outcome_deps
     )
 
     assert historical.status.value == "incomplete"
-    rows = get_connection().execute(
-        """
+    rows = (
+        get_connection()
+        .execute(
+            """
         SELECT decision_id, projected_run_state
         FROM workflow_completion_lifecycle_events
         WHERE workflow_id = ? ORDER BY authoritative_event_sequence
         """,
-        (workflow_id,),
-    ).fetchall()
+            (workflow_id,),
+        )
+        .fetchall()
+    )
     assert [(row["decision_id"], row["projected_run_state"]) for row in rows] == [
         ("decision-a", "planned"),
         ("decision-b", "planned"),
@@ -939,9 +1000,7 @@ def test_all_rejected_governed_run_records_incomplete_and_becomes_non_runnable(
         run_id=run["id"], lock_token=lock_token, ttl_seconds=30
     )
 
-    reconciled = coordinator.synchronize_run(
-        run_id=run["id"], lock_token=lock_token
-    )
+    reconciled = coordinator.synchronize_run(run_id=run["id"], lock_token=lock_token)
 
     assert reconciled["status"] == "canceled"
     assert reconciled["completion_projection_is_current"] is True
