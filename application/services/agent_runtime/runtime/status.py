@@ -19,6 +19,8 @@ def apply_stopping_condition(
     stop = evaluate_stopping_conditions(run=run, actions=actions)
     if not stop:
         return None
+    if stop.status == "completed" and not _completion_is_authorized(run):
+        return None
     deps.agent_runs.update_agent_run(run_id=run_id, status=stop.status, error=None)
     _record_stop(deps=deps, run_id=run_id, stop=stop)
     return stop
@@ -58,6 +60,8 @@ def derive_next_run_status(
 
     stop = evaluate_stopping_conditions(run=run, actions=actions)
     if stop:
+        if stop.status == "completed" and not _completion_is_authorized(run):
+            return "planned", None
         return stop.status, stop
     statuses = {str(item.get("status") or "").lower() for item in actions}
     if "failed" in statuses:
@@ -67,8 +71,26 @@ def derive_next_run_status(
     if "proposed" in statuses:
         return "planned", None
     if statuses and statuses.issubset({"executed", "rejected"}):
-        return "completed", None
+        return (
+            "completed" if _completion_is_authorized(run) else "planned",
+            None,
+        )
     return "planned", None
+
+
+def _completion_is_authorized(run: Dict[str, Any]) -> bool:
+    if not bool(run.get("completion_authority_required")):
+        return True
+    projection = run.get("completion_projection")
+    return bool(
+        type(projection) is dict
+        and run.get("completion_projection_is_current") is True
+        and projection.get("completion_status") == "complete"
+        and projection.get("projected_run_status") == "completed"
+        and projection.get("graph_revision") == run.get("active_graph_revision")
+        and projection.get("decision_id")
+        and projection.get("decision_digest")
+    )
 
 
 def record_stopping_decision(*, deps: AppDeps, run_id: str, stop: StopDecision) -> None:

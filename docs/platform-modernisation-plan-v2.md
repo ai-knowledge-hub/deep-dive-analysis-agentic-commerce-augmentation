@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-09-05
+Last updated: 2026-09-15
 
 ## Purpose
 
@@ -173,9 +173,18 @@ effect. A single-use effect identity, durable started/uncertain/succeeded state,
 receipt linkage, and approval fulfillment prevent status-only authority,
 substitution, stale execution, and blind replay. The complete task, attempt,
 result, and objective-completion contracts are not implemented, however.
-Recovery and broader workflow concurrency controls therefore remain
-prerequisites for chat-issued dynamic workflows, parallel execution, joins, and
-compensation.
+Durable evidence, accepted-result, completion-authority, and deterministic
+decision contracts now govern terminal completion in the production sequential
+runtime through a host-only coordinator composition. Their atomic lifecycle
+commit is fenced against cancellation, lease loss, replanning,
+retry insertion, active-revision changes, and action-set changes. Production
+creation holds new plans in a non-runnable state until governance
+is durable; external-agent plans remain there until their exact job linkage is
+committed. The lifecycle commit includes the exact post-capability state.
+All-rejected governed plans record `INCOMPLETE` and terminate as canceled. Public
+completion projections, repair operations, and the complete durable workflow
+kernel remain prerequisites for chat-issued dynamic workflows, parallel
+execution, joins, and compensation.
 
 ## Target Runtime Model
 
@@ -493,8 +502,16 @@ Phase 1 remains open. The next reviewable sequence is:
    evaluation, canonical fingerprints, and lag-aware projections. Slice 6b adds
    append-only SQLite evidence, result, criteria, authority-snapshot, decision,
    and command-receipt persistence with exact restart reconstruction and trusted
-   host issuance. Runtime lifecycle integration and product projections remain
-   Slices 6c–6d.
+   host issuance. Slice 6c connects a separately privileged host coordinator to
+   the production sequential runtime, adds durable attempt/lease validation,
+   a closed action lifecycle, host-allocated event cursors, and an atomic,
+   run/action-fenced completion commit. Sequential runs
+   cannot become `completed` without an exact current `COMPLETE` decision;
+   creation cannot become runnable before governance, and final capability
+   state commits atomically with the decision. Cancellation, replanning,
+   retries, all-rejected work, incomplete evidence, and duplicate delivery
+   remain fail-closed and recoverable. Public API/control-plane
+   projections, repair, and operational metrics remain Slice 6d.
 7. **Sequential workflow compatibility and framework spike.** Represent one
    existing ordered agent run as an immutable workflow revision and tasks,
    dual-project its events to current APIs, and compare an internal kernel,

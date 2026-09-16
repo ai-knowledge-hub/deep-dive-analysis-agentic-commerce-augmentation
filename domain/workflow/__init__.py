@@ -59,6 +59,7 @@ from domain.workflow.outcome_serialization import (
     task_result_payload,
 )
 from domain.workflow.outcome_evaluation import evaluate_completion
+from domain.workflow.outcome_lifecycle import CompletionProjectionFence
 from domain.workflow.outcome_authority_serialization import (
     COMPLETION_AUTHORITY_SNAPSHOT_CONTRACT,
     completion_authority_snapshot_digest,
@@ -120,6 +121,7 @@ __all__ = [
     "CompletionDecision",
     "CompletionDisplayStatus",
     "CompletionProjection",
+    "CompletionProjectionFence",
     "CompletionStatus",
     "ContractAuthority",
     "CoverageClaim",

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from domain.workflow.outcome_lifecycle import (
+    CompletionProjectionFence,
+    TaskAttemptAuthority,
+)
 from domain.workflow.outcomes import (
     AuthoritativeTaskDefinition,
     CompletionAuthoritySnapshot,
@@ -29,7 +33,16 @@ class WorkflowOutcomeLedgerStore(Protocol):
         command: dict[str, Any],
         result: TaskResult,
         request_hash: str,
+        attempt_authority: TaskAttemptAuthority | None = None,
     ) -> dict[str, Any]: ...
+
+    def get_task_attempt_authority(
+        self, *, tenant_id: str, workflow_id: str, task_id: str
+    ) -> TaskAttemptAuthority | None: ...
+
+    def register_sequential_attempt_authority(
+        self, *, tenant_id: str, workflow_id: str, action_id: str, created_at: str
+    ) -> dict[str, str]: ...
 
     def publish_completion_contract(
         self,
@@ -59,7 +72,26 @@ class WorkflowOutcomeLedgerStore(Protocol):
         result_bindings: tuple[tuple[str, str], ...],
         evidence_bindings: tuple[tuple[str, str], ...],
         request_hash: str,
+        completion_fence: CompletionProjectionFence | None = None,
+        projected_run_state: str | None = None,
     ) -> dict[str, Any]: ...
+
+    def get_completion_projection_fence(
+        self, *, tenant_id: str, workflow_id: str
+    ) -> CompletionProjectionFence | None: ...
+
+    def get_completion_projection(
+        self, *, tenant_id: str, workflow_id: str
+    ) -> dict[str, Any] | None: ...
+
+    def resolve_completion_event_sequence(
+        self,
+        *,
+        tenant_id: str,
+        workflow_id: str,
+        idempotency_key: str,
+        decision_id: str,
+    ) -> int: ...
 
     def get_evidence(
         self, *, tenant_id: str, workflow_id: str, evidence_id: str
@@ -84,6 +116,10 @@ class WorkflowOutcomeLedgerStore(Protocol):
         workflow_id: str,
         criteria_id: str,
         criteria_hash: str | None = None,
+    ) -> dict[str, Any] | None: ...
+
+    def get_active_completion_contract(
+        self, *, tenant_id: str, workflow_id: str
     ) -> dict[str, Any] | None: ...
 
     def get_authority_snapshot(

@@ -307,10 +307,8 @@ event makes the projection current without changing the completion decision.
 
 ## Deferred Work
 
-- Slice 6c: coordinator validation, atomic completion commit, task/workflow
-  lifecycle integration, replanning and cancellation concurrency.
 - Slice 6d: API and UI projections, projection repair, metrics, mutation tests,
-  and composed sequential-runtime verification.
+  and broader composed sequential-runtime verification.
 - The full task, attempt, assignment, and result transition matrices remain part
   of the durable workflow-kernel delivery.
 - Contradiction grouping and resolution authority beyond explicit coverage
@@ -348,6 +346,76 @@ digests, uniqueness keys, foreign-key relationships, immutable-write guards,
 and transaction boundaries. PostgreSQL row or advisory locking may replace
 SQLite's single-writer lock, but it may not weaken exact idempotency, trusted
 snapshot issuance, or read-time reconstruction checks.
+
+## Slice 6c implementation record
+
+As of 2026-09-15, migration
+`shared/db/migrations/051_workflow_completion_lifecycle.sql` connects the
+outcome ledger to the sequential `agent_runs` compatibility projection. A
+separately composed host coordinator now governs the production sequential
+runtime without exposing its writer through general `AppDeps`. It publishes one
+task definition per ordered action, records action-output evidence, and
+validates a pending result against the exact contract plus a durable
+action-attempt identity. The store rechecks the action output, active graph
+revision, producer, and exact live lease token under the result-write lock.
+Worker-provided identity and authority labels remain non-authoritative.
+
+The lifecycle commit reads an exact run-state, active-revision, active worker
+lease, and complete action-set digest before evaluation. Under one
+`BEGIN IMMEDIATE` transaction it
+rechecks that fence, reconstructs and evaluates the durable inputs, stores the
+decision and relationship bindings, appends a completion lifecycle event and
+compatibility audit event, advances the recoverable completion projection, and
+commits the post-capability state and run status together. It transitions the
+run to `completed` only for an exact `COMPLETE` decision. The
+owning sequential coordinator may commit while holding the exact current lease;
+an absent, expired, or different lease fails closed. Every action must use the
+closed lifecycle and be explicitly `executed` or `rejected` before a complete
+decision can commit. Cancellation,
+replanning, retry insertion, revision changes, and write failures therefore
+win or lose as whole transactions rather than leaving mixed authority and
+projection state.
+
+Production run creation uses `planning` as a non-runnable barrier while the
+initial completion contract is published. External-agent runs remain behind
+that barrier until the exact job-to-run linkage is durably verified; an
+idempotent replay completes publication after a crash. Only a governed and,
+where applicable, durably linked run is released to `planned`. If every governed action is
+rejected, the host records an `INCOMPLETE` decision and atomically cancels the
+run so schedulers cannot select it forever. Terminal governed actions reject
+all later updates, including same-status payload replacement; currentness also
+recomputes the canonical output hash from stored JSON.
+
+Completion governance is monotonic but deployment-compatible. Contracts
+published by the Slice 6c writer activate the database completion guard
+immediately. Criteria persisted by the older Slice 6b writer are not
+automatically activated by migration 051; the first Slice 6c lifecycle commit
+adopts them. This permits rolling deployment and rollback without making the
+previous writer fail. Once activated, SQLite rejects any ordinary transition
+to `completed` without the current exact decision projection and preserves
+governed canceled or completed terminal state.
+
+Completion event sequence is not accepted from callers. The service resolves a
+replay cursor or proposes the next value, and the ledger allocates and validates
+the gap-free increment under the same write lock as the decision and projection.
+Read-model currentness independently recomputes the complete action digest and
+compares run status and state, active criteria, graph revision, and the durable
+event cursor. Any later action, payload, state, or stream drift makes the
+projection stale. Each historical decision reconstructs its projected state
+from its immutable lifecycle event keyed by decision identity, not from the
+single replaceable current-projection row.
+
+If a producer fails after completion governance is activated but before an
+external job is linked, the governed run is retained behind the non-runnable
+`planning` barrier and its idempotency reservation is released through an
+independent cleanup attempt. A best-effort transition may additionally mark it
+canceled, but that transition is not the safety boundary. Governance artifacts
+are audit evidence and are not deleted to mimic transactional rollback.
+
+The compatibility read model exposes whether durable completion authority is
+required, the current decision digest and revision, explicit blockers, and the
+projection version. It is not yet the public API or control-plane view; those
+operational projections and repair commands remain Slice 6d.
 
 ## Acceptance Criteria
 

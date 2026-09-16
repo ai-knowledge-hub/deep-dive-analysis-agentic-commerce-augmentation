@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Securi
 from fastapi.security import HTTPBearer
 
 from api.composition import default_deps
+from api.runtime_composition import default_completion_coordinator
 from api.routes.external_agent_job_models import (
     ExternalAgentJobActivityResponse,
     ExternalAgentJobCreateRequest,
@@ -45,9 +46,12 @@ from application.services.agent_runtime.registry import (
     get_tool_spec,
     non_executable_tool_contract,
 )
-from application.services.agent_runtime.runs import (
-    AgentRunPlanError,
-    create_agent_run_with_initial_plan,
+from application.services.agent_runtime.governed_runs import (
+    create_governed_agent_run_with_initial_plan,
+)
+from application.services.agent_runtime.runs import AgentRunPlanError
+from application.services.workflow_outcomes.production import (
+    SequentialCompletionCoordinator,
 )
 from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
 from infrastructure.db.agent.external_agent_jobs import (
@@ -58,6 +62,7 @@ from infrastructure.db.agent.external_agent_jobs import (
     get_external_agent_job_idempotency_reservation,
     list_external_agent_job_receipts,
     reserve_external_agent_job_idempotency,
+    release_linked_external_agent_run,
     update_external_agent_job_status,
 )
 
@@ -76,11 +81,72 @@ def _deps() -> AppDeps:
     return default_deps()
 
 
+def _completion_coordinator(
+    deps: AppDeps = Depends(_deps),
+) -> SequentialCompletionCoordinator:
+    return default_completion_coordinator(deps)
+
+
+def _abandon_unlinked_run(
+    *,
+    deps: AppDeps,
+    run: Dict[str, Any],
+    principal: PrincipalContext,
+    idempotency_key: str,
+    reason: str,
+    release_reservation: bool,
+) -> None:
+    """Retain governed audit state while independently releasing reservation."""
+
+    try:
+        deps.agent_runs.update_agent_run(
+            run_id=str(run["id"]), status="canceled", error=reason
+        )
+    except Exception:
+        # The repository rolls back failed writes. Preserve the original job
+        # failure while still attempting independent reservation cleanup.
+        pass
+    if release_reservation:
+        try:
+            delete_external_agent_job_idempotency_reservation(
+                client_id=principal.client_id,
+                principal_id=principal.principal_id,
+                idempotency_key=idempotency_key,
+            )
+        except Exception:
+            # Do not mask the failure that caused the run to be abandoned.
+            pass
+
+
+def _release_durably_linked_run(
+    *, deps: AppDeps, job: Dict[str, Any], run: Dict[str, Any], principal: PrincipalContext
+) -> Dict[str, Any]:
+    if str(run.get("status")) == "planning" and not release_linked_external_agent_run(
+        job_id=str(job["id"]),
+        run_id=str(run["id"]),
+        client_id=principal.client_id,
+        principal_id=principal.principal_id,
+    ):
+        raise external_agent_error(
+            status_code=409,
+            code="external_job_run_link_incomplete",
+            message="The durable external-job run link is not ready; retry safely.",
+            retryable=True,
+            retry_after_seconds=POLL_RETRY_AFTER_SECONDS,
+        )
+    return deps.agent_runs.get_agent_run(
+        run_id=str(run["id"]), client_id=principal.client_id
+    ) or run
+
+
 @router.post("")
 def create_external_agent_job_route(
     payload: ExternalAgentJobCreateRequest,
     request: Request,
     deps: AppDeps = Depends(_deps),
+    completion_coordinator: SequentialCompletionCoordinator = Depends(
+        _completion_coordinator
+    ),
 ) -> ExternalAgentJobResponse:
     principal = _require_external_agent_principal(request=request)
     _require_any_scope(principal, "external_agent_jobs:write", "agent_runs:write")
@@ -102,6 +168,9 @@ def create_external_agent_job_route(
         )
         if not run:
             raise _idempotent_job_run_missing(job_id=str(existing.get("id") or ""))
+        run = _release_durably_linked_run(
+            deps=deps, job=existing, run=run, principal=principal
+        )
         job = job_status_payload(job=existing, run=run)
         return ExternalAgentJobResponse(job=job, run=run, idempotent_replay=True)
 
@@ -134,6 +203,9 @@ def create_external_agent_job_route(
             )
             if not run:
                 raise _idempotent_job_run_missing(job_id=str(existing.get("id") or ""))
+            run = _release_durably_linked_run(
+                deps=deps, job=existing, run=run, principal=principal
+            )
             job = job_status_payload(job=existing, run=run)
             return ExternalAgentJobResponse(job=job, run=run, idempotent_replay=True)
         reservation = get_external_agent_job_idempotency_reservation(
@@ -165,8 +237,10 @@ def create_external_agent_job_route(
         payload=registry_payload,
     )
     try:
-        run = create_agent_run_with_initial_plan(
+        run = create_governed_agent_run_with_initial_plan(
             deps=deps,
+            completion_coordinator=completion_coordinator,
+            release_to_planned=False,
             client_id=principal.client_id,
             brand_id=payload.brand_id,
             product_id=payload.product_id,
@@ -230,33 +304,55 @@ def create_external_agent_job_route(
             response=response,
         )
     except Exception:
-        deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
-        delete_external_agent_job_idempotency_reservation(
-            client_id=principal.client_id,
-            principal_id=principal.principal_id,
+        _abandon_unlinked_run(
+            deps=deps,
+            run=run,
+            principal=principal,
             idempotency_key=payload.idempotency_key,
+            reason="external_job_persistence_failed",
+            release_reservation=True,
         )
         raise
     if created["request_hash"] != request_hash:
-        deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
+        _abandon_unlinked_run(
+            deps=deps,
+            run=run,
+            principal=principal,
+            idempotency_key=payload.idempotency_key,
+            reason="external_job_idempotency_payload_conflict",
+            release_reservation=True,
+        )
         raise external_agent_error(
             status_code=409,
             code="idempotency_payload_mismatch",
             message="idempotency_key already used with a different request payload",
         )
     if created["run_id"] != run["id"]:
-        deps.agent_runs.delete_agent_run(run_id=run["id"], client_id=principal.client_id)
+        _abandon_unlinked_run(
+            deps=deps,
+            run=run,
+            principal=principal,
+            idempotency_key=payload.idempotency_key,
+            reason="external_job_idempotent_replay_orphan",
+            release_reservation=True,
+        )
         existing_run = deps.agent_runs.get_agent_run(
             run_id=created["run_id"], client_id=principal.client_id
         )
         if not existing_run:
             raise _idempotent_job_run_missing(job_id=str(created.get("id") or ""))
+        existing_run = _release_durably_linked_run(
+            deps=deps, job=created, run=existing_run, principal=principal
+        )
         job = job_status_payload(job=created, run=existing_run)
         return ExternalAgentJobResponse(job=job, run=existing_run, idempotent_replay=True)
     response["job_id"] = created["id"]
     created = update_external_agent_job_status(
         job_id=created["id"], status=response["status"], response=response
     ) or created
+    run = _release_durably_linked_run(
+        deps=deps, job=created, run=run, principal=principal
+    )
     return ExternalAgentJobResponse(job=job_status_payload(job=created, run=run), run=run)
 
 

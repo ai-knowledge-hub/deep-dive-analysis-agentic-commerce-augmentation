@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.composition import default_deps
+from api.runtime_composition import default_completion_coordinator
 from api.routes.agent_run_models import (
     AgentRunCreateRequest,
     AgentRunDetailResponse,
@@ -24,9 +25,12 @@ from api.utils.tenancy import require_client_id
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.events import list_agent_run_events_page
 from application.services.agent_runtime import registry as agent_registry
-from application.services.agent_runtime.runs import (
-    AgentRunPlanError,
-    create_agent_run_with_initial_plan,
+from application.services.agent_runtime.governed_runs import (
+    create_governed_agent_run_with_initial_plan,
+)
+from application.services.agent_runtime.runs import AgentRunPlanError
+from application.services.workflow_outcomes.production import (
+    SequentialCompletionCoordinator,
 )
 from infrastructure.db.agent.agent_registry import ensure_agent_registry_version
 
@@ -36,6 +40,12 @@ router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
 
 def _deps() -> AppDeps:
     return default_deps()
+
+
+def _completion_coordinator(
+    deps: AppDeps = Depends(_deps),
+) -> SequentialCompletionCoordinator:
+    return default_completion_coordinator(deps)
 
 
 def registry_contract_payload(*args: Any, **kwargs: Any) -> Dict[str, Any]:
@@ -60,6 +70,9 @@ def create_agent_run(
     payload: AgentRunCreateRequest,
     request: Request,
     deps: AppDeps = Depends(_deps),
+    completion_coordinator: SequentialCompletionCoordinator = Depends(
+        _completion_coordinator
+    ),
 ) -> Dict[str, Any]:
     principal = resolve_principal_context(
         request=request,
@@ -85,8 +98,9 @@ def create_agent_run(
         payload=registry_payload,
     )
     try:
-        run = create_agent_run_with_initial_plan(
+        run = create_governed_agent_run_with_initial_plan(
             deps=deps,
+            completion_coordinator=completion_coordinator,
             client_id=principal.client_id,
             brand_id=payload.brand_id,
             product_id=payload.product_id,

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.composition import default_deps
+from api.runtime_composition import default_runtime
 from api.utils.approval_authority import require_approval_authority
 from api.utils.agent_run_authorization import require_agent_run_control_access
 from api.utils.tenancy import require_client_id
@@ -34,7 +35,7 @@ def _deps() -> AppDeps:
 
 
 def _runtime(deps: AppDeps = Depends(_deps)) -> AgentRuntimeService:
-    return AgentRuntimeService(deps=deps)
+    return default_runtime(deps)
 
 
 class AgentRunCommandRequest(BaseModel):

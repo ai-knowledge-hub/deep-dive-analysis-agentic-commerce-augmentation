@@ -26,10 +26,18 @@ class AgentWorkerRunResult:
 
 
 class AgentRuntimeWorkerService:
-    def __init__(self, *, deps: AppDeps, lock_ttl_seconds: int = 30) -> None:
+    def __init__(
+        self,
+        *,
+        deps: AppDeps,
+        lock_ttl_seconds: int = 30,
+        completion_coordinator=None,
+    ) -> None:
         self._deps = deps
         self._runtime = AgentRuntimeService(
-            deps=deps, lock_ttl_seconds=lock_ttl_seconds
+            deps=deps,
+            lock_ttl_seconds=lock_ttl_seconds,
+            completion_coordinator=completion_coordinator,
         )
 
     def tick_client(

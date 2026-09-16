@@ -14,10 +14,7 @@ from application.services.agent_runtime.runtime.authorized_execution import (
     AuthorizedExecutionState,
     execute_with_exact_authorization,
 )
-from application.services.agent_runtime.runtime.audit import (
-    record_action_event,
-    record_run_event,
-)
+from application.services.agent_runtime.runtime.audit import record_action_event
 from application.services.agent_runtime.runtime.action_claims import (
     claim_next_approved_action,
 )
@@ -27,11 +24,22 @@ from application.services.agent_runtime.runtime.failures import (
     record_policy_failure_and_stop,
     record_runtime_failure,
 )
+from application.services.agent_runtime.runtime.errors import (
+    AgentRuntimeError,
+    NoApprovedActionError,
+    PlanOnlyModeError,
+    RunBusyError,
+    RunNotFoundError,
+)
+from application.services.agent_runtime.runtime.controls import (
+    cancel_run_control,
+    pause_run_control,
+    start_run_control,
+)
 from application.services.agent_runtime.runtime.payloads import hash_payload
 from application.services.agent_runtime.runtime.status import (
     apply_stopping_condition,
     compute_next_run_status,
-    record_operator_pause_condition,
 )
 from application.services.agent_runtime.harness_posture import (
     HarnessPostureError,
@@ -46,26 +54,6 @@ from application.services.agent_runtime.registry import (
 )
 
 
-class AgentRuntimeError(ValueError):
-    pass
-
-
-class RunNotFoundError(AgentRuntimeError):
-    pass
-
-
-class PlanOnlyModeError(AgentRuntimeError):
-    pass
-
-
-class RunBusyError(AgentRuntimeError):
-    pass
-
-
-class NoApprovedActionError(AgentRuntimeError):
-    pass
-
-
 _TERMINAL_STATUSES = {"canceled", "cancelled", "completed", "failed"}
 _NON_EXECUTABLE_STATUSES = {*_TERMINAL_STATUSES, "paused"}
 
@@ -78,77 +66,27 @@ class RuntimeResult:
 
 
 class AgentRuntimeService:
-    def __init__(self, *, deps: AppDeps, lock_ttl_seconds: int = 30) -> None:
+    def __init__(
+        self,
+        *,
+        deps: AppDeps,
+        lock_ttl_seconds: int = 30,
+        completion_coordinator: Any | None = None,
+    ) -> None:
         self._deps = deps
         self._lock_ttl_seconds = max(5, int(lock_ttl_seconds))
         self._policy = PolicyEnforcer()
+        self._completion_coordinator = completion_coordinator
 
     def start_run(self, *, run_id: str) -> RuntimeResult:
-        run = self._require_run(run_id)
-        self._assert_not_terminal(run, action="started")
-        run_mode = str(run.get("run_mode") or "plan_only").strip().lower()
-        if not run_mode_supported(run_mode):
-            raise AgentRuntimeError(f"Unsupported run_mode: {run_mode}")
-        if run_mode == "plan_only":
-            updated = self._deps.agent_runs.update_agent_run(
-                run_id=run_id,
-                status="planned",
-                last_heartbeat_at=None,
-                error=None,
-            )
-            return RuntimeResult(
-                run=updated or run,
-                message=(
-                    "Run is in plan-only mode. Actions can be approved/rejected but "
-                    "not executed."
-                ),
-            )
-        updated = self._deps.agent_runs.update_agent_run(
-            run_id=run_id, status="running", error=None
-        )
-        record_run_event(
-            deps=self._deps,
-            run_id=run_id,
-            sequence=0,
-            event_type="run_started",
-            status="running",
-            note="Run started",
-        )
-        return RuntimeResult(run=updated or run)
+        run, message = start_run_control(self, run_id)
+        return RuntimeResult(run=run, message=message)
 
     def pause_run(self, *, run_id: str) -> RuntimeResult:
-        run = self._require_run(run_id)
-        self._assert_not_terminal(run, action="paused")
-        updated = self._deps.agent_runs.update_agent_run(run_id=run_id, status="paused")
-        record_run_event(
-            deps=self._deps,
-            run_id=run_id,
-            sequence=0,
-            event_type="run_paused",
-            status="paused",
-            note="Run paused",
-        )
-        record_operator_pause_condition(deps=self._deps, run=updated or run)
-        return RuntimeResult(run=updated or run)
+        return RuntimeResult(run=pause_run_control(self, run_id))
 
     def cancel_run(self, *, run_id: str) -> RuntimeResult:
-        run = self._require_run(run_id)
-        if self._normalized_status(run) in _TERMINAL_STATUSES:
-            raise AgentRuntimeError("Run is already terminal")
-        updated = self._deps.agent_runs.update_agent_run(
-            run_id=run_id,
-            status="canceled",
-            error=None,
-        )
-        record_run_event(
-            deps=self._deps,
-            run_id=run_id,
-            sequence=0,
-            event_type="run_canceled",
-            status="canceled",
-            note="Run canceled",
-        )
-        return RuntimeResult(run=updated or run)
+        return RuntimeResult(run=cancel_run_control(self, run_id))
 
     def step_once(self, *, run_id: str, user_id: Optional[str]) -> RuntimeResult:
         run = self._require_run(run_id)
@@ -175,6 +113,13 @@ class AgentRuntimeService:
                 lock_token=lock_token,
                 ttl_seconds=self._lock_ttl_seconds,
             )
+            if self._completion_coordinator is not None:
+                synchronized = self._completion_coordinator.synchronize_run(
+                    run_id=run_id, lock_token=lock_token
+                )
+                if str(synchronized.get("status") or "").lower() in _TERMINAL_STATUSES:
+                    return RuntimeResult(run=synchronized)
+                run = synchronized
             stop = apply_stopping_condition(deps=self._deps, run=run)
             if stop:
                 raise NoApprovedActionError(stop.note)
@@ -340,18 +285,25 @@ class AgentRuntimeService:
                     action_id=str(action.get("id") or ""),
                     client_id=str(run.get("client_id") or ""),
                 )
-            next_state = next_state_for_capability(capability_name)
-            if next_state:
-                self._deps.agent_runs.update_agent_run(run_id=run_id, state=next_state)
-            refreshed_run = self._require_run(run_id)
-            status = compute_next_run_status(
-                deps=self._deps, run=refreshed_run, run_id=run_id
-            )
-            updated_run = self._deps.agent_runs.update_agent_run(
-                run_id=run_id,
-                status=status,
-                error=None,
-            )
+            if self._completion_coordinator is not None:
+                updated_run = self._completion_coordinator.synchronize_run(
+                    run_id=run_id, lock_token=lock_token
+                )
+            else:
+                next_state = next_state_for_capability(capability_name)
+                if next_state:
+                    self._deps.agent_runs.update_agent_run(
+                        run_id=run_id, state=next_state
+                    )
+                refreshed_run = self._require_run(run_id)
+                status = compute_next_run_status(
+                    deps=self._deps, run=refreshed_run, run_id=run_id
+                )
+                updated_run = self._deps.agent_runs.update_agent_run(
+                    run_id=run_id,
+                    status=status,
+                    error=None,
+                )
             self._deps.agent_runs.heartbeat_run_lock(
                 run_id=run_id,
                 lock_token=lock_token,
@@ -378,6 +330,24 @@ class AgentRuntimeService:
         if not run:
             raise RunNotFoundError("Agent run not found")
         return run
+
+    def _transition_run(
+        self,
+        run: Dict[str, Any],
+        *,
+        status: str,
+        action: str,
+        error: Any = None,
+    ) -> Dict[str, Any]:
+        updated = self._deps.agent_runs.transition_agent_run_status(
+            run_id=str(run.get("id") or ""),
+            expected_statuses=(str(run.get("status") or ""),),
+            status=status,
+            error=error,
+        )
+        if updated is None:
+            raise AgentRuntimeError(f"Run status changed while it was being {action}")
+        return updated
 
     def _normalized_status(self, run: Dict[str, Any]) -> str:
         status = str(run.get("status") or "").strip().lower()

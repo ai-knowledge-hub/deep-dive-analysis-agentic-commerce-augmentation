@@ -11,6 +11,7 @@ import os
 from typing import Any, Dict, List
 
 from api.composition import default_deps
+from api.runtime_composition import default_worker
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
 from shared.db.connection import DEFAULT_DB_PATH
 
@@ -39,7 +40,7 @@ def main() -> None:
 
     deps = default_deps()
     deps.init_db()
-    service = AgentRuntimeWorkerService(deps=deps)
+    service = default_worker(deps)
 
     results: List[Dict[str, Any]] = []
     if args.client_id:

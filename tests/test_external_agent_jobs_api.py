@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import sys
 import types
 import base64
@@ -36,6 +34,7 @@ from infrastructure.db.agent.external_agent_jobs import (
 from infrastructure.db.core.connection import get_connection
 from shared.config.env import get_settings
 from shared.db.connection import init_db, set_database_path
+from tests.support.governed_completion import complete_governed_run
 
 CLIENT_ID = "client-a"
 
@@ -112,6 +111,8 @@ def test_external_agent_job_create_is_idempotent_and_status_is_scoped(
     assert first_payload["run"]["harness_id"] == "safe_autonomy_b2b"
     assert first_payload["run"]["run_mode"] == "auto_execute_safe"
     assert first_payload["run"]["policy_profile_id"] == "safe_auto"
+    assert first_payload["run"]["completion_authority_required"] is True
+    assert first_payload["run"]["active_completion_criteria_digest"]
 
     second = client.post(
         "/external-agent/jobs", headers=_headers(token), json=payload
@@ -720,8 +721,7 @@ def test_external_agent_job_receipt_is_signed_and_tracks_run_status(
     assert verification.json()["valid"] is True
     assert verification.json()["key_id"] == "agent-principal-signing-secret:v1"
 
-    deps = default_deps()
-    deps.agent_runs.update_agent_run(run_id=run_id, status="completed")
+    complete_governed_run(run_id)
     completed_receipt_response = client.get(
         f"/external-agent/jobs/{job_id}/receipt", headers=_headers(token)
     )
@@ -800,8 +800,7 @@ def test_external_agent_job_status_hides_stale_receipt_metadata(client: TestClie
     assert receipt_response.status_code == 200
     assert receipt_response.json()["receipt"]["status"] == "accepted"
 
-    deps = default_deps()
-    deps.agent_runs.update_agent_run(run_id=run_id, status="completed")
+    complete_governed_run(run_id)
 
     status = client.get(f"/external-agent/jobs/{job_id}", headers=_headers(token))
     assert status.status_code == 200

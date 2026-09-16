@@ -438,6 +438,21 @@ def test_create_agent_run_rejects_unsupported_capability(client: TestClient):
     assert "Unsupported allowed_capabilities: not_real" in response.json()["detail"]
 
 
+def test_create_agent_run_never_exposes_an_ungoverned_empty_plan(client: TestClient):
+    response = client.post(
+        "/agent-runs",
+        json={"client_id": CLIENT_ID, "user_id": USER_ID},
+    )
+
+    assert response.status_code == 400
+    assert "at least one planned task" in response.json()["detail"]
+    deps = default_deps()
+    listed = deps.agent_runs.list_agent_runs(client_id=CLIENT_ID, limit=1)[0]
+    run = deps.agent_runs.get_agent_run(run_id=listed["id"], client_id=CLIENT_ID)
+    assert run["status"] == "failed"
+    assert run["completion_authority_required"] is False
+
+
 def test_create_agent_run_rejects_beta_blocked_production_capability(
     client: TestClient,
 ):
