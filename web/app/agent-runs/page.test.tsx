@@ -616,6 +616,50 @@ describe("AgentRunsPage timeline presets", () => {
     });
   });
 
+  it("keeps the default run proposal inside the beta release boundary", async () => {
+    const user = userEvent.setup();
+    const betaBlockedCapabilities = [
+      "promote_variant_prod",
+      "publish_copy_revision",
+    ];
+
+    createAgentRunMock.mockImplementationOnce(
+      async (payload: { allowed_capabilities?: string[] }) => {
+        expect(payload.allowed_capabilities).toEqual([
+          "freeze_retrieval_protocol",
+          "run_control_baseline",
+          "seed_hypotheses",
+          "generate_variants",
+          "run_variant",
+          "request_synthetic_validation",
+          "review_validation_readiness",
+          "update_posterior_and_decisions",
+          "recommend_next_action",
+          "promote_variant_lab",
+        ]);
+        expect(payload.allowed_capabilities).not.toEqual(
+          expect.arrayContaining(betaBlockedCapabilities),
+        );
+        return { run: { id: "run-2" } };
+      },
+    );
+
+    render(<AgentRunsPage />);
+    const newRunButton = screen.getByRole("button", { name: /New agent run/i });
+    await waitFor(() => expect(newRunButton).toBeEnabled());
+    await user.click(newRunButton);
+    await user.click(await screen.findByRole("button", { name: /Create run/i }));
+
+    await waitFor(() => expect(createAgentRunMock).toHaveBeenCalledTimes(1));
+    expect(createAgentRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        run_mode: "plan_only",
+        requires_approval: true,
+      }),
+      "user-a",
+    );
+  });
+
   it("applies Policy failures preset to event query payload", async () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
