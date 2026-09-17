@@ -287,7 +287,7 @@ def test_repair_requires_exact_tenant_scoped_operator_authority(completion_api):
     )
 
     assert unauthenticated.status_code == 401
-    assert wrong_principal.status_code == 403
+    assert wrong_principal.status_code == 404
     assert wrong_tenant.status_code == 403
     with pytest.raises(OutcomeLedgerDataError, match="authority is not trusted"):
         deps.workflow_outcomes.repair_completion_projection(
@@ -318,6 +318,34 @@ def test_repair_requires_exact_tenant_scoped_operator_authority(completion_api):
     assert (
         direct_bypass["reason"] == "repair principal lacks durable operator authority"
     )
+
+
+@pytest.mark.parametrize("path_suffix", ["/completion", "/completion/repair"])
+def test_invalid_bearer_authority_does_not_reveal_run_existence(
+    completion_api, path_suffix
+):
+    client, deps = completion_api
+    existing_id, _ = _governed_incomplete(deps)
+    headers = _operator_headers(scopes=["unrelated:scope"])
+
+    def request(run_id):
+        path = f"/agent-runs/{run_id}{path_suffix}"
+        if path_suffix.endswith("repair"):
+            return client.post(
+                path,
+                headers=headers,
+                json={"client_id": TENANT_ID, "idempotency_key": "hidden-scope"},
+            )
+        return client.get(
+            path,
+            headers=headers,
+            params={"client_id": TENANT_ID},
+        )
+
+    existing = request(existing_id)
+    missing = request("run-does-not-exist")
+
+    assert existing.status_code == missing.status_code == 403
     assert (
         get_connection()
         .execute("SELECT COUNT(*) FROM workflow_completion_projection_repairs")

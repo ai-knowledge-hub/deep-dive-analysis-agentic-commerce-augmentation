@@ -199,6 +199,20 @@ Admin surface:
 
 - Admin (`/admin`)
 
+### Completion truth in Runs
+
+The selected run's **Verified outcome** section is the completion authority.
+Run status describes execution progress but must not be interpreted as proof
+that the objective is complete. A green completion label appears only for a
+current, verified `COMPLETE` decision. Stale, lagging, leading, corrupt, or
+unavailable projections remain explicitly non-authoritative; older legacy runs
+are labeled as not governed.
+
+Eligible projection repair is an operator recovery action, not a reevaluation
+or rerun. It requires a scoped access key held only in memory for the browser
+tab and a second explicit confirmation. Conflicts refresh the authoritative
+view before the operator decides whether to retry.
+
 ## Historical Guides
 
 The older complete user guide and app workflow documents live under `docs/history/`. They are retained for context and rationale, but they describe the older lab-first product shape and should not be used as the current operator guide.

@@ -12,6 +12,7 @@ from api.runtime_composition import default_completion_coordinator
 from api.utils.agent_run_authorization import (
     principal_has_scope,
     require_agent_run_control_access,
+    require_agent_run_list_access,
 )
 from api.utils.principals import PrincipalContext, resolve_principal_context
 from api.utils.tenancy import require_client_id
@@ -53,16 +54,27 @@ def get_agent_run_completion(
     coordinator: SequentialCompletionCoordinator = Depends(_completion_coordinator),
 ):
     scoped_client_id = require_client_id(client_id, user_id)
-    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=scoped_client_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    require_agent_run_control_access(
+    require_agent_run_list_access(
         request=request,
-        run=run,
         client_id=scoped_client_id,
         user_id=user_id,
         required_scope="agent_runs:read",
     )
+    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=scoped_client_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    try:
+        require_agent_run_control_access(
+            request=request,
+            run=run,
+            client_id=scoped_client_id,
+            user_id=user_id,
+            required_scope="agent_runs:read",
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            raise HTTPException(status_code=404, detail="Agent run not found") from exc
+        raise
     try:
         completion = coordinator.get_completion_read_model(
             tenant_id=scoped_client_id, workflow_id=run_id
@@ -89,15 +101,15 @@ def repair_agent_run_completion(
     coordinator: SequentialCompletionCoordinator = Depends(_completion_coordinator),
 ):
     scoped_client_id = require_client_id(payload.client_id, payload.user_id)
-    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=scoped_client_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    principal = _require_repair_operator(
+    principal = _require_repair_principal(
         request=request,
-        run=run,
         client_id=scoped_client_id,
         user_id=payload.user_id,
     )
+    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=scoped_client_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    _require_repair_ownership(principal=principal, run=run)
     try:
         return coordinator.repair_completion_read_model(
             tenant_id=scoped_client_id,
@@ -112,10 +124,9 @@ def repair_agent_run_completion(
         ) from exc
 
 
-def _require_repair_operator(
+def _require_repair_principal(
     *,
     request: Request,
-    run: dict,
     client_id: str,
     user_id: str | None,
 ) -> PrincipalContext:
@@ -138,14 +149,17 @@ def _require_repair_operator(
         )
     if not principal_has_scope(principal=principal, scope=REPAIR_SCOPE):
         raise HTTPException(status_code=403, detail=f"Missing required scope: {REPAIR_SCOPE}")
+    return principal
+
+
+def _require_repair_ownership(*, principal: PrincipalContext, run: dict) -> None:
     if principal.principal_id != str(run.get("principal_id") or "") and not principal_has_scope(
         principal=principal, scope="agent_runs:supervise"
     ):
         raise HTTPException(
-            status_code=403,
-            detail="Operator does not own this run and lacks agent_runs:supervise",
+            status_code=404,
+            detail="Agent run not found",
         )
-    return principal
 
 
 __all__ = ["router"]

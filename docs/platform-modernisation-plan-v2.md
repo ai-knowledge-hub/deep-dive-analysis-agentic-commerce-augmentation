@@ -515,8 +515,14 @@ Phase 1 remains open. The next reviewable sequence is:
    agent-run API. Its bearer-authorized repair command rebuilds only from the
    latest reproduced immutable decision and lifecycle event, records an
    immutable idempotent receipt plus audit event, and refuses repair when live
-   workflow state has superseded the decision. Visible control-plane UI and
-   operational metrics remain Slice 6d.2.
+   workflow state has superseded the decision. Slice 6d.2 adds the Runs
+   control-plane surface: typed completion clients, explicit governed/legacy
+   and current/stale states, the authority/decision/projection cursors,
+   incomplete blockers, accepted result and evidence attestations, bounded
+   loaded-run metrics with deduplicated incomplete-run counts per blocker
+   category, and an explicitly confirmed bearer-authorized repair
+   flow with stable retry idempotency. The UI fails closed when the verified
+   read is unavailable and never derives completion from `agent_runs.status`.
 7. **Sequential workflow compatibility and framework spike.** Represent one
    existing ordered agent run as an immutable workflow revision and tasks,
    dual-project its events to current APIs, and compare an internal kernel,
