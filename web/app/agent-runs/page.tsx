@@ -116,8 +116,6 @@ const DEFAULT_ALLOWED_CAPABILITIES = [
   "update_posterior_and_decisions",
   "recommend_next_action",
   "promote_variant_lab",
-  "promote_variant_prod",
-  "publish_copy_revision",
 ];
 
 const AGENT_FLOW_STEPS: { id: string; label: string }[] = [
