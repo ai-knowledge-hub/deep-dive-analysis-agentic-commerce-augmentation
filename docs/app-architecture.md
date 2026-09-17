@@ -287,6 +287,13 @@ The agentic module is implemented as an orchestration layer over the same experi
   principal with the dedicated repair scope and, for another principal's run,
   supervision scope. Repair can only replay the latest exact immutable
   lifecycle event into the compatibility projection.
+- The Runs control plane reads completion only through that verified API. It
+  distinguishes legacy, awaiting, current, stale, lagging, leading, and corrupt
+  states; displays all three event cursors and decision blockers; and treats an
+  unavailable or non-current projection as non-authoritative. Repair is shown
+  only when the server declares it eligible, requires an in-memory bearer
+  credential plus explicit confirmation, and retains one idempotency key across
+  conflict or transport retries.
 
 ### Recovery and projection integrity
 

@@ -32,6 +32,10 @@ import {
   ValidationJobResponse,
   ValidationProviderRunResponse,
 } from "./types";
+import type {
+  AgentRunCompletionRepairResponse,
+  AgentRunCompletionResponse,
+} from "../completionTypes";
 import {
   StreamHandlers,
   getBrandId,
@@ -563,6 +567,41 @@ export async function getAgentRun(
   if (payload.limit) params.set("limit", String(payload.limit));
   return request<AgentRunDetailResponse>(
     `/agent-runs/${runId}${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+}
+
+export async function getAgentRunCompletion(
+  runId: string,
+  userId?: string | null,
+): Promise<AgentRunCompletionResponse> {
+  const params = new URLSearchParams();
+  const clientId = getClientId();
+  if (clientId) params.set("client_id", clientId);
+  if (userId) params.set("user_id", userId);
+  return request<AgentRunCompletionResponse>(
+    `/agent-runs/${encodeURIComponent(runId)}/completion${
+      params.toString() ? `?${params.toString()}` : ""
+    }`,
+  );
+}
+
+export async function repairAgentRunCompletion(
+  runId: string,
+  payload: { idempotency_key: string },
+  userId?: string | null,
+): Promise<AgentRunCompletionRepairResponse> {
+  const clientId = getClientId();
+  return request<AgentRunCompletionRepairResponse>(
+    `/agent-runs/${encodeURIComponent(runId)}/completion/repair`,
+    {
+      method: "POST",
+      headers: registryWriteAuthHeaders(),
+      body: JSON.stringify({
+        client_id: clientId ?? undefined,
+        user_id: userId ?? undefined,
+        idempotency_key: payload.idempotency_key,
+      }),
+    },
   );
 }
 

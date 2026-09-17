@@ -11,6 +11,8 @@ const replaceMock = vi.fn();
 const listAgentRunsMock = vi.fn();
 const listExperimentsMock = vi.fn();
 const getAgentRunMock = vi.fn();
+const getAgentRunCompletionMock = vi.fn();
+const repairAgentRunCompletionMock = vi.fn();
 const getAgentRunEventsMock = vi.fn();
 const getExternalAgentJobForRunMock = vi.fn();
 const verifyExternalAgentJobReceiptForRunMock = vi.fn();
@@ -67,6 +69,8 @@ vi.mock("../../lib/api", () => ({
   listAgentRuns: (...args: unknown[]) => listAgentRunsMock(...args),
   listExperiments: (...args: unknown[]) => listExperimentsMock(...args),
   getAgentRun: (...args: unknown[]) => getAgentRunMock(...args),
+  getAgentRunCompletion: (...args: unknown[]) => getAgentRunCompletionMock(...args),
+  repairAgentRunCompletion: (...args: unknown[]) => repairAgentRunCompletionMock(...args),
   getAgentRunEvents: (...args: unknown[]) => getAgentRunEventsMock(...args),
   getExternalAgentJobForRun: (...args: unknown[]) =>
     getExternalAgentJobForRunMock(...args),
@@ -111,6 +115,8 @@ describe("AgentRunsPage timeline presets", () => {
     listAgentRunsMock.mockReset();
     listExperimentsMock.mockReset();
     getAgentRunMock.mockReset();
+    getAgentRunCompletionMock.mockReset();
+    repairAgentRunCompletionMock.mockReset();
     getAgentRunEventsMock.mockReset();
     getExternalAgentJobForRunMock.mockReset();
     verifyExternalAgentJobReceiptForRunMock.mockReset();
@@ -180,6 +186,28 @@ describe("AgentRunsPage timeline presets", () => {
         registry_fingerprint: "abcdef1234567890",
       },
       actions: [],
+    });
+    getAgentRunCompletionMock.mockResolvedValue({
+      completion: {
+        tenant_id: "client-a",
+        workflow_id: "run-1",
+        completion_authority_required: false,
+        authority_state: "legacy",
+        authoritative_decision: null,
+        accepted_results: [],
+        evidence: [],
+        projection: {
+          state: "not_governed",
+          freshness: "not_governed",
+          display_status: "not_governed",
+          authoritative_event_sequence: null,
+          decision_event_sequence: null,
+          projected_event_sequence: null,
+          projection_lag: null,
+          projection_version: null,
+        },
+        repair: { eligible: false, reason: "not_governed", last_outcome: null },
+      },
     });
     getAgentRunEventsMock.mockResolvedValue({
       events: [],

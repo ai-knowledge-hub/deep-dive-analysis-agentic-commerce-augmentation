@@ -71,6 +71,10 @@ import {
   type CreateAgentRunForm,
 } from "../../components/agent-runs/CreateAgentRunDrawer";
 import { ExecutionControlsSummary } from "../../components/agent-runs/ExecutionControlsSummary";
+import {
+  CompletionAuthorityPanel,
+} from "../../components/agent-runs/CompletionAuthorityPanel";
+import { useCompletionControlPlane } from "../../components/agent-runs/useCompletionControlPlane";
 import { ExternalAgentJobPanel } from "../../components/agent-runs/ExternalAgentJobPanel";
 import { RegistryPanel } from "../../components/agent-runs/RegistryPanel";
 import { RunActionsPanel } from "../../components/agent-runs/RunActionsPanel";
@@ -459,6 +463,18 @@ function AgentRunsPageContent() {
     userId,
   ]);
 
+  const onCompletionRepairCommitted = useCallback(
+    () => Promise.all([loadSelected(), loadRuns()]),
+    [loadRuns, loadSelected],
+  );
+
+  const completionControl = useCompletionControlPlane({
+    runs,
+    selectedRunId,
+    userId,
+    onRepairCommitted: onCompletionRepairCommitted,
+  });
+
   const loadOlderEvents = useCallback(async () => {
     if (!userId || !selectedRunId || !eventsPage?.before_cursor) return;
     setLoadingOlderEvents(true);
@@ -629,6 +645,7 @@ function AgentRunsPageContent() {
     loadSelected();
   }, [loadSelected]);
 
+
   useEffect(() => {
     if (!selectedRunId || !userId) {
       setLivePollingActive(false);
@@ -706,6 +723,7 @@ function AgentRunsPageContent() {
   }, [runs]);
 
   const displayRuns = useMemo(() => sortRunsForOperatorAttention(runs ?? []), [runs]);
+
 
   const flowSteps = useMemo(() => {
     const currentIndex = AGENT_FLOW_STEPS.findIndex(
@@ -1510,6 +1528,16 @@ function AgentRunsPageContent() {
               {selectedRun ? (
                 <ExecutionControlsSummary selectedRun={selectedRun} flowSteps={flowSteps} />
               ) : null}
+              <CompletionAuthorityPanel
+                completion={completionControl.selected}
+                overview={completionControl.overview}
+                loading={completionControl.loading}
+                unavailable={completionControl.selectedUnavailable}
+                repairBusy={completionControl.repairBusy}
+                repairNotice={completionControl.repairNotice}
+                onRefresh={() => void completionControl.refreshSelected()}
+                onRepair={() => void completionControl.repairSelected()}
+              />
               <section className="control-section">
                 <div className="control-section__header">
                   <div>
