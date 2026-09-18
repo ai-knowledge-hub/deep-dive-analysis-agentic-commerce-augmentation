@@ -16,6 +16,7 @@ from pathlib import Path
 from application.ports.deps import AppDeps
 from infrastructure.alignment import goal_alignment_gateway
 from infrastructure.db import agent as agent_db
+from infrastructure.db import workflow as workflow_db
 import infrastructure.db.catalog.audience_archetypes as audience_archetypes_repo
 import infrastructure.db.catalog.brand_beliefs as brand_beliefs_repo
 import infrastructure.db.catalog.clients as clients_repo
@@ -104,6 +105,7 @@ def default_deps() -> AppDeps:
         approval_ledger=agent_db.approval_ledger,
         agent_registry=agent_db.agent_registry,
         governed_effect_receipts=agent_db.governed_effect_receipts,
+        workflow_compatibility=workflow_db.sequential_compatibility,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id
         ),

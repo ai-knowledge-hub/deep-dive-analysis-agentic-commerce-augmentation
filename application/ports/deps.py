@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
+from application.ports.workflow_compatibility import WorkflowCompatibilityStore
+
 
 class SessionsStore(Protocol):
     def create_session(
@@ -503,6 +505,7 @@ class AppDeps:
     approval_ledger: ApprovalLedgerStore
     agent_registry: AgentRegistryStore
     governed_effect_receipts: GovernedEffectReceiptsStore
+    workflow_compatibility: WorkflowCompatibilityStore
 
     # Semantic memory
     semantic_memory_factory: Callable[[str, str], SemanticMemory]

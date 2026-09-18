@@ -35,6 +35,9 @@ from application.services.agent_runtime.registry import (
     run_mode_supported,
     version_context_for_capability,
 )
+from application.services.workflow_compatibility import (
+    project_sequential_run_best_effort,
+)
 
 
 def create_agent_run_with_initial_plan(
@@ -148,6 +151,11 @@ def create_agent_run_with_initial_plan(
         active_registry_fingerprint=active_registry_fingerprint,
         preferred_skill_id=preferred_skill_id,
         harness_profile=harness_profile,
+    )
+    project_sequential_run_best_effort(
+        store=deps.workflow_compatibility,
+        tenant_id=client_id,
+        run_id=str(run["id"]),
     )
     return run
 

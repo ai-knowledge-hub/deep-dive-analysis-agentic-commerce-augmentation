@@ -290,6 +290,18 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(
     assert payload["actions"][0]["skill_version"] == "v1"
     assert payload["actions"][0]["effect_class"] == "write_low_risk"
 
+    workflow_projection = (
+        default_deps().workflow_compatibility.get_sequential_projection(
+            tenant_id=CLIENT_ID,
+            run_id=run["id"],
+        )
+    )
+    assert workflow_projection is not None
+    assert workflow_projection["structure_and_event_ids_current"] is True
+    assert workflow_projection["governed_semantic_parity"] == "not_projected_slice_7a"
+    assert workflow_projection["revision"]["revision"] == 1
+    assert workflow_projection["tasks"][0]["task_id"] == payload["actions"][0]["id"]
+
     events = client.get(
         f"/agent-runs/{run['id']}/events",
         headers={"Authorization": f"Bearer {token}"},
