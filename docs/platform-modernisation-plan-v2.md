@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 ## Purpose
 
@@ -528,6 +528,19 @@ Phase 1 remains open. The next reviewable sequence is:
    dual-project its events to current APIs, and compare an internal kernel,
    LangGraph-style execution, and Temporal-style execution against the
    accepted portability, replay, recovery, lease, and operations criteria.
+   Slice 7a now compiles newly planned sequential runs into a non-authoritative
+   immutable revision-1 shadow with explicit task membership, deterministic
+   action-to-task identity, linear dependencies, and idempotently imported
+   compatibility events. Live run/action lifecycle state remains sourced from
+   the production sequential runtime, while restart, replay, tenant scope,
+   immutability, cardinality, and structural-drift checks prove compatibility.
+   Projection failure is observable but cannot block the established runtime.
+   This proves structural and canonical event currency only; exact approval,
+   result, receipt, and completion parity remains explicit Slice 7b work.
+   Each scheduler cycle performs a bounded tenant-scoped oldest-first scan so
+   pre-migration, failed, and stale shadows are retried idempotently.
+   Continuous event dual-write and the measured framework comparison remain in
+   the subsequent Slice 7 work.
 
 Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
 the primary command surface. The current supported envelope remains bounded,

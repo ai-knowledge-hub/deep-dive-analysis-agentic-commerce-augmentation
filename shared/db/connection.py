@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -28,9 +30,54 @@ def _create_connection() -> sqlite3.Connection:
         check_same_thread=True,
     )
     conn.row_factory = sqlite3.Row
+    conn.create_function(
+        "workflow_sha256",
+        1,
+        lambda value: hashlib.sha256(str(value).encode("utf-8")).hexdigest(),
+        deterministic=True,
+    )
+    conn.create_function(
+        "workflow_compatibility_event_payload",
+        11,
+        _workflow_compatibility_event_payload,
+        deterministic=True,
+    )
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode = WAL;")
     return conn
+
+
+def _workflow_compatibility_event_payload(
+    source_event_id,
+    source_sequence,
+    source_status,
+    capability_name,
+    capability_version,
+    tool_id,
+    skill_id,
+    effect_class,
+    anchors_json,
+    note_text,
+    is_policy_event,
+) -> str:
+    """Independent SQLite oracle for immutable compatibility event payloads."""
+
+    payload = {
+        "source_event_id": str(source_event_id),
+        "source_sequence": int(source_sequence),
+        "source_status": str(source_status),
+        "capability_name": capability_name,
+        "capability_version": capability_version,
+        "tool_id": tool_id,
+        "skill_id": skill_id,
+        "effect_class": effect_class,
+        "anchors": json.loads(anchors_json or "{}"),
+        "note": str(note_text or ""),
+        "is_policy_event": bool(is_policy_event),
+    }
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
 
 
 def set_database_path(path: str | Path) -> None:

@@ -1,6 +1,6 @@
 # ADR 0001: Workflow, Task, and Delegation Schema
 
-Status: accepted for the Phase 1 contract; persistence implementation deferred
+Status: accepted; Slice 7a sequential compatibility persistence implemented
 Date: 2026-08-06
 Owners: platform architecture and agent runtime
 
@@ -567,6 +567,34 @@ workflow with one immutable revision and one task per ordered action. It should
 dual-project events to the existing control-plane read model. No current API is
 removed until chat and control-plane parity are proven.
 
+Slice 7a implements that boundary as a non-authoritative SQLite shadow in
+migration 053. A current `agent_run` is compiled into one immutable
+`workflow_compatibility_run`, revision `1`, an explicit complete
+revision-to-task membership set, and linear `all` edges. Task identifiers equal
+their source action identifiers so the already-deployed completion contracts
+retain their task identity. Source `agent_events` are imported idempotently into
+a gap-free compatibility event stream with their source identity and payload
+digest preserved. Runtime and action lifecycle values remain authoritative in
+`agent_runs` and `agent_actions`; compatibility views expose them without
+rewriting immutable structure.
+
+The shadow is deliberately not an execution or authorization boundary.
+Creation invokes projection best-effort after the existing plan is durable. A
+projection failure is recorded when possible but cannot prevent the legacy run
+from being created or scheduled. Identical replay is duplicate-safe; restart
+reconstructs the same revision; a changed action set is reported as structural
+drift and never appended silently to revision `1`. Later slices own continuous
+event dual-write, task attempts, scheduling from the workflow model, and any
+framework selection.
+
+Slice 7a's read oracle is intentionally named
+`structure_and_event_ids_current`: it verifies the independently recompiled
+revision/task graph, exact linear edge set, source event identities, canonical
+event contents, and projection cardinalities. It does **not** claim approval,
+accepted-result, effect-receipt, or completion-decision equivalence. Those
+governed semantics remain authoritative in their existing ledgers until Slice
+7b represents and compares them independently.
+
 During that migration, one current `agent_run` maps to one workflow at graph
 revision `1`. Ordered actions receive deterministic workflow task identities.
 Existing explicit `approved` and `rejected` action values may seed read-model
@@ -622,8 +650,8 @@ This ADR intentionally does not decide:
 - event transport and outbox implementation
 - exact identifier format
 
-Those decisions require the Phase 1 vertical spike, STPA controls, and measured
-recovery/concurrency behavior.
+Those decisions require the remaining Phase 1 framework spike, STPA controls,
+and measured recovery/concurrency behavior.
 
 ## Validation criteria
 

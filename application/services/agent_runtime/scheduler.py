@@ -6,6 +6,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from application.ports.deps import AppDeps
 from application.services.agent_runtime.worker import AgentRuntimeWorkerService
+from application.services.workflow_compatibility import (
+    reconcile_sequential_projections_best_effort,
+)
 
 
 @dataclass(frozen=True)
@@ -43,12 +46,21 @@ class AgentRuntimeSchedulerService:
         max_clients: int = 100,
         max_runs_per_client: int = 10,
         max_steps_per_run: int = 5,
+        max_projection_repairs_per_client: int = 25,
     ) -> Dict[str, Any]:
         client_ids = self._resolve_client_ids(
             client_id=client_id, max_clients=max_clients
         )
         summaries: List[Dict[str, Any]] = []
+        projection_reconciliation: List[Dict[str, Any]] = []
         for current_client_id in client_ids:
+            projection_reconciliation.append(
+                reconcile_sequential_projections_best_effort(
+                    store=self._deps.workflow_compatibility,
+                    tenant_id=current_client_id,
+                    limit=max_projection_repairs_per_client,
+                )
+            )
             summary = self._worker.tick_client(
                 client_id=current_client_id,
                 user_id=user_id,
@@ -67,6 +79,7 @@ class AgentRuntimeSchedulerService:
                 int(item.get("steps_executed_total") or 0) for item in summaries
             ),
             "summaries": summaries,
+            "workflow_projection_reconciliation": projection_reconciliation,
         }
 
     def run_forever(
@@ -78,6 +91,7 @@ class AgentRuntimeSchedulerService:
         max_clients: int = 100,
         max_runs_per_client: int = 10,
         max_steps_per_run: int = 5,
+        max_projection_repairs_per_client: int = 25,
         max_cycles: Optional[int] = None,
         sleep_fn: Callable[[float], None] = time.sleep,
     ) -> Dict[str, Any]:
@@ -93,6 +107,7 @@ class AgentRuntimeSchedulerService:
                 max_clients=max_clients,
                 max_runs_per_client=max_runs_per_client,
                 max_steps_per_run=max_steps_per_run,
+                max_projection_repairs_per_client=max_projection_repairs_per_client,
             )
             cycle_result = AgentSchedulerCycleResult(
                 cycle=cycle,

@@ -35,6 +35,7 @@ def main() -> None:
     parser.add_argument("--max-clients", type=int, default=100)
     parser.add_argument("--max-runs-per-client", type=int, default=10)
     parser.add_argument("--max-steps-per-run", type=int, default=5)
+    parser.add_argument("--max-projection-repairs-per-client", type=int, default=25)
     args = parser.parse_args()
 
     deps = default_deps()
@@ -50,6 +51,7 @@ def main() -> None:
             max_clients=args.max_clients,
             max_runs_per_client=args.max_runs_per_client,
             max_steps_per_run=args.max_steps_per_run,
+            max_projection_repairs_per_client=args.max_projection_repairs_per_client,
         )
         _print_once_summary(summary)
     else:
@@ -65,6 +67,7 @@ def main() -> None:
             max_runs_per_client=args.max_runs_per_client,
             max_steps_per_run=args.max_steps_per_run,
             max_cycles=args.max_cycles,
+            max_projection_repairs_per_client=args.max_projection_repairs_per_client,
         )
         last_cycle = (result.get("cycle_results") or [{}])[-1]
         print(
