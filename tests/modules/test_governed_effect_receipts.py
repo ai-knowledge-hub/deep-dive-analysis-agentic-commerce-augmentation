@@ -275,6 +275,35 @@ def test_lab_promotion_commits_effect_and_receipt_atomically(tmp_path):
         deps.decision_events.get_decision_event(event_id=outputs["decision_event_id"])
         is not None
     )
+    get_connection().execute(
+        """
+        UPDATE agent_runs
+        SET harness_id = 'harness.default', trace_id = 'trace-semantic-effect'
+        WHERE id = ?
+        """,
+        (run["id"],),
+    )
+    get_connection().commit()
+    semantic_result = deps.workflow_compatibility.project_sequential_run(
+        tenant_id="client-a", run_id=run["id"]
+    )
+    semantic_projection = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id="client-a", run_id=run["id"]
+    )
+    assert semantic_result["imported_semantic_artifacts"] >= 3
+    assert semantic_projection is not None
+    assert semantic_projection["governed_semantic_parity"] is False
+    assert semantic_projection["semantic_status"]["parity_state"] == "not_governed"
+    assert {
+        "approval_event",
+        "effect_receipt",
+        "governed_effect_receipt",
+    }.issubset(
+        {
+            item["artifact_type"]
+            for item in semantic_projection["semantic_artifacts"]
+        }
+    )
 
 
 def test_migration_048_accepts_previous_writer_for_valid_scoped_promotion(tmp_path):

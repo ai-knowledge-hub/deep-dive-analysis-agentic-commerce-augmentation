@@ -1,6 +1,6 @@
 # ADR 0001: Workflow, Task, and Delegation Schema
 
-Status: accepted; Slice 7a sequential compatibility persistence implemented
+Status: accepted; Slices 7a-7b compatibility persistence implemented
 Date: 2026-08-06
 Owners: platform architecture and agent runtime
 
@@ -587,13 +587,36 @@ drift and never appended silently to revision `1`. Later slices own continuous
 event dual-write, task attempts, scheduling from the workflow model, and any
 framework selection.
 
-Slice 7a's read oracle is intentionally named
+Slice 7a's structural read oracle is intentionally named
 `structure_and_event_ids_current`: it verifies the independently recompiled
 revision/task graph, exact linear edge set, source event identities, canonical
 event contents, and projection cardinalities. It does **not** claim approval,
 accepted-result, effect-receipt, or completion-decision equivalence. Those
-governed semantics remain authoritative in their existing ledgers until Slice
-7b represents and compares them independently.
+governed semantics remain authoritative in their existing ledgers.
+
+Slice 7b represents them independently without making the compatibility shadow
+an authority. Immutable semantic artifacts are admitted only when a
+database-level source guard proves their exact tenant, workflow, revision,
+task, attempt, source identity, canonical payload, digest, and timestamp against
+the approval, outcome, effect, or completion ledger. Evidence and decision
+relationships are separate artifacts so missing links cannot be hidden inside
+an aggregate count. Before first backfill, the projector independently
+reconstructs approval histories, effect-start/receipt provenance, and every
+completion decision bundle; a reduced or corrupted source relationship set
+therefore cannot certify itself. Governed action and effect-start references
+independently pin required approval membership. Provider-job artifacts contain
+only immutable request and effect-binding identity; mutable execution status
+and provider-observed model remain live operational state, not immutable parity
+evidence. Executed-action and fulfilled-approval receipts independently pin
+required effect bundles. The monotonic completion cursor pins a gap-free
+lifecycle history, and every lifecycle event must resolve its exact decision
+and command. The mutable semantic status is only a reconciliation cursor: reads
+recompute the entire artifact set and require the
+same live run, action, revision, criteria, and event-cursor fence as the
+authoritative completion reader before returning
+`governed_semantic_parity=true`. Structural currency and semantic parity remain
+separate signals, and non-governed, stale, or partially governed runs never
+claim semantic equivalence.
 
 During that migration, one current `agent_run` maps to one workflow at graph
 revision `1`. Ordered actions receive deterministic workflow task identities.

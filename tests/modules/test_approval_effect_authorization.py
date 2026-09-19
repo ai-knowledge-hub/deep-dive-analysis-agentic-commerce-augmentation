@@ -42,6 +42,7 @@ def _run_and_action(
     capability_name: str = "request_synthetic_validation",
     dedupe_key: str = "effect:validation:1",
     status: str = "proposed",
+    action_inputs: dict | None = None,
 ):
     set_database_path(tmp_path / "approval-effect.db")
     init_db()
@@ -83,7 +84,7 @@ def _run_and_action(
         status=status,
         capability_name=capability_name,
         capability_version="v1",
-        inputs={"experiment_id": "experiment-a"},
+        inputs=action_inputs or {"experiment_id": "experiment-a"},
         outputs={},
         inputs_hash=None,
         outputs_hash=None,
@@ -248,6 +249,29 @@ def test_exact_approval_is_consumed_fulfilled_and_linked_to_receipt(
         approval["envelope"]["lifecycle"]["fulfillment_receipt_id"]
         == effect["receipt_id"]
     )
+    get_connection().execute(
+        """
+        UPDATE agent_runs
+        SET harness_id = 'harness.default', trace_id = 'trace-semantic-validation'
+        WHERE id = ?
+        """,
+        (run["id"],),
+    )
+    get_connection().commit()
+    projected = deps.workflow_compatibility.project_sequential_run(
+        tenant_id="client-a", run_id=run["id"]
+    )
+    semantic = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id="client-a", run_id=run["id"]
+    )
+    assert projected["imported_semantic_artifacts"] >= 4
+    assert semantic is not None
+    assert {
+        "approval_event",
+        "effect_receipt",
+        "validation_job_receipt",
+        "validation_result_receipt",
+    }.issubset({item["artifact_type"] for item in semantic["semantic_artifacts"]})
     event_types = {
         event["event_type"]
         for event in deps.agent_events.list_agent_events(agent_run_id=run["id"])

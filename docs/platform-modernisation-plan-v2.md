@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 ## Purpose
 
@@ -535,8 +535,25 @@ Phase 1 remains open. The next reviewable sequence is:
    the production sequential runtime, while restart, replay, tenant scope,
    immutability, cardinality, and structural-drift checks prove compatibility.
    Projection failure is observable but cannot block the established runtime.
-   This proves structural and canonical event currency only; exact approval,
-   result, receipt, and completion parity remains explicit Slice 7b work.
+   Slice 7b extends that shadow with independently sourced, immutable semantic
+   artifacts for approval events and authority identities, accepted results and
+   their evidence records/bindings, successful effect receipts, completion
+   criteria and authority snapshots with exact membership, completion decisions
+   and their result/evidence bindings, and immutable completion checkpoints. A
+   separate semantic status binds the latest authoritative
+   completion decision, cursor, projection version, and canonical projection
+   hash. First backfill validates the canonical approval, effect, and completion
+   bundles before accepting the source inventory, with governed actions and
+   effect starts independently pinning required approvals. Validation-job
+   parity records immutable request/provenance identity rather than mutable
+   provider execution state. Executed-action and fulfilled-approval receipts
+   independently pin effect bundle membership, while the monotonic completion
+   cursor requires a gap-free decision/lifecycle/command history. It reports
+   parity only when the complete source and shadow artifact sets match exactly
+   and the live
+   completion fence still agrees on run state, action digest, revision,
+   criteria, and event cursor; absent, partial, corrupt, or stale governance
+   fails closed without changing runtime authority.
    Each scheduler cycle performs a bounded tenant-scoped oldest-first scan so
    pre-migration, failed, and stale shadows are retried idempotently.
    Continuous event dual-write and the measured framework comparison remain in
