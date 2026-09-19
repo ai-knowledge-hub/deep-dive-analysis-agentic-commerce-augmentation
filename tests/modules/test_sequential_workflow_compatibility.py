@@ -690,7 +690,7 @@ def test_lifecycle_changes_are_read_from_live_compatibility_views(tmp_path):
     assert projection["tasks"][0]["initial_status"] == "proposed"
 
 
-def test_new_source_event_marks_read_stale_until_idempotent_import(tmp_path):
+def test_new_source_event_is_transactionally_current_without_reconciliation(tmp_path):
     deps, run, actions = _seed_sequential_run(tmp_path)
     deps.workflow_compatibility.project_sequential_run(
         tenant_id=TENANT_ID, run_id=run["id"]
@@ -706,21 +706,16 @@ def test_new_source_event_marks_read_stale_until_idempotent_import(tmp_path):
         trace_id="trace-compatibility-a",
     )
 
-    stale = deps.workflow_compatibility.get_sequential_projection(
+    current = deps.workflow_compatibility.get_sequential_projection(
         tenant_id=TENANT_ID, run_id=run["id"]
     )
-    assert stale is not None
-    assert stale["structure_and_event_ids_current"] is False
+    assert current is not None
+    assert current["structure_and_event_ids_current"] is True
 
     refreshed = deps.workflow_compatibility.project_sequential_run(
         tenant_id=TENANT_ID, run_id=run["id"]
     )
-    current = deps.workflow_compatibility.get_sequential_projection(
-        tenant_id=TENANT_ID, run_id=run["id"]
-    )
-    assert refreshed["imported_events"] == 1
-    assert current is not None
-    assert current["structure_and_event_ids_current"] is True
+    assert refreshed["imported_events"] == 0
 
 
 def test_replay_rejects_mutated_source_event_identity(tmp_path):
@@ -729,6 +724,9 @@ def test_replay_rejects_mutated_source_event_identity(tmp_path):
         tenant_id=TENANT_ID, run_id=run["id"]
     )
     conn = get_connection()
+    # Simulate storage corruption below the Slice 7c source-immutability guard
+    # so reconciliation's independent exact-content oracle is still exercised.
+    conn.execute("DROP TRIGGER projected_agent_events_no_update")
     conn.execute(
         "UPDATE agent_events SET principal_id = 'tampered-principal' WHERE agent_run_id = ?",
         (run["id"],),
@@ -896,74 +894,27 @@ def test_event_insert_guard_rejects_cross_run_action_reference(tmp_path):
         tenant_id=TENANT_ID,
         suffix="database-guard",
     )
-    source = deps.agent_events.create_agent_event(
-        agent_run_id=run["id"],
-        action_id=other_action["id"],
-        sequence=3,
-        event_type="action_approved",
-        status="approved",
-        capability_name="freeze_retrieval_protocol",
-        capability_version="v1",
-        principal_type="user",
-        principal_id="operator-a",
-        trace_id="trace-compatibility-a",
-    )
     conn = get_connection()
-    source_row = conn.execute(
-        "SELECT rowid AS source_row_order FROM agent_events WHERE id = ?",
-        (source["id"],),
-    ).fetchone()
-    assert source_row is not None
-    payload = {
-        "source_event_id": source["id"],
-        "source_sequence": 3,
-        "source_status": "approved",
-        "capability_name": "freeze_retrieval_protocol",
-        "capability_version": "v1",
-        "tool_id": None,
-        "skill_id": None,
-        "effect_class": None,
-        "anchors": {},
-        "note": "",
-        "is_policy_event": False,
-    }
-    payload_json = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
-
     with pytest.raises(sqlite3.IntegrityError, match="source event is invalid"):
-        conn.execute(
-            """
-            INSERT INTO workflow_compatibility_events (
-                event_id, tenant_id, workflow_id, sequence, source_event_id,
-                source_row_order, event_type, event_version, entity_type,
-                entity_id, principal_id, command_id, event_index, payload_json,
-                payload_hash, causation_id, correlation_id, trace_id,
-                occurred_at, recorded_at
-            ) VALUES (?, ?, ?, 2, ?, ?, ?, '1.0', 'task', ?, ?, ?, ?, ?, ?,
-                      ?, ?, ?, ?, ?)
-            """,
-            (
-                f"workflow-event:{source['id']}",
-                TENANT_ID,
-                run["id"],
-                source["id"],
-                int(source_row["source_row_order"]),
-                "compatibility.agent.action_approved",
-                other_action["id"],
-                "operator-a",
-                f"compatibility-import:{run['id']}",
-                int(source_row["source_row_order"]),
-                payload_json,
-                _digest(payload),
-                source["id"],
-                "trace-compatibility-a",
-                "trace-compatibility-a",
-                source["timestamp"],
-                source["timestamp"],
-            ),
+        deps.agent_events.create_agent_event(
+            agent_run_id=run["id"],
+            action_id=other_action["id"],
+            sequence=3,
+            event_type="action_approved",
+            status="approved",
+            capability_name="freeze_retrieval_protocol",
+            capability_version="v1",
+            principal_type="user",
+            principal_id="operator-a",
+            trace_id="trace-compatibility-a",
         )
-    conn.rollback()
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM agent_events WHERE agent_run_id = ?",
+            (run["id"],),
+        ).fetchone()[0]
+        == 2
+    )
 
 
 def test_edges_are_revision_scoped_and_exactly_compared(tmp_path):
@@ -1041,7 +992,7 @@ def test_insert_or_replace_cannot_rewrite_imported_event(tmp_path):
     assert preserved["payload_json"] == row["payload_json"]
 
 
-def test_first_event_insert_must_match_canonical_source_content(tmp_path):
+def test_conflicting_reuse_of_dual_written_event_identity_fails(tmp_path):
     deps, run, actions = _seed_sequential_run(tmp_path)
     deps.workflow_compatibility.project_sequential_run(
         tenant_id=TENANT_ID, run_id=run["id"]
@@ -1063,7 +1014,7 @@ def test_first_event_insert_must_match_canonical_source_content(tmp_path):
     ).fetchone()
     assert source_row is not None
 
-    with pytest.raises(sqlite3.IntegrityError, match="source event is invalid"):
+    with pytest.raises(sqlite3.IntegrityError, match="event already exists"):
         conn.execute(
             """
             INSERT INTO workflow_compatibility_events (

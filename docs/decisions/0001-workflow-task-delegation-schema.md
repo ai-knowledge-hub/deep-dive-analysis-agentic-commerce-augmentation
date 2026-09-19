@@ -1,6 +1,6 @@
 # ADR 0001: Workflow, Task, and Delegation Schema
 
-Status: accepted; Slices 7a-7b compatibility persistence implemented
+Status: accepted; Slices 7a-7c compatibility persistence implemented
 Date: 2026-08-06
 Owners: platform architecture and agent runtime
 
@@ -617,6 +617,57 @@ authoritative completion reader before returning
 `governed_semantic_parity=true`. Structural currency and semantic parity remain
 separate signals, and non-governed, stale, or partially governed runs never
 claim semantic equivalence.
+
+Slice 7c keeps the immutable compatibility event stream current at source-write
+time. New sequential runs persist their complete ordered action set and create
+revision 1 before the first `agent_events` row. A database trigger then derives
+the canonical compatibility payload, digest, scope, source row order, event
+sequence, principal, trace, and timestamp inside the transaction that inserted
+the authoritative event. A projection conflict aborts that source statement;
+callers that already own approval, effect, or completion transactions retain
+their existing commit boundary. SQLite write serialization plus the workflow
+event uniqueness constraints provide gap-free compatibility ordering for the
+current single-node runtime; this does not claim distributed scheduling or
+parallel-worker readiness.
+
+Current writers mark new runs as requiring the transactional projection before
+the run row commits, so a concurrent event writer fails closed until revision 1
+exists. The column defaults off for old-writer compatibility; inserting the
+first reconciled compatibility run turns it on permanently for that workflow.
+A database monotonicity guard rejects any attempt to clear that fence, and a
+compatibility shadow independently keeps the fence mandatory. Event update
+guards inspect both the old and new run scope, so an unfenced legacy event
+cannot be reassigned into a fenced workflow. For fenced runs, source event
+update, deletion, and replacement are rejected as well, so the immutable shadow
+cannot be orphaned or made to certify a rewritten source identity after commit.
+Source-run deletion and identity replacement are likewise rejected as soon as
+the projection fence is set or a compatibility shadow exists, including the
+creation interval after revision 1 is committed but before the first source
+event is written. The source run's primary identity and tenant scope are also
+immutable across that boundary, including rejected empty plans with no action
+or event foreign-key children. A retained compatibility shadow also reserves
+its source run identity independently, so neither update nor fresh insertion
+can attach unrelated source provenance after corruption or partial migration.
+
+The production writer inventory for this boundary is:
+
+- the standalone `agent_events.create_agent_event` adapter used by initial-plan,
+  command-preflight, recovery, runtime-audit, and runtime-failure services;
+- approval/effect audit inserts in `approval_persistence` and
+  `approval_ledger`, which participate in their existing `BEGIN IMMEDIATE`
+  transactions;
+- completion-decision and completion-projection-repair audit inserts in the
+  workflow outcome persistence modules, which participate in their existing
+  lifecycle or repair transactions.
+
+The trigger is the common enforcement point for both adapter and direct SQL
+writers, so no nested transaction or duplicated event canonicalizer is needed.
+Runs without a compatibility shadow are treated as pre-Slice-7c legacy or
+interrupted-migration candidates and remain visible to bounded oldest-first
+reconciliation. Reconciliation imports their existing events idempotently and
+also remains the repair path for detected drift. The compatibility stream is
+still a non-authoritative projection: approval, effect, completion, scheduling,
+and API authority remain in their established ledgers and sequential runtime.
 
 During that migration, one current `agent_run` maps to one workflow at graph
 revision `1`. Ordered actions receive deterministic workflow task identities.

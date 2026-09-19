@@ -35,9 +35,6 @@ from application.services.agent_runtime.registry import (
     run_mode_supported,
     version_context_for_capability,
 )
-from application.services.workflow_compatibility import (
-    project_sequential_run_best_effort,
-)
 
 
 def create_agent_run_with_initial_plan(
@@ -140,6 +137,7 @@ def create_agent_run_with_initial_plan(
         trace_id=trace_id,
         registry_version=str(registry_payload["registry_version"]),
         registry_fingerprint=active_registry_fingerprint,
+        workflow_event_projection_required=True,
     )
     _seed_initial_plan(
         deps=deps,
@@ -151,11 +149,6 @@ def create_agent_run_with_initial_plan(
         active_registry_fingerprint=active_registry_fingerprint,
         preferred_skill_id=preferred_skill_id,
         harness_profile=harness_profile,
-    )
-    project_sequential_run_best_effort(
-        store=deps.workflow_compatibility,
-        tenant_id=client_id,
-        run_id=str(run["id"]),
     )
     return run
 
@@ -195,6 +188,7 @@ def _seed_initial_plan(
         else {},
         planner_mode=str(harness_profile.get("planner_mode") or ""),
     )
+    planned_actions: list[tuple[Any, Dict[str, Any]]] = []
     for idx, action in enumerate(plan, start=1):
         tool_id = capability_to_tool_id(action.capability_name)
         skill = select_skill_for_tool_id(tool_id, preferred_skill_id=preferred_skill_id)
@@ -242,6 +236,15 @@ def _seed_initial_plan(
                 allowed_capabilities=allowed_capabilities,
             ),
         )
+        planned_actions.append((action, created_action))
+
+    # New source events require the immutable revision-1 shadow to exist first.
+    deps.workflow_compatibility.project_sequential_run(
+        tenant_id=str(run.get("client_id") or ""),
+        run_id=str(run.get("id") or ""),
+    )
+
+    for idx, (action, created_action) in enumerate(planned_actions, start=1):
         deps.agent_events.create_agent_event(
             agent_run_id=run.get("id"),
             action_id=created_action.get("id"),

@@ -36,6 +36,7 @@ def create_agent_run(
     parent_run_id: Optional[str] = None,
     registry_version: Optional[str] = None,
     registry_fingerprint: Optional[str] = None,
+    workflow_event_projection_required: bool = False,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     ensure_client(client_id)
@@ -67,9 +68,10 @@ def create_agent_run(
             root_run_id,
             parent_run_id,
             registry_version,
-            registry_fingerprint
+            registry_fingerprint,
+            workflow_event_projection_required
         )
-        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -97,6 +99,7 @@ def create_agent_run(
             parent_run_id,
             registry_version,
             registry_fingerprint,
+            1 if workflow_event_projection_required else 0,
         ),
     )
     conn.commit()

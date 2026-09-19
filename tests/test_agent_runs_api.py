@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 import types
 
@@ -464,6 +465,56 @@ def test_create_agent_run_never_exposes_an_ungoverned_empty_plan(client: TestCli
     run = deps.agent_runs.get_agent_run(run_id=listed["id"], client_id=CLIENT_ID)
     assert run["status"] == "failed"
     assert run["completion_authority_required"] is False
+    conn = get_connection()
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM agent_actions WHERE agent_run_id = ?",
+            (run["id"],),
+        ).fetchone()[0]
+        == 0
+    )
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM agent_events WHERE agent_run_id = ?",
+            (run["id"],),
+        ).fetchone()[0]
+        == 0
+    )
+    shadow = conn.execute(
+        """
+        SELECT tenant_id, source_agent_run_id
+        FROM workflow_compatibility_runs
+        WHERE source_agent_run_id = ?
+        """,
+        (run["id"],),
+    ).fetchone()
+    assert shadow is not None
+
+    renamed_id = f"renamed-{run['id']}"
+    with pytest.raises(sqlite3.IntegrityError, match="identity and tenant"):
+        conn.execute(
+            "UPDATE agent_runs SET id = ? WHERE id = ?",
+            (renamed_id, run["id"]),
+        )
+    conn.rollback()
+    with pytest.raises(sqlite3.IntegrityError, match="identity and tenant"):
+        conn.execute(
+            "UPDATE agent_runs SET client_id = 'client-b' WHERE id = ?",
+            (run["id"],),
+        )
+    conn.rollback()
+
+    assert deps.agent_runs.get_agent_run(run_id=run["id"], client_id=CLIENT_ID)
+    assert deps.agent_runs.get_agent_run(run_id=renamed_id) is None
+    preserved_shadow = conn.execute(
+        """
+        SELECT tenant_id, source_agent_run_id
+        FROM workflow_compatibility_runs
+        WHERE source_agent_run_id = ?
+        """,
+        (run["id"],),
+    ).fetchone()
+    assert dict(preserved_shadow) == dict(shadow)
 
 
 def test_create_agent_run_rejects_beta_blocked_production_capability(
