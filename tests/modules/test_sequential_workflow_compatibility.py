@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import timedelta
 import hashlib
 import json
 import sqlite3
@@ -15,7 +17,22 @@ from domain.workflow.sequential_compatibility import (
     SequentialCompatibilityError,
     compile_sequential_workflow,
 )
+from domain.workflow.outcomes import ResultValidationStatus
 from infrastructure.db.core.connection import get_connection
+from infrastructure.db.workflow.outcome_rows import OutcomeLedgerDataError
+from tests.modules.workflow_outcome_ledger_support import (
+    NOW,
+    command as outcome_command,
+    coordinator_command,
+    criteria as outcome_criteria,
+    evidence as outcome_evidence,
+    evidence_command,
+    publisher_command,
+    result as outcome_result,
+    service as outcome_service,
+    task_definitions as outcome_task_definitions,
+    with_outcome_ledger,
+)
 
 
 TENANT_ID = "tenant-compatibility"
@@ -170,6 +187,182 @@ def _seed_single_action_run(deps, *, tenant_id: str, suffix: str):
     return run, action
 
 
+def _complete_governed_run(deps, run, action) -> None:
+    governed = with_outcome_ledger(deps)
+    service = outcome_service(governed)
+    requirement = replace(
+        outcome_criteria(run["id"]).evidence_requirements[0],
+        task_id=action["id"],
+    )
+    criteria = replace(
+        outcome_criteria(run["id"]),
+        tenant_id=TENANT_ID,
+        required_task_ids=(action["id"],),
+        evidence_requirements=(requirement,),
+    )
+    definition = replace(
+        outcome_task_definitions()[0],
+        task_id=action["id"],
+        task_input_hash=action["inputs_hash"],
+    )
+    publication = service.publish_completion_contract(
+        command=replace(
+            publisher_command(run["id"], "semantic-publish"),
+            tenant_id=TENANT_ID,
+        ),
+        criteria=criteria,
+        task_definitions=(definition,),
+    )
+    governed.agent_actions.update_agent_action_status(
+        action_id=action["id"], status="executed", outputs_hash=_digest({})
+    )
+    for other in (
+        get_connection()
+        .execute(
+            "SELECT id FROM agent_actions WHERE agent_run_id = ? AND id <> ?",
+            (run["id"], action["id"]),
+        )
+        .fetchall()
+    ):
+        governed.agent_actions.update_agent_action_status(
+            action_id=other["id"], status="rejected"
+        )
+    attempt_id = "semantic-attempt-a"
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO workflow_completion_attempt_authorities (
+            tenant_id, workflow_id, graph_revision, task_id, attempt_id,
+            assignment_id, producer_principal_id, action_id, created_at
+        ) VALUES (?, ?, 1, ?, ?, NULL, 'internal-agent:validator', ?, ?)
+        """,
+        (TENANT_ID, run["id"], action["id"], attempt_id, action["id"], NOW.isoformat()),
+    )
+    conn.commit()
+    lock_token = "semantic-validation-lock"
+    assert governed.agent_runs.acquire_run_lock(
+        run_id=run["id"], lock_token=lock_token, ttl_seconds=30
+    )
+    evidence = replace(
+        outcome_evidence(run["id"]),
+        tenant_id=TENANT_ID,
+        task_id=action["id"],
+        attempt_id=attempt_id,
+        action_id=action["id"],
+    )
+    service.record_evidence(
+        command=replace(
+            evidence_command(
+                run["id"], "semantic-evidence", issued_at=NOW + timedelta(minutes=2)
+            ),
+            tenant_id=TENANT_ID,
+        ),
+        evidence=evidence,
+    )
+    accepted = outcome_result(run["id"], (evidence,))
+    pending = replace(
+        accepted,
+        tenant_id=TENANT_ID,
+        task_id=action["id"],
+        attempt_id=attempt_id,
+        task_input_hash=action["inputs_hash"],
+        payload_hash=_digest({}),
+        validation_status=ResultValidationStatus.PENDING,
+        validation_authority=None,
+        validated_at=None,
+    )
+    validation_command = coordinator_command(
+        run["id"], "semantic-validation", issued_at=NOW + timedelta(minutes=5)
+    )
+    validation_command = replace(validation_command, tenant_id=TENANT_ID)
+    service.validate_submitted_result(
+        command=validation_command,
+        submitted_result=pending,
+        criteria_id=criteria.criteria_id,
+        criteria_hash=publication["artifact_digest"],
+        validation_status=ResultValidationStatus.ACCEPTED,
+        lock_token=lock_token,
+    )
+    governed.agent_runs.release_run_lock(run_id=run["id"], lock_token=lock_token)
+    snapshot_command = replace(
+        outcome_command(run["id"], command_id="semantic-snapshot"),
+        tenant_id=TENANT_ID,
+    )
+    service.issue_authority_snapshot(
+        command=snapshot_command,
+        snapshot_id="semantic-snapshot-a",
+        criteria_id=criteria.criteria_id,
+        criteria_hash=publication["artifact_digest"],
+    )
+    governed.agent_runs.update_agent_run(run_id=run["id"], status="running")
+    decision_command = replace(
+        outcome_command(
+            run["id"],
+            command_id="semantic-decision",
+            issued_at=NOW + timedelta(minutes=50),
+        ),
+        tenant_id=TENANT_ID,
+    )
+    service.evaluate_and_commit_lifecycle(
+        command=decision_command,
+        snapshot_id="semantic-snapshot-a",
+        decision_id="semantic-decision-a",
+        evaluated_at=NOW + timedelta(minutes=40),
+    )
+
+
+def _commit_initial_incomplete_decision(deps, run, action):
+    governed = with_outcome_ledger(deps)
+    service = outcome_service(governed)
+    requirement = replace(
+        outcome_criteria(run["id"]).evidence_requirements[0],
+        task_id=action["id"],
+    )
+    criteria = replace(
+        outcome_criteria(run["id"]),
+        tenant_id=TENANT_ID,
+        required_task_ids=(action["id"],),
+        evidence_requirements=(requirement,),
+    )
+    definition = replace(
+        outcome_task_definitions()[0],
+        task_id=action["id"],
+        task_input_hash=action["inputs_hash"],
+    )
+    publication = service.publish_completion_contract(
+        command=replace(
+            publisher_command(run["id"], "semantic-publish"),
+            tenant_id=TENANT_ID,
+        ),
+        criteria=criteria,
+        task_definitions=(definition,),
+    )
+    service.issue_authority_snapshot(
+        command=replace(
+            outcome_command(run["id"], command_id="semantic-snapshot"),
+            tenant_id=TENANT_ID,
+        ),
+        snapshot_id="semantic-snapshot-a",
+        criteria_id=criteria.criteria_id,
+        criteria_hash=publication["artifact_digest"],
+    )
+    governed.agent_runs.update_agent_run(run_id=run["id"], status="running")
+    service.evaluate_and_commit_lifecycle(
+        command=replace(
+            outcome_command(
+                run["id"],
+                command_id="semantic-decision",
+                issued_at=NOW + timedelta(minutes=50),
+            ),
+            tenant_id=TENANT_ID,
+        ),
+        snapshot_id="semantic-snapshot-a",
+        decision_id="semantic-decision-a",
+        evaluated_at=NOW + timedelta(minutes=40),
+    )
+    return governed, service
+
+
 def test_projection_persists_exact_revision_membership_and_linear_graph(tmp_path):
     deps, run, actions = _seed_sequential_run(tmp_path)
 
@@ -186,7 +379,8 @@ def test_projection_persists_exact_revision_membership_and_linear_graph(tmp_path
     assert result["operation"] == "created"
     assert projection is not None
     assert projection["structure_and_event_ids_current"] is True
-    assert projection["governed_semantic_parity"] == "not_projected_slice_7a"
+    assert projection["governed_semantic_parity"] is False
+    assert projection["semantic_status"]["parity_state"] == "not_governed"
     assert "equivalent" not in projection
     assert projection["revision"]["revision"] == 1
     assert [task["task_id"] for task in projection["tasks"]] == [
@@ -203,6 +397,252 @@ def test_projection_persists_exact_revision_membership_and_linear_graph(tmp_path
     assert {event["trace_id"] for event in projection["events"]} == {
         "trace-compatibility-a"
     }
+
+
+def test_governed_semantic_parity_requires_exact_artifacts_and_completion_cursor(
+    tmp_path,
+):
+    deps, run, actions = _seed_sequential_run(tmp_path)
+    _complete_governed_run(deps, run, actions[0])
+
+    result = deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    projection = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+
+    assert result["semantic_parity_state"] == "current"
+    assert result["imported_semantic_artifacts"] > 0
+    assert projection is not None
+    assert projection["structure_and_event_ids_current"] is True
+    assert projection["governed_semantic_parity"] is True
+    assert projection["semantic_status"]["parity_state"] == "current"
+    artifact_types = {
+        item["artifact_type"] for item in projection["semantic_artifacts"]
+    }
+    assert {
+        "accepted_result",
+        "evidence_record",
+        "result_evidence_binding",
+        "completion_criteria",
+        "completion_task_definition",
+        "completion_authority_snapshot",
+        "snapshot_result_binding",
+        "completion_decision",
+        "decision_result_binding",
+        "decision_evidence_binding",
+        "completion_checkpoint",
+    }.issubset(artifact_types)
+
+
+@pytest.mark.parametrize(
+    ("triggers", "deletions"),
+    (
+        (
+            ("workflow_completion_decision_evidence_no_delete",),
+            (
+                "DELETE FROM workflow_completion_decision_evidence "
+                "WHERE decision_id = 'semantic-decision-a'",
+            ),
+        ),
+        (
+            (
+                "workflow_completion_decision_evidence_no_delete",
+                "workflow_result_evidence_no_delete",
+            ),
+            (
+                "DELETE FROM workflow_completion_decision_evidence "
+                "WHERE decision_id = 'semantic-decision-a'",
+                "DELETE FROM workflow_result_evidence WHERE result_id = 'result-a'",
+            ),
+        ),
+    ),
+    ids=("unilateral-decision-binding-loss", "coordinated-binding-loss"),
+)
+def test_first_semantic_backfill_rejects_incomplete_authoritative_relationships(
+    tmp_path,
+    triggers,
+    deletions,
+):
+    deps, run, actions = _seed_sequential_run(tmp_path)
+    _complete_governed_run(deps, run, actions[0])
+    conn = get_connection()
+    for trigger in triggers:
+        conn.execute(f"DROP TRIGGER {trigger}")
+    for deletion in deletions:
+        conn.execute(deletion)
+    conn.commit()
+
+    with pytest.raises(
+        OutcomeLedgerDataError,
+        match="canonical payload|exact result evidence bindings",
+    ):
+        deps.workflow_compatibility.project_sequential_run(
+            tenant_id=TENANT_ID,
+            run_id=run["id"],
+        )
+
+    assert (
+        conn.execute(
+            """
+            SELECT 1 FROM workflow_compatibility_semantic_status
+            WHERE tenant_id = ? AND workflow_id = ?
+            """,
+            (TENANT_ID, run["id"]),
+        ).fetchone()
+        is None
+    )
+
+
+def test_semantic_parity_fails_closed_after_coordinated_source_corruption(tmp_path):
+    deps, run, actions = _seed_sequential_run(tmp_path)
+    _complete_governed_run(deps, run, actions[0])
+    deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    conn = get_connection()
+    conn.execute("DROP TRIGGER workflow_task_results_no_update")
+    conn.execute(
+        """
+        UPDATE workflow_task_results
+        SET payload_json = json('{"corrupted":true}')
+        WHERE workflow_id = ?
+        """,
+        (run["id"],),
+    )
+    conn.commit()
+
+    projection = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert projection is not None
+    assert projection["governed_semantic_parity"] is False
+    with pytest.raises(OutcomeLedgerDataError, match="task result payload is invalid"):
+        deps.workflow_compatibility.project_sequential_run(
+            tenant_id=TENANT_ID,
+            run_id=run["id"],
+        )
+
+
+def test_semantic_artifacts_reject_replacement_and_reconcile_missing_rows(tmp_path):
+    deps, run, actions = _seed_sequential_run(tmp_path)
+    _complete_governed_run(deps, run, actions[0])
+    deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    conn = get_connection()
+    row = conn.execute(
+        """
+        SELECT * FROM workflow_compatibility_semantic_artifacts
+        WHERE workflow_id = ? AND artifact_type = 'accepted_result'
+        """,
+        (run["id"],),
+    ).fetchone()
+    assert row is not None
+    columns = list(row.keys())
+    values = dict(row)
+    values["payload_json"] = "{}"
+    values["payload_hash"] = _digest({})
+    with pytest.raises(sqlite3.IntegrityError, match="source artifact is invalid"):
+        conn.execute(
+            f"INSERT OR REPLACE INTO workflow_compatibility_semantic_artifacts "
+            f"({', '.join(columns)}) VALUES "
+            f"({', '.join('?' for _ in columns)})",
+            tuple(values[column] for column in columns),
+        )
+    conn.rollback()
+
+    conn.execute("DROP TRIGGER workflow_compatibility_semantic_no_delete")
+    conn.execute(
+        "DELETE FROM workflow_compatibility_semantic_artifacts "
+        "WHERE semantic_artifact_id = ?",
+        (row["semantic_artifact_id"],),
+    )
+    conn.commit()
+    stale = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert stale is not None
+    assert stale["governed_semantic_parity"] is False
+
+    repaired = deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert repaired["imported_semantic_artifacts"] == 1
+    current = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert current is not None
+    assert current["governed_semantic_parity"] is True
+
+
+def test_semantic_parity_rejects_a_changed_completion_projection_cursor(tmp_path):
+    deps, run, actions = _seed_sequential_run(tmp_path)
+    _complete_governed_run(deps, run, actions[0])
+    deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    conn = get_connection()
+    conn.execute("DROP TRIGGER workflow_completion_projection_decision_guard_update")
+    conn.execute(
+        """
+        UPDATE workflow_completion_projections
+        SET projection_version = projection_version + 1
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (TENANT_ID, run["id"]),
+    )
+    conn.commit()
+
+    projection = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert projection is not None
+    assert projection["governed_semantic_parity"] is False
+
+
+def test_semantic_parity_reuses_authoritative_live_completion_freshness(tmp_path):
+    deps, run, actions = _seed_sequential_run(tmp_path)
+    _complete_governed_run(deps, run, actions[0])
+    deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+
+    deps.agent_runs.update_agent_run(run_id=run["id"], state="live-state-changed")
+
+    authoritative_run = deps.agent_runs.get_agent_run(run["id"])
+    projection = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert authoritative_run is not None
+    assert authoritative_run["completion_projection_is_current"] is False
+    assert projection is not None
+    assert projection["governed_semantic_parity"] is False
+
+    reconciled = deps.workflow_compatibility.project_sequential_run(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert reconciled["semantic_parity_state"] == "drifted"
+    stored = deps.workflow_compatibility.get_sequential_projection(
+        tenant_id=TENANT_ID,
+        run_id=run["id"],
+    )
+    assert stored is not None
+    assert stored["semantic_status"]["error_code"] == "completion_projection_stale"
 
 
 def test_projection_replay_and_restart_are_idempotent(tmp_path):

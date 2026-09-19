@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import sqlite3
 from typing import Any
@@ -13,6 +14,10 @@ from domain.workflow.sequential_compatibility import (
 )
 from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json
+import infrastructure.db.workflow.outcome_reads as outcome_reads
+from infrastructure.db.workflow.semantic_validation import (
+    validate_authoritative_semantic_bundles_locked,
+)
 
 
 def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
@@ -77,6 +82,15 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
             structural_outcome = "replayed"
 
         imported_events = _import_events_locked(conn, compiled)
+        validate_authoritative_semantic_bundles_locked(
+            conn, tenant_id=tenant_id, workflow_id=run_id
+        )
+        semantic_sources = _load_semantic_sources_locked(
+            conn, tenant_id=tenant_id, workflow_id=run_id
+        )
+        imported_semantic_artifacts = _import_semantic_artifacts_locked(
+            conn, semantic_sources
+        )
         projected_task_count = _count_locked(
             conn,
             "workflow_compatibility_revision_tasks",
@@ -107,6 +121,22 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
             projected_event_count=projected_event_count,
             error_code=None if state == "current" else "cardinality_mismatch",
         )
+        semantic_state = _semantic_parity_state_locked(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=run_id,
+            sources=semantic_sources,
+        )
+        _upsert_semantic_status_locked(
+            conn,
+            tenant_id=tenant_id,
+            workflow_id=run_id,
+            parity_state=semantic_state["parity_state"],
+            source_artifact_count=len(semantic_sources),
+            projected_artifact_count=semantic_state["projected_artifact_count"],
+            completion=semantic_state["completion"],
+            error_code=semantic_state["error_code"],
+        )
         conn.commit()
         return {
             "outcome": state,
@@ -115,6 +145,8 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
             "workflow_id": run_id,
             "active_revision": 1,
             "imported_events": imported_events,
+            "imported_semantic_artifacts": imported_semantic_artifacts,
+            "semantic_parity_state": semantic_state["parity_state"],
             "structural_digest": compiled.structural_digest,
         }
     except Exception:
@@ -186,6 +218,21 @@ def get_sequential_projection(*, tenant_id: str, run_id: str) -> dict[str, Any] 
         """,
         (tenant_id, run_id),
     ).fetchone()
+    semantic_rows = conn.execute(
+        """
+        SELECT * FROM workflow_compatibility_semantic_artifacts
+        WHERE tenant_id = ? AND workflow_id = ?
+        ORDER BY artifact_type ASC, source_id ASC
+        """,
+        (tenant_id, run_id),
+    ).fetchall()
+    semantic_status = conn.execute(
+        """
+        SELECT * FROM workflow_compatibility_semantic_status
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (tenant_id, run_id),
+    ).fetchone()
     structure_and_event_ids_current = _content_is_current(
         conn,
         tenant_id=tenant_id,
@@ -198,6 +245,13 @@ def get_sequential_projection(*, tenant_id: str, run_id: str) -> dict[str, Any] 
         status=status,
         live_run=live_run,
     )
+    governed_semantic_parity = _semantic_content_is_current(
+        conn,
+        tenant_id=tenant_id,
+        workflow_id=run_id,
+        semantic_rows=semantic_rows,
+        semantic_status=semantic_status,
+    )
     return {
         "workflow": _dict_row(shadow),
         "revision": _dict_row(revision),
@@ -205,9 +259,11 @@ def get_sequential_projection(*, tenant_id: str, run_id: str) -> dict[str, Any] 
         "tasks": [_dict_row(row) for row in task_rows],
         "edges": [_dict_row(row) for row in edge_rows],
         "events": [_event_row(row) for row in event_rows],
+        "semantic_artifacts": [_semantic_row(row) for row in semantic_rows],
         "projection_status": _dict_row(status),
+        "semantic_status": _dict_row(semantic_status),
         "structure_and_event_ids_current": structure_and_event_ids_current,
-        "governed_semantic_parity": "not_projected_slice_7a",
+        "governed_semantic_parity": governed_semantic_parity,
     }
 
 
@@ -349,6 +405,327 @@ def _stored_event_matches(row: sqlite3.Row, expected: Any, *, sequence: int) -> 
         and row["trace_id"] == expected.trace_id
         and row["occurred_at"] == expected.occurred_at
     )
+
+
+def _load_semantic_sources_locked(
+    conn: sqlite3.Connection, *, tenant_id: str, workflow_id: str
+) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT * FROM workflow_compatibility_semantic_sources
+        WHERE tenant_id = ? AND workflow_id = ?
+        ORDER BY artifact_type ASC, source_id ASC
+        """,
+        (tenant_id, workflow_id),
+    ).fetchall()
+
+
+def _import_semantic_artifacts_locked(
+    conn: sqlite3.Connection, sources: list[sqlite3.Row]
+) -> int:
+    imported = 0
+    now = _now()
+    for source in sources:
+        existing = conn.execute(
+            """
+            SELECT * FROM workflow_compatibility_semantic_artifacts
+            WHERE tenant_id = ? AND workflow_id = ?
+              AND artifact_type = ? AND source_id = ?
+            """,
+            (
+                source["tenant_id"],
+                source["workflow_id"],
+                source["artifact_type"],
+                source["source_id"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if not _semantic_artifact_matches(existing, source):
+                raise ValueError(
+                    "existing workflow semantic artifact disagrees with its source"
+                )
+            continue
+        conn.execute(
+            """
+            INSERT INTO workflow_compatibility_semantic_artifacts (
+                semantic_artifact_id, tenant_id, workflow_id, graph_revision,
+                artifact_type, source_id, task_id, attempt_id, payload_json,
+                payload_hash, source_recorded_at, projected_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, json(?), ?, ?, ?)
+            """,
+            (
+                f"workflow-semantic:{source['artifact_type']}:{source['source_id']}",
+                source["tenant_id"],
+                source["workflow_id"],
+                int(source["graph_revision"]),
+                source["artifact_type"],
+                source["source_id"],
+                source["task_id"],
+                source["attempt_id"],
+                source["payload_json"],
+                source["payload_hash"],
+                source["recorded_at"],
+                now,
+            ),
+        )
+        imported += 1
+    return imported
+
+
+def _semantic_artifact_matches(stored: sqlite3.Row, source: sqlite3.Row) -> bool:
+    return bool(
+        stored["tenant_id"] == source["tenant_id"]
+        and stored["workflow_id"] == source["workflow_id"]
+        and int(stored["graph_revision"]) == int(source["graph_revision"])
+        and stored["artifact_type"] == source["artifact_type"]
+        and stored["source_id"] == source["source_id"]
+        and stored["task_id"] == source["task_id"]
+        and stored["attempt_id"] == source["attempt_id"]
+        and stored["payload_json"] == source["payload_json"]
+        and stored["payload_hash"] == source["payload_hash"]
+        and stored["source_recorded_at"] == source["recorded_at"]
+    )
+
+
+def _semantic_parity_state_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    sources: list[sqlite3.Row],
+) -> dict[str, Any]:
+    projected = conn.execute(
+        """
+        SELECT * FROM workflow_compatibility_semantic_artifacts
+        WHERE tenant_id = ? AND workflow_id = ?
+        ORDER BY artifact_type ASC, source_id ASC
+        """,
+        (tenant_id, workflow_id),
+    ).fetchall()
+    governed = conn.execute(
+        """
+        SELECT 1 FROM workflow_completion_governance
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    completion = _completion_projection_identity_locked(
+        conn, tenant_id=tenant_id, workflow_id=workflow_id
+    )
+    exact = len(sources) == len(projected) and all(
+        _semantic_artifact_matches(stored, source)
+        for stored, source in zip(projected, sources)
+    )
+    if governed is None:
+        parity_state = "not_governed"
+        error_code = "completion_governance_absent"
+    elif completion is None:
+        parity_state = "drifted"
+        error_code = "completion_projection_absent"
+    elif not completion["is_current"]:
+        parity_state = "drifted"
+        error_code = "completion_projection_stale"
+    elif not exact:
+        parity_state = "drifted"
+        error_code = "semantic_artifact_mismatch"
+    elif not _has_current_completion_checkpoint(sources, completion=completion):
+        parity_state = "drifted"
+        error_code = "completion_checkpoint_mismatch"
+    else:
+        parity_state = "current"
+        error_code = None
+    return {
+        "parity_state": parity_state,
+        "projected_artifact_count": len(projected),
+        "completion": completion,
+        "error_code": error_code,
+    }
+
+
+def _has_current_completion_checkpoint(
+    sources: list[sqlite3.Row], *, completion: dict[str, Any]
+) -> bool:
+    for source in sources:
+        if source["artifact_type"] != "completion_checkpoint":
+            continue
+        try:
+            payload = json.loads(source["payload_json"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+        if (
+            payload.get("decision_id") == completion["decision_id"]
+            and payload.get("decision_digest") == completion["decision_digest"]
+            and payload.get("authoritative_event_sequence")
+            == completion["event_sequence"]
+        ):
+            return True
+    return False
+
+
+def _completion_projection_identity_locked(
+    conn: sqlite3.Connection, *, tenant_id: str, workflow_id: str
+) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT projection.*, decision.decision_digest AS source_decision_digest
+        FROM workflow_completion_projections projection
+        JOIN workflow_completion_decisions decision
+          ON decision.decision_id = projection.decision_id
+        WHERE projection.tenant_id = ? AND projection.workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    if row is None:
+        return None
+    fence = outcome_reads.get_completion_projection_fence_locked(
+        conn, tenant_id=tenant_id, workflow_id=workflow_id
+    )
+    governance = conn.execute(
+        """
+        SELECT graph_revision, criteria_digest
+        FROM workflow_completion_governance
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    event_cursor = conn.execute(
+        """
+        SELECT current_sequence
+        FROM workflow_completion_event_cursors
+        WHERE tenant_id = ? AND workflow_id = ?
+        """,
+        (tenant_id, workflow_id),
+    ).fetchone()
+    is_current = bool(
+        fence is not None
+        and governance is not None
+        and event_cursor is not None
+        and int(row["graph_revision"]) == fence.active_graph_revision
+        and int(row["graph_revision"]) == int(governance["graph_revision"])
+        and row["criteria_digest"] == governance["criteria_digest"]
+        and row["action_projection_digest"] == fence.action_projection_digest
+        and row["projected_run_status"] == fence.run_status
+        and row["projected_run_state"] == fence.run_state
+        and int(row["authoritative_event_sequence"])
+        == int(event_cursor["current_sequence"])
+    )
+    payload = {
+        "action_projection_digest": row["action_projection_digest"],
+        "authoritative_event_sequence": int(row["authoritative_event_sequence"]),
+        "blockers": from_json(row["blockers_json"], default=[]),
+        "completion_status": row["completion_status"],
+        "criteria_digest": row["criteria_digest"],
+        "decision_digest": row["decision_digest"],
+        "decision_id": row["decision_id"],
+        "evaluated_at": row["evaluated_at"],
+        "graph_revision": int(row["graph_revision"]),
+        "projected_run_state": row["projected_run_state"],
+        "projected_run_status": row["projected_run_status"],
+        "projection_version": int(row["projection_version"]),
+    }
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    return {
+        "decision_id": row["decision_id"],
+        "decision_digest": row["source_decision_digest"],
+        "event_sequence": int(row["authoritative_event_sequence"]),
+        "projection_version": int(row["projection_version"]),
+        "projection_hash": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "is_current": is_current,
+    }
+
+
+def _upsert_semantic_status_locked(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    parity_state: str,
+    source_artifact_count: int,
+    projected_artifact_count: int,
+    completion: dict[str, Any] | None,
+    error_code: str | None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO workflow_compatibility_semantic_status (
+            tenant_id, workflow_id, parity_state, source_artifact_count,
+            projected_artifact_count, completion_decision_id,
+            completion_decision_digest, completion_event_sequence,
+            completion_projection_version, completion_projection_hash,
+            error_code, checked_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id, workflow_id) DO UPDATE SET
+            parity_state = excluded.parity_state,
+            source_artifact_count = excluded.source_artifact_count,
+            projected_artifact_count = excluded.projected_artifact_count,
+            completion_decision_id = excluded.completion_decision_id,
+            completion_decision_digest = excluded.completion_decision_digest,
+            completion_event_sequence = excluded.completion_event_sequence,
+            completion_projection_version = excluded.completion_projection_version,
+            completion_projection_hash = excluded.completion_projection_hash,
+            error_code = excluded.error_code,
+            checked_at = excluded.checked_at
+        """,
+        (
+            tenant_id,
+            workflow_id,
+            parity_state,
+            source_artifact_count,
+            projected_artifact_count,
+            None if completion is None else completion["decision_id"],
+            None if completion is None else completion["decision_digest"],
+            None if completion is None else completion["event_sequence"],
+            None if completion is None else completion["projection_version"],
+            None if completion is None else completion["projection_hash"],
+            error_code,
+            _now(),
+        ),
+    )
+
+
+def _semantic_content_is_current(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    semantic_rows: list[sqlite3.Row],
+    semantic_status: sqlite3.Row | None,
+) -> bool:
+    if semantic_status is None or semantic_status["parity_state"] != "current":
+        return False
+    sources = _load_semantic_sources_locked(
+        conn, tenant_id=tenant_id, workflow_id=workflow_id
+    )
+    if len(sources) != len(semantic_rows):
+        return False
+    if not all(
+        _semantic_artifact_matches(stored, source)
+        for stored, source in zip(semantic_rows, sources)
+    ):
+        return False
+    completion = _completion_projection_identity_locked(
+        conn, tenant_id=tenant_id, workflow_id=workflow_id
+    )
+    if completion is None:
+        return False
+    if not completion["is_current"]:
+        return False
+    try:
+        return bool(
+            semantic_status["completion_decision_id"] == completion["decision_id"]
+            and semantic_status["completion_decision_digest"]
+            == completion["decision_digest"]
+            and int(semantic_status["completion_event_sequence"])
+            == completion["event_sequence"]
+            and int(semantic_status["completion_projection_version"])
+            == completion["projection_version"]
+            and semantic_status["completion_projection_hash"]
+            == completion["projection_hash"]
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def _load_run_locked(
@@ -750,6 +1127,12 @@ def _dict_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 
 def _event_row(row: sqlite3.Row) -> dict[str, Any]:
+    result = dict(row)
+    result["payload"] = json.loads(result.pop("payload_json"))
+    return result
+
+
+def _semantic_row(row: sqlite3.Row) -> dict[str, Any]:
     result = dict(row)
     result["payload"] = json.loads(result.pop("payload_json"))
     return result

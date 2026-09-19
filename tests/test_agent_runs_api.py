@@ -298,7 +298,8 @@ def test_create_agent_run_persists_principal_policy_and_trace_fields(
     )
     assert workflow_projection is not None
     assert workflow_projection["structure_and_event_ids_current"] is True
-    assert workflow_projection["governed_semantic_parity"] == "not_projected_slice_7a"
+    assert workflow_projection["governed_semantic_parity"] is False
+    assert workflow_projection["semantic_status"]["parity_state"] == "not_governed"
     assert workflow_projection["revision"]["revision"] == 1
     assert workflow_projection["tasks"][0]["task_id"] == payload["actions"][0]["id"]
 
