@@ -556,8 +556,15 @@ Phase 1 remains open. The next reviewable sequence is:
    fails closed without changing runtime authority.
    Each scheduler cycle performs a bounded tenant-scoped oldest-first scan so
    pre-migration, failed, and stale shadows are retried idempotently.
-   Continuous event dual-write and the measured framework comparison remain in
-   the subsequent Slice 7 work.
+   Slice 7c adds continuous transactional event dual-write. New runs establish
+   the complete immutable revision-1 structure before their first source event;
+   every later `agent_events` insert for a projected run derives the exact
+   compatibility event through a database trigger in the source writer's own
+   transaction. Projection conflicts roll back the authoritative event, while
+   pre-7c runs and interrupted migrations remain bounded reconciliation
+   candidates. Existing approval, effect, completion, scheduling, and API
+   authority is unchanged. The measured framework comparison remains in the
+   subsequent Slice 7 work.
 
 Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
 the primary command surface. The current supported envelope remains bounded,

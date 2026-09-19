@@ -28,50 +28,54 @@ def create_agent_event(
 ) -> Dict[str, Any]:
     event_id = str(uuid.uuid4())
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO agent_events (
-            id,
-            agent_run_id,
-            action_id,
-            sequence,
-            event_type,
-            status,
-            capability_name,
-            capability_version,
-            principal_type,
-            principal_id,
-            tool_id,
-            skill_id,
-            effect_class,
-            trace_id,
-            note_text,
-            is_policy_event,
-            anchors_json
+    try:
+        conn.execute(
+            """
+            INSERT INTO agent_events (
+                id,
+                agent_run_id,
+                action_id,
+                sequence,
+                event_type,
+                status,
+                capability_name,
+                capability_version,
+                principal_type,
+                principal_id,
+                tool_id,
+                skill_id,
+                effect_class,
+                trace_id,
+                note_text,
+                is_policy_event,
+                anchors_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
+            """,
+            (
+                event_id,
+                agent_run_id,
+                action_id,
+                int(sequence),
+                event_type,
+                status,
+                capability_name,
+                capability_version,
+                principal_type,
+                principal_id,
+                tool_id,
+                skill_id,
+                effect_class,
+                trace_id,
+                note,
+                1 if is_policy_event else 0,
+                to_json(anchors or {}) or to_json({}),
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?))
-        """,
-        (
-            event_id,
-            agent_run_id,
-            action_id,
-            int(sequence),
-            event_type,
-            status,
-            capability_name,
-            capability_version,
-            principal_type,
-            principal_id,
-            tool_id,
-            skill_id,
-            effect_class,
-            trace_id,
-            note,
-            1 if is_policy_event else 0,
-            to_json(anchors or {}) or to_json({}),
-        ),
-    )
-    conn.commit()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return get_agent_event(event_id) or {}
 
 
