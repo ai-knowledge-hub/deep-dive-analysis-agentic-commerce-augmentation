@@ -286,9 +286,10 @@ Deliverables:
 - STPA control structure and first hazard analysis
 - security threat model covering prompt injection, excessive agency, memory
   poisoning, inter-agent communication, cascading failure, and repudiation
-- architecture decision record comparing an internal kernel, LangGraph-style
-  graph execution, and Temporal-style durable execution against repository
-  requirements
+- architecture decision record comparing the internal sequential kernel with
+  first-party graph-state and durable-history strategies against repository
+  requirements; external frameworks may inform the patterns but are not
+  runtime, persistence, SDK, service, or deployment dependencies
 
 Exit gate:
 
@@ -525,9 +526,10 @@ Phase 1 remains open. The next reviewable sequence is:
    read is unavailable and never derives completion from `agent_runs.status`.
 7. **Sequential workflow compatibility and framework spike.** Represent one
    existing ordered agent run as an immutable workflow revision and tasks,
-   dual-project its events to current APIs, and compare an internal kernel,
-   LangGraph-style execution, and Temporal-style execution against the
-   accepted portability, replay, recovery, lease, and operations criteria.
+   dual-project its events to current APIs, and compare the internal sequential
+   kernel with first-party graph-state and durable-history execution strategies
+   against the accepted portability, replay, recovery, lease, and operations
+   criteria.
    Slice 7a now compiles newly planned sequential runs into a non-authoritative
    immutable revision-1 shadow with explicit task membership, deterministic
    action-to-task identity, linear dependencies, and idempotently imported
@@ -574,9 +576,17 @@ Phase 1 remains open. The next reviewable sequence is:
    cancellation, verified checkpoints, scope isolation, and non-proprietary
    history export. The golden scenarios are parameterized by the adapter
    factory so candidates must run the unchanged correctness portfolio. This
-   benchmark code is not a production scheduler and makes no framework
-   decision; LangGraph-style and Temporal-style adapters must be measured before
-   an ADR closes Phase 1.
+   benchmark code is not a production scheduler and makes no orchestration
+   decision. The durable SQLite candidate now stores normalized platform-owned
+   workflow identity, commands, events, command and effect receipts, and
+   checkpoints in an isolated benchmark schema. It restores through a fresh
+   connection, serializes competing writers with database transactions,
+   retains immutable evidence at every injected crash boundary, and emits
+   canonical operational measurements. First-party graph-state and
+   durable-history strategies must still be measured before an ADR closes
+   Phase 1. LangGraph and Temporal may be research inputs, but their packages,
+   SDKs, runtimes, services, persistence formats, and framework-native state
+   are not candidates or production dependencies.
 
 Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
 the primary command surface. The current supported envelope remains bounded,
