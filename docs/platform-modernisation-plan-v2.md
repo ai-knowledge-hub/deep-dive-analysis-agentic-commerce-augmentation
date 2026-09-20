@@ -564,7 +564,19 @@ Phase 1 remains open. The next reviewable sequence is:
    pre-7c runs and interrupted migrations remain bounded reconciliation
    candidates. Existing approval, effect, completion, scheduling, and API
    authority is unchanged. The measured framework comparison remains in the
-   subsequent Slice 7 work.
+   subsequent Slice 7 work. Slice 7d has started with a deterministic,
+   framework-neutral adapter contract and internal-kernel baseline covering
+   canonical command replay and collection ordering, independent effect
+   execution and receipt oracles with exact command/digest provenance binding,
+   faults across the effect/receipt/event/acknowledgement timeline, fresh-store
+   recovery from portable evidence, revision-pinned scheduling, worker-owned
+   leases, heartbeat, expiry and late-worker fencing, pause/resume and in-flight
+   cancellation, verified checkpoints, scope isolation, and non-proprietary
+   history export. The golden scenarios are parameterized by the adapter
+   factory so candidates must run the unchanged correctness portfolio. This
+   benchmark code is not a production scheduler and makes no framework
+   decision; LangGraph-style and Temporal-style adapters must be measured before
+   an ADR closes Phase 1.
 
 Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
 the primary command surface. The current supported envelope remains bounded,
