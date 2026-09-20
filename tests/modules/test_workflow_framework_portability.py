@@ -16,6 +16,7 @@ from application.services.workflow_portability import (
     PortabilityConflictError,
     PortabilityInjectedCrash,
     PortabilityInvariantError,
+    SQLitePortabilityAdapterFactory,
     verify_portability_history,
 )
 from domain.workflow.portability import (
@@ -32,13 +33,16 @@ WORKFLOW_ID = "workflow-portability"
 PAYLOAD_HASH = hashlib.sha256(b"bounded effect").hexdigest()
 
 
-@pytest.fixture(params=[InternalKernelAdapter], ids=["internal-kernel"])
+@pytest.fixture(params=["internal-kernel", "sqlite"], ids=["internal-kernel", "sqlite"])
 def adapter_factory(
     request: pytest.FixtureRequest,
+    tmp_path,
 ) -> WorkflowFrameworkAdapterFactory:
     """Register every candidate here to run the unchanged golden scenarios."""
 
-    return request.param
+    if request.param == "internal-kernel":
+        return InternalKernelAdapter
+    return SQLitePortabilityAdapterFactory(tmp_path / "portability-benchmark.sqlite3")
 
 
 @pytest.fixture
@@ -204,11 +208,17 @@ def test_restored_store_does_not_share_lifecycle_mutations(
         effect_sink=effect_sink,
     )
 
-    original.apply(_command("command-cancel", PortabilityOperation.CANCEL_WORKFLOW))
-
-    assert original.snapshot().workflow_status == "canceled"
-    assert restored.snapshot().workflow_status == "running"
-    assert restored.export_history() == history
+    if restored.adapter_id == "sqlite-portability.v1":
+        original.close()
+        assert restored.snapshot().workflow_status == "running"
+        assert restored.export_history() == history
+        with pytest.raises(PortabilityInvariantError, match="closed"):
+            original.snapshot()
+    else:
+        original.apply(_command("command-cancel", PortabilityOperation.CANCEL_WORKFLOW))
+        assert original.snapshot().workflow_status == "canceled"
+        assert restored.snapshot().workflow_status == "running"
+        assert restored.export_history() == history
 
 
 def test_non_effect_crash_restores_pending_command_from_portable_evidence(

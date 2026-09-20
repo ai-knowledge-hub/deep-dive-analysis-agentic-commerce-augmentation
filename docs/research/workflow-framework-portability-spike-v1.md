@@ -1,25 +1,28 @@
 # Workflow Framework Portability Spike v1
 
 Status: snapshot
-Last verified: 2026-09-19
-Baseline: `origin/main@c4b6a5b`
-Issue: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142)
+Last verified: 2026-09-20
+Baseline: `origin/main@131b23d`
+Issues: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142), [#144](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/144)
 
 ## Decision question
 
-Which orchestration approach should carry the platform from the current
-sequential SQLite runtime into durable task attempts and later bounded
-parallelism without making framework-native state authoritative?
+Which first-party orchestration strategy should carry the platform from the
+current sequential SQLite runtime into durable task attempts and later bounded
+parallelism without making strategy-native state authoritative?
 
 The candidates are:
 
-- the internal workflow kernel;
-- a LangGraph-style adapter; and
-- a Temporal-style adapter.
+- the internal sequential workflow kernel;
+- a first-party graph-state strategy inspired by explicit graph execution; and
+- a first-party durable-history strategy inspired by durable workflow systems.
 
 This document records the independent benchmark contract and evidence. It does
-not select a framework. A later ADR must make that decision from executable
-results and state the supported deployment envelope.
+not select a vendor. A later ADR must decide which patterns to adopt from
+executable results and state the supported deployment envelope. LangGraph and
+Temporal are research references only: their packages, SDKs, runtimes,
+services, persistence formats, and framework-native state are excluded from
+the implementation.
 
 ## Evidence boundary
 
@@ -29,7 +32,7 @@ command and effect receipts, replayable history export, verified checkpoints,
 a harness-owned clock and deterministic effect sink, fault injection, fencing,
 and an internal-kernel baseline. The executable contract is
 `workflow-portability.v2`. It does not exercise a live language model, a
-production scheduler, LangGraph, or Temporal yet.
+production scheduler, LangGraph, or Temporal.
 
 Language-model output is deliberately outside the correctness oracle. A later
 optional smoke suite may record one pinned model response and replay that exact
@@ -95,9 +98,9 @@ This is benchmark vocabulary, not the final production task API.
 | Reordered portable collections | Pinned command-ID and effect-ID ordering rules | Recomputed hashes do not legitimize non-canonical commands or receipts; restore/export bytes remain stable. |
 | Corrupt or coordinated history mutation | Independent replay validator | Digest, scope, schema, sequence, fencing, or lifecycle violation is detected. |
 
-Later increments must add runtime-created tasks, `all`/`any`/`quorum` joins,
-SQLite persistence, and operational measurements without weakening these
-scenarios.
+Later increments must add runtime-created tasks and `all`/`any`/`quorum` joins
+without weakening these scenarios. The isolated SQLite candidate and
+operational measurement runner are now implemented.
 
 ## Evaluation criteria
 
@@ -128,8 +131,8 @@ smaller implementation.
 
 ## Current evidence
 
-The internal baseline currently demonstrates the deterministic scenario
-portfolio in memory. The candidate store owns command/event state only. The
+The internal baseline demonstrates the deterministic scenario portfolio in
+memory. The candidate store owns command/event state only. The
 harness separately owns logical time, provider execution evidence, and an
 immutable receipt ledger. Recovery exports portable command, event, and receipt
 evidence, verifies the checkpoint and external ledger, and constructs a fresh
@@ -144,9 +147,28 @@ unchanged suite. This proves the shared contract and independent test oracles
 are executable; it does not prove the current production SQLite runtime has
 implemented task attempts, leases, or crash-safe distributed scheduling.
 
-LangGraph-style and Temporal-style evidence remains unmeasured. No framework
-decision should be recorded until both run the unchanged correctness suite and
-their operational assumptions are measured explicitly.
+The durable SQLite candidate runs the same golden portfolio through normalized,
+immutable, explicitly versioned tables for workflow identity, canonical
+commands, ordered events, command and effect receipts, and checkpoints.
+Existing benchmark databases are accepted only when their complete table,
+column, primary-key, unique-index, foreign-key, and trigger contract matches
+that version; incompatible or partial schemas fail before persistent connection
+settings or workflow evidence are written. Schema detection, first installation,
+and validation share one `BEGIN IMMEDIATE` transaction so concurrent first-open
+factories cannot race the bootstrap. Restoration opens a new connection and
+requires byte-identical portable history plus the independently verified
+checkpoint and effect ledger. `BEGIN IMMEDIATE` also serializes competing
+connections around validation, lease/effect execution, and evidence commit;
+post-validation WAL configuration retries only SQLite busy or locked outcomes
+through a bounded deadline. Multi-connection tests cover first-open races, the
+WAL lock boundary, duplicate delivery, and competing lease claims.
+The canonical measurement runner retains raw cold-start and recovery samples,
+database footprint, evidence counts, Python and SQLite versions, journal and
+connection settings, and dependency/service requirements.
+
+First-party graph-state and durable-history evidence remains unmeasured. No
+orchestration-pattern decision should be recorded until both run the unchanged
+correctness suite and their operational assumptions are measured explicitly.
 
 ## Non-goals
 
@@ -154,17 +176,31 @@ their operational assumptions are measured explicitly.
 - using model quality as a framework score;
 - making benchmark state a production authority;
 - adding parallel execution, dynamic joins, or delegation;
-- introducing a permanent Temporal service; or
+- introducing LangGraph, Temporal, or another workflow-vendor package, SDK,
+  runtime, service, or persisted representation; or
 - replacing current approval, effect, completion, or compatibility ledgers.
 
 ## Next increments
 
 1. Persist the internal baseline through an isolated SQLite adapter and measure
-   restart behavior against the same exported-history oracle.
-2. Add a minimal LangGraph-style adapter without allowing graph state to become
-   authoritative.
-3. Add a minimal Temporal-style adapter and record its service and deployment
-   requirements.
+   restart behavior against the same exported-history oracle. **Implemented.**
+2. Add a first-party graph-state strategy without allowing graph state to
+   become authoritative.
+3. Add a first-party durable-history strategy and record its operational and
+   deployment requirements.
 4. Run the complete scenario and operational matrix.
-5. Publish the decision ADR with evidence, rejected alternatives, migration
-   boundary, and rollback strategy.
+5. Publish the pattern-adoption ADR with evidence, rejected alternatives,
+   migration boundary, and rollback strategy.
+
+Run the local measurement artifact with:
+
+```bash
+python -m scripts.ops.run_workflow_portability_measurements \
+  --output tmp/workflow-portability-measurements.json \
+  --samples 5
+```
+
+The command performs no model or external-service calls.
+Each invocation creates an isolated benchmark-data subdirectory, so rerunning
+the command with the same output path cannot reuse or overwrite prior SQLite
+workflow evidence.

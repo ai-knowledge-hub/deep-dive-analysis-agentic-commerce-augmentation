@@ -18,9 +18,9 @@ queue, but it cannot represent dependencies, fan-out, joins, or runtime graph
 revision. Status changes are also distributed across services.
 
 Phase 1 needs a logical schema that defines these concepts before the platform
-selects an internal, LangGraph-style, or Temporal-style execution engine. This
-ADR defines the portable contract. It does not add database tables or choose a
-workflow framework.
+selects which first-party orchestration patterns to adopt. This ADR defines the
+portable contract. It does not add production database tables or choose a
+workflow vendor.
 
 The workflow lifecycle is governed by
 `domain/workflow/lifecycle.py`. The schema below must not permit adapters to
@@ -679,8 +679,8 @@ fields have been established under the versioned envelope contract.
 
 ## Framework portability requirements
 
-Any internal kernel, LangGraph-style adapter, or Temporal-style adapter must
-demonstrate that it can:
+The internal sequential kernel and every first-party graph-state or
+durable-history strategy must demonstrate that it can:
 
 - preserve the domain lifecycle and event sequence
 - persist immutable graph revisions and runtime-created tasks
@@ -692,8 +692,11 @@ demonstrate that it can:
 - project existing agent-run APIs and control-plane views
 - export complete event and result history without proprietary serialization
 
-Framework-native state may optimize execution, but it cannot become the only
-copy of domain events, receipts, approvals, or authority decisions.
+Strategy-native state may optimize execution, but it cannot become the only
+copy of domain events, receipts, approvals, or authority decisions. LangGraph
+and Temporal may inform the design patterns, but their packages, SDKs,
+runtimes, services, persistence formats, and framework-native serialized state
+are not platform dependencies.
 
 ## Consequences
 
@@ -717,7 +720,8 @@ Costs:
 
 This ADR intentionally does not decide:
 
-- internal kernel versus LangGraph-style versus Temporal-style execution
+- which first-party graph-state and durable-history patterns should extend the
+  internal sequential kernel
 - SQLite-constrained beta versus PostgreSQL and durable queue topology
 - physical JSON versus blob/object payload storage thresholds
 - the full task, attempt, assignment, and result transition matrices
