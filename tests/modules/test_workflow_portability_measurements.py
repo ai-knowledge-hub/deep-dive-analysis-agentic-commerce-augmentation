@@ -11,7 +11,7 @@ from application.services.workflow_portability.measurement import (
 from domain.workflow.portability import PORTABILITY_CONTRACT_VERSION
 
 
-def test_measurement_runner_emits_canonical_raw_samples_for_both_adapters(tmp_path):
+def test_measurement_runner_emits_canonical_raw_samples_for_all_adapters(tmp_path):
     measurements = run_portability_measurements(
         output_directory=tmp_path / "measurement-data",
         sample_count=2,
@@ -21,15 +21,19 @@ def test_measurement_runner_emits_canonical_raw_samples_for_both_adapters(tmp_pa
     assert json.loads(encoded) == measurements
     assert encoded == canonical_measurement_json(json.loads(encoded))
     assert measurements["measurement_schema_version"] == MEASUREMENT_SCHEMA_VERSION
+    assert MEASUREMENT_SCHEMA_VERSION == "workflow-portability-measurements.v2"
     assert measurements["portability_contract_version"] == PORTABILITY_CONTRACT_VERSION
     assert measurements_passed(measurements)
     assert [item["adapter_id"] for item in measurements["adapters"]] == [
         "internal-kernel.v2",
         "sqlite-portability.v1",
+        "graph-state-portability.v1",
     ]
     for adapter in measurements["adapters"]:
         assert adapter["required_packages"] == []
         assert adapter["external_services"] == []
+        assert adapter["implementation_modules"]
+        assert adapter["implementation_source_lines"] > 0
         assert len(adapter["samples"]) == 2
         for sample in adapter["samples"]:
             assert sample["passed"] is True
@@ -42,16 +46,25 @@ def test_measurement_runner_emits_canonical_raw_samples_for_both_adapters(tmp_pa
                 "effect_receipts": 1,
                 "events": 4,
             }
-    sqlite_result = measurements["adapters"][1]
-    assert sqlite_result["connection_settings"] == {
-        "busy_timeout_ms": 5000,
-        "foreign_keys": True,
-        "journal_mode": "wal",
-        "synchronous": "full",
-    }
+    for adapter in measurements["adapters"][:2]:
+        assert all(
+            sample["strategy_state_hash"] is None for sample in adapter["samples"]
+        )
     assert all(
-        sample["persisted_database_bytes"] > 0 for sample in sqlite_result["samples"]
+        len(sample["strategy_state_hash"]) == 64
+        for sample in measurements["adapters"][2]["samples"]
     )
+    for persisted_result in measurements["adapters"][1:]:
+        assert persisted_result["connection_settings"] == {
+            "busy_timeout_ms": 5000,
+            "foreign_keys": True,
+            "journal_mode": "wal",
+            "synchronous": "full",
+        }
+        assert all(
+            sample["persisted_database_bytes"] > 0
+            for sample in persisted_result["samples"]
+        )
 
 
 def test_measurement_runner_rejects_nonpositive_sample_count(tmp_path):
@@ -87,6 +100,8 @@ def test_measurement_runner_isolates_repeated_invocations(tmp_path):
     assert len(run_directories) == 2
     for run_directory in run_directories:
         assert sorted(path.name for path in run_directory.glob("*.sqlite3")) == [
+            "graph-state-sample-0.sqlite3",
+            "graph-state-sample-1.sqlite3",
             "sqlite-sample-0.sqlite3",
             "sqlite-sample-1.sqlite3",
         ]

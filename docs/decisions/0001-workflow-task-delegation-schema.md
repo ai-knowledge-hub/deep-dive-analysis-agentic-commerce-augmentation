@@ -698,6 +698,28 @@ and Temporal may inform the design patterns, but their packages, SDKs,
 runtimes, services, persistence formats, and framework-native serialized state
 are not platform dependencies.
 
+The initial Slice 7d.2a graph-state candidate implements this boundary as a
+deterministic projection and command-routing guard over the isolated portable
+SQLite evidence. Exact platform-owned graph definitions name nodes, node
+types, closed condition and reducer identities, state versions, the active
+node, and the portable event cursor. Conditions execute against each verified
+event, and deterministic reducer outputs are canonical evidence in the graph
+state hash rather than descriptive labels. The definition digest includes the
+canonical syntax digest of every self-contained reducer implementation. A
+reducer must expose exactly `(event_type, payload, target)` with no defaults,
+keyword-only parameters, or variadics, preventing external configuration from
+being captured outside that digest. Changing executable reducer behavior
+requires a new persisted pin even when a developer forgets to change its
+version label. Each workflow also stores one
+immutable definition ID, state version, and exact definition hash. Route
+admission, checkpointing, and restoration fail closed if that pin is missing
+or differs, including when a new definition reuses the old ID and version.
+Route admission reconstructs its node from independently verified portable
+history and never accepts a caller-provided graph projection as authority.
+Restoration reconstructs graph state from verified commands, events, receipts,
+and checkpoints through a new connection; no live graph object or graph-native
+serialization is authoritative or required.
+
 ## Consequences
 
 Positive:

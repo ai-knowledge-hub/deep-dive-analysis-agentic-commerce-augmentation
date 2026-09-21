@@ -9,6 +9,10 @@ from application.services.workflow_portability.internal_kernel import (
     InternalKernelStore,
     verify_portability_history,
 )
+from application.services.workflow_portability.graph_state_adapter import (
+    GraphStatePortabilityAdapter,
+    GraphStatePortabilityAdapterFactory,
+)
 from application.services.workflow_portability.sqlite_adapter import (
     SQLitePortabilityAdapter,
     SQLitePortabilityAdapterFactory,
@@ -28,6 +32,8 @@ from domain.workflow.portability import (
 __all__ = [
     "DeterministicClock",
     "DeterministicEffectSink",
+    "GraphStatePortabilityAdapter",
+    "GraphStatePortabilityAdapterFactory",
     "InternalKernelAdapter",
     "InternalKernelStore",
     "MEASUREMENT_SCHEMA_VERSION",

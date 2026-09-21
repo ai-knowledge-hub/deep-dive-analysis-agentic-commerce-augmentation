@@ -15,6 +15,10 @@ from application.services.workflow_portability.harness import (
     DeterministicClock,
     DeterministicEffectSink,
 )
+from application.services.workflow_portability.graph_state_adapter import (
+    GraphStatePortabilityAdapter,
+    GraphStatePortabilityAdapterFactory,
+)
 from application.services.workflow_portability.internal_kernel import (
     InternalKernelAdapter,
 )
@@ -29,8 +33,16 @@ from domain.workflow.portability import (
 )
 
 
-MEASUREMENT_SCHEMA_VERSION = "workflow-portability-measurements.v1"
+MEASUREMENT_SCHEMA_VERSION = "workflow-portability-measurements.v2"
 _PAYLOAD_HASH = hashlib.sha256(b"portability measurement effect").hexdigest()
+_IMPLEMENTATION_MODULES = {
+    "internal": ("application/services/workflow_portability/internal_kernel.py",),
+    "sqlite": ("application/services/workflow_portability/sqlite_adapter.py",),
+    "graph-state": (
+        "domain/workflow/graph_state.py",
+        "application/services/workflow_portability/graph_state_adapter.py",
+    ),
+}
 
 
 def run_portability_measurements(
@@ -47,13 +59,19 @@ def run_portability_measurements(
             adapter_id=InternalKernelAdapter.adapter_id,
             output_directory=run_directory,
             sample_count=sample_count,
-            sqlite_candidate=False,
+            candidate_kind="internal",
         ),
         _measure_adapter(
             adapter_id=SQLitePortabilityAdapter.adapter_id,
             output_directory=run_directory,
             sample_count=sample_count,
-            sqlite_candidate=True,
+            candidate_kind="sqlite",
+        ),
+        _measure_adapter(
+            adapter_id=GraphStatePortabilityAdapter.adapter_id,
+            output_directory=run_directory,
+            sample_count=sample_count,
+            candidate_kind="graph-state",
         ),
     )
     return {
@@ -93,14 +111,14 @@ def _measure_adapter(
     adapter_id: str,
     output_directory: Path,
     sample_count: int,
-    sqlite_candidate: bool,
+    candidate_kind: str,
 ) -> dict[str, object]:
     samples = [
         _measure_sample(
             adapter_id=adapter_id,
             output_directory=output_directory,
             sample_index=index,
-            sqlite_candidate=sqlite_candidate,
+            candidate_kind=candidate_kind,
         )
         for index in range(sample_count)
     ]
@@ -109,6 +127,8 @@ def _measure_adapter(
         "all_scenarios_passed": all(sample["passed"] for sample in samples),
         "connection_settings": samples[0]["connection_settings"],
         "external_services": [],
+        "implementation_modules": list(_IMPLEMENTATION_MODULES[candidate_kind]),
+        "implementation_source_lines": _implementation_source_lines(candidate_kind),
         "required_packages": [],
         "samples": samples,
     }
@@ -119,18 +139,25 @@ def _measure_sample(
     adapter_id: str,
     output_directory: Path,
     sample_index: int,
-    sqlite_candidate: bool,
+    candidate_kind: str,
 ) -> dict[str, object]:
     tenant_id = f"tenant-measurement-{sample_index}"
     workflow_id = f"workflow-measurement-{sample_index}"
-    database_path = output_directory / f"sqlite-sample-{sample_index}.sqlite3"
+    database_path = output_directory / (
+        f"{candidate_kind}-sample-{sample_index}.sqlite3"
+    )
     clock = DeterministicClock()
     sink = DeterministicEffectSink()
-    factory: Any = (
-        SQLitePortabilityAdapterFactory(database_path)
-        if sqlite_candidate
-        else InternalKernelAdapter
-    )
+    factory: Any
+    if candidate_kind == "internal":
+        factory = InternalKernelAdapter
+    elif candidate_kind == "sqlite":
+        factory = SQLitePortabilityAdapterFactory(database_path)
+    elif candidate_kind == "graph-state":
+        factory = GraphStatePortabilityAdapterFactory(database_path)
+    else:
+        raise ValueError("unsupported portability measurement candidate")
+    persistent_candidate = candidate_kind != "internal"
     sample: dict[str, object] = {
         "cold_start_latency_ns": None,
         "connection_settings": {},
@@ -142,6 +169,7 @@ def _measure_sample(
         "recovery_latency_ns": None,
         "sample_index": sample_index,
         "scenario": "sequential_effect_and_fresh_restore",
+        "strategy_state_hash": None,
     }
     adapter = None
     restored = None
@@ -192,7 +220,7 @@ def _measure_sample(
         )
         history = adapter.export_history()
         checkpoint = adapter.checkpoint()
-        if sqlite_candidate:
+        if persistent_candidate:
             adapter.close()
             adapter = None
 
@@ -217,7 +245,10 @@ def _measure_sample(
         final_checkpoint = restored.checkpoint()
         final_history = restored.export_history()
         sample["history_hash"] = final_checkpoint.history_hash
-        if sqlite_candidate:
+        graph_state = getattr(restored, "graph_state", None)
+        if callable(graph_state):
+            sample["strategy_state_hash"] = graph_state().state_hash
+        if persistent_candidate:
             sample["connection_settings"] = restored.connection_settings
             sample["evidence_counts"] = restored.evidence_counts()
             restored.close()
@@ -268,6 +299,14 @@ def _database_footprint(database_path: Path) -> int:
             Path(f"{database_path}-shm"),
         )
         if candidate.exists()
+    )
+
+
+def _implementation_source_lines(candidate_kind: str) -> int:
+    repository_root = Path(__file__).resolve().parents[3]
+    return sum(
+        len((repository_root / module).read_text(encoding="utf-8").splitlines())
+        for module in _IMPLEMENTATION_MODULES[candidate_kind]
     )
 
 

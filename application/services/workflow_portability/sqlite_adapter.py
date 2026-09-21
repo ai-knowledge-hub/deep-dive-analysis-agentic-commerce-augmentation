@@ -27,6 +27,11 @@ from application.services.workflow_portability.internal_kernel import (
     InternalKernelStore,
     verify_portability_history,
 )
+from application.services.workflow_portability.sqlite_graph_definition import (
+    GRAPH_DEFINITION_SCHEMA,
+    GRAPH_DEFINITION_TABLE,
+    SQLiteGraphDefinitionStore,
+)
 from domain.workflow.portability import (
     PORTABILITY_CONTRACT_VERSION,
     PortabilityCheckpoint,
@@ -45,7 +50,7 @@ from domain.workflow.portability import (
 )
 
 
-_SQLITE_SCHEMA_VERSION = 1
+_SQLITE_SCHEMA_VERSION = 2
 _SQLITE_CONFIGURATION_TIMEOUT_SECONDS = 5.0
 _SQLITE_CONFIGURATION_RETRY_SECONDS = 0.01
 
@@ -68,6 +73,8 @@ CREATE TABLE portability_benchmark_workflows (
     PRIMARY KEY (tenant_id, workflow_id),
     UNIQUE (tenant_id, workflow_id, graph_revision)
 );
+
+{GRAPH_DEFINITION_SCHEMA}
 
 CREATE TABLE portability_benchmark_commands (
     tenant_id TEXT NOT NULL,
@@ -209,6 +216,7 @@ END;
 _IMMUTABLE_TABLES = (
     "portability_benchmark_schema",
     "portability_benchmark_workflows",
+    GRAPH_DEFINITION_TABLE,
     "portability_benchmark_commands",
     "portability_benchmark_events",
     "portability_benchmark_command_receipts",
@@ -258,7 +266,7 @@ class SQLitePortabilityAdapterFactory:
         )
 
 
-class SQLitePortabilityAdapter:
+class SQLitePortabilityAdapter(SQLiteGraphDefinitionStore):
     adapter_id = "sqlite-portability.v1"
 
     def __init__(
@@ -833,9 +841,7 @@ def _configure_connection(connection: sqlite3.Connection) -> None:
     deadline = monotonic() + _SQLITE_CONFIGURATION_TIMEOUT_SECONDS
     while True:
         try:
-            journal_mode = connection.execute(
-                "PRAGMA journal_mode = WAL"
-            ).fetchone()
+            journal_mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()
         except sqlite3.OperationalError as exc:
             if not _is_sqlite_busy_or_locked(exc):
                 raise PortabilityInvariantError(
