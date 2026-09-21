@@ -582,11 +582,22 @@ Phase 1 remains open. The next reviewable sequence is:
    checkpoints in an isolated benchmark schema. It restores through a fresh
    connection, serializes competing writers with database transactions,
    retains immutable evidence at every injected crash boundary, and emits
-   canonical operational measurements. First-party graph-state and
-   durable-history strategies must still be measured before an ADR closes
-   Phase 1. LangGraph and Temporal may be research inputs, but their packages,
-   SDKs, runtimes, services, persistence formats, and framework-native state
-   are not candidates or production dependencies.
+   canonical operational measurements. Slice 7d.2a now has an initial
+   first-party graph-state candidate: exact versioned nodes and transitions,
+   closed executable condition and reducer registries, canonical reducer
+   outputs in the state hash, canonical implementation digests for
+   self-contained, exact-signature, default-free reducers,
+   history-reconstructed route admission that rejects
+   caller-supplied projection authority, active-node and checkpoint cursors, immutable
+   per-workflow definition pins verified at route, checkpoint, and restore
+   boundaries, fresh-store reconstruction from portable evidence, unchanged
+   golden-scenario execution, and canonical measurements. Graph state remains
+   a non-authoritative execution projection over platform commands, events,
+   receipts, checkpoints, and the independent effect ledger. Runtime-created
+   tasks, joins, and the durable-history strategy must still be measured before
+   an ADR closes Phase 1. LangGraph and Temporal may be research inputs, but
+   their packages, SDKs, runtimes, services, persistence formats, and
+   framework-native state are not candidates or production dependencies.
 
 Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
 the primary command surface. The current supported envelope remains bounded,

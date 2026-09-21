@@ -149,7 +149,9 @@ implemented task attempts, leases, or crash-safe distributed scheduling.
 
 The durable SQLite candidate runs the same golden portfolio through normalized,
 immutable, explicitly versioned tables for workflow identity, canonical
-commands, ordered events, command and effect receipts, and checkpoints.
+commands, ordered events, command and effect receipts, checkpoints, and exact
+per-workflow graph-definition pins. The SQLite schema version is `2`; graph
+definition records are immutable and scope-bound to their workflow.
 Existing benchmark databases are accepted only when their complete table,
 column, primary-key, unique-index, foreign-key, and trigger contract matches
 that version; incompatible or partial schemas fail before persistent connection
@@ -166,9 +168,52 @@ The canonical measurement runner retains raw cold-start and recovery samples,
 database footprint, evidence counts, Python and SQLite versions, journal and
 connection settings, and dependency/service requirements.
 
-First-party graph-state and durable-history evidence remains unmeasured. No
-orchestration-pattern decision should be recorded until both run the unchanged
-correctness suite and their operational assumptions are measured explicitly.
+The first Slice 7d.2a graph-state increment adds an exact platform-owned graph
+definition with versioned nodes, transitions, reducer identities, conditional
+routes, active-node state, a portable event cursor, and canonical definition
+and state hashes. Conditions and reducers come from closed registries: replay
+executes the matching condition and deterministic reducer for every verified
+event, preserves its canonical output and digest, and incorporates all reducer
+outputs into the state hash. Each reducer must be self-contained and expose
+exactly three ordinary positional parameters with no runtime defaults. Its
+canonical implementation-syntax digest participates in the definition hash;
+an executable change therefore invalidates the persisted pin even if its
+human-assigned version label is unchanged. `GraphStatePortabilityAdapter`
+admits new commands only when replay of independently verified portable history
+reconstructs a compatible route. Caller-supplied projection fields are never
+route authority. The adapter then delegates durable
+authority and effect handling to the SQLite portability boundary. Every graph
+view is rebuilt from independently verified portable history; graph state is
+never an approval, receipt, effect, or lifecycle authority. The exact
+definition ID, state version, and hash are immutably pinned per workflow and
+checked before route admission, checkpoint mutation, and restoration, so a
+same-ID/same-version definition change cannot reinterpret prior evidence. The candidate runs
+the unchanged golden portfolio and the canonical measurement runner, while
+graph-specific tests reject unknown versions, nodes, ambiguous or missing
+routes, and substituted portable snapshots.
+
+Initial graph-pattern evidence:
+
+| Pattern | Disposition | Evidence and friction |
+| --- | --- | --- |
+| Explicit nodes and conditional transitions | Adopt | Makes pause, resume, terminal cancellation, and post-cancellation effect reconciliation routes inspectable and deterministic. |
+| Named deterministic reducers | Adopt | Every portable event selects a registered reducer, whose canonical output and digest contribute to the graph-state hash. Unknown reducer identities fail closed. |
+| Closed condition registry | Adopt | Registered conditions execute against portable event types and operations; unknown identities fail closed, and committed versus reconciled effect branches have separate evidence. |
+| Immutable definition pin | Adopt | Workflow-scoped definition ID, state version, and exact hash are checked during routing, checkpointing, and restoration. |
+| Active-node and checkpoint cursor | Adopt as projection | Useful for execution diagnostics, but must match the independently verified portable history hash and event cursor. |
+| Graph-native mutable checkpoint or serialized runtime object | Reject | Would duplicate authority and prevent clean recovery without a live framework object. |
+| Adapter-local command or effect semantics | Reject | The shared lifecycle, command digest, SQLite evidence, effect sink, and receipt ledger remain authoritative. |
+| Current sequential command vocabulary | Revise later | It proves deterministic routing but cannot yet express runtime-created nodes or `all`/`any`/`quorum` joins without a new shared contract version. |
+
+Measurement schema `workflow-portability-measurements.v2` now retains the graph
+strategy state hash and incremental source
+modules/line count alongside raw latency, database growth, evidence counts,
+dependencies, services, and connection settings.
+
+Conditional graph routing is now executable, but runtime-created tasks, joins,
+and the first-party durable-history strategy remain unmeasured. No
+orchestration-pattern decision should be recorded until both strategies run the
+complete correctness and operational matrix.
 
 ## Non-goals
 
@@ -185,7 +230,7 @@ correctness suite and their operational assumptions are measured explicitly.
 1. Persist the internal baseline through an isolated SQLite adapter and measure
    restart behavior against the same exported-history oracle. **Implemented.**
 2. Add a first-party graph-state strategy without allowing graph state to
-   become authoritative.
+   become authoritative. **Initial sequential graph increment implemented.**
 3. Add a first-party durable-history strategy and record its operational and
    deployment requirements.
 4. Run the complete scenario and operational matrix.

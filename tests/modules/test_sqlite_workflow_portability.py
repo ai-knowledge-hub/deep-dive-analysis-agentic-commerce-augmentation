@@ -212,9 +212,7 @@ def test_partial_schema_is_rejected_before_schema_or_workflow_mutation(tmp_path)
         )
         """
     )
-    connection.execute(
-        "INSERT INTO portability_benchmark_schema VALUES (1, 1)"
-    )
+    connection.execute("INSERT INTO portability_benchmark_schema VALUES (1, 1)")
     connection.execute(
         """
         CREATE TABLE portability_benchmark_workflows (
@@ -276,11 +274,9 @@ def test_fresh_database_records_exact_sqlite_schema_version(tmp_path):
         "SELECT singleton, schema_version FROM portability_benchmark_schema"
     ).fetchall()
     with pytest.raises(sqlite3.IntegrityError, match="immutable"):
-        connection.execute(
-            "UPDATE portability_benchmark_schema SET schema_version = 1"
-        )
+        connection.execute("UPDATE portability_benchmark_schema SET schema_version = 1")
     connection.close()
-    assert version_rows == [(1, 1)]
+    assert version_rows == [(1, 2)]
 
 
 def test_concurrent_first_open_accepts_distinct_workflow_identities(tmp_path):
@@ -378,18 +374,14 @@ def test_journal_configuration_retries_across_competing_write_lock(
     blocker.close()
 
 
-def test_journal_configuration_busy_exhaustion_is_a_domain_error(
-    tmp_path, monkeypatch
-):
+def test_journal_configuration_busy_exhaustion_is_a_domain_error(tmp_path, monkeypatch):
     database_path = tmp_path / "journal-busy.sqlite3"
     _install_unconfigured_schema(database_path)
     blocker = sqlite3.connect(database_path, isolation_level=None)
     blocker.execute("BEGIN IMMEDIATE")
     candidate = sqlite3.connect(database_path, timeout=0.001, isolation_level=None)
     candidate.execute("PRAGMA busy_timeout = 1")
-    monkeypatch.setattr(
-        sqlite_adapter, "_SQLITE_CONFIGURATION_TIMEOUT_SECONDS", 0.0
-    )
+    monkeypatch.setattr(sqlite_adapter, "_SQLITE_CONFIGURATION_TIMEOUT_SECONDS", 0.0)
 
     with pytest.raises(PortabilityInvariantError, match="remained busy"):
         sqlite_adapter._configure_connection(candidate)
