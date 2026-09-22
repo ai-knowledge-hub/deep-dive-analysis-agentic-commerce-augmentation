@@ -593,9 +593,33 @@ Phase 1 remains open. The next reviewable sequence is:
    boundaries, fresh-store reconstruction from portable evidence, unchanged
    golden-scenario execution, and canonical measurements. Graph state remains
    a non-authoritative execution projection over platform commands, events,
-   receipts, checkpoints, and the independent effect ledger. Runtime-created
-   tasks, joins, and the durable-history strategy must still be measured before
-   an ADR closes Phase 1. LangGraph and Temporal may be research inputs, but
+   receipts, checkpoints, and the independent effect ledger. Slice 7d.2b now
+   adds the first-party durable-history candidate. An immutable, gap-free,
+   hash-chained decision journal records command admission, effect-receipt,
+   event-commit, and command-receipt boundaries derived from verified portable
+   evidence. Its exact strategy implementation is pinned per workflow; restart
+   reconciles missing journal phases without manufacturing authority or
+   re-executing an externally observed effect. The pin includes the evaluated
+   lifecycle transition contract and portability operation/command schema, so
+   imported semantic changes fail closed during restore. A separately
+   persisted count/head binds the accepted chain, while per-command phase
+   causality and authoritative event order reject reordered and consistently
+   rehashed records. Every projection transaction has a gap-free batch sequence
+   and may contain evidence for only one command. Normal non-effect
+   admission/event/receipt commits form one batch; after an injected pre-event
+   crash, the earlier admission and later event/receipt commits form separate
+   batches. Event and command-receipt phases remain inseparable. Workflow
+   lifecycle, attempt, fencing, and effect state is replayed at every admission
+   boundary, rejecting cross-batch commands whose prerequisites were not yet
+   committed. Workflow
+   identity, strategy pin, and the initial empty head are
+   created in one transaction, eliminating an unusable unpinned workflow
+   window. It runs the unchanged golden
+   lifecycle, lease, fencing, pause, cancellation, crash, and late-delivery
+   scenarios and participates in canonical measurements without a workflow
+   vendor SDK, service, or serialization format. Runtime-created tasks and
+   `all`/`any`/`quorum` joins must still be measured before an ADR closes Phase
+   1. LangGraph and Temporal may be research inputs, but
    their packages, SDKs, runtimes, services, persistence formats, and
    framework-native state are not candidates or production dependencies.
 

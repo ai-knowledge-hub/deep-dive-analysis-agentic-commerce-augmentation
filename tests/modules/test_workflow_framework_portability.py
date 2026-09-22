@@ -12,6 +12,7 @@ from application.ports.workflow_portability import (
 from application.services.workflow_portability import (
     DeterministicClock,
     DeterministicEffectSink,
+    DurableHistoryPortabilityAdapterFactory,
     GraphStatePortabilityAdapterFactory,
     InternalKernelAdapter,
     PortabilityConflictError,
@@ -35,8 +36,8 @@ PAYLOAD_HASH = hashlib.sha256(b"bounded effect").hexdigest()
 
 
 @pytest.fixture(
-    params=["internal-kernel", "sqlite", "graph-state"],
-    ids=["internal-kernel", "sqlite", "graph-state"],
+    params=["internal-kernel", "sqlite", "graph-state", "durable-history"],
+    ids=["internal-kernel", "sqlite", "graph-state", "durable-history"],
 )
 def adapter_factory(
     request: pytest.FixtureRequest,
@@ -49,7 +50,9 @@ def adapter_factory(
     database_path = tmp_path / "portability-benchmark.sqlite3"
     if request.param == "sqlite":
         return SQLitePortabilityAdapterFactory(database_path)
-    return GraphStatePortabilityAdapterFactory(database_path)
+    if request.param == "graph-state":
+        return GraphStatePortabilityAdapterFactory(database_path)
+    return DurableHistoryPortabilityAdapterFactory(database_path)
 
 
 @pytest.fixture
@@ -218,6 +221,7 @@ def test_restored_store_does_not_share_lifecycle_mutations(
     if restored.adapter_id in {
         "sqlite-portability.v1",
         "graph-state-portability.v1",
+        "durable-history-portability.v1",
     }:
         original.close()
         assert restored.snapshot().workflow_status == "running"

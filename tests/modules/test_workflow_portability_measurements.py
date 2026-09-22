@@ -21,13 +21,14 @@ def test_measurement_runner_emits_canonical_raw_samples_for_all_adapters(tmp_pat
     assert json.loads(encoded) == measurements
     assert encoded == canonical_measurement_json(json.loads(encoded))
     assert measurements["measurement_schema_version"] == MEASUREMENT_SCHEMA_VERSION
-    assert MEASUREMENT_SCHEMA_VERSION == "workflow-portability-measurements.v2"
+    assert MEASUREMENT_SCHEMA_VERSION == "workflow-portability-measurements.v3"
     assert measurements["portability_contract_version"] == PORTABILITY_CONTRACT_VERSION
     assert measurements_passed(measurements)
     assert [item["adapter_id"] for item in measurements["adapters"]] == [
         "internal-kernel.v2",
         "sqlite-portability.v1",
         "graph-state-portability.v1",
+        "durable-history-portability.v1",
     ]
     for adapter in measurements["adapters"]:
         assert adapter["required_packages"] == []
@@ -50,10 +51,11 @@ def test_measurement_runner_emits_canonical_raw_samples_for_all_adapters(tmp_pat
         assert all(
             sample["strategy_state_hash"] is None for sample in adapter["samples"]
         )
-    assert all(
-        len(sample["strategy_state_hash"]) == 64
-        for sample in measurements["adapters"][2]["samples"]
-    )
+    for strategy_result in measurements["adapters"][2:]:
+        assert all(
+            len(sample["strategy_state_hash"]) == 64
+            for sample in strategy_result["samples"]
+        )
     for persisted_result in measurements["adapters"][1:]:
         assert persisted_result["connection_settings"] == {
             "busy_timeout_ms": 5000,
@@ -100,6 +102,8 @@ def test_measurement_runner_isolates_repeated_invocations(tmp_path):
     assert len(run_directories) == 2
     for run_directory in run_directories:
         assert sorted(path.name for path in run_directory.glob("*.sqlite3")) == [
+            "durable-history-sample-0.sqlite3",
+            "durable-history-sample-1.sqlite3",
             "graph-state-sample-0.sqlite3",
             "graph-state-sample-1.sqlite3",
             "sqlite-sample-0.sqlite3",
