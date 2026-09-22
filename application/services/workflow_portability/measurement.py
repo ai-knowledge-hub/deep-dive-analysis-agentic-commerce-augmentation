@@ -19,6 +19,10 @@ from application.services.workflow_portability.graph_state_adapter import (
     GraphStatePortabilityAdapter,
     GraphStatePortabilityAdapterFactory,
 )
+from application.services.workflow_portability.durable_history_adapter import (
+    DurableHistoryPortabilityAdapter,
+    DurableHistoryPortabilityAdapterFactory,
+)
 from application.services.workflow_portability.internal_kernel import (
     InternalKernelAdapter,
 )
@@ -33,7 +37,7 @@ from domain.workflow.portability import (
 )
 
 
-MEASUREMENT_SCHEMA_VERSION = "workflow-portability-measurements.v2"
+MEASUREMENT_SCHEMA_VERSION = "workflow-portability-measurements.v3"
 _PAYLOAD_HASH = hashlib.sha256(b"portability measurement effect").hexdigest()
 _IMPLEMENTATION_MODULES = {
     "internal": ("application/services/workflow_portability/internal_kernel.py",),
@@ -41,6 +45,11 @@ _IMPLEMENTATION_MODULES = {
     "graph-state": (
         "domain/workflow/graph_state.py",
         "application/services/workflow_portability/graph_state_adapter.py",
+    ),
+    "durable-history": (
+        "domain/workflow/durable_history.py",
+        "application/services/workflow_portability/durable_history_adapter.py",
+        "application/services/workflow_portability/sqlite_durable_history.py",
     ),
 }
 
@@ -72,6 +81,12 @@ def run_portability_measurements(
             output_directory=run_directory,
             sample_count=sample_count,
             candidate_kind="graph-state",
+        ),
+        _measure_adapter(
+            adapter_id=DurableHistoryPortabilityAdapter.adapter_id,
+            output_directory=run_directory,
+            sample_count=sample_count,
+            candidate_kind="durable-history",
         ),
     )
     return {
@@ -155,6 +170,8 @@ def _measure_sample(
         factory = SQLitePortabilityAdapterFactory(database_path)
     elif candidate_kind == "graph-state":
         factory = GraphStatePortabilityAdapterFactory(database_path)
+    elif candidate_kind == "durable-history":
+        factory = DurableHistoryPortabilityAdapterFactory(database_path)
     else:
         raise ValueError("unsupported portability measurement candidate")
     persistent_candidate = candidate_kind != "internal"
@@ -248,6 +265,9 @@ def _measure_sample(
         graph_state = getattr(restored, "graph_state", None)
         if callable(graph_state):
             sample["strategy_state_hash"] = graph_state().state_hash
+        durable_state = getattr(restored, "durable_history_state", None)
+        if callable(durable_state):
+            sample["strategy_state_hash"] = durable_state().state_hash
         if persistent_candidate:
             sample["connection_settings"] = restored.connection_settings
             sample["evidence_counts"] = restored.evidence_counts()

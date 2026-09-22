@@ -1,9 +1,9 @@
 # Workflow Framework Portability Spike v1
 
 Status: snapshot
-Last verified: 2026-09-20
-Baseline: `origin/main@131b23d`
-Issues: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142), [#144](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/144)
+Last verified: 2026-09-21
+Baseline: `origin/main@5f92255`
+Issues: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142), [#144](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/144), [#148](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/148)
 
 ## Decision question
 
@@ -150,8 +150,9 @@ implemented task attempts, leases, or crash-safe distributed scheduling.
 The durable SQLite candidate runs the same golden portfolio through normalized,
 immutable, explicitly versioned tables for workflow identity, canonical
 commands, ordered events, command and effect receipts, checkpoints, and exact
-per-workflow graph-definition pins. The SQLite schema version is `2`; graph
-definition records are immutable and scope-bound to their workflow.
+per-workflow strategy pins. The SQLite schema version is `5`; graph-definition
+and durable-history strategy records are immutable and scope-bound to their
+workflow.
 Existing benchmark databases are accepted only when their complete table,
 column, primary-key, unique-index, foreign-key, and trigger contract matches
 that version; incompatible or partial schemas fail before persistent connection
@@ -205,13 +206,58 @@ Initial graph-pattern evidence:
 | Adapter-local command or effect semantics | Reject | The shared lifecycle, command digest, SQLite evidence, effect sink, and receipt ledger remain authoritative. |
 | Current sequential command vocabulary | Revise later | It proves deterministic routing but cannot yet express runtime-created nodes or `all`/`any`/`quorum` joins without a new shared contract version. |
 
-Measurement schema `workflow-portability-measurements.v2` now retains the graph
-strategy state hash and incremental source
+Measurement schema `workflow-portability-measurements.v3` now retains graph and
+durable-history strategy state hashes and incremental source
 modules/line count alongside raw latency, database growth, evidence counts,
 dependencies, services, and connection settings.
 
-Conditional graph routing is now executable, but runtime-created tasks, joins,
-and the first-party durable-history strategy remain unmeasured. No
+The first Slice 7d.2b durable-history increment adds an immutable per-workflow
+strategy pin and a gap-free, hash-chained journal for command admission,
+effect-receipt persistence, event commit, and command-receipt persistence. The
+pin binds the strategy implementation, evaluated workflow-lifecycle transition
+matrix, and portability operation/command schema; dependency changes cannot
+reinterpret existing journals under an unchanged version label. Every phase
+binds a digest of independently verified portable evidence. After a crash, a
+fresh adapter verifies the portable history, checkpoint, and external receipt
+oracle before appending missing journal phases; it cannot use journal state to
+invent a transition or certify an effect. Fault tests distinguish the
+provider-executed/no-receipt window from receipt, event, and acknowledgement
+boundaries and reconcile each without another provider call. The journal chain
+is bound to a separately persisted record count and head hash. Command
+phases must follow causal order, and event and command-receipt records must
+follow the authoritative portable event sequence. A coordinated rehash of
+permuted records therefore fails even if its stored head is also replaced.
+Records additionally bind a gap-free projection-transaction batch. Each batch
+contains one command and a contiguous causal phase segment. A normal non-effect
+admission/event/receipt group shares one batch, while a crash-staged admission
+and its later event/receipt recovery use separate batches. A subtle
+cross-command admission inserted inside another command's atomic group is
+rejected even though both commands retain local phase order; the corresponding
+legitimate crash-split interleaving remains accepted. Verification also
+replays committed lifecycle, attempt, fencing, and effect state before every
+admission, so splitting a premature command into its own valid batch cannot
+bypass that command's prerequisites.
+Workflow identity, strategy pin, and the empty head commit atomically; an
+injected failure after all three inserts leaves no stranded workflow and a
+clean retry succeeds. The unchanged
+golden scenarios cover leases, reassignment, fencing, pause, cancellation, and
+late delivery, while the canonical runner measures the candidate with no
+external service or additional package.
+
+Initial durable-history pattern evidence:
+
+| Pattern | Disposition | Evidence and friction |
+| --- | --- | --- |
+| Append-only decision journal | Adopt | Makes recovery phases inspectable while exact portable evidence remains authoritative. |
+| Hash-chained records with persisted head and transaction batches | Adopt | Exact evidence coverage plus the independent count/head, gap-free single-command batches, command phase order, and portable event order detect deletion, insertion, reordering, duplication, and altered evidence without rejecting crash-split recovery. |
+| Atomic workflow and strategy creation | Adopt | Workflow identity, strategy pin, and zero-record head either all commit or all roll back. |
+| Immutable strategy/code pin | Adopt | A strategy or implementation change cannot silently reinterpret an existing workflow. |
+| Evidence-led tail reconciliation | Adopt | Repairs only phases already established by verified commands, receipts, and events. |
+| Provider execution inferred from journal state | Reject | The independent effect sink and receipt ledger remain the only execution oracle. |
+| Vendor-native history serialization | Reject | It would make recovery proprietary and create a second authority boundary. |
+
+Both initial sequential candidates are now executable, but runtime-created
+tasks and joins remain unmeasured. No
 orchestration-pattern decision should be recorded until both strategies run the
 complete correctness and operational matrix.
 
@@ -232,7 +278,7 @@ complete correctness and operational matrix.
 2. Add a first-party graph-state strategy without allowing graph state to
    become authoritative. **Initial sequential graph increment implemented.**
 3. Add a first-party durable-history strategy and record its operational and
-   deployment requirements.
+   deployment requirements. **Initial sequential increment implemented.**
 4. Run the complete scenario and operational matrix.
 5. Publish the pattern-adoption ADR with evidence, rejected alternatives,
    migration boundary, and rollback strategy.

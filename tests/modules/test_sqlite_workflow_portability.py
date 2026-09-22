@@ -276,7 +276,7 @@ def test_fresh_database_records_exact_sqlite_schema_version(tmp_path):
     with pytest.raises(sqlite3.IntegrityError, match="immutable"):
         connection.execute("UPDATE portability_benchmark_schema SET schema_version = 1")
     connection.close()
-    assert version_rows == [(1, 2)]
+    assert version_rows == [(1, 5)]
 
 
 def test_concurrent_first_open_accepts_distinct_workflow_identities(tmp_path):

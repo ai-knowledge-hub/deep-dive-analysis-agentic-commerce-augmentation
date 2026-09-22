@@ -13,6 +13,10 @@ from application.services.workflow_portability.graph_state_adapter import (
     GraphStatePortabilityAdapter,
     GraphStatePortabilityAdapterFactory,
 )
+from application.services.workflow_portability.durable_history_adapter import (
+    DurableHistoryPortabilityAdapter,
+    DurableHistoryPortabilityAdapterFactory,
+)
 from application.services.workflow_portability.sqlite_adapter import (
     SQLitePortabilityAdapter,
     SQLitePortabilityAdapterFactory,
@@ -32,6 +36,8 @@ from domain.workflow.portability import (
 __all__ = [
     "DeterministicClock",
     "DeterministicEffectSink",
+    "DurableHistoryPortabilityAdapter",
+    "DurableHistoryPortabilityAdapterFactory",
     "GraphStatePortabilityAdapter",
     "GraphStatePortabilityAdapterFactory",
     "InternalKernelAdapter",

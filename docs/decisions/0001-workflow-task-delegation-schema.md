@@ -720,6 +720,51 @@ Restoration reconstructs graph state from verified commands, events, receipts,
 and checkpoints through a new connection; no live graph object or graph-native
 serialization is authoritative or required.
 
+The initial Slice 7d.2b durable-history candidate adds a platform-owned
+decision journal over the same portable SQLite evidence. Each workflow pins an
+exact strategy ID, state version, record-contract version, and canonical
+implementation digest. That definition digest also pins the complete evaluated
+workflow-lifecycle transition matrix and the portability operation/command
+schema implementation, so changing an imported semantic dependency invalidates
+the existing workflow pin even when its version label is unchanged. The journal
+appends a gap-free SHA-256 chain for four recoverable boundaries: command
+admission, effect-receipt persistence, event commit, and command-receipt
+persistence. Every record binds the exact portable evidence digest and command
+identity. Projection verifies the entire chain and requires unique, exact
+coverage of independently replayed portable history; journal records cannot
+create lifecycle, authority, approval, effect, or receipt facts. The accepted
+record count and head hash are stored independently of the record chain.
+Verification also requires admission before later phases for each command and
+event/command-receipt phases in authoritative event order, so recomputing
+hashes cannot legitimize a permutation. Every record also binds a gap-free
+transaction-batch sequence. A batch contains one command and one contiguous
+segment of its causal phases. The ordinary SQLite writer commits a completed
+non-effect command, its event, and its command receipt as one batch.
+If a pre-event crash durably stages only admission, later recovery records that
+admission and the atomic event/receipt pair as separate batches, allowing valid
+lifecycle work between them without erasing the real commit boundaries. Effect
+commands likewise retain separately visible admission and effect-receipt
+boundaries because provider execution and reconciliation can span database
+commits. Batch validity is not sufficient authority by itself: verification
+replays committed lifecycle, attempt, fencing, and effect state in journal
+order and checks each command's prerequisites at its admission boundary. A
+separately rehashed batch therefore cannot admit assignment before the start
+event that makes the workflow running.
+
+Creation inserts the workflow identity, exact strategy pin, and zero-record
+head in one `BEGIN IMMEDIATE` transaction. A failure at any point rolls back all
+three records; retry can create the workflow instead of encountering an
+immutable, permanently unpinned identity.
+
+Crash recovery opens a fresh connection, verifies the portable checkpoint and
+external effect ledger first, requires the immutable strategy pin, then appends
+only journal phases already proven by that evidence. An executed effect without
+a receipt remains owned by the independent provider oracle and pending command,
+so reconciliation cannot call the provider again merely to repair the journal.
+Lease reassignment, fencing, pause, cancellation, and late delivery continue to
+use the shared lifecycle rather than strategy-local rules. The candidate has no
+Temporal SDK, service, payload, or persisted serialization dependency.
+
 ## Consequences
 
 Positive:

@@ -28,9 +28,15 @@ from application.services.workflow_portability.internal_kernel import (
     verify_portability_history,
 )
 from application.services.workflow_portability.sqlite_graph_definition import (
-    GRAPH_DEFINITION_SCHEMA,
-    GRAPH_DEFINITION_TABLE,
     SQLiteGraphDefinitionStore,
+)
+from application.services.workflow_portability.sqlite_durable_history import (
+    SQLiteDurableHistoryStore,
+    insert_durable_history_identity,
+)
+from application.services.workflow_portability.sqlite_schema import SQLITE_SCHEMA
+from application.services.workflow_portability.sqlite_schema_contract import (
+    SQLITE_IMMUTABLE_TABLES,
 )
 from domain.workflow.portability import (
     PORTABILITY_CONTRACT_VERSION,
@@ -50,179 +56,11 @@ from domain.workflow.portability import (
 )
 
 
-_SQLITE_SCHEMA_VERSION = 2
 _SQLITE_CONFIGURATION_TIMEOUT_SECONDS = 5.0
 _SQLITE_CONFIGURATION_RETRY_SECONDS = 0.01
 
-_SCHEMA = f"""
-CREATE TABLE portability_benchmark_schema (
-    singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (
-        schema_version = {_SQLITE_SCHEMA_VERSION}
-    )
-);
 
-INSERT INTO portability_benchmark_schema (singleton, schema_version)
-VALUES (1, {_SQLITE_SCHEMA_VERSION});
-
-CREATE TABLE portability_benchmark_workflows (
-    tenant_id TEXT NOT NULL CHECK (length(tenant_id) > 0),
-    workflow_id TEXT NOT NULL CHECK (length(workflow_id) > 0),
-    graph_revision INTEGER NOT NULL CHECK (graph_revision >= 1),
-    contract_version TEXT NOT NULL CHECK (contract_version = '{PORTABILITY_CONTRACT_VERSION}'),
-    PRIMARY KEY (tenant_id, workflow_id),
-    UNIQUE (tenant_id, workflow_id, graph_revision)
-);
-
-{GRAPH_DEFINITION_SCHEMA}
-
-CREATE TABLE portability_benchmark_commands (
-    tenant_id TEXT NOT NULL,
-    workflow_id TEXT NOT NULL,
-    graph_revision INTEGER NOT NULL,
-    command_id TEXT NOT NULL CHECK (length(command_id) > 0),
-    operation TEXT NOT NULL,
-    task_id TEXT,
-    attempt_id TEXT,
-    worker_id TEXT,
-    fencing_token INTEGER,
-    lease_expires_at_tick INTEGER,
-    effect_id TEXT,
-    payload_hash TEXT,
-    request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
-    PRIMARY KEY (tenant_id, workflow_id, command_id),
-    FOREIGN KEY (tenant_id, workflow_id, graph_revision)
-        REFERENCES portability_benchmark_workflows
-            (tenant_id, workflow_id, graph_revision)
-);
-
-CREATE UNIQUE INDEX portability_benchmark_effect_command
-ON portability_benchmark_commands (tenant_id, workflow_id, effect_id)
-WHERE effect_id IS NOT NULL;
-
-CREATE TABLE portability_benchmark_events (
-    tenant_id TEXT NOT NULL,
-    workflow_id TEXT NOT NULL,
-    sequence INTEGER NOT NULL CHECK (sequence >= 0),
-    event_type TEXT NOT NULL CHECK (length(event_type) > 0),
-    command_id TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    PRIMARY KEY (tenant_id, workflow_id, sequence),
-    UNIQUE (tenant_id, workflow_id, command_id),
-    FOREIGN KEY (tenant_id, workflow_id, command_id)
-        REFERENCES portability_benchmark_commands
-            (tenant_id, workflow_id, command_id)
-);
-
-CREATE TABLE portability_benchmark_command_receipts (
-    tenant_id TEXT NOT NULL,
-    workflow_id TEXT NOT NULL,
-    command_id TEXT NOT NULL,
-    request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
-    first_event_sequence INTEGER NOT NULL CHECK (first_event_sequence >= 0),
-    last_event_sequence INTEGER NOT NULL CHECK (
-        last_event_sequence = first_event_sequence
-    ),
-    PRIMARY KEY (tenant_id, workflow_id, command_id),
-    UNIQUE (tenant_id, workflow_id, first_event_sequence),
-    FOREIGN KEY (tenant_id, workflow_id, command_id)
-        REFERENCES portability_benchmark_commands
-            (tenant_id, workflow_id, command_id),
-    FOREIGN KEY (tenant_id, workflow_id, first_event_sequence)
-        REFERENCES portability_benchmark_events
-            (tenant_id, workflow_id, sequence)
-);
-
-CREATE TABLE portability_benchmark_effect_receipts (
-    tenant_id TEXT NOT NULL,
-    workflow_id TEXT NOT NULL,
-    effect_id TEXT NOT NULL CHECK (length(effect_id) > 0),
-    command_id TEXT NOT NULL,
-    request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
-    graph_revision INTEGER NOT NULL CHECK (graph_revision >= 1),
-    task_id TEXT NOT NULL CHECK (length(task_id) > 0),
-    attempt_id TEXT NOT NULL CHECK (length(attempt_id) > 0),
-    worker_id TEXT NOT NULL CHECK (length(worker_id) > 0),
-    fencing_token INTEGER NOT NULL CHECK (fencing_token >= 1),
-    payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
-    provider_receipt_id TEXT NOT NULL CHECK (length(provider_receipt_id) > 0),
-    PRIMARY KEY (tenant_id, workflow_id, effect_id),
-    UNIQUE (tenant_id, workflow_id, command_id),
-    UNIQUE (tenant_id, workflow_id, provider_receipt_id),
-    FOREIGN KEY (tenant_id, workflow_id, command_id)
-        REFERENCES portability_benchmark_commands
-            (tenant_id, workflow_id, command_id)
-);
-
-CREATE TABLE portability_benchmark_checkpoints (
-    tenant_id TEXT NOT NULL,
-    workflow_id TEXT NOT NULL,
-    graph_revision INTEGER NOT NULL,
-    event_sequence INTEGER NOT NULL,
-    history_hash TEXT NOT NULL CHECK (length(history_hash) = 64),
-    committed_receipt_ids_json TEXT NOT NULL,
-    snapshot_json TEXT NOT NULL,
-    checkpoint_hash TEXT NOT NULL CHECK (length(checkpoint_hash) = 64),
-    PRIMARY KEY (tenant_id, workflow_id, history_hash),
-    FOREIGN KEY (tenant_id, workflow_id, graph_revision)
-        REFERENCES portability_benchmark_workflows
-            (tenant_id, workflow_id, graph_revision)
-);
-
-CREATE TRIGGER portability_benchmark_event_sequence_guard
-BEFORE INSERT ON portability_benchmark_events
-BEGIN
-    SELECT CASE WHEN NEW.sequence != COALESCE((
-        SELECT MAX(sequence) + 1
-        FROM portability_benchmark_events
-        WHERE tenant_id = NEW.tenant_id AND workflow_id = NEW.workflow_id
-    ), 0) THEN RAISE(ABORT, 'portability event sequence must be gap-free') END;
-END;
-
-CREATE TRIGGER portability_benchmark_command_receipt_binding
-BEFORE INSERT ON portability_benchmark_command_receipts
-BEGIN
-    SELECT CASE WHEN NOT EXISTS (
-        SELECT 1 FROM portability_benchmark_events event
-        WHERE event.tenant_id = NEW.tenant_id
-          AND event.workflow_id = NEW.workflow_id
-          AND event.sequence = NEW.first_event_sequence
-          AND event.command_id = NEW.command_id
-    ) THEN RAISE(ABORT, 'portability command receipt must bind its event') END;
-END;
-
-CREATE TRIGGER portability_benchmark_effect_receipt_binding
-BEFORE INSERT ON portability_benchmark_effect_receipts
-BEGIN
-    SELECT CASE WHEN NOT EXISTS (
-        SELECT 1 FROM portability_benchmark_commands command
-        WHERE command.tenant_id = NEW.tenant_id
-          AND command.workflow_id = NEW.workflow_id
-          AND command.command_id = NEW.command_id
-          AND command.operation = 'commit_effect'
-          AND command.request_hash = NEW.request_hash
-          AND command.graph_revision = NEW.graph_revision
-          AND command.task_id = NEW.task_id
-          AND command.attempt_id = NEW.attempt_id
-          AND command.worker_id = NEW.worker_id
-          AND command.fencing_token = NEW.fencing_token
-          AND command.effect_id = NEW.effect_id
-          AND command.payload_hash = NEW.payload_hash
-    ) THEN RAISE(ABORT, 'portability effect receipt binding mismatch') END;
-END;
-"""
-
-
-_IMMUTABLE_TABLES = (
-    "portability_benchmark_schema",
-    "portability_benchmark_workflows",
-    GRAPH_DEFINITION_TABLE,
-    "portability_benchmark_commands",
-    "portability_benchmark_events",
-    "portability_benchmark_command_receipts",
-    "portability_benchmark_effect_receipts",
-    "portability_benchmark_checkpoints",
-)
+_IMMUTABLE_TABLES = SQLITE_IMMUTABLE_TABLES
 
 
 class SQLitePortabilityAdapterFactory:
@@ -265,8 +103,35 @@ class SQLitePortabilityAdapterFactory:
             effect_sink=effect_sink,
         )
 
+    def create_with_durable_history(
+        self,
+        *,
+        tenant_id: str,
+        workflow_id: str,
+        graph_revision: int,
+        clock: PortabilityClock,
+        effect_sink: PortabilityEffectSink,
+        strategy_id: str,
+        state_version: str,
+        definition_hash: str,
+    ) -> SQLitePortabilityAdapter:
+        return SQLitePortabilityAdapter.create_with_durable_history(
+            database_path=self.database_path,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            graph_revision=graph_revision,
+            clock=clock,
+            effect_sink=effect_sink,
+            strategy_id=strategy_id,
+            state_version=state_version,
+            definition_hash=definition_hash,
+        )
 
-class SQLitePortabilityAdapter(SQLiteGraphDefinitionStore):
+
+class SQLitePortabilityAdapter(
+    SQLiteGraphDefinitionStore,
+    SQLiteDurableHistoryStore,
+):
     adapter_id = "sqlite-portability.v1"
 
     def __init__(
@@ -301,6 +166,56 @@ class SQLitePortabilityAdapter(SQLiteGraphDefinitionStore):
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
     ) -> SQLitePortabilityAdapter:
+        return cls._create(
+            database_path=database_path,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            graph_revision=graph_revision,
+            clock=clock,
+            effect_sink=effect_sink,
+            durable_history_identity=None,
+        )
+
+    @classmethod
+    def create_with_durable_history(
+        cls,
+        *,
+        database_path: str | Path,
+        tenant_id: str,
+        workflow_id: str,
+        graph_revision: int,
+        clock: PortabilityClock,
+        effect_sink: PortabilityEffectSink,
+        strategy_id: str,
+        state_version: str,
+        definition_hash: str,
+    ) -> SQLitePortabilityAdapter:
+        return cls._create(
+            database_path=database_path,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            graph_revision=graph_revision,
+            clock=clock,
+            effect_sink=effect_sink,
+            durable_history_identity=(
+                strategy_id,
+                state_version,
+                definition_hash,
+            ),
+        )
+
+    @classmethod
+    def _create(
+        cls,
+        *,
+        database_path: str | Path,
+        tenant_id: str,
+        workflow_id: str,
+        graph_revision: int,
+        clock: PortabilityClock,
+        effect_sink: PortabilityEffectSink,
+        durable_history_identity: tuple[str, str, str] | None,
+    ) -> SQLitePortabilityAdapter:
         validated = InternalKernelAdapter.create(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
@@ -312,6 +227,7 @@ class SQLitePortabilityAdapter(SQLiteGraphDefinitionStore):
         connection = _connect(path)
         try:
             _install_schema(connection)
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 INSERT INTO portability_benchmark_workflows (
@@ -325,12 +241,27 @@ class SQLitePortabilityAdapter(SQLiteGraphDefinitionStore):
                     PORTABILITY_CONTRACT_VERSION,
                 ),
             )
+            if durable_history_identity is not None:
+                strategy_id, state_version, definition_hash = durable_history_identity
+                insert_durable_history_identity(
+                    connection,
+                    tenant_id=tenant_id,
+                    workflow_id=workflow_id,
+                    strategy_id=strategy_id,
+                    state_version=state_version,
+                    definition_hash=definition_hash,
+                )
+            connection.commit()
         except sqlite3.IntegrityError as exc:
+            if connection.in_transaction:
+                connection.rollback()
             connection.close()
             raise PortabilityConflictError(
                 "SQLite portability workflow identity already exists"
             ) from exc
         except Exception:
+            if connection.in_transaction:
+                connection.rollback()
             connection.close()
             raise
         del validated
@@ -888,7 +819,7 @@ def _schema_statements() -> tuple[str, ...]:
                 END;
                 """
             )
-    script = "\n".join((_SCHEMA, *immutable_triggers))
+    script = "\n".join((SQLITE_SCHEMA, *immutable_triggers))
     statements = []
     pending = ""
     for line in script.splitlines(keepends=True):
