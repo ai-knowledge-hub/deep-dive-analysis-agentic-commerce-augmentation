@@ -27,6 +27,7 @@ from application.services.workflow_portability.internal_kernel import (
     InternalKernelStore,
     verify_portability_history,
 )
+from application.services.workflow_portability.replay import active_graph_revision
 from application.services.workflow_portability.sqlite_graph_definition import (
     SQLiteGraphDefinitionStore,
 )
@@ -38,6 +39,9 @@ from application.services.workflow_portability.sqlite_schema import SQLITE_SCHEM
 from application.services.workflow_portability.sqlite_schema_contract import (
     SQLITE_IMMUTABLE_TABLES,
 )
+from application.services.workflow_portability.sqlite_topology import (
+    read_sqlite_graph_revision,
+)
 from domain.workflow.portability import (
     PORTABILITY_CONTRACT_VERSION,
     PortabilityCheckpoint,
@@ -47,11 +51,15 @@ from domain.workflow.portability import (
     PortabilityEffectReceipt,
     PortabilityEvent,
     PortabilityFaultPoint,
+    PortabilityGraphRevision,
     PortabilityHistory,
     PortabilityInjectedCrash,
     PortabilityInvariantError,
     PortabilityOperation,
     PortabilitySnapshot,
+    PortabilityTaskOutcome,
+    canonical_graph_revision_payload,
+    default_portability_topology,
     portability_history_digest,
 )
 
@@ -75,6 +83,7 @@ class SQLitePortabilityAdapterFactory:
         tenant_id: str,
         workflow_id: str,
         graph_revision: int,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
     ) -> SQLitePortabilityAdapter:
@@ -83,6 +92,7 @@ class SQLitePortabilityAdapterFactory:
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             graph_revision=graph_revision,
+            initial_topology=initial_topology,
             clock=clock,
             effect_sink=effect_sink,
         )
@@ -109,6 +119,7 @@ class SQLitePortabilityAdapterFactory:
         tenant_id: str,
         workflow_id: str,
         graph_revision: int,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
         strategy_id: str,
@@ -120,6 +131,7 @@ class SQLitePortabilityAdapterFactory:
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             graph_revision=graph_revision,
+            initial_topology=initial_topology,
             clock=clock,
             effect_sink=effect_sink,
             strategy_id=strategy_id,
@@ -163,6 +175,7 @@ class SQLitePortabilityAdapter(
         tenant_id: str,
         workflow_id: str,
         graph_revision: int = 1,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
     ) -> SQLitePortabilityAdapter:
@@ -171,6 +184,7 @@ class SQLitePortabilityAdapter(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             graph_revision=graph_revision,
+            initial_topology=initial_topology,
             clock=clock,
             effect_sink=effect_sink,
             durable_history_identity=None,
@@ -184,6 +198,7 @@ class SQLitePortabilityAdapter(
         tenant_id: str,
         workflow_id: str,
         graph_revision: int,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
         strategy_id: str,
@@ -195,6 +210,7 @@ class SQLitePortabilityAdapter(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             graph_revision=graph_revision,
+            initial_topology=initial_topology,
             clock=clock,
             effect_sink=effect_sink,
             durable_history_identity=(
@@ -212,6 +228,7 @@ class SQLitePortabilityAdapter(
         tenant_id: str,
         workflow_id: str,
         graph_revision: int,
+        initial_topology: PortabilityGraphRevision | None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
         durable_history_identity: tuple[str, str, str] | None,
@@ -220,9 +237,11 @@ class SQLitePortabilityAdapter(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             graph_revision=graph_revision,
+            initial_topology=initial_topology,
             clock=clock,
             effect_sink=effect_sink,
         )
+        topology = initial_topology or default_portability_topology(graph_revision)
         path = Path(database_path)
         connection = _connect(path)
         try:
@@ -231,13 +250,15 @@ class SQLitePortabilityAdapter(
             connection.execute(
                 """
                 INSERT INTO portability_benchmark_workflows (
-                    tenant_id, workflow_id, graph_revision, contract_version
-                ) VALUES (?, ?, ?, ?)
+                    tenant_id, workflow_id, graph_revision, initial_topology_json,
+                    contract_version
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     tenant_id,
                     workflow_id,
                     graph_revision,
+                    _canonical_json(canonical_graph_revision_payload(topology)),
                     PORTABILITY_CONTRACT_VERSION,
                 ),
             )
@@ -302,7 +323,7 @@ class SQLitePortabilityAdapter(
                 database_path=path,
                 tenant_id=history.tenant_id,
                 workflow_id=history.workflow_id,
-                graph_revision=history.graph_revision,
+                graph_revision=history.initial_topology.revision,
                 clock=clock,
                 effect_sink=effect_sink,
             )
@@ -514,8 +535,10 @@ class SQLitePortabilityAdapter(
                     INSERT INTO portability_benchmark_commands (
                         tenant_id, workflow_id, graph_revision, command_id,
                         operation, task_id, attempt_id, worker_id, fencing_token,
-                        lease_expires_at_tick, effect_id, payload_hash, request_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        lease_expires_at_tick, effect_id, payload_hash,
+                        topology_revision_json, task_outcome, result_hash,
+                        request_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (tenant_id, workflow_id, command_id) DO NOTHING
                     """,
                     (
@@ -531,6 +554,21 @@ class SQLitePortabilityAdapter(
                         command.lease_expires_at_tick,
                         command.effect_id,
                         command.payload_hash,
+                        (
+                            _canonical_json(
+                                canonical_graph_revision_payload(
+                                    command.topology_revision
+                                )
+                            )
+                            if command.topology_revision is not None
+                            else None
+                        ),
+                        (
+                            command.task_outcome.value
+                            if command.task_outcome is not None
+                            else None
+                        ),
+                        command.result_hash,
                         _command_hash(command),
                     ),
                 )
@@ -628,7 +666,7 @@ class SQLitePortabilityAdapter(
     def _read_history(self) -> PortabilityHistory:
         workflow = self._connection.execute(
             """
-            SELECT contract_version
+            SELECT contract_version, initial_topology_json
             FROM portability_benchmark_workflows
             WHERE tenant_id = ? AND workflow_id = ? AND graph_revision = ?
             """,
@@ -638,6 +676,11 @@ class SQLitePortabilityAdapter(
             raise PortabilityInvariantError("SQLite workflow identity is missing")
         if workflow[0] != PORTABILITY_CONTRACT_VERSION:
             raise PortabilityInvariantError("unsupported SQLite contract version")
+        initial_topology = read_sqlite_graph_revision(workflow[1])
+        if initial_topology.revision != self._graph_revision:
+            raise PortabilityInvariantError(
+                "SQLite initial topology does not match workflow identity"
+            )
 
         commands = tuple(
             _command_from_row(row)
@@ -646,7 +689,8 @@ class SQLitePortabilityAdapter(
                 SELECT command_id, tenant_id, workflow_id, operation,
                        graph_revision, task_id, attempt_id, worker_id,
                        fencing_token, lease_expires_at_tick, effect_id,
-                       payload_hash, request_hash
+                       payload_hash, topology_revision_json, task_outcome,
+                       result_hash, request_hash
                 FROM portability_benchmark_commands
                 WHERE tenant_id = ? AND workflow_id = ?
                 ORDER BY command_id
@@ -698,7 +742,8 @@ class SQLitePortabilityAdapter(
         return _history(
             tenant_id=self._tenant_id,
             workflow_id=self._workflow_id,
-            graph_revision=self._graph_revision,
+            initial_topology=initial_topology,
+            graph_revision=active_graph_revision(initial_topology, commands, events),
             commands=commands,
             events=events,
             command_receipts=command_receipts,
@@ -1003,6 +1048,9 @@ def _command_from_row(row: tuple[object, ...]) -> PortabilityCommand:
         lease_expires_at_tick,
         effect_id,
         payload_hash,
+        topology_revision_json,
+        task_outcome,
+        result_hash,
         request_hash,
     ) = row
     command = PortabilityCommand(
@@ -1018,6 +1066,17 @@ def _command_from_row(row: tuple[object, ...]) -> PortabilityCommand:
         lease_expires_at_tick=lease_expires_at_tick,
         effect_id=effect_id,
         payload_hash=payload_hash,
+        topology_revision=(
+            read_sqlite_graph_revision(topology_revision_json)
+            if topology_revision_json is not None
+            else None
+        ),
+        task_outcome=(
+            PortabilityTaskOutcome(str(task_outcome))
+            if task_outcome is not None
+            else None
+        ),
+        result_hash=result_hash,
     )
     if request_hash != _command_hash(command):
         raise PortabilityInvariantError("SQLite command request hash mismatch")
@@ -1032,6 +1091,7 @@ def _history_from_store(
     return _history(
         tenant_id=store.tenant_id,
         workflow_id=store.workflow_id,
+        initial_topology=store.initial_topology,
         graph_revision=store.graph_revision,
         commands=tuple(store.commands[key] for key in sorted(store.commands)),
         events=tuple(store.events),
@@ -1046,6 +1106,7 @@ def _history(
     *,
     tenant_id: str,
     workflow_id: str,
+    initial_topology: PortabilityGraphRevision,
     graph_revision: int,
     commands: tuple[PortabilityCommand, ...],
     events: tuple[PortabilityEvent, ...],
@@ -1056,6 +1117,7 @@ def _history(
         contract_version=PORTABILITY_CONTRACT_VERSION,
         tenant_id=tenant_id,
         workflow_id=workflow_id,
+        initial_topology=initial_topology,
         graph_revision=graph_revision,
         commands=commands,
         events=events,
@@ -1064,6 +1126,7 @@ def _history(
         history_hash=portability_history_digest(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
+            initial_topology=initial_topology,
             graph_revision=graph_revision,
             commands=commands,
             events=events,
@@ -1077,6 +1140,7 @@ def _store_from_history(history: PortabilityHistory) -> InternalKernelStore:
     return InternalKernelStore(
         tenant_id=history.tenant_id,
         workflow_id=history.workflow_id,
+        initial_topology=history.initial_topology,
         graph_revision=history.graph_revision,
         commands={command.command_id: command for command in history.commands},
         events=list(history.events),

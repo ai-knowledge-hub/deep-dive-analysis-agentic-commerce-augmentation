@@ -1,9 +1,9 @@
 # Workflow Framework Portability Spike v1
 
 Status: snapshot
-Last verified: 2026-09-21
-Baseline: `origin/main@5f92255`
-Issues: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142), [#144](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/144), [#148](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/148)
+Last verified: 2026-09-23
+Baseline: `origin/main@1ee1dd44904771acf4132db4dd3dcc1ed57ffdbd`
+Issues: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142), [#144](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/144), [#148](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/148), [#150](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/150)
 
 ## Decision question
 
@@ -31,7 +31,7 @@ port and factory, canonical revision-pinned command evidence, immutable events,
 command and effect receipts, replayable history export, verified checkpoints,
 a harness-owned clock and deterministic effect sink, fault injection, fencing,
 and an internal-kernel baseline. The executable contract is
-`workflow-portability.v2`. It does not exercise a live language model, a
+`workflow-portability.v3`. It does not exercise a live language model, a
 production scheduler, LangGraph, or Temporal.
 
 Language-model output is deliberately outside the correctness oracle. A later
@@ -74,6 +74,8 @@ The initial command vocabulary is intentionally small:
 - pause and resume a running workflow;
 - assign, heartbeat, expire, or reassign a worker-owned fenced task attempt;
 - commit one effect from the current attempt;
+- append the exact next immutable graph revision;
+- record an attempt-bound task outcome with result evidence;
 - complete the workflow; and
 - cancel the workflow.
 
@@ -92,15 +94,19 @@ This is benchmark vocabulary, not the final production task API.
 | Duplicate effect under another command | Harness sink and immutable receipt binding | Second command conflicts without another provider call or actual effect. |
 | Cross-tenant or cross-workflow command | Host scope versus command scope | No state changes. |
 | Stale graph revision | Pinned revision versus active revision | Scheduling fails before state changes. |
+| Runtime graph expansion | Initial topology, parent revision, canonical candidate topology, and committed event | Only the exact next append-only child becomes active; a competing or stale child is fenced. |
+| Deterministic joins | Immutable edges and exact task outcomes | `all`, `any`, and `quorum` converge to waiting, satisfied, or impossible identically in every adapter. |
+| Expansion crash and duplicate delivery | Pending command, committed event, active revision, and checkpoint | Recovery commits one revision event and exact retry is idempotent. |
+| Cancellation with in-flight tasks | Lifecycle, attempt fence, and outcome history | A late worker cannot create an outcome or satisfy a join after cancellation. |
 | Pause, resume, and retry | Lifecycle and attempt event history | Effects are blocked while paused and retry appends a fenced attempt. |
 | Cancellation during an active lease | Harness sink and lifecycle history | Late completion/effect is rejected and the sink observes no execution. |
 | Verified portable restore | History digest, cursor, scope, receipt inventory, replayed snapshot, and external ledger | Fresh store reconstructs exactly; altered or missing evidence fails closed and stores do not share later mutations. |
 | Reordered portable collections | Pinned command-ID and effect-ID ordering rules | Recomputed hashes do not legitimize non-canonical commands or receipts; restore/export bytes remain stable. |
 | Corrupt or coordinated history mutation | Independent replay validator | Digest, scope, schema, sequence, fencing, or lifecycle violation is detected. |
 
-Later increments must add runtime-created tasks and `all`/`any`/`quorum` joins
-without weakening these scenarios. The isolated SQLite candidate and
-operational measurement runner are now implemented.
+Slice 7d.3 adds runtime-created tasks and `all`/`any`/`quorum` joins without
+weakening these scenarios. The isolated SQLite candidate and operational
+measurement runner exercise the expanded contract.
 
 ## Evaluation criteria
 
@@ -150,7 +156,9 @@ implemented task attempts, leases, or crash-safe distributed scheduling.
 The durable SQLite candidate runs the same golden portfolio through normalized,
 immutable, explicitly versioned tables for workflow identity, canonical
 commands, ordered events, command and effect receipts, checkpoints, and exact
-per-workflow strategy pins. The SQLite schema version is `5`; graph-definition
+per-workflow strategy pins. The SQLite schema version is `6`; canonical initial
+topology and command-carried revision snapshots are immutable evidence, while
+the active revision is reconstructed from committed events. Graph-definition
 and durable-history strategy records are immutable and scope-bound to their
 workflow.
 Existing benchmark databases are accepted only when their complete table,
@@ -204,12 +212,14 @@ Initial graph-pattern evidence:
 | Active-node and checkpoint cursor | Adopt as projection | Useful for execution diagnostics, but must match the independently verified portable history hash and event cursor. |
 | Graph-native mutable checkpoint or serialized runtime object | Reject | Would duplicate authority and prevent clean recovery without a live framework object. |
 | Adapter-local command or effect semantics | Reject | The shared lifecycle, command digest, SQLite evidence, effect sink, and receipt ledger remain authoritative. |
-| Current sequential command vocabulary | Revise later | It proves deterministic routing but cannot yet express runtime-created nodes or `all`/`any`/`quorum` joins without a new shared contract version. |
+| Portable dynamic topology | Adopt | Version 3 carries immutable revision snapshots and exact outcomes; graph state derives joins but cannot create membership or satisfaction. |
 
-Measurement schema `workflow-portability-measurements.v3` now retains graph and
+Measurement schema `workflow-portability-measurements.v4` now retains graph and
 durable-history strategy state hashes and incremental source
 modules/line count alongside raw latency, database growth, evidence counts,
-dependencies, services, and connection settings.
+dependencies, services, and connection settings. Its shared scenario commits a
+runtime revision, records a predecessor result, admits the satisfied join task,
+and restores from fresh evidence.
 
 The first Slice 7d.2b durable-history increment adds an immutable per-workflow
 strategy pin and a gap-free, hash-chained journal for command admission,
@@ -256,17 +266,22 @@ Initial durable-history pattern evidence:
 | Provider execution inferred from journal state | Reject | The independent effect sink and receipt ledger remain the only execution oracle. |
 | Vendor-native history serialization | Reject | It would make recovery proprietary and create a second authority boundary. |
 
-Both initial sequential candidates are now executable, but runtime-created
-tasks and joins remain unmeasured. No
-orchestration-pattern decision should be recorded until both strategies run the
-complete correctness and operational matrix.
+Both candidates now execute the same dynamic-task and deterministic-join
+portfolio. Immutable revision evidence, append-only membership, competing and
+stale revision fencing, duplicate delivery, crash recovery, task failure,
+cancellation, late outcomes, join impossibility, and fresh restoration are
+verified across the internal, SQLite, graph-state, and durable-history
+adapters. `all`, `any`, and `quorum` are domain derivations over exact portable
+outcomes, not framework-native authority. This closes the experimental build
+needed before the separate pattern-adoption ADR; it does not turn the benchmark
+into the production scheduler.
 
 ## Non-goals
 
 - selecting a framework from documentation or preference;
 - using model quality as a framework score;
 - making benchmark state a production authority;
-- adding parallel execution, dynamic joins, or delegation;
+- adding a production parallel scheduler or delegation runtime;
 - introducing LangGraph, Temporal, or another workflow-vendor package, SDK,
   runtime, service, or persisted representation; or
 - replacing current approval, effect, completion, or compatibility ledgers.
@@ -279,7 +294,8 @@ complete correctness and operational matrix.
    become authoritative. **Initial sequential graph increment implemented.**
 3. Add a first-party durable-history strategy and record its operational and
    deployment requirements. **Initial sequential increment implemented.**
-4. Run the complete scenario and operational matrix.
+4. Add runtime-created tasks and deterministic joins to the complete scenario
+   and operational matrix. **Implemented.**
 5. Publish the pattern-adoption ADR with evidence, rejected alternatives,
    migration boundary, and rollback strategy.
 

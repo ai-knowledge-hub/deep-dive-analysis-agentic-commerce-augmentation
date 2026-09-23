@@ -122,6 +122,12 @@ SEQUENTIAL_GRAPH_DEFINITION: Final = GraphDefinition(
         GraphTransition("running", "event.effect_committed", "running", "effect"),
         GraphTransition("running", "event.effect_reconciled", "running", "effect"),
         GraphTransition(
+            "running", "event.graph_revision_committed", "running", "topology"
+        ),
+        GraphTransition(
+            "running", "event.task_outcome_recorded", "running", "topology"
+        ),
+        GraphTransition(
             "running", "event.workflow_completed", "completed", "lifecycle"
         ),
         GraphTransition("running", "event.workflow_canceled", "canceled", "lifecycle"),
@@ -142,6 +148,8 @@ _CONDITION_CONTRACTS: Final = tuple(
         ("attempt_heartbeat", PortabilityOperation.HEARTBEAT_ATTEMPT),
         ("effect_committed", PortabilityOperation.COMMIT_EFFECT),
         ("effect_reconciled", PortabilityOperation.COMMIT_EFFECT),
+        ("graph_revision_committed", PortabilityOperation.COMMIT_GRAPH_REVISION),
+        ("task_outcome_recorded", PortabilityOperation.RECORD_TASK_OUTCOME),
         ("workflow_completed", PortabilityOperation.COMPLETE_WORKFLOW),
         ("workflow_canceled", PortabilityOperation.CANCEL_WORKFLOW),
     )
@@ -184,6 +192,17 @@ def _effect_reducer(
     }
 
 
+def _topology_reducer(
+    event_type: str, payload: dict[str, object], target: GraphNode
+) -> dict[str, object]:
+    return {
+        "event_type": event_type,
+        "target_node_id": target.node_id,
+        "topology_evidence": payload,
+        "workflow_status": target.workflow_status,
+    }
+
+
 _REDUCER_CONTRACTS: Final = MappingProxyType(
     {
         contract.reducer_id: contract
@@ -211,6 +230,16 @@ _REDUCER_CONTRACTS: Final = MappingProxyType(
                     }
                 ),
             ),
+            GraphReducerContract(
+                "topology",
+                "topology-reducer.v1",
+                frozenset(
+                    {
+                        "event.graph_revision_committed",
+                        "event.task_outcome_recorded",
+                    }
+                ),
+            ),
         )
     }
 )
@@ -221,6 +250,7 @@ _REDUCER_FUNCTIONS: Final[
         "attempt": _attempt_reducer,
         "effect": _effect_reducer,
         "lifecycle": _lifecycle_reducer,
+        "topology": _topology_reducer,
     }
 )
 

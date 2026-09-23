@@ -11,6 +11,7 @@ from domain.workflow.portability import (
     PortabilityEffectExecution,
     PortabilityEffectReceipt,
     PortabilityFaultPoint,
+    PortabilityGraphRevision,
     PortabilityHistory,
     PortabilitySnapshot,
 )
@@ -68,6 +69,7 @@ class WorkflowFrameworkAdapterFactory(Protocol):
         tenant_id: str,
         workflow_id: str,
         graph_revision: int,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
     ) -> WorkflowFrameworkAdapter: ...

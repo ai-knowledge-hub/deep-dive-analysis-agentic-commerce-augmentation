@@ -756,6 +756,38 @@ head in one `BEGIN IMMEDIATE` transaction. A failure at any point rolls back all
 three records; retry can create the workflow instead of encountering an
 immutable, permanently unpinned identity.
 
+Slice 7d.3 makes dynamic topology part of the same portable authority boundary.
+Creation pins an immutable initial graph-revision snapshot. A
+`commit_graph_revision` command may append only the exact next child revision,
+and the committed event binds the canonical tasks, edges, joins, parent, and
+topology digest. Existing task definitions, edges, and joins cannot be removed
+or rewritten. Competing children therefore cannot both become active, and a
+stale command cannot schedule against a later revision. SQLite stores the
+initial topology and command-carried candidate revisions as immutable canonical
+JSON; the active revision is reconstructed from committed events rather than a
+mutable workflow-row flag.
+
+Task outcomes are separate attempt-bound commands. They require the current
+worker, attempt, fence, live lease, workflow lifecycle, and active graph
+revision; success additionally binds a result digest. Cancellation and lease
+replacement reject late outcomes. A task receives at most one authoritative
+outcome in this benchmark contract. Join state is never adapter-owned:
+`all`, `any`, and `quorum` are recomputed from the active revision and exact
+outcome evidence as `waiting`, `satisfied`, or `impossible`. Assignment to a
+joined task is legal only when every join targeting it is satisfied. Graph-state
+and durable-history records remain projections and cannot invent membership,
+outcomes, join satisfaction, or revisions.
+
+Revision advancement does not erase an effect already observed by the
+independent provider oracle. If execution occurred under an earlier active
+revision but the process failed before its receipt or event commit, retry of
+that exact command may cross the later revision fence only to persist the
+matching provider receipt and append an `effect_reconciled` event. Portable
+replay admits that stale revision solely for this reconciled event and still
+requires the prior attempt assignment, exact command digest, execution
+provenance, effect receipt, tenant, workflow, task, worker, and fence. A stale
+effect without provider execution remains rejected before any external call.
+
 Crash recovery opens a fresh connection, verifies the portable checkpoint and
 external effect ledger first, requires the immutable strategy pin, then appends
 only journal phases already proven by that evidence. An executed effect without

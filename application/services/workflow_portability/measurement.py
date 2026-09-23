@@ -33,11 +33,17 @@ from application.services.workflow_portability.sqlite_adapter import (
 from domain.workflow.portability import (
     PORTABILITY_CONTRACT_VERSION,
     PortabilityCommand,
+    PortabilityEdgeDefinition,
+    PortabilityGraphRevision,
+    PortabilityJoinDefinition,
+    PortabilityJoinPolicy,
     PortabilityOperation,
+    PortabilityTaskDefinition,
+    PortabilityTaskOutcome,
 )
 
 
-MEASUREMENT_SCHEMA_VERSION = "workflow-portability-measurements.v3"
+MEASUREMENT_SCHEMA_VERSION = "workflow-portability-measurements.v4"
 _PAYLOAD_HASH = hashlib.sha256(b"portability measurement effect").hexdigest()
 _IMPLEMENTATION_MODULES = {
     "internal": ("application/services/workflow_portability/internal_kernel.py",),
@@ -181,11 +187,13 @@ def _measure_sample(
         "evidence_counts": None,
         "error_type": None,
         "history_hash": None,
+        "graph_revision": None,
+        "join_states": None,
         "passed": False,
         "persisted_database_bytes": 0,
         "recovery_latency_ns": None,
         "sample_index": sample_index,
-        "scenario": "sequential_effect_and_fresh_restore",
+        "scenario": "dynamic_join_effect_and_fresh_restore",
         "strategy_state_hash": None,
     }
     adapter = None
@@ -212,8 +220,18 @@ def _measure_sample(
             _command(
                 tenant_id,
                 workflow_id,
+                "command-expand",
+                PortabilityOperation.COMMIT_GRAPH_REVISION,
+                topology_revision=_measurement_topology(),
+            )
+        )
+        adapter.apply(
+            _command(
+                tenant_id,
+                workflow_id,
                 "command-assign",
                 PortabilityOperation.ASSIGN_ATTEMPT,
+                graph_revision=2,
                 task_id="task-a",
                 attempt_id="attempt-a1",
                 worker_id="worker-a",
@@ -227,12 +245,42 @@ def _measure_sample(
                 workflow_id,
                 "command-effect",
                 PortabilityOperation.COMMIT_EFFECT,
+                graph_revision=2,
                 task_id="task-a",
                 attempt_id="attempt-a1",
                 worker_id="worker-a",
                 fencing_token=1,
                 effect_id="effect-a",
                 payload_hash=_PAYLOAD_HASH,
+            )
+        )
+        adapter.apply(
+            _command(
+                tenant_id,
+                workflow_id,
+                "command-outcome",
+                PortabilityOperation.RECORD_TASK_OUTCOME,
+                graph_revision=2,
+                task_id="task-a",
+                attempt_id="attempt-a1",
+                worker_id="worker-a",
+                fencing_token=1,
+                task_outcome=PortabilityTaskOutcome.SUCCEEDED,
+                result_hash=hashlib.sha256(b"measurement result").hexdigest(),
+            )
+        )
+        adapter.apply(
+            _command(
+                tenant_id,
+                workflow_id,
+                "command-assign-join",
+                PortabilityOperation.ASSIGN_ATTEMPT,
+                graph_revision=2,
+                task_id="task-join",
+                attempt_id="attempt-join-1",
+                worker_id="worker-join",
+                fencing_token=1,
+                lease_expires_at_tick=10,
             )
         )
         history = adapter.export_history()
@@ -257,11 +305,16 @@ def _measure_sample(
                 workflow_id,
                 "command-complete",
                 PortabilityOperation.COMPLETE_WORKFLOW,
+                graph_revision=2,
             )
         )
         final_checkpoint = restored.checkpoint()
         final_history = restored.export_history()
         sample["history_hash"] = final_checkpoint.history_hash
+        sample["graph_revision"] = final_checkpoint.snapshot.graph_revision
+        sample["join_states"] = [
+            list(item) for item in final_checkpoint.snapshot.join_states
+        ]
         graph_state = getattr(restored, "graph_state", None)
         if callable(graph_state):
             sample["strategy_state_hash"] = graph_state().state_hash
@@ -291,6 +344,23 @@ def _measure_sample(
             if callable(close):
                 close()
     return sample
+
+
+def _measurement_topology() -> PortabilityGraphRevision:
+    return PortabilityGraphRevision(
+        revision=2,
+        parent_revision=1,
+        tasks=(
+            PortabilityTaskDefinition("task-a", "portable-task"),
+            PortabilityTaskDefinition("task-join", "portable-task"),
+        ),
+        edges=(PortabilityEdgeDefinition("task-a", "task-join", "join-any"),),
+        joins=(
+            PortabilityJoinDefinition(
+                "join-any", "task-join", PortabilityJoinPolicy.ANY
+            ),
+        ),
+    )
 
 
 def _command(
