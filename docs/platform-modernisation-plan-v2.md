@@ -617,9 +617,20 @@ Phase 1 remains open. The next reviewable sequence is:
    window. It runs the unchanged golden
    lifecycle, lease, fencing, pause, cancellation, crash, and late-delivery
    scenarios and participates in canonical measurements without a workflow
-   vendor SDK, service, or serialization format. Runtime-created tasks and
-   `all`/`any`/`quorum` joins must still be measured before an ADR closes Phase
-   1. LangGraph and Temporal may be research inputs, but
+   vendor SDK, service, or serialization format. Slice 7d.3 extends the shared
+   contract to `workflow-portability.v3`: immutable initial topology and
+   append-only graph-revision snapshots are portable evidence; revision-fenced
+   commands add runtime tasks, edges, and join definitions; attempt-bound
+   outcomes carry exact result evidence; and `all`, `any`, and `quorum` states
+   are derived deterministically as waiting, satisfied, or impossible.
+   Existing task, edge, and join identities cannot be removed or rewritten.
+   Every candidate runs the same expansion, duplicate, crash, stale and
+   concurrent revision, failure, cancellation, late-result, restart, and join
+   scenarios. SQLite schema version 6 persists canonical topology evidence
+   while deriving the active revision only from committed expansion events.
+   The operational runner measures a dynamic join and fresh restoration under
+   measurement schema v4. The next increment is the evidence-led pattern
+   adoption ADR that closes Phase 1. LangGraph and Temporal may be research inputs, but
    their packages, SDKs, runtimes, services, persistence formats, and
    framework-native state are not candidates or production dependencies.
 

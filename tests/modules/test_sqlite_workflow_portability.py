@@ -19,7 +19,9 @@ from application.services.workflow_portability import (
 from domain.workflow.portability import (
     PortabilityCommand,
     PortabilityFaultPoint,
+    PortabilityGraphRevision,
     PortabilityOperation,
+    PortabilityTaskDefinition,
     portability_command_digest,
 )
 
@@ -276,7 +278,7 @@ def test_fresh_database_records_exact_sqlite_schema_version(tmp_path):
     with pytest.raises(sqlite3.IntegrityError, match="immutable"):
         connection.execute("UPDATE portability_benchmark_schema SET schema_version = 1")
     connection.close()
-    assert version_rows == [(1, 5)]
+    assert version_rows == [(1, 6)]
 
 
 def test_concurrent_first_open_accepts_distinct_workflow_identities(tmp_path):
@@ -452,6 +454,48 @@ def test_competing_lease_assignments_have_one_winner_and_one_loser(tmp_path):
     loser = next(item for item in outcomes if isinstance(item, Exception))
     assert "unexpired lease" in str(loser)
     assert len(first.snapshot().active_attempts) == 1
+
+
+def test_competing_graph_expansions_have_one_revision_winner(tmp_path):
+    factory, first, clock, sink = _running_factory(tmp_path)
+    second = _second_connection(factory, first, clock, sink)
+    barrier = Barrier(2)
+    commands = tuple(
+        _command(
+            f"command-expand-{suffix}",
+            PortabilityOperation.COMMIT_GRAPH_REVISION,
+            topology_revision=PortabilityGraphRevision(
+                revision=2,
+                parent_revision=1,
+                tasks=(
+                    PortabilityTaskDefinition("task-a", "portable-task"),
+                    PortabilityTaskDefinition(f"task-{suffix}", "portable-task"),
+                ),
+                edges=(),
+                joins=(),
+            ),
+        )
+        for suffix in ("b", "c")
+    )
+
+    def expand(pair):
+        adapter, command = pair
+        barrier.wait()
+        try:
+            return adapter.apply(command)
+        except PortabilityInvariantError as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(executor.map(expand, zip((first, second), commands)))
+
+    assert sum(not isinstance(item, Exception) for item in outcomes) == 1
+    loser = next(item for item in outcomes if isinstance(item, Exception))
+    assert "active revision" in str(loser)
+    snapshot = first.snapshot()
+    assert snapshot.graph_revision == 2
+    task_ids = {task_id for task_id, _task_type, _revision in snapshot.graph_tasks}
+    assert task_ids in ({"task-a", "task-b"}, {"task-a", "task-c"})
 
 
 def test_cancellation_racing_effect_preserves_the_committed_order(tmp_path):

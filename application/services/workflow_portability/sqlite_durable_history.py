@@ -155,7 +155,7 @@ class SQLiteDurableHistoryStore:
         if (
             history.tenant_id != self._tenant_id
             or history.workflow_id != self._workflow_id
-            or history.graph_revision != self._graph_revision
+            or history.initial_topology.revision != self._graph_revision
         ):
             raise PortabilityInvariantError(
                 "durable-history evidence scope or revision changed"

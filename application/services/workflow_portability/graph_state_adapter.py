@@ -33,6 +33,7 @@ from domain.workflow.portability import (
     PortabilityCommand,
     PortabilityCommandReceipt,
     PortabilityFaultPoint,
+    PortabilityGraphRevision,
     PortabilityHistory,
     PortabilityInvariantError,
     PortabilitySnapshot,
@@ -59,6 +60,7 @@ class GraphStatePortabilityAdapterFactory:
         tenant_id: str,
         workflow_id: str,
         graph_revision: int,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
     ) -> GraphStatePortabilityAdapter:
@@ -66,6 +68,7 @@ class GraphStatePortabilityAdapterFactory:
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             graph_revision=graph_revision,
+            initial_topology=initial_topology,
             clock=clock,
             effect_sink=effect_sink,
         )

@@ -21,7 +21,7 @@ def test_measurement_runner_emits_canonical_raw_samples_for_all_adapters(tmp_pat
     assert json.loads(encoded) == measurements
     assert encoded == canonical_measurement_json(json.loads(encoded))
     assert measurements["measurement_schema_version"] == MEASUREMENT_SCHEMA_VERSION
-    assert MEASUREMENT_SCHEMA_VERSION == "workflow-portability-measurements.v3"
+    assert MEASUREMENT_SCHEMA_VERSION == "workflow-portability-measurements.v4"
     assert measurements["portability_contract_version"] == PORTABILITY_CONTRACT_VERSION
     assert measurements_passed(measurements)
     assert [item["adapter_id"] for item in measurements["adapters"]] == [
@@ -42,11 +42,13 @@ def test_measurement_runner_emits_canonical_raw_samples_for_all_adapters(tmp_pat
             assert sample["recovery_latency_ns"] >= 0
             assert sample["evidence_counts"] == {
                 "checkpoints": 2,
-                "command_receipts": 4,
-                "commands": 4,
+                "command_receipts": 7,
+                "commands": 7,
                 "effect_receipts": 1,
-                "events": 4,
+                "events": 7,
             }
+            assert sample["graph_revision"] == 2
+            assert sample["join_states"] == [["join-any", "satisfied"]]
     for adapter in measurements["adapters"][:2]:
         assert all(
             sample["strategy_state_hash"] is None for sample in adapter["samples"]

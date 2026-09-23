@@ -13,11 +13,15 @@ from typing import Final
 from domain.workflow.lifecycle import WorkflowStatus, can_transition_workflow
 from domain.workflow.portability import (
     PortabilityCommand,
+    PortabilityGraphRevision,
     PortabilityHistory,
     PortabilityInvariantError,
     PortabilityOperation,
     PortabilitySnapshot,
+    PortabilityTaskOutcome,
     portability_command_digest,
+    portability_task_is_schedulable,
+    require_portability_revision_successor,
 )
 
 
@@ -353,6 +357,8 @@ def _verify_admissions_against_committed_state(
     status = WorkflowStatus.PLANNED
     attempts: dict[str, tuple[str, str, int, int]] = {}
     committed_effects: set[str] = set()
+    topology_state = {"current": history.initial_topology}
+    outcomes: dict[str, PortabilityTaskOutcome] = {}
     for record in records:
         command = commands[record.command_id]
         if record.record_type == "command_admitted":
@@ -361,6 +367,8 @@ def _verify_admissions_against_committed_state(
                 status=status,
                 attempts=attempts,
                 committed_effects=committed_effects,
+                topology=topology_state["current"],
+                outcomes=outcomes,
             )
         elif record.record_type == "event_committed":
             status = _apply_committed_command(
@@ -368,6 +376,8 @@ def _verify_admissions_against_committed_state(
                 status=status,
                 attempts=attempts,
                 committed_effects=committed_effects,
+                topology_state=topology_state,
+                outcomes=outcomes,
             )
 
 
@@ -377,7 +387,11 @@ def _require_admissible_from_committed_state(
     status: WorkflowStatus,
     attempts: dict[str, tuple[str, str, int, int]],
     committed_effects: set[str],
+    topology: PortabilityGraphRevision,
+    outcomes: dict[str, PortabilityTaskOutcome],
 ) -> None:
+    if command.graph_revision != topology.revision:
+        _raise_invalid_admission(command)
     target_status = {
         PortabilityOperation.START_WORKFLOW: WorkflowStatus.RUNNING,
         PortabilityOperation.PAUSE_WORKFLOW: WorkflowStatus.PAUSED,
@@ -394,7 +408,23 @@ def _require_admissible_from_committed_state(
         _raise_invalid_admission(command)
     current = attempts.get(command.task_id or "")
     if command.operation is PortabilityOperation.ASSIGN_ATTEMPT:
-        if current is not None and int(command.fencing_token or 0) <= current[2]:
+        if (
+            not portability_task_is_schedulable(
+                topology, command.task_id or "", outcomes
+            )
+            or current is not None
+            and int(command.fencing_token or 0) <= current[2]
+        ):
+            _raise_invalid_admission(command)
+        return
+
+    if command.operation is PortabilityOperation.COMMIT_GRAPH_REVISION:
+        try:
+            require_portability_revision_successor(
+                topology,
+                command.topology_revision or topology,
+            )
+        except ValueError:
             _raise_invalid_admission(command)
         return
 
@@ -406,10 +436,17 @@ def _require_admissible_from_committed_state(
     if current is None or current[:3] != expected_identity:
         _raise_invalid_admission(command)
     if command.operation is PortabilityOperation.HEARTBEAT_ATTEMPT:
-        if int(command.lease_expires_at_tick or 0) <= current[3]:
+        if (
+            command.task_id in outcomes
+            or int(command.lease_expires_at_tick or 0) <= current[3]
+        ):
             _raise_invalid_admission(command)
-    elif command.effect_id in committed_effects:
-        _raise_invalid_admission(command)
+    elif command.operation is PortabilityOperation.RECORD_TASK_OUTCOME:
+        if command.task_id in outcomes:
+            _raise_invalid_admission(command)
+    elif command.operation is PortabilityOperation.COMMIT_EFFECT:
+        if command.task_id in outcomes or command.effect_id in committed_effects:
+            _raise_invalid_admission(command)
 
 
 def _apply_committed_command(
@@ -418,6 +455,8 @@ def _apply_committed_command(
     status: WorkflowStatus,
     attempts: dict[str, tuple[str, str, int, int]],
     committed_effects: set[str],
+    topology_state: dict[str, PortabilityGraphRevision],
+    outcomes: dict[str, PortabilityTaskOutcome],
 ) -> WorkflowStatus:
     target_status = {
         PortabilityOperation.START_WORKFLOW: WorkflowStatus.RUNNING,
@@ -440,6 +479,14 @@ def _apply_committed_command(
         )
     elif command.operation is PortabilityOperation.COMMIT_EFFECT:
         committed_effects.add(command.effect_id or "")
+    elif command.operation is PortabilityOperation.COMMIT_GRAPH_REVISION:
+        if command.topology_revision is None:
+            _raise_invalid_admission(command)
+        topology_state["current"] = command.topology_revision
+    elif command.operation is PortabilityOperation.RECORD_TASK_OUTCOME:
+        if command.task_outcome is None:
+            _raise_invalid_admission(command)
+        outcomes[command.task_id or ""] = command.task_outcome
     return status
 
 

@@ -8,11 +8,16 @@ receipts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import json
 
 from application.ports.workflow_portability import (
     PortabilityClock,
     PortabilityEffectSink,
+)
+from application.services.workflow_portability.replay import (
+    active_graph_revision,
+    replay_portability_history,
+    snapshot_graph_revision,
+    snapshot_task_is_schedulable,
 )
 from domain.workflow.lifecycle import WorkflowStatus, require_workflow_transition
 from domain.workflow.portability import (
@@ -24,14 +29,19 @@ from domain.workflow.portability import (
     PortabilityEffectReceipt,
     PortabilityEvent,
     PortabilityFaultPoint,
+    PortabilityGraphRevision,
     PortabilityHistory,
     PortabilityInjectedCrash,
     PortabilityInvariantError,
     PortabilityOperation,
     PortabilitySnapshot,
     canonical_event_payload,
+    canonical_graph_revision_payload,
+    default_portability_topology,
+    portability_graph_revision_digest,
     portability_command_digest,
     portability_history_digest,
+    require_portability_revision_successor,
 )
 
 
@@ -42,6 +52,7 @@ AttemptState = tuple[str, str, int, int]
 class InternalKernelStore:
     tenant_id: str
     workflow_id: str
+    initial_topology: PortabilityGraphRevision
     graph_revision: int
     commands: dict[str, PortabilityCommand] = field(default_factory=dict)
     events: list[PortabilityEvent] = field(default_factory=list)
@@ -72,6 +83,7 @@ class InternalKernelAdapter:
         tenant_id: str,
         workflow_id: str,
         graph_revision: int = 1,
+        initial_topology: PortabilityGraphRevision | None = None,
         clock: PortabilityClock,
         effect_sink: PortabilityEffectSink,
     ) -> InternalKernelAdapter:
@@ -81,10 +93,16 @@ class InternalKernelAdapter:
             raise PortabilityInvariantError("workflow_id must be a non-empty string")
         if type(graph_revision) is not int or graph_revision < 1:
             raise PortabilityInvariantError("graph_revision must be a positive integer")
+        topology = initial_topology or default_portability_topology(graph_revision)
+        if topology.revision != graph_revision or topology.parent_revision is not None:
+            raise PortabilityInvariantError(
+                "initial topology does not match the initial graph revision"
+            )
         return cls(
             InternalKernelStore(
                 tenant_id=tenant_id,
                 workflow_id=workflow_id,
+                initial_topology=topology,
                 graph_revision=graph_revision,
             ),
             clock=clock,
@@ -106,6 +124,7 @@ class InternalKernelAdapter:
         store = InternalKernelStore(
             tenant_id=history.tenant_id,
             workflow_id=history.workflow_id,
+            initial_topology=history.initial_topology,
             graph_revision=history.graph_revision,
             commands={command.command_id: command for command in history.commands},
             events=list(history.events),
@@ -122,7 +141,7 @@ class InternalKernelAdapter:
         fault: PortabilityFaultPoint | None = None,
     ) -> PortabilityCommandReceipt:
         self._require_fault(command, fault)
-        self._require_scope(command)
+        self._require_workflow_scope(command)
         request_hash = portability_command_digest(command)
         recorded_command = self._store.commands.get(command.command_id)
         if recorded_command is not None and recorded_command != command:
@@ -136,7 +155,6 @@ class InternalKernelAdapter:
                     "command identity reused with changed request hash"
                 )
             return existing_receipt
-
         provider_receipt_id: str | None = None
         if command.operation is PortabilityOperation.COMMIT_EFFECT:
             for recorded in self._store.commands.values():
@@ -161,6 +179,10 @@ class InternalKernelAdapter:
                     raise PortabilityConflictError(
                         "provider execution is bound to different provenance"
                     )
+                if recorded_command != command:
+                    raise PortabilityInvariantError(
+                        "provider execution lacks exact pending command evidence"
+                    )
                 provider_receipt_id = execution.provider_receipt_id
             recorded_effect_receipt = self._effect_sink.receipt_for(
                 tenant_id=command.tenant_id,
@@ -177,6 +199,7 @@ class InternalKernelAdapter:
                     raise PortabilityConflictError("effect receipt binding changed")
         reconciling_executed_effect = provider_receipt_id is not None
         if not reconciling_executed_effect:
+            self._require_active_revision(command)
             self._validate_command(command)
         self._store.commands.setdefault(command.command_id, command)
 
@@ -246,7 +269,7 @@ class InternalKernelAdapter:
             **self._store.command_receipts,
             command.command_id: receipt,
         }
-        verify_portability_history(
+        prospective_snapshot = verify_portability_history(
             self._history(
                 events=prospective_events,
                 command_receipts=prospective_receipts,
@@ -254,6 +277,7 @@ class InternalKernelAdapter:
         )
         self._store.events.append(event)
         self._store.command_receipts[command.command_id] = receipt
+        self._store.graph_revision = prospective_snapshot.graph_revision
         self._crash(
             fault,
             PortabilityFaultPoint.AFTER_EVENT_COMMIT_BEFORE_ACK,
@@ -277,10 +301,11 @@ class InternalKernelAdapter:
         )
 
     def snapshot(self) -> PortabilitySnapshot:
-        return _replay(
+        return replay_portability_history(
             tenant_id=self._store.tenant_id,
             workflow_id=self._store.workflow_id,
-            graph_revision=self._store.graph_revision,
+            initial_topology=self._store.initial_topology,
+            expected_graph_revision=self._store.graph_revision,
             commands=tuple(self._store.commands.values()),
             events=tuple(self._store.events),
             effect_receipts=self._effect_sink.export_receipts(
@@ -312,21 +337,29 @@ class InternalKernelAdapter:
         return _history(
             tenant_id=self._store.tenant_id,
             workflow_id=self._store.workflow_id,
-            graph_revision=self._store.graph_revision,
+            initial_topology=self._store.initial_topology,
+            graph_revision=active_graph_revision(
+                self._store.initial_topology,
+                commands,
+                events,
+            ),
             commands=commands,
             events=events,
             command_receipts=receipts,
             effect_receipts=effect_receipts,
         )
 
-    def _require_scope(self, command: PortabilityCommand) -> None:
+    def _require_workflow_scope(self, command: PortabilityCommand) -> None:
         if (
             command.tenant_id != self._store.tenant_id
             or command.workflow_id != self._store.workflow_id
-            or command.graph_revision != self._store.graph_revision
         ):
+            raise PortabilityInvariantError("command scope does not match workflow")
+
+    def _require_active_revision(self, command: PortabilityCommand) -> None:
+        if command.graph_revision != self._store.graph_revision:
             raise PortabilityInvariantError(
-                "command scope or graph revision does not match workflow"
+                "command graph revision does not match active revision"
             )
 
     @staticmethod
@@ -366,6 +399,10 @@ class InternalKernelAdapter:
             _require_status_transition(snapshot, WorkflowStatus.RUNNING)
         elif command.operation is PortabilityOperation.ASSIGN_ATTEMPT:
             _require_running(snapshot)
+            if not snapshot_task_is_schedulable(snapshot, command.task_id or ""):
+                raise PortabilityInvariantError(
+                    "task is not schedulable in the active graph revision"
+                )
             current = _active_attempts(snapshot).get(command.task_id or "")
             if current is not None:
                 if self._clock.now_tick < current[3]:
@@ -378,6 +415,12 @@ class InternalKernelAdapter:
                 raise PortabilityInvariantError("new attempt lease must be unexpired")
         elif command.operation is PortabilityOperation.HEARTBEAT_ATTEMPT:
             _require_running(snapshot)
+            if command.task_id in {
+                task_id for task_id, _outcome, _result in snapshot.task_outcomes
+            }:
+                raise PortabilityInvariantError(
+                    "completed task cannot heartbeat its attempt"
+                )
             current = _active_attempts(snapshot).get(command.task_id or "")
             expected = (
                 command.attempt_id,
@@ -392,6 +435,12 @@ class InternalKernelAdapter:
                 raise PortabilityInvariantError("heartbeat must extend the lease")
         elif command.operation is PortabilityOperation.COMMIT_EFFECT:
             _require_running(snapshot)
+            if command.task_id in {
+                task_id for task_id, _outcome, _result in snapshot.task_outcomes
+            }:
+                raise PortabilityInvariantError(
+                    "completed task cannot commit a new effect"
+                )
             current = _active_attempts(snapshot).get(command.task_id or "")
             expected = (
                 command.attempt_id,
@@ -407,6 +456,37 @@ class InternalKernelAdapter:
                 for effect_id, payload_hash, _ in snapshot.committed_effects
             ):
                 raise PortabilityConflictError("effect identity is already committed")
+        elif command.operation is PortabilityOperation.COMMIT_GRAPH_REVISION:
+            _require_running(snapshot)
+            current = snapshot_graph_revision(snapshot)
+            try:
+                require_portability_revision_successor(
+                    current,
+                    command.topology_revision or current,
+                )
+            except ValueError as exc:
+                raise PortabilityInvariantError(str(exc)) from exc
+        elif command.operation is PortabilityOperation.RECORD_TASK_OUTCOME:
+            _require_running(snapshot)
+            current_attempt = _active_attempts(snapshot).get(command.task_id or "")
+            expected = (
+                command.attempt_id,
+                command.worker_id,
+                command.fencing_token,
+            )
+            if current_attempt is None or current_attempt[:3] != expected:
+                raise PortabilityInvariantError(
+                    "stale attempt cannot record a task outcome"
+                )
+            if self._clock.now_tick >= current_attempt[3]:
+                raise PortabilityInvariantError(
+                    "expired lease cannot record a task outcome"
+                )
+            if command.task_id in dict(
+                (task_id, outcome)
+                for task_id, outcome, _result_hash in snapshot.task_outcomes
+            ):
+                raise PortabilityConflictError("task outcome is already committed")
         elif command.operation is PortabilityOperation.COMPLETE_WORKFLOW:
             _require_status_transition(snapshot, WorkflowStatus.COMPLETED)
         else:
@@ -428,6 +508,8 @@ class InternalKernelAdapter:
             PortabilityOperation.COMMIT_EFFECT: (
                 "effect_reconciled" if reconciled else "effect_committed"
             ),
+            PortabilityOperation.COMMIT_GRAPH_REVISION: "graph_revision_committed",
+            PortabilityOperation.RECORD_TASK_OUTCOME: "task_outcome_recorded",
             PortabilityOperation.COMPLETE_WORKFLOW: "workflow_completed",
             PortabilityOperation.CANCEL_WORKFLOW: "workflow_canceled",
         }[command.operation]
@@ -453,6 +535,24 @@ class InternalKernelAdapter:
                 "task_id": command.task_id,
                 "worker_id": command.worker_id,
             }
+        elif command.operation is PortabilityOperation.COMMIT_GRAPH_REVISION:
+            payload = canonical_graph_revision_payload(
+                command.topology_revision or self._store.initial_topology
+            )
+            payload["graph_hash"] = portability_graph_revision_digest(
+                command.topology_revision or self._store.initial_topology
+            )
+        elif command.operation is PortabilityOperation.RECORD_TASK_OUTCOME:
+            payload = {
+                "attempt_id": command.attempt_id,
+                "fencing_token": command.fencing_token,
+                "result_hash": command.result_hash,
+                "task_id": command.task_id,
+                "task_outcome": (
+                    command.task_outcome.value if command.task_outcome else None
+                ),
+                "worker_id": command.worker_id,
+            }
         return PortabilityEvent(
             sequence=len(self._store.events),
             tenant_id=command.tenant_id,
@@ -468,6 +568,7 @@ def verify_portability_history(history: PortabilityHistory) -> PortabilitySnapsh
     expected_hash = portability_history_digest(
         tenant_id=history.tenant_id,
         workflow_id=history.workflow_id,
+        initial_topology=history.initial_topology,
         graph_revision=history.graph_revision,
         commands=history.commands,
         events=history.events,
@@ -494,7 +595,9 @@ def verify_portability_history(history: PortabilityHistory) -> PortabilitySnapsh
         if (
             command.tenant_id != history.tenant_id
             or command.workflow_id != history.workflow_id
-            or command.graph_revision != history.graph_revision
+            or not history.initial_topology.revision
+            <= command.graph_revision
+            <= history.graph_revision
         ):
             raise PortabilityInvariantError("command scope does not match history")
         if command.command_id in commands:
@@ -548,130 +651,14 @@ def verify_portability_history(history: PortabilityHistory) -> PortabilitySnapsh
             raise PortabilityInvariantError("effect receipt binding mismatch")
         effect_receipts[receipt.effect_id] = receipt
 
-    return _replay(
+    return replay_portability_history(
         tenant_id=history.tenant_id,
         workflow_id=history.workflow_id,
-        graph_revision=history.graph_revision,
+        initial_topology=history.initial_topology,
+        expected_graph_revision=history.graph_revision,
         commands=history.commands,
         events=history.events,
         effect_receipts=history.effect_receipts,
-    )
-
-
-def _replay(
-    *,
-    tenant_id: str,
-    workflow_id: str,
-    graph_revision: int,
-    commands: tuple[PortabilityCommand, ...],
-    events: tuple[PortabilityEvent, ...],
-    effect_receipts: tuple[PortabilityEffectReceipt, ...],
-) -> PortabilitySnapshot:
-    status = WorkflowStatus.PLANNED
-    attempts: dict[str, AttemptState] = {}
-    effects: dict[str, tuple[str, str]] = {}
-    command_map = {command.command_id: command for command in commands}
-    effect_receipt_map = {receipt.effect_id: receipt for receipt in effect_receipts}
-    for expected_sequence, event in enumerate(events):
-        if type(event.sequence) is not int or event.sequence != expected_sequence:
-            raise PortabilityInvariantError("event history must be gap-free")
-        if event.tenant_id != tenant_id or event.workflow_id != workflow_id:
-            raise PortabilityInvariantError("event scope does not match history")
-        command = command_map.get(event.command_id)
-        if command is None:
-            raise PortabilityInvariantError("event lacks command evidence")
-        payload = _event_payload(event)
-        expected_types = _expected_event_types(command.operation)
-        if event.event_type not in expected_types:
-            raise PortabilityInvariantError("event type does not match command")
-
-        if event.event_type == "workflow_started":
-            _require_payload_keys(payload, frozenset())
-            _replay_transition(status, WorkflowStatus.RUNNING)
-            status = WorkflowStatus.RUNNING
-        elif event.event_type == "workflow_paused":
-            _require_payload_keys(payload, frozenset())
-            _replay_transition(status, WorkflowStatus.PAUSED)
-            status = WorkflowStatus.PAUSED
-        elif event.event_type == "workflow_resumed":
-            _require_payload_keys(payload, frozenset())
-            _replay_transition(status, WorkflowStatus.RUNNING)
-            status = WorkflowStatus.RUNNING
-        elif event.event_type == "attempt_assigned":
-            _require_running_status(status, "attempt assigned")
-            attempt = _attempt_payload(payload)
-            _require_attempt_payload_matches_command(payload, command)
-            current = attempts.get(command.task_id or "")
-            if current is not None and attempt[2] <= current[2]:
-                raise PortabilityInvariantError(
-                    "attempt fencing history is not monotonic"
-                )
-            attempts[command.task_id or ""] = attempt
-        elif event.event_type == "attempt_heartbeat":
-            _require_running_status(status, "attempt heartbeat")
-            attempt = _attempt_payload(payload)
-            _require_attempt_payload_matches_command(payload, command)
-            current = attempts.get(command.task_id or "")
-            if (
-                current is None
-                or attempt[:3] != current[:3]
-                or attempt[3] <= current[3]
-            ):
-                raise PortabilityInvariantError(
-                    "heartbeat does not extend current lease"
-                )
-            attempts[command.task_id or ""] = attempt
-        elif event.event_type in {"effect_committed", "effect_reconciled"}:
-            if event.event_type == "effect_committed":
-                _require_running_status(status, "effect committed")
-                current = attempts.get(command.task_id or "")
-                expected = (
-                    command.attempt_id,
-                    command.worker_id,
-                    command.fencing_token,
-                )
-                if current is None or current[:3] != expected:
-                    raise PortabilityInvariantError("effect committed by stale attempt")
-            effect_id, payload_hash, provider_receipt_id = _effect_payload(payload)
-            _require_effect_payload_matches_command(payload, command)
-            receipt = effect_receipt_map.get(effect_id)
-            if receipt is None or (
-                receipt.command_id != command.command_id
-                or receipt.payload_hash != payload_hash
-                or receipt.provider_receipt_id != provider_receipt_id
-            ):
-                raise PortabilityInvariantError("effect event lacks matching receipt")
-            if effect_id in effects:
-                raise PortabilityInvariantError(
-                    "effect identity committed more than once"
-                )
-            effects[effect_id] = (payload_hash, provider_receipt_id)
-        elif event.event_type == "workflow_completed":
-            _require_payload_keys(payload, frozenset())
-            _replay_transition(status, WorkflowStatus.COMPLETED)
-            status = WorkflowStatus.COMPLETED
-        elif event.event_type == "workflow_canceled":
-            _require_payload_keys(payload, frozenset())
-            _replay_transition(status, WorkflowStatus.CANCELED)
-            status = WorkflowStatus.CANCELED
-    return PortabilitySnapshot(
-        tenant_id=tenant_id,
-        workflow_id=workflow_id,
-        workflow_status=status.value,
-        graph_revision=graph_revision,
-        active_attempts=tuple(
-            (task_id, attempt_id, worker_id, token, expiry)
-            for task_id, (attempt_id, worker_id, token, expiry) in sorted(
-                attempts.items()
-            )
-        ),
-        committed_effects=tuple(
-            (effect_id, payload_hash, provider_receipt_id)
-            for effect_id, (payload_hash, provider_receipt_id) in sorted(
-                effects.items()
-            )
-        ),
-        last_event_sequence=len(events) - 1,
     )
 
 
@@ -679,6 +666,7 @@ def _history(
     *,
     tenant_id: str,
     workflow_id: str,
+    initial_topology: PortabilityGraphRevision,
     graph_revision: int,
     commands: tuple[PortabilityCommand, ...],
     events: tuple[PortabilityEvent, ...],
@@ -689,6 +677,7 @@ def _history(
         contract_version=PORTABILITY_CONTRACT_VERSION,
         tenant_id=tenant_id,
         workflow_id=workflow_id,
+        initial_topology=initial_topology,
         graph_revision=graph_revision,
         commands=commands,
         events=events,
@@ -697,6 +686,7 @@ def _history(
         history_hash=portability_history_digest(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
+            initial_topology=initial_topology,
             graph_revision=graph_revision,
             commands=commands,
             events=events,
@@ -732,7 +722,17 @@ def _validate_history_header(history: PortabilityHistory) -> None:
         raise PortabilityInvariantError("history tenant_id must be a string")
     if type(history.workflow_id) is not str or not history.workflow_id:
         raise PortabilityInvariantError("history workflow_id must be a string")
-    if type(history.graph_revision) is not int or history.graph_revision < 1:
+    if type(history.initial_topology) is not PortabilityGraphRevision:
+        raise PortabilityInvariantError(
+            "history initial topology must use the exact contract"
+        )
+    if history.initial_topology.parent_revision is not None:
+        raise PortabilityInvariantError(
+            "history initial topology cannot have a parent revision"
+        )
+    if type(history.graph_revision) is not int or (
+        history.graph_revision < history.initial_topology.revision
+    ):
         raise PortabilityInvariantError("history graph_revision must be positive")
 
 
@@ -823,146 +823,18 @@ def _active_attempts(snapshot: PortabilitySnapshot) -> dict[str, AttemptState]:
     }
 
 
-def _event_payload(event: PortabilityEvent) -> dict[str, object]:
-    try:
-        payload = json.loads(event.payload_json)
-    except (TypeError, json.JSONDecodeError) as exc:
-        raise PortabilityInvariantError("event payload is not valid JSON") from exc
-    if type(payload) is not dict:
-        raise PortabilityInvariantError("event payload must be an object")
-    if canonical_event_payload(payload) != event.payload_json:
-        raise PortabilityInvariantError("event payload must be canonical")
-    return payload
-
-
-def _attempt_payload(payload: dict[str, object]) -> AttemptState:
-    _require_payload_keys(
-        payload,
-        frozenset(
-            {
-                "task_id",
-                "attempt_id",
-                "worker_id",
-                "fencing_token",
-                "lease_expires_at_tick",
-            }
-        ),
-    )
-    return (
-        _payload_string(payload, "attempt_id"),
-        _payload_string(payload, "worker_id"),
-        _payload_integer(payload, "fencing_token"),
-        _payload_integer(payload, "lease_expires_at_tick"),
-    )
-
-
-def _effect_payload(payload: dict[str, object]) -> tuple[str, str, str]:
-    _require_payload_keys(
-        payload,
-        frozenset(
-            {
-                "task_id",
-                "attempt_id",
-                "worker_id",
-                "fencing_token",
-                "effect_id",
-                "payload_hash",
-                "provider_receipt_id",
-            }
-        ),
-    )
-    return (
-        _payload_string(payload, "effect_id"),
-        _payload_string(payload, "payload_hash"),
-        _payload_string(payload, "provider_receipt_id"),
-    )
-
-
-def _require_attempt_payload_matches_command(
-    payload: dict[str, object], command: PortabilityCommand
-) -> None:
-    if (
-        payload["task_id"] != command.task_id
-        or payload["attempt_id"] != command.attempt_id
-        or payload["worker_id"] != command.worker_id
-        or payload["fencing_token"] != command.fencing_token
-        or payload["lease_expires_at_tick"] != command.lease_expires_at_tick
-    ):
-        raise PortabilityInvariantError("attempt event does not match command")
-
-
-def _require_effect_payload_matches_command(
-    payload: dict[str, object], command: PortabilityCommand
-) -> None:
-    if (
-        payload["task_id"] != command.task_id
-        or payload["attempt_id"] != command.attempt_id
-        or payload["worker_id"] != command.worker_id
-        or payload["fencing_token"] != command.fencing_token
-        or payload["effect_id"] != command.effect_id
-        or payload["payload_hash"] != command.payload_hash
-    ):
-        raise PortabilityInvariantError("effect event does not match command")
-
-
-def _expected_event_types(operation: PortabilityOperation) -> frozenset[str]:
-    if operation is PortabilityOperation.COMMIT_EFFECT:
-        return frozenset({"effect_committed", "effect_reconciled"})
-    return frozenset(
-        {
-            {
-                PortabilityOperation.START_WORKFLOW: "workflow_started",
-                PortabilityOperation.PAUSE_WORKFLOW: "workflow_paused",
-                PortabilityOperation.RESUME_WORKFLOW: "workflow_resumed",
-                PortabilityOperation.ASSIGN_ATTEMPT: "attempt_assigned",
-                PortabilityOperation.HEARTBEAT_ATTEMPT: "attempt_heartbeat",
-                PortabilityOperation.COMPLETE_WORKFLOW: "workflow_completed",
-                PortabilityOperation.CANCEL_WORKFLOW: "workflow_canceled",
-            }[operation]
-        }
-    )
-
-
 def _require_running(snapshot: PortabilitySnapshot) -> None:
     if snapshot.workflow_status != WorkflowStatus.RUNNING.value:
         raise PortabilityInvariantError("operation requires a running workflow")
 
 
-def _require_running_status(status: WorkflowStatus, operation: str) -> None:
-    if status is not WorkflowStatus.RUNNING:
-        raise PortabilityInvariantError(f"{operation} outside running workflow")
-
-
 def _require_status_transition(
     snapshot: PortabilitySnapshot, target: WorkflowStatus
 ) -> None:
-    _replay_transition(WorkflowStatus(snapshot.workflow_status), target)
-
-
-def _replay_transition(source: WorkflowStatus, target: WorkflowStatus) -> None:
     try:
-        require_workflow_transition(source, target)
+        require_workflow_transition(WorkflowStatus(snapshot.workflow_status), target)
     except ValueError as exc:
         raise PortabilityInvariantError(str(exc)) from exc
-
-
-def _payload_string(payload: dict[str, object], field_name: str) -> str:
-    value = payload.get(field_name)
-    if type(value) is not str or not value:
-        raise PortabilityInvariantError(f"event {field_name} must be a string")
-    return value
-
-
-def _payload_integer(payload: dict[str, object], field_name: str) -> int:
-    value = payload.get(field_name)
-    if type(value) is not int or value < 1:
-        raise PortabilityInvariantError(f"event {field_name} must be positive")
-    return value
-
-
-def _require_payload_keys(payload: dict[str, object], expected: frozenset[str]) -> None:
-    if frozenset(payload) != expected:
-        raise PortabilityInvariantError("event payload fields do not match contract")
 
 
 __all__ = [

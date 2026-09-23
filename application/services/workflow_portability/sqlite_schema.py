@@ -9,7 +9,7 @@ from application.services.workflow_portability.sqlite_graph_definition import (
 from domain.workflow.portability import PORTABILITY_CONTRACT_VERSION
 
 
-SQLITE_SCHEMA_VERSION = 5
+SQLITE_SCHEMA_VERSION = 6
 SQLITE_SCHEMA = f"""
 CREATE TABLE portability_benchmark_schema (
     singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
@@ -25,6 +25,7 @@ CREATE TABLE portability_benchmark_workflows (
     tenant_id TEXT NOT NULL CHECK (length(tenant_id) > 0),
     workflow_id TEXT NOT NULL CHECK (length(workflow_id) > 0),
     graph_revision INTEGER NOT NULL CHECK (graph_revision >= 1),
+    initial_topology_json TEXT NOT NULL CHECK (length(initial_topology_json) > 0),
     contract_version TEXT NOT NULL CHECK (contract_version = '{PORTABILITY_CONTRACT_VERSION}'),
     PRIMARY KEY (tenant_id, workflow_id),
     UNIQUE (tenant_id, workflow_id, graph_revision)
@@ -47,11 +48,13 @@ CREATE TABLE portability_benchmark_commands (
     lease_expires_at_tick INTEGER,
     effect_id TEXT,
     payload_hash TEXT,
+    topology_revision_json TEXT,
+    task_outcome TEXT,
+    result_hash TEXT,
     request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
     PRIMARY KEY (tenant_id, workflow_id, command_id),
-    FOREIGN KEY (tenant_id, workflow_id, graph_revision)
-        REFERENCES portability_benchmark_workflows
-            (tenant_id, workflow_id, graph_revision)
+    FOREIGN KEY (tenant_id, workflow_id)
+        REFERENCES portability_benchmark_workflows (tenant_id, workflow_id)
 );
 
 CREATE UNIQUE INDEX portability_benchmark_effect_command
@@ -122,9 +125,8 @@ CREATE TABLE portability_benchmark_checkpoints (
     snapshot_json TEXT NOT NULL,
     checkpoint_hash TEXT NOT NULL CHECK (length(checkpoint_hash) = 64),
     PRIMARY KEY (tenant_id, workflow_id, history_hash),
-    FOREIGN KEY (tenant_id, workflow_id, graph_revision)
-        REFERENCES portability_benchmark_workflows
-            (tenant_id, workflow_id, graph_revision)
+    FOREIGN KEY (tenant_id, workflow_id)
+        REFERENCES portability_benchmark_workflows (tenant_id, workflow_id)
 );
 
 CREATE TRIGGER portability_benchmark_event_sequence_guard

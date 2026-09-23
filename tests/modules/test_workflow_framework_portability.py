@@ -150,6 +150,7 @@ def _history_with_hash(history, **changes):
         history_hash=portability_history_digest(
             tenant_id=changed.tenant_id,
             workflow_id=changed.workflow_id,
+            initial_topology=changed.initial_topology,
             graph_revision=changed.graph_revision,
             commands=changed.commands,
             events=changed.events,
