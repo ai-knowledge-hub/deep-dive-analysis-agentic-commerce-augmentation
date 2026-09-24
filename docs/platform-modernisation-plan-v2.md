@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-09-18
+Last updated: 2026-09-23
 
 ## Purpose
 
@@ -272,9 +272,10 @@ Status: completed on 2026-08-03.
 
 ### Phase 1: Contracts and safety model
 
-Status: open. Slices 1–5 established the contract, safety, security, and exact
-approval baseline; evidence/completion contracts and the working
-framework-comparison spike remain.
+Status: completed on 2026-09-23. Slices 1–7 established the lifecycle, schema,
+safety, security, approval, completion, compatibility, and framework-neutral
+orchestration contracts. ADR 0003 adopts the graph-state and durable-history
+patterns supported by the working comparison spike.
 
 Deliverables:
 
@@ -468,7 +469,7 @@ No dynamic planner, subagent, or chat redesign should land unless the lifecycle,
 schema, safety, and security contracts agree on state, authority, effects,
 trust boundaries, and failure semantics.
 
-Phase 1 remains open. The next reviewable sequence is:
+Phase 1 is complete. Its final reviewable sequence was:
 
 5. **Exact approval and effect authorization — completed** ([#112](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/112),
    [#114](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/114),
@@ -629,13 +630,19 @@ Phase 1 remains open. The next reviewable sequence is:
    scenarios. SQLite schema version 6 persists canonical topology evidence
    while deriving the active revision only from committed expansion events.
    The operational runner measures a dynamic join and fresh restoration under
-   measurement schema v4. The next increment is the evidence-led pattern
-   adoption ADR that closes Phase 1. LangGraph and Temporal may be research inputs, but
-   their packages, SDKs, runtimes, services, persistence formats, and
-   framework-native state are not candidates or production dependencies.
+   measurement schema v4. Slice 7d.4 accepts ADR 0003: portable commands,
+   events, receipts, topology, results, and completion evidence remain
+   authoritative; graph state is adopted as a rebuildable routing/readiness
+   projection; and durable-history transaction, integrity, and reconciliation
+   patterns are adopted as a rebuildable decision journal. The migration is
+   expand-first, workflow ownership is pinned at creation, and rollback retains
+   evidence rather than reviving work from legacy projections. LangGraph and
+   Temporal remain research inputs; their packages, SDKs, runtimes, services,
+   persistence formats, and framework-native state are not production
+   dependencies.
 
-Only after these slices satisfy the Phase 1 exit gate should Phase 2 make chat
-the primary command surface. The current supported envelope remains bounded,
+The Phase 1 exit gate is satisfied. Phase 2 may now make chat the primary
+command surface while the current supported envelope remains bounded,
 supervised or low-risk sequential execution. Dynamic workflows, reliable
 parallel agents, transaction-grade external effects, and automatic harness
 self-promotion remain contracted or planned rather than implemented.

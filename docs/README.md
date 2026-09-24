@@ -1,9 +1,9 @@
 # Documentation Index
 
 Status: current
-Last verified: 2026-09-05
+Last verified: 2026-09-23
 Owner: platform architecture
-Baseline: `origin/main@96a1c23` (includes PR #120)
+Baseline: `origin/main@3264ce06641a80925b23d05c34da599928bfe837`
 
 This is the authoritative documentation inventory. Every file under `docs/`
 must appear exactly once below. A category defines how a document may be used;
@@ -37,7 +37,7 @@ validates this inventory and repository-local links.
 
 | Path | Category / authority | Status | Purpose | Owner | Last verified | Baseline / supersession |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/README.md` | executable-governance | current | Authoritative documentation inventory and category policy. | platform architecture | 2026-09-12 | Updated for the Slice 6b implementation set. |
+| `docs/README.md` | executable-governance | current | Authoritative documentation inventory and category policy. | platform architecture | 2026-09-23 | Updated for ADR 0003 and Phase 1 closure. |
 | `docs/agent-capability-map.md` | reference-design | reference | Map product verbs to agent skills, tools, and intended capabilities. | product and agent runtime | 2026-09-05 | Recheck implementation statuses before use. |
 | `docs/agent-first-modular-architecture-v1.md` | reference-design | reference | Describe the target modular agent-first architecture. | platform architecture | 2026-09-05 | Subordinate to Plan v2 and accepted ADRs. |
 | `docs/agentic-layer.md` | current-implementation | current | Describe the implemented agent-runtime layer and remaining roadmap. | agent runtime | 2026-09-05 | `origin/main@96a1c23` |
@@ -48,9 +48,10 @@ validates this inventory and repository-local links.
 | `docs/codebase-cleanup-and-modularisation-plan.md` | historical | historical | Preserve the completed cleanup and modularisation sequence. | platform architecture | 2026-05-06 | Superseded by `docs/platform-modernisation-plan-v2.md`. |
 | `docs/debug/incidents-fixed.md` | operational-record | maintained | Retain resolved incidents and reusable failure lessons. | engineering operations | 2026-09-05 | Append-only operational context. |
 | `docs/debug/open-risks.md` | operational-record | maintained | Track unresolved runtime and release risks. | engineering operations | 2026-09-05 | Review before release decisions. |
-| `docs/decisions/0001-workflow-task-delegation-schema.md` | durable-decision | accepted | Define workflow, revision, task, attempt, delegation, result, and checkpoint semantics. | platform architecture and agent runtime | 2026-09-05 | Accepted Phase 1 contract. |
-| `docs/decisions/0002-evidence-result-completion-contracts.md` | durable-decision | accepted | Define exact evidence, validated result, independent criteria, completion decision, and lag-aware projection semantics. | platform architecture and agent runtime | 2026-09-12 | Slice 6a domain contract plus Slice 6b append-only persistence record; lifecycle integration remains deferred. |
-| `docs/decisions/README.md` | durable-decision | current | Index accepted architecture decisions. | platform architecture | 2026-09-05 | ADRs are authoritative until superseded. |
+| `docs/decisions/0001-workflow-task-delegation-schema.md` | durable-decision | accepted | Define workflow, revision, task, attempt, delegation, result, and checkpoint semantics. | platform architecture and agent runtime | 2026-09-23 | Accepted Phase 1 contract; orchestration patterns selected by ADR 0003. |
+| `docs/decisions/0002-evidence-result-completion-contracts.md` | durable-decision | accepted | Define exact evidence, validated result, independent criteria, completion decision, and lag-aware projection semantics. | platform architecture and agent runtime | 2026-09-23 | Slice 6a contract with Slices 6b-6d persistence, lifecycle, API, and control-plane integration. |
+| `docs/decisions/0003-workflow-orchestration-pattern-adoption.md` | durable-decision | accepted | Adopt first-party graph-state projection and durable-history integrity patterns over portable workflow authority. | platform architecture, workflow kernel, and agent runtime | 2026-09-23 | Evidence-led Phase 1 decision at `origin/main@3264ce06641a80925b23d05c34da599928bfe837`. |
+| `docs/decisions/README.md` | durable-decision | current | Index accepted architecture decisions. | platform architecture | 2026-09-23 | ADRs are authoritative until superseded. |
 | `docs/deployment.md` | operational-record | current | Explain supported environments, migrations, rollout, and runtime operations. | engineering operations | 2026-09-05 | `origin/main@96a1c23` |
 | `docs/external-agent-job-contracts.md` | reference-design | current-contract | Describe the current machine-facing external-agent job API. | agent runtime and API | 2026-09-05 | Verify endpoint details against routes and tests. |
 | `docs/external-integrations.md` | reference-design | reference | Inventory provider and protocol integrations. | integrations | 2026-09-05 | Some future sections remain explicitly planned. |
@@ -61,10 +62,10 @@ validates this inventory and repository-local links.
 | `docs/history/pitch-deck.html` | historical | historical | Preserve the historical product presentation. | product | 2026-05-06 | Not engineering authority. |
 | `docs/history/user-guide-complete.md` | historical | historical | Preserve the former human-led user guide. | product | 2026-05-06 | Superseded by `docs/operator-experience.md`. |
 | `docs/operator-experience.md` | current-product-guide | current | Describe current operator behavior and intervention surfaces. | product and design | 2026-09-05 | `origin/main@96a1c23` |
-| `docs/platform-modernisation-plan-v2.md` | canonical-plan | canonical | Define scope, beta boundaries, architecture direction, and delivery order. | platform architecture | 2026-09-12 | Sole forward execution plan; Slice 6b persistence status recorded. |
+| `docs/platform-modernisation-plan-v2.md` | canonical-plan | canonical | Define scope, beta boundaries, architecture direction, and delivery order. | platform architecture | 2026-09-23 | Sole forward execution plan; Phase 1 closed by ADR 0003. |
 | `docs/research/agent-harness-orchestration-notes-v1.md` | research-snapshot | snapshot | Record research on recursive, parallel, long-running, and continual harnesses. | platform architecture | 2026-08-10 | Revalidate external claims before decisions. |
 | `docs/research/current-platform-whole-system-map-v1.md` | research-snapshot | snapshot | Preserve the pre-PR #120 whole-system map and post-#120 delta. | platform architecture | 2026-09-05 | Snapshot at 2026-08-25 plus delta at `origin/main@96a1c23`. |
-| `docs/research/workflow-framework-portability-spike-v1.md` | research-snapshot | snapshot | Record the independent Slice 7d benchmark contract and measured framework evidence. | platform architecture and agent runtime | 2026-09-19 | Baseline `origin/main@c4b6a5b`; evidence collection in progress and no framework decision yet. |
+| `docs/research/workflow-framework-portability-spike-v1.md` | research-snapshot | snapshot | Record the independent Slice 7d benchmark contract and measured framework evidence. | platform architecture and agent runtime | 2026-09-23 | Completed at `origin/main@3264ce06641a80925b23d05c34da599928bfe837`; decision accepted in ADR 0003. |
 | `docs/safety/README.md` | executable-governance | current | Index the STPA analysis and executable safety catalog. | safety and platform architecture | 2026-09-05 | Enforced by `make safety-traceability-check`. |
 | `docs/safety/safety-controls-v1.yaml` | executable-governance | normative | Define machine-checked safety traceability. | safety and platform architecture | 2026-09-05 | Schema v1, enforced by CI. |
 | `docs/safety/stpa-workflow-control-analysis-v1.md` | executable-governance | accepted | Explain the STPA control structure, hazards, scenarios, and constraints. | safety and platform architecture | 2026-09-05 | Phase 1 safety baseline. |

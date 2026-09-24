@@ -1,6 +1,6 @@
 # ADR 0001: Workflow, Task, and Delegation Schema
 
-Status: accepted; Slices 7a-7c compatibility persistence implemented
+Status: accepted; Slices 7a-7d implemented and patterns adopted by ADR 0003
 Date: 2026-08-06
 Owners: platform architecture and agent runtime
 
@@ -19,8 +19,8 @@ revision. Status changes are also distributed across services.
 
 Phase 1 needs a logical schema that defines these concepts before the platform
 selects which first-party orchestration patterns to adopt. This ADR defines the
-portable contract. It does not add production database tables or choose a
-workflow vendor.
+portable contract. ADR 0003 now adopts the graph-state projection and durable-
+history integrity patterns that extend it without choosing a workflow vendor.
 
 The workflow lifecycle is governed by
 `domain/workflow/lifecycle.py`. The schema below must not permit adapters to
@@ -817,18 +817,18 @@ Costs:
 
 ## Deferred decisions
 
-This ADR intentionally does not decide:
+ADR 0003 decides which graph-state and durable-history patterns should extend
+the future kernel. This ADR continues to defer:
 
-- which first-party graph-state and durable-history patterns should extend the
-  internal sequential kernel
 - SQLite-constrained beta versus PostgreSQL and durable queue topology
 - physical JSON versus blob/object payload storage thresholds
 - the full task, attempt, assignment, and result transition matrices
 - event transport and outbox implementation
 - exact identifier format
 
-Those decisions require the remaining Phase 1 framework spike, STPA controls,
-and measured recovery/concurrency behavior.
+Those decisions require Phase 3 production-topology evidence and the existing
+STPA, security, portability, and recovery contracts; the completed Phase 1
+spike is evidence for their invariants, not a production deployment result.
 
 ## Validation criteria
 
