@@ -12,3 +12,8 @@ constraints future implementations must preserve.
   exact evidence provenance and freshness, coordinator-validated task results,
   independently versioned completion criteria, authoritative completion
   decisions, and lag-aware operator projections.
+- `0003-workflow-orchestration-pattern-adoption.md`: accepted evidence-led
+  decision to keep portable workflow evidence authoritative, adopt graph-state
+  as a rebuildable routing projection, adopt durable-history integrity and
+  recovery-journal patterns, and preserve explicit migration and rollback
+  boundaries.

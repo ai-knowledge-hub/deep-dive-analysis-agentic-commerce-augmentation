@@ -1,8 +1,8 @@
 # Workflow Framework Portability Spike v1
 
-Status: snapshot
+Status: completed evidence snapshot; decision accepted in ADR 0003
 Last verified: 2026-09-23
-Baseline: `origin/main@1ee1dd44904771acf4132db4dd3dcc1ed57ffdbd`
+Baseline: `origin/main@3264ce06641a80925b23d05c34da599928bfe837`
 Issues: [#142](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/142), [#144](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/144), [#148](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/148), [#150](https://github.com/ai-knowledge-hub/deep-dive-analysis-agentic-commerce-augmentation/issues/150)
 
 ## Decision question
@@ -17,12 +17,12 @@ The candidates are:
 - a first-party graph-state strategy inspired by explicit graph execution; and
 - a first-party durable-history strategy inspired by durable workflow systems.
 
-This document records the independent benchmark contract and evidence. It does
-not select a vendor. A later ADR must decide which patterns to adopt from
-executable results and state the supported deployment envelope. LangGraph and
-Temporal are research references only: their packages, SDKs, runtimes,
-services, persistence formats, and framework-native state are excluded from
-the implementation.
+This document records the independent benchmark contract and evidence. ADR 0003
+uses that evidence to adopt first-party graph-state projection and durable-
+history integrity patterns without selecting a vendor. LangGraph and Temporal
+are research references only: their packages, SDKs, runtimes, services,
+persistence formats, and framework-native state are excluded from the
+implementation.
 
 ## Evidence boundary
 
@@ -297,7 +297,7 @@ into the production scheduler.
 4. Add runtime-created tasks and deterministic joins to the complete scenario
    and operational matrix. **Implemented.**
 5. Publish the pattern-adoption ADR with evidence, rejected alternatives,
-   migration boundary, and rollback strategy.
+   migration boundary, and rollback strategy. **Implemented in ADR 0003.**
 
 Run the local measurement artifact with:
 
