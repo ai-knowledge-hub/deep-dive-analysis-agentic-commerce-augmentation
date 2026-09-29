@@ -384,6 +384,7 @@ def complete_authorized_effect(
         expected_envelope_digest=authorization.envelope_digest,
         effect_idempotency_key=authorization.effect_idempotency_key,
         receipt_id=normalized_receipt,
+        linked_validation_job_id=verified_receipt.linked_validation_job_id,
         outputs=outputs,
         outputs_hash=outputs_hash,
         completed_at=_format_datetime(completed_at),

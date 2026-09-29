@@ -33,6 +33,7 @@ class ApprovalReceiptError(ValueError):
 class VerifiedEffectReceipt:
     receipt_id: str
     outputs_hash: str
+    linked_validation_job_id: str | None = None
 
 
 def verify_effect_receipt(
@@ -146,6 +147,7 @@ def verify_effect_receipt(
     return VerifiedEffectReceipt(
         receipt_id=expected_receipt_id,
         outputs_hash=computed_hash,
+        linked_validation_job_id=job_id,
     )
 
 

@@ -117,13 +117,18 @@ make test
 
 ### Chat
 
-The repository currently has two different conversation models:
+At the start of Phase 2 the repository had two different conversation models:
 
 - product-discovery chat in Lab
 - predefined operator prompts and command controls in Runs
 
-There is no single free-form, execution-aware operator conversation. Chat is
-therefore adjacent to the product rather than its primary shell.
+Slice 2.1 now establishes the first shared gateway increment: `/runs` has a
+free-form, read-only operator conversation backed by a server-built execution
+snapshot, while Lab continues to use the existing discovery conversation on
+the same `/conversation` API boundary. Mutation intents remain in the
+Interventions control plane until later slices map them to exact governed
+commands. The remaining gap is promotion of this gateway to `/` and migration
+of Lab without creating another conversation architecture.
 
 ### Workflow orchestration
 
@@ -318,6 +323,54 @@ Exit gate:
   authorization where required, and event receipt
 - chat and control-plane views cannot report completion ahead of the durable
   result, evidence-completeness, and receipt gates
+
+#### Slice 2.1: read-only, run-grounded operator conversation
+
+Implemented boundary:
+
+- normal browser traffic reaches `POST /conversation/operator/runs/{run_id}`
+  through a same-origin Clerk/mock-authenticated BFF. The BFF replaces any
+  request user identity and sends a short-lived, run-bound server assertion;
+  direct API clients may use a signed human-principal bearer token. Both paths
+  derive tenant and identity from verified claims, authorize the selected run,
+  and treat request tenant or user values only as equality-checked selectors;
+- every turn is bound to one tenant, principal, and run; changing runs creates
+  a new conversation context and old sessions fail closed;
+- the immutable response snapshot includes run and active revision, ordered
+  actions and events, approval and effect state, experiment evidence where
+  linked, authoritative completion evidence, completeness markers, freshness,
+  and server-created navigation links;
+- every bounded experiment source uses an extra-row completeness probe and
+  reports `complete`, `partial`, `missing`, `unavailable`, or `contradictory`
+  state; bounded completion evidence reports its included and available counts
+  plus whether more records exist;
+- every action-linked validation job is independently read in tenant scope;
+  requested/included counts and missing, unavailable, or contradictory links
+  participate in the overall evidence state and warnings. Governed capability
+  completion persists the independently verified job link on the action in the
+  same receipt transaction. Records written before that fix may use the typed
+  output link only when the tenant, action, exact effect execution, approval,
+  idempotency identity, and validation receipt all agree. Retry and change-plan
+  actions retain a prior job only as source recovery context; their canonical
+  result link remains empty until their own verified effect receipt commits;
+- the deterministic fact catalog includes the run objective, notable events,
+  metric values and baseline deltas, validation outcomes, completion evidence,
+  and recorded recommendations with typed provenance and resolved source links;
+- completion language comes only from the verified completion decision and a
+  current projection, never from the compatibility run status;
+- model output is constrained to a closed intent and existing server-created
+  fact identifiers. Raw model prose cannot become a verified fact, command,
+  authority decision, or operator response;
+- a second authority-fence read detects changes during generation and marks the
+  response stale without rewriting its original as-of snapshot;
+- the `/runs` composer streams typed responses and renders structured facts,
+  evidence records, and scoped source links, aborts
+  in-flight UI work when the selected run changes, and exposes no execution or
+  approval command controls.
+
+This slice is deliberately execution-read-only. Conversation turns are durable
+references for continuity, but they are not workflow replay input and cannot
+mutate run, action, approval, effect, evidence, or completion state.
 
 ### Phase 3: Durable workflow kernel
 

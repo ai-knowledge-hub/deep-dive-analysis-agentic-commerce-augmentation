@@ -10,8 +10,8 @@ export function OperatorChatThread({ messages }: Props) {
     <div className="operator-chat__thread">
       {messages.length === 0 ? (
         <div className="panel__muted">
-          Ask through the quick prompts first. This first slice focuses on explain, summarize,
-          navigate, and recommendation flows.
+          Ask a free-form question or use a prompt. Answers are grounded in the selected run’s
+          server-verified run context.
         </div>
       ) : (
         messages.map((message) => (

@@ -1,7 +1,7 @@
 # Safety Analysis
 
 Status: current
-Last updated: 2026-08-30
+Last updated: 2026-09-27
 
 The Phase 1 safety baseline has two synchronized artifacts:
 
@@ -30,3 +30,11 @@ harness, policy, expiry, revocation, and supersession. Single-use effect state
 and receipt-linked fulfillment make revocation races, retries, and uncertain
 outcomes explicit without claiming the broader task-attempt, compensation, or
 parallel-workflow controls that remain planned.
+
+Phase 2.1 keeps operator conversation outside the control path. The gateway can
+explain verified run evidence and recommend navigation, but it has no command
+dependency and refuses mutation language. Run lifecycle status cannot be used
+as completion evidence, stale snapshots are marked after a second authority
+fence read, and conversation state is excluded from workflow replay. This
+preserves SC-10, SC-11, and SC-13 while later write-capable conversation remains
+subject to the existing governed-command controls.

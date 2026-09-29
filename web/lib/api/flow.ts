@@ -32,6 +32,7 @@ import {
   ValidationJobResponse,
   ValidationProviderRunResponse,
 } from "./types";
+import type { OperatorConversationResponse } from "../operatorConversationTypes";
 import type {
   AgentRunCompletionRepairResponse,
   AgentRunCompletionResponse,
@@ -66,6 +67,30 @@ export async function startConversation(
       metadata: metadata ?? undefined,
     }),
   });
+}
+
+export async function sendOperatorConversationMessageStream(
+  runId: string,
+  message: string,
+  sessionId: string | null,
+  handlers: StreamHandlers<OperatorConversationResponse>,
+  signal?: AbortSignal,
+): Promise<OperatorConversationResponse> {
+  const clientId = getClientId();
+  return requestStreamWithEvents<OperatorConversationResponse>(
+    `/api/operator-conversation/runs/${encodeURIComponent(runId)}/stream`,
+    {
+      method: "POST",
+      signal,
+      body: JSON.stringify({
+        message,
+        client_id: clientId,
+        session_id: sessionId ?? undefined,
+      }),
+    },
+    handlers,
+    { sameOrigin: true },
+  );
 }
 
 export async function startConversationStream(

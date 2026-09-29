@@ -181,7 +181,9 @@ def _recovery_template_for_capability(
     }:
         template["inputs"]["variant_id"] = variant_id
     if validation_job_id:
-        template["inputs"]["validation_job_id"] = validation_job_id
+        template["inputs"]["recovery_context"][
+            "source_validation_job_id"
+        ] = validation_job_id
 
     if capability_name == "request_synthetic_validation":
         template["inputs"]["auto_run"] = False
@@ -338,6 +340,13 @@ def create_change_plan_recovery_action(
     )
     inputs = dict(recovery_template.get("inputs") or {})
     recovery_context = dict(inputs.get("recovery_context") or {})
+    source_validation_job_id = str(
+        (source_action or {}).get("validation_job_id") or ""
+    ).strip()
+    if source_validation_job_id:
+        recovery_context["source_validation_job_id"] = source_validation_job_id
+    else:
+        recovery_context.pop("source_validation_job_id", None)
     recovery_context.setdefault("harness", _harness_context(run))
     recovery_context.setdefault(
         "selection_reason",
@@ -368,9 +377,7 @@ def create_change_plan_recovery_action(
         else None,
         hypothesis_id=source_action.get("hypothesis_id") if source_action else None,
         variant_id=source_action.get("variant_id") if source_action else None,
-        validation_job_id=source_action.get("validation_job_id")
-        if source_action
-        else None,
+        validation_job_id=None,
         tool_id=tool_id,
         skill_id=skill_id,
         registry_version=version_context["registry_version"],
@@ -415,6 +422,9 @@ def create_change_plan_recovery_action(
             "experiment_id": run.get("experiment_id"),
             "variant_id": recovery_action.get("variant_id"),
             "validation_job_id": recovery_action.get("validation_job_id"),
+            "source_validation_job_id": (
+                source_action.get("validation_job_id") if source_action else None
+            ),
             "hypothesis_id": recovery_action.get("hypothesis_id"),
             "snapshot_version": recovery_action.get("snapshot_version"),
             "metric_id": None,
@@ -496,9 +506,13 @@ def create_retry_action(
         )
         retry_inputs = dict(recovery_template.get("inputs") or retry_inputs)
     retry_context = dict(retry_inputs.get("recovery_context") or {})
+    source_validation_job_id = str(action.get("validation_job_id") or "").strip()
+    if source_validation_job_id:
+        retry_context["source_validation_job_id"] = source_validation_job_id
     if retry_strategy in {"last_safe_checkpoint", "create_recovery_action"}:
         retry_context.setdefault("harness", _harness_context(run))
         retry_context.setdefault("strategy", retry_strategy)
+    if retry_context:
         retry_inputs["recovery_context"] = retry_context
     rollback_guidance = recovery_template.get(
         "rollback_guidance"
@@ -525,7 +539,7 @@ def create_retry_action(
         snapshot_version=action.get("snapshot_version"),
         hypothesis_id=action.get("hypothesis_id"),
         variant_id=action.get("variant_id"),
-        validation_job_id=action.get("validation_job_id"),
+        validation_job_id=None,
         tool_id=tool_id,
         skill_id=skill_id,
         registry_version=version_context["registry_version"],
@@ -576,6 +590,7 @@ def create_retry_action(
             "experiment_id": run.get("experiment_id"),
             "variant_id": retry_action.get("variant_id"),
             "validation_job_id": retry_action.get("validation_job_id"),
+            "source_validation_job_id": action.get("validation_job_id"),
             "hypothesis_id": retry_action.get("hypothesis_id"),
             "snapshot_version": retry_action.get("snapshot_version"),
             "metric_id": None,

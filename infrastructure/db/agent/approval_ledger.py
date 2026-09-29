@@ -5,7 +5,6 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from domain.workflow.approval import (
-    ApprovalBinding,
     ApprovalContractError,
     ApprovalEnvelope,
     ApprovalStatus,
@@ -17,27 +16,14 @@ from domain.workflow.approval_serialization import (
 )
 from domain.workflow.approval_execution import approval_execution_source_digest
 import infrastructure.db.agent.approval_persistence as approval_persistence
+from infrastructure.db.agent.approval_scope import (
+    bindings_have_compatible_supersession_scope,
+)
+from infrastructure.db.agent.validation_job_links import validation_job_link_conflict
 from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
 
 
-_SUPERSESSION_SCOPE_FIELDS = (
-    "tenant_id",
-    "principal_type",
-    "principal_id",
-    "workflow_id",
-    "capability_id",
-    "tool_id",
-    "effect_class",
-    "native_target",
-    "authority_hash",
-    "registry_version",
-    "registry_fingerprint",
-    "harness_id",
-    "harness_version",
-    "policy_profile_id",
-    "policy_version",
-)
 _ALLOWED_ACTION_PROJECTION_TRANSITIONS = frozenset(
     {
         ("proposed", None),
@@ -424,6 +410,7 @@ def commit_effect_completion(
     expected_envelope_digest: str,
     effect_idempotency_key: str,
     receipt_id: str,
+    linked_validation_job_id: str | None,
     outputs: Dict[str, Any],
     outputs_hash: str,
     completed_at: str,
@@ -523,7 +510,7 @@ def commit_effect_completion(
             }
         action_row = conn.execute(
             """
-            SELECT status FROM agent_actions
+            SELECT status, validation_job_id FROM agent_actions
             WHERE id = ? AND agent_run_id = ?
             """,
             (action_id, workflow_id),
@@ -534,6 +521,20 @@ def commit_effect_completion(
                 "outcome": "action_state_conflict",
                 "reason": "action is not awaiting effect completion or reconciliation",
             }
+        link_conflict = validation_job_link_conflict(
+            conn=conn,
+            linked_validation_job_id=linked_validation_job_id,
+            existing_validation_job_id=action_row["validation_job_id"],
+            tenant_id=tenant_id,
+            action_id=action_id,
+            approval_id=approval_id,
+            effect_idempotency_key=effect_idempotency_key,
+            execution_id=execution_id,
+            receipt_id=receipt_id,
+        )
+        if link_conflict:
+            conn.rollback()
+            return {"outcome": "identity_conflict", "reason": link_conflict}
 
         result_json = to_json(result) or to_json({})
         result_hash = str(result["result_hash"])
@@ -617,6 +618,7 @@ def commit_effect_completion(
             UPDATE agent_actions
             SET status = 'executed', outputs_json = json(?), outputs_hash = ?,
                 receipt_id = ?, error_text = NULL,
+                validation_job_id = COALESCE(validation_job_id, ?),
                 approval_id = ?, approval_envelope_digest = ?,
                 updated_at = datetime('now')
             WHERE id = ? AND agent_run_id = ? AND status IN ('executing', 'failed')
@@ -625,6 +627,7 @@ def commit_effect_completion(
                 to_json(outputs) or to_json({}),
                 outputs_hash,
                 receipt_id,
+                linked_validation_job_id,
                 approval_id,
                 mutation["envelope_digest"],
                 action_id,
@@ -1017,7 +1020,7 @@ def _validate_supersession_mutations_locked(
                 "replacement approval does not exist in the same tenant and workflow",
                 status_code=404,
             )
-        if not _bindings_have_compatible_supersession_scope(
+        if not bindings_have_compatible_supersession_scope(
             source.binding, current.binding
         ):
             return _validation_error(
@@ -1105,15 +1108,6 @@ def _validated_history_envelope_locked(
             status_code=500,
         )
     return record_envelope, None
-
-
-def _bindings_have_compatible_supersession_scope(
-    source: ApprovalBinding, replacement: ApprovalBinding
-) -> bool:
-    return all(
-        getattr(source, field) == getattr(replacement, field)
-        for field in _SUPERSESSION_SCOPE_FIELDS
-    )
 
 
 def _validation_error(

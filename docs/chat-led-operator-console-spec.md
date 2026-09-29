@@ -4,6 +4,12 @@ Status: future reference specification
 Last verified: 2026-09-05
 Current behavior: `docs/operator-experience.md`
 
+Implementation note (2026-09-27): Phase 2.1 implements the read-only subset of
+Operator Chat on `/runs`: free-form, run-grounded explanation, evidence,
+recommendation, freshness, and navigation. Steering remains an explicit
+Interventions responsibility; chat mutations in this document are future work
+and must use governed command envelopes when introduced.
+
 This document defines the recommended operator experience for the platform as it evolves into an agent-first execution system.
 
 The core idea is:

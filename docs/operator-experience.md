@@ -1,7 +1,7 @@
 # Operator Experience Guide
 
 Status: current
-Last updated: 2026-06-17
+Last updated: 2026-09-27
 
 This is the current user-facing product guide for the agentic commerce control plane. It replaces the older human-led lab guide as the default way to understand the web app.
 
@@ -68,6 +68,15 @@ Role: execution supervision.
 
 Use it to inspect active and recent agent execution. Runs should expose principal, harness, policy, registry, skills, tools, action state, timeline, receipts, and operator chat context.
 The top of Runs should keep one start-here decision visible before detailed queue, timeline, and audit context.
+
+The operator chat on this screen now accepts free-form questions grounded in
+the selected run. Its answer shows a snapshot digest, freshness, warnings, and
+links to related records. It is read-only: requests to approve, pause, retry,
+cancel, or otherwise change execution are not performed and direct the operator
+to the governed Interventions workspace. Selecting another run clears the chat
+context so evidence cannot bleed across runs. Normal signed-in browser sessions
+authenticate through the same-origin web gateway; operators do not load a
+registry-write credential to ask read-only questions.
 
 Primary questions:
 

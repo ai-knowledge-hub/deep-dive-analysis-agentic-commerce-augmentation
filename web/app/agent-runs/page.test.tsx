@@ -26,8 +26,7 @@ const getAgentRuntimeRegistryReleaseMock = vi.fn();
 const updateAgentRuntimeRegistryOwnershipMock = vi.fn();
 const verifyAgentRuntimeRegistryApprovalReceiptMock = vi.fn();
 const backfillAgentRuntimeRegistryPinsMock = vi.fn();
-const issueAgentRunCommandMock = vi.fn();
-const preflightAgentRunCommandMock = vi.fn();
+const sendOperatorConversationMessageStreamMock = vi.fn();
 let searchParamsValue = "experiment_id=exp-1";
 
 const localStorageMock = {
@@ -92,9 +91,8 @@ vi.mock("../../lib/api", () => ({
     verifyAgentRuntimeRegistryApprovalReceiptMock(...args),
   backfillAgentRuntimeRegistryPins: (...args: unknown[]) =>
     backfillAgentRuntimeRegistryPinsMock(...args),
-  issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
-  preflightAgentRunCommand: (...args: unknown[]) =>
-    preflightAgentRunCommandMock(...args),
+  sendOperatorConversationMessageStream: (...args: unknown[]) =>
+    sendOperatorConversationMessageStreamMock(...args),
   getRegistryWriteToken: () => undefined,
   setRegistryWriteToken: vi.fn(),
   clearRegistryWriteToken: vi.fn(),
@@ -130,8 +128,7 @@ describe("AgentRunsPage timeline presets", () => {
     updateAgentRuntimeRegistryOwnershipMock.mockReset();
     verifyAgentRuntimeRegistryApprovalReceiptMock.mockReset();
     backfillAgentRuntimeRegistryPinsMock.mockReset();
-    issueAgentRunCommandMock.mockReset();
-    preflightAgentRunCommandMock.mockReset();
+    sendOperatorConversationMessageStreamMock.mockReset();
     searchParamsValue = "experiment_id=exp-1";
     Element.prototype.scrollIntoView = vi.fn();
     window.localStorage.clear();
@@ -243,23 +240,40 @@ describe("AgentRunsPage timeline presets", () => {
     createAgentRunMock.mockResolvedValue({ run: { id: "run-2" } });
     decideAgentActionMock.mockResolvedValue({});
     controlAgentRunMock.mockResolvedValue({});
-    issueAgentRunCommandMock.mockResolvedValue({
-      command: { id: "evt-command", run_id: "run-1", sequence: 0, event_type: "operator_command_approve", status: "completed" },
-      run: { id: "run-1" },
-    });
-    preflightAgentRunCommandMock.mockResolvedValue({
-      preflight: {
-        allowed: true,
-        command_type: "approve",
-        risk_level: "low",
-        requires_confirmation: false,
-        requires_approval: true,
-        side_effects: [],
-        blockers: [],
-        warnings: [],
-        rollback_guidance: "No direct side effects are expected from this command.",
-        summary: "Preflight passed with low risk.",
+    sendOperatorConversationMessageStreamMock.mockResolvedValue({
+      contract: "operator-conversation-response.v1",
+      session_id: "session-1",
+      run_id: "run-1",
+      intent: "explain_run",
+      answer: "Verified run explanation.",
+      verified_facts: [],
+      inference: { kind: "validated_fact_selection", model_prose_exposed: false },
+      recommendation: null,
+      evidence: [],
+      navigation: [{ label: "Run workspace", href: "/runs?run_id=run-1" }],
+      freshness: {
+        state: "current",
+        data_state: "complete",
+        snapshot_digest: "a".repeat(64),
       },
+      warnings: [],
+      snapshot: {
+        contract: "operator-execution-snapshot.v1",
+        digest: "a".repeat(64),
+        fetched_at: "2026-09-27T10:00:00Z",
+        scope: { tenant_id: "client-a", principal_id: "human:user-a" },
+        run: { id: "run-1" },
+        actions: [],
+        events: [],
+        event_page: {},
+        approvals: [],
+        effects: [],
+        experiment: null,
+        validation_jobs: [],
+        completion: {},
+        completeness: {},
+      },
+      read_only: true,
     });
     listAgentRuntimeRegistryMock.mockResolvedValue({
       registry_version: "agent-runtime-static-v1",
@@ -899,7 +913,7 @@ describe("AgentRunsPage timeline presets", () => {
     );
   });
 
-  it("lets operator chat drive timeline filters and next-action selection", async () => {
+  it("keeps operator chat read-only while structured controls remain explicit", async () => {
     getAgentRunMock.mockResolvedValue({
       run: {
         id: "run-1",
@@ -960,24 +974,18 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
 
-    await userEvent.click(screen.getAllByRole("button", { name: /^Open experiment$/i })[0]);
-    expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
+    await userEvent.click(screen.getByRole("button", { name: /Explain run/i }));
+    await waitFor(() =>
+      expect(sendOperatorConversationMessageStreamMock).toHaveBeenCalled(),
+    );
+    expect(screen.queryByRole("button", { name: /Focus policy events/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Approve selected/i })).not.toBeInTheDocument();
 
     getAgentRunEventsMock.mockClear();
-
-    await userEvent.click(screen.getByRole("button", { name: /Focus policy events/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Policy$/i }));
     await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
-    let payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    const payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
     expect(payload.event_type).toBe("policy");
-    expect(payload.status).toBe("failed");
-
-    getAgentRunEventsMock.mockClear();
-
-    await userEvent.click(screen.getByRole("button", { name: /Focus approvals/i }));
-    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
-    payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
-    expect(payload.event_type).toBe("all");
-    expect(payload.status).toBe("proposed");
 
     await userEvent.click(screen.getByRole("button", { name: /Jump to next action/i }));
     expect(screen.getByText(/Selection: publish copy revision/i)).toBeInTheDocument();
@@ -993,20 +1001,7 @@ describe("AgentRunsPage timeline presets", () => {
     expect(screen.queryByRole("button", { name: /Variant: variant-/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Metric: metric-/i })).not.toBeInTheDocument();
 
-    getAgentRunEventsMock.mockClear();
-
-    await userEvent.click(screen.getByRole("button", { name: /Focus validation-linked/i }));
-    await waitFor(() => expect(getAgentRunEventsMock).toHaveBeenCalled());
-    payload = getAgentRunEventsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
-    expect(payload.capability_name).toBe("request_synthetic_validation");
-
-    await userEvent.click(screen.getByRole("button", { name: /^Open validation$/i }));
-    expect(pushMock).toHaveBeenCalledWith("/validation?experiment_id=exp-1&run_id=run-1");
-
-    await userEvent.click(screen.getByRole("button", { name: /Open interventions/i }));
-    expect(pushMock).toHaveBeenCalledWith("/interventions?run_id=run-1");
-
-    await userEvent.click(screen.getByRole("button", { name: /Open experiment context/i }));
+    await userEvent.click(screen.getAllByRole("button", { name: /^Open experiment$/i })[0]);
     expect(pushMock).toHaveBeenCalledWith("/experiments?experiment_id=exp-1&run_id=run-1");
   });
 
@@ -1277,7 +1272,7 @@ describe("AgentRunsPage timeline presets", () => {
     );
   });
 
-  it("routes operator chat steering commands through the command API", async () => {
+  it("routes mutation language to the read-only conversation gateway", async () => {
     getAgentRunMock.mockResolvedValue({
       run: {
         id: "run-1",
@@ -1310,27 +1305,22 @@ describe("AgentRunsPage timeline presets", () => {
     render(<AgentRunsPage />);
 
     await screen.findByText(/Selection: run variant/i);
-    await userEvent.click(screen.getByRole("button", { name: /Approve selected/i }));
+    await userEvent.type(
+      screen.getByLabelText(/Ask about the selected run/i),
+      "Approve this action now",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
 
-    expect(preflightAgentRunCommandMock).toHaveBeenCalledWith(
-      "run-1",
-      {
-        command_type: "approve",
-        action_id: "action-1",
-        message: "Approve run variant",
-      },
-      "user-a",
+    await waitFor(() =>
+      expect(sendOperatorConversationMessageStreamMock).toHaveBeenCalledWith(
+        "run-1",
+        "Approve this action now",
+        null,
+        expect.any(Object),
+        expect.any(AbortSignal),
+      ),
     );
-    await waitFor(() => expect(issueAgentRunCommandMock).toHaveBeenCalled());
-    expect(issueAgentRunCommandMock).toHaveBeenCalledWith(
-      "run-1",
-      {
-        command_type: "approve",
-        action_id: "action-1",
-        message: "Approve run variant",
-      },
-      "user-a",
-    );
+    expect(decideAgentActionMock).not.toHaveBeenCalled();
   });
 
   it("shows protocol discovery provenance for selected actions", async () => {

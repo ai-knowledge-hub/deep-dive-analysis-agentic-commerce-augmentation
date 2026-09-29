@@ -214,11 +214,13 @@ def test_exact_approval_is_consumed_fulfilled_and_linked_to_receipt(
     )
 
     calls = 0
+    validation_job_id = None
 
     def _effect(**kwargs):
-        nonlocal calls
+        nonlocal calls, validation_job_id
         calls += 1
         job = _matching_validation_job(deps, approved["action"])
+        validation_job_id = job["id"]
         return {"validation_job_id": job["id"]}
 
     monkeypatch.setattr(
@@ -232,6 +234,7 @@ def test_exact_approval_is_consumed_fulfilled_and_linked_to_receipt(
     assert result.action is not None
     assert result.action["status"] == "executed"
     assert result.action["receipt_id"].startswith("validation-job:")
+    assert result.action["validation_job_id"] == validation_job_id
     effect = deps.approval_ledger.get_effect_execution(
         tenant_id="client-a",
         workflow_id=run["id"],

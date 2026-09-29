@@ -1,4 +1,4 @@
-import type { AgentRunCommandType } from "../../lib/types";
+import type { OperatorConversationResponse } from "../../lib/operatorConversationTypes";
 
 export type PromptId =
   | "brief"
@@ -12,11 +12,5 @@ export type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
-};
-
-export type OperatorCommand = {
-  command_type: AgentRunCommandType;
-  action_id?: string | null;
-  message?: string | null;
-  metadata?: Record<string, unknown>;
+  response?: OperatorConversationResponse;
 };
