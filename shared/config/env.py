@@ -163,6 +163,16 @@ class Settings(BaseSettings):
         default="deep-dive-analysis-agentic-commerce-augmentation",
         validation_alias=AliasChoices("AGENT_PRINCIPAL_TOKEN_ISSUER"),
     )
+    operator_bff_signing_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPERATOR_BFF_SIGNING_SECRET"),
+    )
+    operator_bff_assertion_max_ttl_seconds: int = Field(
+        default=60,
+        ge=30,
+        le=300,
+        validation_alias=AliasChoices("OPERATOR_BFF_ASSERTION_MAX_TTL_SECONDS"),
+    )
     registry_approval_signing_secret: str | None = Field(
         default=None,
         validation_alias=AliasChoices("REGISTRY_APPROVAL_SIGNING_SECRET"),

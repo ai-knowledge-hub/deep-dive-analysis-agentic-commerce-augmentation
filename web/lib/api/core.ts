@@ -178,9 +178,10 @@ export async function requestStreamWithEvents<T>(
   path: string,
   init: RequestInit | undefined,
   handlers: StreamHandlers<T>,
+  options: { sameOrigin?: boolean } = {},
 ): Promise<T> {
   const { headers: initHeaders, ...rest } = init ?? {};
-  const response = await fetch(`${resolveApiBase()}${path}`, {
+  const response = await fetch(`${options.sameOrigin ? "" : resolveApiBase()}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
@@ -223,7 +224,10 @@ export async function requestStreamWithEvents<T>(
             handlers.onDelta?.(parsed.content ?? "");
           } else if (eventName === "status") {
             handlers.onStatus?.(parsed.phase ?? "");
-          } else if (eventName === "conversation") {
+          } else if (
+            eventName === "conversation" ||
+            eventName === "operator_conversation"
+          ) {
             lastPayload = parsed as T;
             handlers.onPayload?.(parsed as T);
           }

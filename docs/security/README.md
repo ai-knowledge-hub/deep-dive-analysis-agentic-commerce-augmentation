@@ -1,7 +1,7 @@
 # Security Analysis
 
 Status: current
-Last updated: 2026-08-30
+Last updated: 2026-09-27
 
 The Phase 1 agent-workflow security baseline has three synchronized artifacts:
 
@@ -42,3 +42,26 @@ started, uncertain, and succeeded outcomes and links the final receipt to
 approval fulfillment and the compatibility action projection. SEC-16 remains
 planned, so production publishing and write-capable dynamic delegation remain
 blocked by the immutable beta release contract.
+
+The Phase 2.1 operator gateway accepts normal browser traffic only through the
+same-origin Clerk/mock-authenticated web BFF. The BFF replaces request identity
+and creates a short-lived server assertion bound to tenant, user, and exact run;
+its dedicated signing secret never reaches the browser and cannot mint agent or
+write authority. Direct API clients require a signed human bearer token. Body
+tenant/user selectors must match verified claims; membership and the fixed
+read scope are then checked. Sessions are bound
+to one authorized run and cannot be carried across run or tenant boundaries.
+Retrieved execution content and user questions are treated as untrusted data:
+the model may return only a closed intent and existing server-created fact IDs,
+while raw generated prose is never exposed as fact or authority. Mandatory
+intent facts, typed provenance, evidence completeness states—including missing,
+unavailable, and contradictory linked validation jobs—and resolved source links
+are server-owned. Client-supplied lifecycle, revision, cursor, and completion
+claims are rejected. The gateway contains no execution-command dependency.
+Governed validation completion records its verified job link atomically with
+the effect receipt. Compatibility reads of the older output-only shape require
+the exact tenant, action, approval, effect-execution, idempotency, and receipt
+provenance; an output value alone cannot introduce operator evidence.
+Recovery actions carry a prior validation job only as non-authoritative source
+context. They begin with no result link, preventing a stale source job from
+blocking or being mistaken for the retry's separately authorized effect.

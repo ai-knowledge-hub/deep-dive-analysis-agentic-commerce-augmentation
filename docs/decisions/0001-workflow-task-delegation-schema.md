@@ -830,6 +830,63 @@ Those decisions require Phase 3 production-topology evidence and the existing
 STPA, security, portability, and recovery contracts; the completed Phase 1
 spike is evidence for their invariants, not a production deployment result.
 
+## Phase 2.1 operator-conversation projection contract
+
+The first production operator-conversation increment is a read-only projection
+over one authorized workflow run. It does not introduce a third execution
+model, scheduler, command format, or completion authority.
+
+- Browser requests pass through the same-origin authenticated web BFF, which
+  replaces request identity and signs a short-lived assertion bound to the
+  exact tenant, user, and run. Direct API clients may instead present a signed,
+  expiring human-principal bearer token. Tenant and user authority come only
+  from verified claims; optional request selectors must exactly match them.
+  Revision, cursor, lifecycle, or completion claims are rejected.
+- Each operator session is scoped to one tenant, authenticated identity, and
+  run. Conversation persistence stores references and answer evidence only;
+  workflow reconstruction never reads mutable conversation state.
+- A server-built snapshot pins the active graph revision, ordered action and
+  event projection, approval/effect receipts, linked experiment evidence,
+  completion decision/projection, completeness, cursor, and a canonical
+  digest. The answer retains this as-of snapshot even when a post-reasoning
+  fence read observes newer execution state.
+- Bounded experiment collections are read with an extra-row probe and expose
+  source-specific completeness. Missing links, failed reads, truncation, and
+  contradictory experiment/variant identities are distinguishable states and
+  become operator warnings rather than disappearing behind a current freshness
+  label. Bounded completion evidence exposes its truncation, observed count,
+  and whether additional records exist.
+- Action-linked validation jobs expose requested and included counts. Missing
+  tenant-scoped records, dependency failures, and contradictory job/action
+  identities are distinct fail-closed completeness states and warnings. The
+  governed effect-completion transaction writes the verified validation-job
+  identity to both the typed outputs and canonical action link. For records
+  produced before that dual representation, an output-only link is accepted
+  only when it matches the succeeded effect's tenant, action, approval,
+  idempotency key, execution identity, and receipt. A retry or change-plan
+  action never inherits this result identity: the prior job is preserved under
+  source recovery context and the new action's canonical link is populated
+  only by that action's independently verified receipt transaction.
+- Compatibility `agent_runs.status` is lifecycle context, not completion
+  authority. Only a current verified completion decision may support a
+  completion statement; missing, stale, or corrupt completion evidence produces
+  an explicit unavailable warning.
+- The reasoning boundary accepts only a closed intent and identifiers from the
+  server-created fact catalog. Generated prose and retrieved execution text are
+  untrusted and cannot alter facts, authority, navigation targets, or commands.
+- Intent admission adds mandatory server-owned fact categories even when model
+  selection omits them. Objective, event, metric and baseline comparison,
+  validation, completion-evidence, and recommendation facts retain typed record
+  provenance and resolved in-scope navigation links.
+- Mutation language receives a read-only refusal and a server-created deep link
+  to the governed Interventions surface. The conversation service has no
+  dependency on the command gateway.
+
+This contract is the shared gateway seam for later `/` and Lab convergence.
+Later write-capable chat must map intent to an exact command envelope and pass
+the existing preflight, approval, authority, idempotency, and receipt controls;
+it must not weaken this read-model boundary.
+
 ## Validation criteria
 
 Slice 2 is complete when reviewers can trace every target concept to a logical

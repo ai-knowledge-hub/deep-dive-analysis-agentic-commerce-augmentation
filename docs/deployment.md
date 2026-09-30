@@ -214,7 +214,10 @@ is recorded outside this application.
 3. Set Clerk env vars (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
    `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL`,
    `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL`)
-4. Deploy automatically on push
+4. Set the same high-entropy `OPERATOR_BFF_SIGNING_SECRET` on the web and API
+   services. Set server-only `OPERATOR_API_URL` on the web service when the API
+   has an internal address.
+5. Deploy automatically on push
 
 ### Vercel (Full‑stack) — Planned, Not Built
 

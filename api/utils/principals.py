@@ -116,7 +116,11 @@ def agent_principal_token_metadata() -> dict[str, Any]:
                 "scope": "agent_runs:read",
                 "kind": "endpoint",
                 "grants": "read scoped agent-run registry and run-event surfaces",
-                "required_for": ["GET /agent-runs/registry"],
+                "required_for": [
+                    "GET /agent-runs/registry",
+                    "POST /conversation/operator/runs/{run_id}/message",
+                    "POST /conversation/operator/runs/{run_id}/stream",
+                ],
             },
             {
                 "scope": "agent_runs:write",
@@ -416,7 +420,9 @@ def _verify_agent_principal_token(token: str) -> dict[str, Any]:
             status_code=401, detail="Invalid agent principal token audience"
         )
     if str(payload.get("iss") or "") != settings.agent_principal_token_issuer:
-        raise HTTPException(status_code=401, detail="Invalid agent principal token issuer")
+        raise HTTPException(
+            status_code=401, detail="Invalid agent principal token issuer"
+        )
     return payload
 
 

@@ -19,7 +19,6 @@ import type {
   AgentRegistryRelease,
   AgentRegistryReleaseDetail,
   AgentRun,
-  AgentRunCommandType,
   AgentRunEvent,
   AgentRuntimeRegistryResponse,
   Experiment,
@@ -34,13 +33,11 @@ import {
   getAgentRunEvents,
   getAgentRuntimeRegistryRelease,
   getExternalAgentJobForRun,
-  issueAgentRunCommand,
   listExperiments,
   listAgentRuns,
   listAgentRuntimeRegistryAudit,
   listAgentRuntimeRegistryReleases,
   listAgentRuntimeRegistry,
-  preflightAgentRunCommand,
   updateAgentRuntimeRegistryOwnership,
   verifyAgentRuntimeRegistryApprovalReceipt,
   verifyExternalAgentJobReceiptForRun,
@@ -1299,47 +1296,6 @@ function AgentRunsPageContent() {
     [loadRuns, loadSelected, selectedRunId, userId],
   );
 
-  const handleOperatorCommand = useCallback(
-    async (command: {
-      command_type: AgentRunCommandType;
-      action_id?: string | null;
-      message?: string | null;
-      metadata?: Record<string, unknown>;
-    }) => {
-      if (!userId || !selectedRunId) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await issueAgentRunCommand(selectedRunId, command, userId);
-        await loadSelected();
-        await loadRuns();
-        return response;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to issue command.");
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [loadRuns, loadSelected, selectedRunId, userId],
-  );
-
-  const handleOperatorCommandPreflight = useCallback(
-    async (command: {
-      command_type: AgentRunCommandType;
-      action_id?: string | null;
-      message?: string | null;
-      metadata?: Record<string, unknown>;
-    }) => {
-      if (!userId || !selectedRunId) {
-        throw new Error("Select a run before issuing an operator command.");
-      }
-      const response = await preflightAgentRunCommand(selectedRunId, command, userId);
-      return response.preflight;
-    },
-    [selectedRunId, userId],
-  );
-
   const verifyExternalAgentReceipt = useCallback(async () => {
     if (!userId || !selectedRun?.id) return;
     setExternalAgentJobVerificationBusy(true);
@@ -1450,73 +1406,12 @@ function AgentRunsPageContent() {
                 run={selectedRun}
                 actions={actions}
                 events={runEvents}
-                runtimeRegistry={runtimeRegistry}
+                userId={userId}
                 selectedAction={selectedAction}
                 nextRecommendedAction={nextRecommendedAction}
                 onJumpToNextAction={() => {
                   if (nextRecommendedAction.action?.id) {
                     focusSelectedActionDetail(nextRecommendedAction.action.id);
-                  }
-                }}
-                onPreflightCommand={handleOperatorCommandPreflight}
-                onIssueCommand={handleOperatorCommand}
-                onOpenExperiment={() => {
-                  if (selectedRun?.experiment_id) {
-                    const params = new URLSearchParams();
-                    params.set("experiment_id", selectedRun.experiment_id);
-                    params.set("run_id", selectedRun.id);
-                    router.push(`/experiments?${params.toString()}`);
-                  }
-                }}
-                onOpenValidation={() =>
-                  router.push(
-                    buildValidationHref({
-                      experimentId: selectedRun?.experiment_id,
-                      runId: selectedRun?.id,
-                    }),
-                  )
-                }
-                onOpenInterventionsForRun={() => {
-                  if (!selectedRun?.id) return;
-                  router.push(`/interventions?run_id=${selectedRun.id}`);
-                }}
-                onFocusFailures={() => {
-                  setTimelineFilter("failed");
-                  setTimelineStatusFilter("failed");
-                  setTimelineCapabilityFilter("all");
-                  setTimelinePreset("custom");
-                }}
-                onFocusApprovals={() => {
-                  setTimelineFilter("all");
-                  setTimelineStatusFilter("proposed");
-                  setTimelineCapabilityFilter("all");
-                  setTimelineTimeWindow("all");
-                  setTimelinePreset("custom");
-                  if (nextRecommendedAction.action?.id) {
-                    focusSelectedActionDetail(nextRecommendedAction.action.id);
-                  }
-                }}
-                onFocusPolicy={() => {
-                  setTimelineFilter("policy");
-                  setTimelineStatusFilter("failed");
-                  setTimelineCapabilityFilter("all");
-                  setTimelineTimeWindow("24h");
-                  setTimelinePreset("custom");
-                }}
-                onFocusValidationLinked={() => {
-                  const validationAction =
-                    actions.find((item) => Boolean(item.validation_job_id)) ??
-                    actions.find(
-                      (item) => item.capability_name === "request_synthetic_validation",
-                    ) ??
-                    null;
-                  setTimelineFilter("all");
-                  setTimelineStatusFilter("all");
-                  setTimelineCapabilityFilter("request_synthetic_validation");
-                  setTimelineTimeWindow("7d");
-                  setTimelinePreset("custom");
-                  if (validationAction?.id) {
-                    setSelectedActionId(validationAction.id);
                   }
                 }}
               />

@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from shared.db.connection import init_db
 from api.routes import products as products_route
 from api.routes import conversation as conversation_route
+from api.routes import operator_conversation as operator_conversation_route
 from api.routes import intent as intent_route
 from api.routes import evidence as evidence_route
 from api.routes import simulation as simulation_route
@@ -37,8 +38,12 @@ from api.routes import loop as loop_route
 from api.routes import memory as memory_route
 from api.routes import calibration as calibration_route
 from api.routes import agent_runs_registry as agent_runs_registry_route
-from api.routes import agent_runs_registry_harnesses as agent_runs_registry_harnesses_route
-from api.routes import agent_runs_registry_profiles as agent_runs_registry_profiles_route
+from api.routes import (
+    agent_runs_registry_harnesses as agent_runs_registry_harnesses_route,
+)
+from api.routes import (
+    agent_runs_registry_profiles as agent_runs_registry_profiles_route,
+)
 from api.routes import agent_runs_control as agent_runs_control_route
 from api.routes import agent_runs_commands as agent_runs_commands_route
 from api.routes import agent_approvals as agent_approvals_route
@@ -62,6 +67,7 @@ if FastAPI:
         )
     app.include_router(products_route.router)
     app.include_router(conversation_route.router)
+    app.include_router(operator_conversation_route.router)
     app.include_router(intent_route.router)
     app.include_router(evidence_route.router)
     app.include_router(evidence_route.representation_router)
