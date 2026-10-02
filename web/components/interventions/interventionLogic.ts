@@ -14,6 +14,7 @@ import type {
   RetryItem,
   RiskLevel,
 } from "./interventionTypes";
+import type { OperatorCommandRecord } from "../../lib/operatorConversationTypes";
 
 const HIGH_RISK_CAPABILITIES = new Set([
   "promote_variant_prod",
@@ -112,6 +113,10 @@ export function buildDetails(
   actions: InterventionDetail["actions"],
   events: AgentRunEvent[],
   harnessProfiles: AgentRuntimeHarnessProfile[] = [],
+  operatorCommandRecords: OperatorCommandRecord[] = [],
+  operatorCommandsAvailable = true,
+  operatorCommandsComplete = true,
+  operatorCommandTotalCount = operatorCommandRecords.length,
 ): InterventionDetail {
   const proposedActions = actions.filter((item) => normalize(item.status) === "proposed");
   const approvedActions = actions.filter((item) => normalize(item.status) === "approved");
@@ -129,6 +134,10 @@ export function buildDetails(
     approvedActions,
     latestPolicyEvent,
     latestFailureEvent,
+    operatorCommandRecords,
+    operatorCommandsAvailable,
+    operatorCommandsComplete,
+    operatorCommandTotalCount,
   };
 }
 
@@ -244,11 +253,15 @@ export function buildEscalationItem(detail: InterventionDetail): EscalationItem 
 }
 
 export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
-  return detail.events
+  const durableProposalIds = new Set(
+    detail.operatorCommandRecords.map((record) => record.proposal.proposal_id),
+  );
+  const eventItems = detail.events
     .filter((event) => {
       const eventType = String(event.event_type || "");
+      const proposalId = String(event.anchors?.proposal_id || "");
       return (
-        eventType.startsWith("operator_command_") ||
+        (eventType.startsWith("operator_command_") && !durableProposalIds.has(proposalId)) ||
         eventType === "action_retry_proposed" ||
         eventType === "action_recovery_proposed"
       );
@@ -294,7 +307,53 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
     .filter(
       (item) =>
         item.risk !== "low" ||
+        item.event.anchors?.origin === "operator_conversation" ||
+        Boolean(item.event.anchors?.proposal_id) ||
         item.event.event_type === "action_retry_proposed" ||
         item.event.event_type === "action_recovery_proposed",
     );
+  const durableItems = detail.operatorCommandRecords.map((record): CommandItem => {
+    const receipt = record.receipt;
+    const proposal = record.proposal;
+    const event: AgentRunEvent = {
+      id: receipt?.event_ids.command ?? `proposal:${proposal.proposal_id}`,
+      run_id: detail.run.id,
+      action_id: null,
+      sequence: 0,
+      event_type: receipt ? "operator_command_pause" : "operator_command_pause_proposed",
+      status: receipt ? "completed" : "proposed",
+      capability_name: null,
+      capability_version: null,
+      principal_type: "human",
+      principal_id: proposal.principal_id,
+      tool_id: null,
+      skill_id: null,
+      effect_class: null,
+      note: receipt
+        ? "A conversational pause command committed with an immutable receipt."
+        : "A conversational pause proposal is awaiting explicit confirmation.",
+      is_policy_event: false,
+      anchors: {
+        origin: "operator_conversation",
+        proposal_id: proposal.proposal_id,
+        proposal_digest: proposal.proposal_digest,
+        receipt_id: receipt?.receipt_id,
+      },
+      timestamp: receipt?.completed_at ?? proposal.issued_at,
+    };
+    return {
+      kind: "command",
+      run: detail.run,
+      harness: detail.harness,
+      event,
+      priority: receipt ? "low" : "medium",
+      risk: "low",
+      title: receipt
+        ? `${formatRunLabel(detail.run)} pause command completed`
+        : `${formatRunLabel(detail.run)} has a pause proposal`,
+      summary: event.note || "Conversational operator command evidence is available.",
+      operatorCommandRecord: record,
+    };
+  });
+  return [...durableItems, ...eventItems];
 }

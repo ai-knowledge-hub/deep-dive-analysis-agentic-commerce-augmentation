@@ -4,11 +4,16 @@ Status: future reference specification
 Last verified: 2026-09-05
 Current behavior: `docs/operator-experience.md`
 
-Implementation note (2026-09-27): Phase 2.1 implements the read-only subset of
+Implementation note (2026-09-30): Phase 2.1 implements the read-only subset of
 Operator Chat on `/runs`: free-form, run-grounded explanation, evidence,
-recommendation, freshness, and navigation. Steering remains an explicit
-Interventions responsibility; chat mutations in this document are future work
-and must use governed command envelopes when introduced.
+recommendation, freshness, and navigation. Phase 2.2 adds only a governed,
+explicitly confirmed pause proposal with an immutable receipt. Its complete
+snapshot fence is replayed under the commit lock, and a scoped durable read
+projection uses explicit cursor completeness to keep proposals and receipts
+visible in Runs and Interventions. Run-scoped Interventions navigation fetches
+the requested run independently of its bounded queue window. All other steering
+remains an Interventions responsibility and future chat commands must use their
+own governed command envelopes.
 
 This document defines the recommended operator experience for the platform as it evolves into an agent-first execution system.
 

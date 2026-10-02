@@ -5,6 +5,7 @@ import type {
   AgentRunEvent,
   AgentRuntimeHarnessProfile,
 } from "../../lib/types";
+import type { OperatorCommandRecord } from "../../lib/operatorConversationTypes";
 
 export type Priority = "critical" | "high" | "medium" | "low";
 export type RiskLevel = "high" | "medium" | "low";
@@ -18,6 +19,10 @@ export type InterventionDetail = {
   latestFailureEvent: AgentRunEvent | null;
   proposedActions: AgentAction[];
   approvedActions: AgentAction[];
+  operatorCommandRecords: OperatorCommandRecord[];
+  operatorCommandsAvailable: boolean;
+  operatorCommandsComplete: boolean;
+  operatorCommandTotalCount: number;
 };
 
 export type HarnessAwareIntervention = {
@@ -77,4 +82,5 @@ export type CommandItem = {
   summary: string;
   rollbackGuidance?: string | null;
   compensatingActions?: AgentCompensatingAction[];
+  operatorCommandRecord?: OperatorCommandRecord;
 };

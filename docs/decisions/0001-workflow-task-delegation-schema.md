@@ -887,6 +887,50 @@ Later write-capable chat must map intent to an exact command envelope and pass
 the existing preflight, approval, authority, idempotency, and receipt controls;
 it must not weaken this read-model boundary.
 
+## Phase 2.2 conversational pause command contract
+
+The first write-capable operator-conversation increment is deliberately one
+closed command: pause the selected run. Natural-language text selects that
+intent but never supplies command parameters, tenant, principal, run identity,
+revision, policy, or authority.
+
+- Proposal creation is non-mutating with respect to workflow execution. The
+  durable proposal binds the authenticated human, tenant, run, active revision,
+  source lifecycle, snapshot digest and cursor, latest event identity, policy,
+  harness, registry pins, exact preflight digest, expiry, idempotency key, and
+  canonical proposal digest.
+- Confirmation is a second user action and a second authenticated request. The
+  browser BFF uses a command-only secret and assertion audience; the Phase 2.1
+  read assertion cannot authorize this boundary. Analysts can read the run but
+  only owner, admin, and operator roles can confirm.
+- The host reloads the immutable proposal and independently reconstructs the
+  current snapshot and preflight. After `BEGIN IMMEDIATE`, it reconstructs the
+  complete server-owned snapshot and preflight a second time on the same
+  per-thread connection, and compares their digests before changing state.
+  Actions, approvals, effects, linked validation evidence, experiment evidence,
+  and completion projections therefore share the final transaction fence with
+  lifecycle, revision, pins, and the event head.
+- The pause status, `operator_command_pause`, `run_paused`, optional
+  `run_stopping_condition_met`, and immutable command receipt are one atomic
+  outcome. Any event/projection/receipt failure rolls back the run update.
+  Concurrent or repeated exact confirmations converge on one receipt and one
+  command/lifecycle event set.
+- The receipt says `control_plane_paused` and
+  `runtime_propagation_not_certified`. This slice does not close SEC-17 or claim
+  that an already in-flight worker, connector, or external operation has
+  acknowledged interruption.
+- A tenant-and-run-scoped authenticated read model verifies immutable proposal
+  columns and receipt digests on every load. Stable cursor pagination reports
+  total, included, and remaining evidence rather than silently truncating the
+  ledger. Runs can load older pages; a run-scoped Interventions link fetches the
+  exact run outside the bounded queue and pages its command projection. Thus a
+  later answer, navigation, reload, or queue-window change cannot hide a pending
+  proposal or its exact receipt identity.
+
+Other conversational mutations remain read-only refusals. A later slice must
+add each command as its own typed contract rather than generalizing this pause
+proposal into model-authored executable payloads.
+
 ## Validation criteria
 
 Slice 2 is complete when reviewers can trace every target concept to a logical

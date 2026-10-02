@@ -246,7 +246,7 @@ export function CommandWorkSection({
   return (
     <section className="control-surface intervention-section">
       <div className="control-section__header">
-        <h3>Recovery work</h3>
+        <h3>Operator commands and recovery</h3>
         <span className="control-chip control-chip--attention">{items.length}</span>
       </div>
       {items.length === 0 ? (
@@ -270,6 +270,29 @@ export function CommandWorkSection({
                 {item.rollbackGuidance ? (
                   <div className="list__meta">
                     Recovery path: {softenOperatorText(item.rollbackGuidance)}
+                  </div>
+                ) : null}
+                {item.operatorCommandRecord ? (
+                  <div className="panel__meta-strip panel__meta-strip--flat">
+                    <div>
+                      <strong>Proposal</strong>: {item.operatorCommandRecord.proposal.proposal_id}
+                    </div>
+                    <div>
+                      <strong>Proposal digest</strong>:{" "}
+                      {item.operatorCommandRecord.proposal.proposal_digest}
+                    </div>
+                    <div>
+                      <strong>Receipt</strong>:{" "}
+                      {item.operatorCommandRecord.receipt?.receipt_id ?? "awaiting confirmation"}
+                    </div>
+                    <div>
+                      <strong>Acknowledgement</strong>:{" "}
+                      {item.operatorCommandRecord.receipt
+                        ? formatOperatorIdentifier(
+                            item.operatorCommandRecord.receipt.acknowledgement,
+                          )
+                        : "not issued"}
+                    </div>
                   </div>
                 ) : null}
                 <CompensatingProposalControl

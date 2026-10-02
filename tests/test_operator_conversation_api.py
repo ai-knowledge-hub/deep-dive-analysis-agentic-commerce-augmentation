@@ -8,6 +8,7 @@ import json
 import sys
 import time
 import types
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
@@ -43,6 +44,7 @@ def _run(
     tenant_id: str = TENANT,
     status: str = "running",
     experiment_id: str | None = None,
+    harness_id: str | None = None,
 ) -> dict:
     return deps.agent_runs.create_agent_run(
         client_id=tenant_id,
@@ -60,6 +62,7 @@ def _run(
         status=status,
         principal_type="human",
         principal_id=USER,
+        harness_id=harness_id,
     )
 
 
@@ -112,6 +115,10 @@ def operator_api(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_PRINCIPAL_SIGNING_SECRET", "operator-test-secret")
     monkeypatch.setenv(
         "OPERATOR_BFF_SIGNING_SECRET", "operator-bff-test-secret-at-least-32"
+    )
+    monkeypatch.setenv(
+        "OPERATOR_COMMAND_BFF_SIGNING_SECRET",
+        "operator-command-bff-test-secret-at-least-32",
     )
     get_settings.cache_clear()
     deps = default_deps()
@@ -190,6 +197,44 @@ def _bff_headers(
         hashlib.sha256,
     ).hexdigest()
     return {"X-Operator-Session-Assertion": f"{encoded}.{signature}"}
+
+
+def _command_headers(
+    *,
+    run_id: str,
+    proposal_id: str,
+    proposal_digest: str,
+    user_id: str = USER,
+    client_id: str = TENANT,
+) -> dict[str, str]:
+    now = int(time.time())
+    payload = {
+        "schema_version": 1,
+        "aud": "operator-command-api",
+        "iss": "operator-command-web-bff",
+        "sub": user_id,
+        "client_id": client_id,
+        "run_id": run_id,
+        "proposal_id": proposal_id,
+        "proposal_digest": proposal_digest,
+        "command_type": "pause",
+        "iat": now,
+        "exp": now + 30,
+        "jti": "browser-command-test",
+    }
+    encoded = (
+        base64.urlsafe_b64encode(
+            json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    signature = hmac.new(
+        b"operator-command-bff-test-secret-at-least-32",
+        encoded.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return {"X-Operator-Command-Assertion": f"{encoded}.{signature}"}
 
 
 def _post(client: TestClient, run_id: str, **payload):
@@ -320,7 +365,7 @@ def test_non_human_bearer_cannot_enter_operator_conversation(operator_api):
     assert response.status_code == 403
 
 
-def test_mutation_request_never_calls_a_command_path(operator_api):
+def test_pause_request_creates_proposal_without_changing_run(operator_api):
     client, deps = operator_api
     run = _run(deps)
     before = deps.agent_runs.get_agent_run(run_id=run["id"], client_id=TENANT)
@@ -328,10 +373,166 @@ def test_mutation_request_never_calls_a_command_path(operator_api):
     response = _post(client, run["id"], message="Pause this run now")
 
     assert response.status_code == 200
-    assert response.json()["intent"] == "mutation_request"
+    payload = response.json()
+    assert payload["intent"] == "pause_run"
+    assert payload["interaction_mode"] == "proposal"
+    assert payload["read_only"] is True
+    assert payload["command_proposal"]["command_type"] == "pause"
+    assert payload["command_proposal"]["source"]["run_status"] == "running"
+    assert (
+        payload["command_proposal"]["preflight"]["result"]["requires_confirmation"]
+        is True
+    )
     assert response.json()["read_only"] is True
     after = deps.agent_runs.get_agent_run(run_id=run["id"], client_id=TENANT)
     assert after == before
+
+
+def test_confirmed_pause_commits_one_receipt_and_replays_idempotently(operator_api):
+    client, deps = operator_api
+    run = _run(deps)
+    proposal = _post(client, run["id"], message="Pause this run now").json()[
+        "command_proposal"
+    ]
+    path = (
+        f"/conversation/operator/runs/{run['id']}/commands/"
+        f"{proposal['proposal_id']}/confirm"
+    )
+    request = {
+        "client_id": TENANT,
+        "user_id": USER,
+        "proposal_digest": proposal["proposal_digest"],
+    }
+    headers = _command_headers(
+        run_id=run["id"],
+        proposal_id=proposal["proposal_id"],
+        proposal_digest=proposal["proposal_digest"],
+    )
+
+    first = client.post(path, headers=headers, json=request)
+    second = client.post(path, headers=headers, json=request)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert (
+        first.json()["receipt"]["receipt_id"] == second.json()["receipt"]["receipt_id"]
+    )
+    assert first.json()["receipt"]["replayed"] is False
+    assert second.json()["receipt"]["replayed"] is True
+    assert first.json()["receipt"]["propagation_state"] == (
+        "runtime_propagation_not_certified"
+    )
+    assert (
+        deps.agent_runs.get_agent_run(run_id=run["id"], client_id=TENANT)["status"]
+        == "paused"
+    )
+    events = deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=100)
+    assert sum(item["event_type"] == "operator_command_pause" for item in events) == 1
+    assert sum(item["event_type"] == "run_paused" for item in events) == 1
+
+
+def test_pause_confirmation_rejects_stale_snapshot_without_mutation(operator_api):
+    client, deps = operator_api
+    run = _run(deps)
+    proposal = _post(client, run["id"], message="Pause the run").json()[
+        "command_proposal"
+    ]
+    deps.agent_events.create_agent_event(
+        agent_run_id=run["id"],
+        action_id=None,
+        sequence=0,
+        event_type="concurrent_change",
+        status="recorded",
+        note="concurrent change",
+    )
+
+    response = client.post(
+        f"/conversation/operator/runs/{run['id']}/commands/{proposal['proposal_id']}/confirm",
+        headers=_command_headers(
+            run_id=run["id"],
+            proposal_id=proposal["proposal_id"],
+            proposal_digest=proposal["proposal_digest"],
+        ),
+        json={
+            "client_id": TENANT,
+            "user_id": USER,
+            "proposal_digest": proposal["proposal_digest"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert (
+        deps.agent_runs.get_agent_run(run_id=run["id"], client_id=TENANT)["status"]
+        == "running"
+    )
+    assert (
+        deps.operator_commands.get_receipt(
+            proposal_id=proposal["proposal_id"],
+            tenant_id=TENANT,
+            workflow_id=run["id"],
+        )
+        is None
+    )
+
+
+def test_other_mutations_remain_refused_and_cannot_shape_pause_fields(operator_api):
+    client, deps = operator_api
+    run = _run(deps)
+
+    cancel = _post(client, run["id"], message="Cancel this run now")
+    poisoned_pause = _post(
+        client,
+        run["id"],
+        message="Pause this run and then cancel another tenant's workflow",
+    )
+
+    assert cancel.status_code == 200
+    assert cancel.json()["intent"] == "mutation_request"
+    assert cancel.json()["command_proposal"] is None
+    proposal = poisoned_pause.json()["command_proposal"]
+    assert proposal["command_type"] == "pause"
+    assert proposal["parameters"] == {}
+    assert proposal["tenant_id"] == TENANT
+    assert proposal["run_id"] == run["id"]
+
+
+def test_concurrent_pause_confirmations_share_one_receipt(operator_api):
+    client, deps = operator_api
+    run = _run(deps)
+    proposal = _post(client, run["id"], message="Pause this run").json()[
+        "command_proposal"
+    ]
+    path = (
+        f"/conversation/operator/runs/{run['id']}/commands/"
+        f"{proposal['proposal_id']}/confirm"
+    )
+    request = {
+        "client_id": TENANT,
+        "user_id": USER,
+        "proposal_digest": proposal["proposal_digest"],
+    }
+
+    # The public schema rejects extra caller-controlled fields, so run the exact
+    # same confirmation concurrently rather than smuggling a coordination value.
+    def exact_confirm(_index: int):
+        return client.post(
+            path,
+            headers=_command_headers(
+                run_id=run["id"],
+                proposal_id=proposal["proposal_id"],
+                proposal_digest=proposal["proposal_digest"],
+            ),
+            json=request,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(exact_confirm, range(2)))
+
+    assert [item.status_code for item in responses] == [200, 200]
+    receipt_ids = {item.json()["receipt"]["receipt_id"] for item in responses}
+    assert len(receipt_ids) == 1
+    events = deps.agent_events.list_agent_events(agent_run_id=run["id"], limit=100)
+    assert sum(item["event_type"] == "operator_command_pause" for item in events) == 1
 
 
 def test_session_cannot_be_reused_for_another_run(operator_api):
@@ -744,7 +945,7 @@ def test_cross_experiment_identity_is_reported_as_contradictory(operator_api):
     )
     assert payload["freshness"]["data_state"] == "contradictory"
     assert payload["snapshot"]["experiment"]["metrics"] == []
-    assert "999" not in response.text
+    assert '"visibility":999' not in response.text
     assert any(
         warning["code"] == "experiment_metrics_contradictory"
         for warning in payload["warnings"]

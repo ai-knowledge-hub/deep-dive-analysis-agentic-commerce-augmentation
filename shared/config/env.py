@@ -173,6 +173,18 @@ class Settings(BaseSettings):
         le=300,
         validation_alias=AliasChoices("OPERATOR_BFF_ASSERTION_MAX_TTL_SECONDS"),
     )
+    operator_command_bff_signing_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPERATOR_COMMAND_BFF_SIGNING_SECRET"),
+    )
+    operator_command_bff_assertion_max_ttl_seconds: int = Field(
+        default=60,
+        ge=30,
+        le=300,
+        validation_alias=AliasChoices(
+            "OPERATOR_COMMAND_BFF_ASSERTION_MAX_TTL_SECONDS"
+        ),
+    )
     registry_approval_signing_secret: str | None = Field(
         default=None,
         validation_alias=AliasChoices("REGISTRY_APPROVAL_SIGNING_SECRET"),

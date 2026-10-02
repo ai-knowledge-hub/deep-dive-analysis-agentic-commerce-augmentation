@@ -372,6 +372,42 @@ This slice is deliberately execution-read-only. Conversation turns are durable
 references for continuity, but they are not workflow replay input and cannot
 mutate run, action, approval, effect, evidence, or completion state.
 
+#### Slice 2.2: governed conversational pause proposals
+
+Implemented boundary:
+
+- only the closed `pause_run` intent can leave the read-only answer path; all
+  other mutation language remains a refusal and Interventions deep link;
+- a pause request creates an immutable, expiring proposal bound to the exact
+  tenant, human principal, run, active revision, lifecycle state, snapshot and
+  event cursor, policy/harness/registry pins, preflight result, idempotency key,
+  and canonical digest. Creating it does not change execution state;
+- a separate browser confirmation uses a dedicated short-lived assertion that
+  cannot be minted with the read-only conversation secret. Direct API callers
+  require equivalent human write authority;
+- confirmation reloads the durable proposal, performs an early snapshot check,
+  and then reconstructs the complete server-owned snapshot plus preflight again
+  under the final SQLite `BEGIN IMMEDIATE` write lock. Stale, expired,
+  cross-principal, cross-run, cross-tenant, or digest-substituted proposals fail
+  closed;
+- the compatibility run transition, human-attributed command audit, lifecycle
+  event, optional operator-pause stopping-condition event, and immutable receipt
+  commit in one SQLite transaction. Exact retries return the original receipt;
+- the receipt acknowledges the control-plane pause only. It explicitly reports
+  that end-to-end worker or external-operation propagation is not certified;
+  that stronger guarantee remains owned by the Phase 3 runtime controls.
+
+An authenticated, tenant-and-run-scoped, cursor-paginated read projection
+reconstructs every proposal with its exact immutable receipt. Each page reports
+the total, included count, and whether older evidence remains. Runs can load
+successive pages independently of conversation memory. A run-scoped
+Interventions link fetches that exact run even when it is outside the newest
+queue window, and pages through its command history before rendering the
+proposal, proposal digest, receipt identity, and acknowledgement. Unscoped
+queue reads explicitly warn when older command evidence remains instead of
+presenting a bounded page as complete. Approval, retry, cancel, resume, plan changes,
+and broader natural-language command generation remain out of scope.
+
 ### Phase 3: Durable workflow kernel
 
 Deliverables:

@@ -6,6 +6,7 @@ import infrastructure.db.agent.agent_runs as agent_runs
 import infrastructure.db.agent.approval_ledger as approval_ledger
 import infrastructure.db.agent.agent_registry as agent_registry
 import infrastructure.db.agent.governed_effect_receipts as governed_effect_receipts
+import infrastructure.db.agent.operator_commands as operator_commands
 
 __all__ = [
     "agent_actions",
@@ -14,4 +15,5 @@ __all__ = [
     "agent_runs",
     "approval_ledger",
     "governed_effect_receipts",
+    "operator_commands",
 ]

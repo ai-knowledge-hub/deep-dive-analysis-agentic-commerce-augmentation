@@ -1,28 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Dict, Optional
 
 from application.ports.deps import AppDeps
-from application.services.agent_runtime.approval_ledger import ApprovalLedgerError
+from application.services.agent_runtime.commands.apply import apply_agent_run_command
 from application.services.agent_runtime.commands.context import (
     AgentRunCommandError,
     command_context,
 )
-from application.services.agent_runtime.commands.decisions import (
-    apply_command_action_decision,
-)
 from application.services.agent_runtime.commands.preflight import (
     _command_preflight,
     _record_command_event,
-)
-from application.services.agent_runtime.commands.recovery import (
-    RecoveryActionCreationError,
-    create_change_plan_recovery_action,
-    create_retry_action,
-)
-from application.services.agent_runtime.effect_recovery import (
-    EffectRecoveryError,
-    reconcile_effect_from_durable_evidence,
 )
 from application.services.agent_runtime.runtime import (
     AgentRuntimeService,
@@ -72,6 +61,10 @@ def issue_agent_run_command(
     metadata: Dict[str, Any],
     approving_authority: ApprovalAuthority | None = None,
     idempotency_key: str | None = None,
+    conversation_proposal: Dict[str, Any] | None = None,
+    conversation_preflight: Dict[str, Any] | None = None,
+    conversation_principal_id: str | None = None,
+    conversation_confirmation_state: Callable[[], Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     run, action, normalized_command = command_context(
         deps=deps,
@@ -87,12 +80,52 @@ def issue_agent_run_command(
         action=action,
         metadata=metadata,
     )
-    if not preflight["allowed"] and normalized_command not in {"approve", "reject"}:
+    if (
+        conversation_proposal is None
+        and not preflight["allowed"]
+        and normalized_command not in {"approve", "reject"}
+    ):
         raise AgentRunCommandError(status_code=409, detail=preflight)
+
+    if conversation_proposal is not None:
+        if (
+            normalized_command != "pause"
+            or conversation_preflight is None
+            or not conversation_principal_id
+            or conversation_confirmation_state is None
+        ):
+            raise AgentRunCommandError(
+                status_code=400,
+                detail={
+                    "code": "invalid_conversation_proposal",
+                    "message": "Only an exact conversational pause proposal is supported.",
+                },
+            )
+        receipt = deps.operator_commands.commit_pause(
+            proposal=conversation_proposal,
+            principal_id=conversation_principal_id,
+            confirmation_state=conversation_confirmation_state,
+        )
+        updated_run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=client_id)
+        return {
+            "command": {
+                "id": receipt["event_ids"]["command"],
+                "event_type": "operator_command_pause",
+                "status": "completed",
+                "anchors": {
+                    "proposal_id": receipt["proposal_id"],
+                    "proposal_digest": receipt["proposal_digest"],
+                    "receipt_id": receipt["receipt_id"],
+                },
+            },
+            "command_receipt": receipt,
+            "run": updated_run or run,
+            "preflight": conversation_preflight,
+        }
 
     if normalized_command in {"approve", "reject"}:
         result = {"run": run, "preflight": preflight}
-        _apply_agent_run_command(
+        apply_agent_run_command(
             deps=deps,
             runtime=runtime,
             result=result,
@@ -146,7 +179,7 @@ def issue_agent_run_command(
     if normalized_command in {"explain", "focus"}:
         return result
 
-    _apply_agent_run_command(
+    apply_agent_run_command(
         deps=deps,
         runtime=runtime,
         result=result,
@@ -173,122 +206,3 @@ def issue_agent_run_command(
         command_authority=approving_authority,
     )
     return result
-
-
-def _apply_agent_run_command(
-    *,
-    deps: AppDeps,
-    runtime: AgentRuntimeService,
-    result: Dict[str, Any],
-    run_id: str,
-    run: Dict[str, Any],
-    action: Optional[Dict[str, Any]],
-    command_type: str,
-    command_receipt: Dict[str, Any],
-    user_id: Optional[str],
-    message: Optional[str],
-    metadata: Dict[str, Any],
-    approving_authority: ApprovalAuthority | None,
-    idempotency_key: str | None,
-) -> None:
-    if command_type == "change_plan":
-        try:
-            result["action"] = create_change_plan_recovery_action(
-                deps=deps,
-                run_id=run_id,
-                run=run,
-                source_action=action,
-                command_receipt=command_receipt,
-                message=message,
-                metadata=metadata,
-            )
-        except RecoveryActionCreationError as exc:
-            raise AgentRunCommandError(
-                status_code=409,
-                detail={"code": "run_terminal", "message": str(exc)},
-            ) from exc
-    elif command_type == "start":
-        runtime_result = runtime.start_run(run_id=run_id)
-        result["run"] = runtime_result.run
-        result["message"] = runtime_result.message
-    elif command_type == "pause":
-        runtime_result = runtime.pause_run(run_id=run_id)
-        result["run"] = runtime_result.run
-    elif command_type == "cancel":
-        runtime_result = runtime.cancel_run(run_id=run_id)
-        result["run"] = runtime_result.run
-    elif command_type == "step":
-        runtime_result = runtime.step_once(run_id=run_id, user_id=user_id)
-        result["run"] = runtime_result.run
-        result["action"] = runtime_result.action
-    elif command_type == "retry":
-        if not action:
-            raise AgentRunCommandError(status_code=400, detail="Action id is required")
-        try:
-            result["action"] = create_retry_action(
-                deps=deps,
-                run_id=run_id,
-                run=run,
-                action=action,
-                metadata=metadata,
-            )
-        except RecoveryActionCreationError as exc:
-            raise AgentRunCommandError(
-                status_code=409,
-                detail={"code": "run_terminal", "message": str(exc)},
-            ) from exc
-    elif command_type == "reconcile_effect":
-        if not action:
-            raise AgentRunCommandError(status_code=400, detail="Action id is required")
-        if approving_authority is None:
-            raise AgentRunCommandError(
-                status_code=401,
-                detail="Effect reconciliation requires authenticated authority",
-            )
-        try:
-            result.update(
-                reconcile_effect_from_durable_evidence(
-                    deps=deps,
-                    run=run,
-                    action=action,
-                )
-            )
-        except EffectRecoveryError as exc:
-            raise AgentRunCommandError(
-                status_code=exc.status_code,
-                detail={
-                    "code": exc.code,
-                    "message": str(exc),
-                    "mismatches": list(exc.mismatches),
-                },
-            ) from exc
-    elif command_type in {"approve", "reject"}:
-        if not action:
-            raise AgentRunCommandError(status_code=400, detail="Action id is required")
-        if approving_authority is None:
-            raise AgentRunCommandError(
-                status_code=401,
-                detail="Approval command requires authenticated authority",
-            )
-        try:
-            approval_result = apply_command_action_decision(
-                deps=deps,
-                run_id=run_id,
-                run=run,
-                action=action,
-                command_type=command_type,
-                approving_authority=approving_authority,
-                idempotency_key=idempotency_key
-                or f"operator-command:{run_id}:{action['id']}:{command_type}",
-                message=message,
-                metadata=metadata,
-            )
-        except ApprovalLedgerError as exc:
-            raise AgentRunCommandError(
-                status_code=exc.status_code,
-                detail={"code": exc.code, "message": str(exc)},
-            ) from exc
-        result["action"] = approval_result.get("action") or action
-        result["approval"] = approval_result.get("approval")
-        result["approval_command"] = approval_result.get("command")
-        result["approval_replayed"] = bool(approval_result.get("replayed"))

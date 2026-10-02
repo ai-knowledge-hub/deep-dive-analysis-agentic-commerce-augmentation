@@ -105,6 +105,7 @@ def default_deps() -> AppDeps:
         approval_ledger=agent_db.approval_ledger,
         agent_registry=agent_db.agent_registry,
         governed_effect_receipts=agent_db.governed_effect_receipts,
+        operator_commands=agent_db.operator_commands,
         workflow_compatibility=workflow_db.sequential_compatibility,
         semantic_memory_factory=lambda user_id, client_id: SemanticMemory(
             user_id=user_id, client_id=client_id

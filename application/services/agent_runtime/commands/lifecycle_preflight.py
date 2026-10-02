@@ -15,6 +15,11 @@ def command_lifecycle_blockers(
         blockers.append("Canceled or completed runs cannot be started.")
     if command_type == "cancel" and terminal:
         blockers.append("Run is already terminal.")
+    if command_type == "pause":
+        if run_status in {"canceled", "cancelled", "completed", "failed"}:
+            blockers.append("Terminal runs cannot be paused.")
+        elif run_status == "paused":
+            blockers.append("Run is already paused.")
     if command_type in {"change_plan", "retry"} and terminal:
         blockers.append(
             "Terminal runs cannot accept recovery actions; create a new run to continue."

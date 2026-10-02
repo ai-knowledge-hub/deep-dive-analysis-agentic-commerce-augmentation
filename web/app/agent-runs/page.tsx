@@ -1414,6 +1414,7 @@ function AgentRunsPageContent() {
                     focusSelectedActionDetail(nextRecommendedAction.action.id);
                   }
                 }}
+                onCommandCommitted={() => Promise.all([loadSelected(), loadRuns()]).then(() => undefined)}
               />
             </section>
 

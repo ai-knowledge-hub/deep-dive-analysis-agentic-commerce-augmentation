@@ -1,7 +1,16 @@
 "use client";
 
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { sendOperatorConversationMessageStream } from "../../lib/api";
+import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  confirmOperatorConversationCommand,
+  listOperatorConversationCommands,
+  sendOperatorConversationMessageStream,
+} from "../../lib/api";
+import type {
+  OperatorCommandProposal,
+  OperatorCommandReceipt,
+  OperatorCommandRecord,
+} from "../../lib/operatorConversationTypes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 import { OperatorChatPrompts } from "./OperatorChatPrompts";
 import { OperatorChatSummary } from "./OperatorChatSummary";
@@ -20,6 +29,7 @@ type Props = {
     hint: string;
   };
   onJumpToNextAction?: () => void;
+  onCommandCommitted?: () => void | Promise<void>;
 };
 
 const PROMPTS: Record<PromptId, string> = {
@@ -39,14 +49,28 @@ export function OperatorConsoleChat({
   selectedAction,
   nextRecommendedAction,
   onJumpToNextAction,
+  onCommandCommitted,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingProposalId, setConfirmingProposalId] = useState<string | null>(null);
+  const [dismissedProposalIds, setDismissedProposalIds] = useState<string[]>([]);
+  const [commandReceipt, setCommandReceipt] = useState<OperatorCommandReceipt | null>(null);
+  const [commandRecords, setCommandRecords] = useState<OperatorCommandRecord[]>([]);
+  const [commandHistoryPage, setCommandHistoryPage] = useState<{
+    hasMore: boolean;
+    nextCursor: string | null;
+    totalCount: number;
+  }>({ hasMore: false, nextCursor: null, totalCount: 0 });
+  const [loadingOlderCommands, setLoadingOlderCommands] = useState(false);
+  const [commandRecordsError, setCommandRecordsError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestRef = useRef(0);
+  const confirmationRequestRef = useRef(0);
+  const commandRecordsRequestRef = useRef(0);
 
   const counts = useMemo(
     () => ({
@@ -58,15 +82,125 @@ export function OperatorConsoleChat({
     [actions, events],
   );
 
+  const refreshCommandRecords = useCallback(
+    async ({
+      signal,
+      cursor = null,
+      append = false,
+    }: {
+      signal?: AbortSignal;
+      cursor?: string | null;
+      append?: boolean;
+    } = {}) => {
+      if (!run) {
+        commandRecordsRequestRef.current += 1;
+        setCommandRecords([]);
+        setCommandHistoryPage({ hasMore: false, nextCursor: null, totalCount: 0 });
+        setCommandRecordsError(null);
+        return;
+      }
+      const requestId = commandRecordsRequestRef.current + 1;
+      commandRecordsRequestRef.current = requestId;
+      try {
+        const response = await listOperatorConversationCommands(run.id, {
+          cursor,
+          signal,
+        });
+        if (
+          commandRecordsRequestRef.current !== requestId ||
+          response.run_id !== run.id
+        ) {
+          return;
+        }
+        setCommandRecords((current) => {
+          if (!append) return response.records;
+          const records = new Map(
+            current.map((record) => [record.proposal.proposal_id, record]),
+          );
+          response.records.forEach((record) => {
+            records.set(record.proposal.proposal_id, record);
+          });
+          return [...records.values()];
+        });
+        setCommandHistoryPage({
+          hasMore: response.page.has_more,
+          nextCursor: response.page.next_cursor,
+          totalCount: response.total_count,
+        });
+        setCommandRecordsError(null);
+      } catch (caught) {
+        if (signal?.aborted || commandRecordsRequestRef.current !== requestId) return;
+        setCommandRecordsError(
+          caught instanceof Error ? caught.message : "Operator command history is unavailable.",
+        );
+      }
+    },
+    [run],
+  );
+
+  const loadOlderCommands = useCallback(async () => {
+    if (!commandHistoryPage.hasMore || !commandHistoryPage.nextCursor) return;
+    setLoadingOlderCommands(true);
+    try {
+      await refreshCommandRecords({
+        cursor: commandHistoryPage.nextCursor,
+        append: true,
+      });
+    } finally {
+      setLoadingOlderCommands(false);
+    }
+  }, [commandHistoryPage, refreshCommandRecords]);
+
   useEffect(() => {
     abortRef.current?.abort();
     requestRef.current += 1;
+    confirmationRequestRef.current += 1;
+    commandRecordsRequestRef.current += 1;
     setMessages([]);
     setSessionId(null);
     setDraft("");
     setStatus(null);
     setError(null);
+    setConfirmingProposalId(null);
+    setDismissedProposalIds([]);
+    setCommandReceipt(null);
+    setCommandRecords([]);
+    setCommandHistoryPage({ hasMore: false, nextCursor: null, totalCount: 0 });
+    setLoadingOlderCommands(false);
+    setCommandRecordsError(null);
   }, [run?.id]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void refreshCommandRecords({ signal: controller.signal });
+    return () => controller.abort();
+  }, [refreshCommandRecords]);
+
+  async function confirmPause(proposal: OperatorCommandProposal) {
+    if (!run || !proposal || confirmingProposalId) return;
+    const confirmationRequestId = confirmationRequestRef.current + 1;
+    confirmationRequestRef.current = confirmationRequestId;
+    setConfirmingProposalId(proposal.proposal_id);
+    setError(null);
+    try {
+      const response = await confirmOperatorConversationCommand(
+        run.id,
+        proposal.proposal_id,
+        proposal.proposal_digest,
+      );
+      if (confirmationRequestRef.current !== confirmationRequestId) return;
+      setCommandReceipt(response.receipt);
+      await refreshCommandRecords();
+      await onCommandCommitted?.();
+    } catch (caught) {
+      if (confirmationRequestRef.current !== confirmationRequestId) return;
+      setError(caught instanceof Error ? caught.message : "Pause confirmation failed.");
+    } finally {
+      if (confirmationRequestRef.current === confirmationRequestId) {
+        setConfirmingProposalId(null);
+      }
+    }
+  }
 
   async function sendQuestion(question: string) {
     const normalized = question.trim();
@@ -116,6 +250,7 @@ export function OperatorConsoleChat({
             : message,
         ),
       );
+      await refreshCommandRecords();
     } catch (caught) {
       if (controller.signal.aborted || requestRef.current !== requestId) return;
       setStatus(null);
@@ -140,6 +275,15 @@ export function OperatorConsoleChat({
   const latestResponse = [...messages]
     .reverse()
     .find((message) => message.response)?.response;
+  const durablePendingProposal = commandRecords.find(
+    (record) =>
+      !record.receipt &&
+      new Date(record.proposal.expires_at).getTime() > Date.now() &&
+      !dismissedProposalIds.includes(record.proposal.proposal_id),
+  )?.proposal;
+  const pendingProposal = durablePendingProposal ?? latestResponse?.command_proposal ?? null;
+  const durableReceipt =
+    commandReceipt ?? commandRecords.find((record) => Boolean(record.receipt))?.receipt ?? null;
 
   return (
     <section className="panel__card panel__card--secondary">
@@ -147,7 +291,7 @@ export function OperatorConsoleChat({
         run={run}
         briefing={
           run
-            ? "Ask about this run’s verified execution, evidence, blockers, or recommended next step. Conversation cannot change execution state."
+            ? "Ask about verified execution, evidence, blockers, or next steps. Pause requests become reviewable proposals and require a separate confirmation."
             : "Select a run to start a grounded operator conversation."
         }
         proposedCount={counts.proposed}
@@ -255,6 +399,118 @@ export function OperatorConsoleChat({
             ))}
           </div>
         </div>
+      ) : null}
+      {run ? (
+        <section className="operator-chat__artifacts" aria-label="Durable operator commands">
+          <div className="control-section__header">
+            <strong>Operator commands</strong>
+            <span className="control-chip">
+              {commandRecords.length}
+              {commandHistoryPage.totalCount > commandRecords.length
+                ? ` of ${commandHistoryPage.totalCount}`
+                : ""}
+            </span>
+          </div>
+          {commandRecordsError ? (
+            <div className="panel__notice panel__notice--warning">
+              Durable operator command history could not be loaded: {commandRecordsError}
+            </div>
+          ) : null}
+          {commandHistoryPage.hasMore ? (
+            <div className="panel__notice panel__notice--warning">
+              Showing the newest {commandRecords.length} of {commandHistoryPage.totalCount} durable
+              commands. Older proposal and receipt evidence is available.
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="button button--ghost button--sm"
+                  disabled={loadingOlderCommands}
+                  onClick={() => void loadOlderCommands()}
+                >
+                  {loadingOlderCommands ? "Loading…" : "Load older commands"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {pendingProposal &&
+          !dismissedProposalIds.includes(pendingProposal.proposal_id) &&
+          durableReceipt?.proposal_id !== pendingProposal.proposal_id ? (
+            <section className="operator-chat__proposal" aria-label="Pause proposal">
+              <div>
+                <strong>Pause this run?</strong>
+                <div className="panel__muted">
+                  Revision {pendingProposal.source.active_graph_revision} · status{" "}
+                  {pendingProposal.source.run_status} · expires{" "}
+                  {new Date(pendingProposal.expires_at).toLocaleTimeString()}
+                </div>
+              </div>
+              <ul className="operator-chat__fact-list">
+                {pendingProposal.consequences.map((consequence) => (
+                  <li key={consequence}>{consequence}</li>
+                ))}
+              </ul>
+              <div className="panel__muted">
+                Proposal {pendingProposal.proposal_id.slice(0, 12)} · digest{" "}
+                {pendingProposal.proposal_digest.slice(0, 12)}
+              </div>
+              <div className="panel__actions">
+                <button
+                  type="button"
+                  className="button button--primary button--sm"
+                  disabled={Boolean(confirmingProposalId)}
+                  onClick={() => void confirmPause(pendingProposal)}
+                >
+                  {confirmingProposalId ? "Confirming…" : "Confirm pause"}
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost button--sm"
+                  disabled={Boolean(confirmingProposalId)}
+                  onClick={() =>
+                    setDismissedProposalIds((current) => [
+                      ...current,
+                      pendingProposal.proposal_id,
+                    ])
+                  }
+                >
+                  Dismiss
+                </button>
+              </div>
+            </section>
+          ) : null}
+          {durableReceipt ? (
+            <div className="panel__notice panel__notice--info" aria-label="Pause receipt">
+              <strong>Pause acknowledged.</strong> Receipt {durableReceipt.receipt_id} · proposal{" "}
+              {durableReceipt.proposal_id} · {durableReceipt.acknowledgement.replaceAll("_", " ")}.
+              Runtime propagation is not independently certified.{" "}
+              <a href={`/interventions?run_id=${run.id}`}>Open Interventions</a>
+            </div>
+          ) : null}
+          {!pendingProposal && !durableReceipt && !commandRecordsError ? (
+            <div className="panel__muted">No conversational operator commands are recorded.</div>
+          ) : null}
+          {commandRecords.length ? (
+            <details className="panel__details">
+              <summary className="panel__details-summary">
+                Durable command history ({commandRecords.length})
+              </summary>
+              <ul className="operator-chat__fact-list">
+                {commandRecords.map((record) => (
+                  <li key={record.proposal.proposal_id}>
+                    <span>
+                      Pause proposal {record.proposal.proposal_id} ·{" "}
+                      {record.receipt ? "completed" : "awaiting confirmation"}
+                    </span>
+                    <small>
+                      Proposal digest {record.proposal.proposal_digest} · receipt{" "}
+                      {record.receipt?.receipt_id ?? "not issued"}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </section>
       ) : null}
     </section>
   );
