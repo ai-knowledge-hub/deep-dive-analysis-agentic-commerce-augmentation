@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.composition import default_deps
-from api.runtime_composition import default_completion_coordinator
+from api.runtime_composition import default_completion_coordinator, default_runtime
 from api.utils.agent_run_authorization import principal_has_scope
+from api.utils.operator_command_session import resolve_operator_command_identity
 from api.utils.operator_session import resolve_operator_session_identity
 from api.utils.principals import PrincipalContext, ensure_principal
 from api.utils.tenancy import require_client_role
@@ -19,6 +20,20 @@ from application.ports.deps import AppDeps
 from application.services.conversation.operator_gateway import (
     OperatorConversationError,
     OperatorConversationService,
+)
+from application.services.conversation.operator_commands import (
+    conversational_pause_preflight,
+    pause_proposal_view,
+)
+from application.services.conversation.operator_snapshot import build_operator_snapshot
+from application.services.agent_runtime.commands import (
+    AgentRunCommandError,
+    issue_agent_run_command as issue_agent_run_command_service,
+)
+from application.services.agent_runtime.runtime import AgentRuntimeService
+from domain.workflow.operator_commands import (
+    OperatorCommandConflictError,
+    OperatorCommandCursorError,
 )
 from application.services.workflow_outcomes.production import (
     SequentialCompletionCoordinator,
@@ -37,6 +52,55 @@ class OperatorMessageRequest(BaseModel):
     session_id: str | None = None
 
 
+class OperatorCommandConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_digest: str = Field(..., min_length=64, max_length=64)
+    user_id: str | None = None
+    client_id: str | None = None
+
+
+def _authorize_run_read(
+    *,
+    request: Request,
+    run_id: str,
+    deps: AppDeps,
+    client_id: str | None,
+    user_id: str | None,
+) -> tuple[PrincipalContext, dict[str, Any]]:
+    identity = resolve_operator_session_identity(
+        request=request,
+        client_id=client_id,
+        user_id=user_id,
+        run_id=run_id,
+    )
+    principal = identity.principal
+    if not principal_has_scope(principal=principal, scope="agent_runs:read"):
+        raise HTTPException(
+            status_code=403,
+            detail="Missing required scope: agent_runs:read",
+        )
+    require_client_role(
+        client_id=principal.client_id,
+        user_id=identity.user_id,
+        allowed_roles={"owner", "admin", "operator", "analyst"},
+    )
+    ensure_principal(
+        principal_id=principal.principal_id,
+        principal_type="human",
+        tenant_id=principal.client_id,
+        display_name=identity.user_id,
+        metadata={
+            "auth_method": principal.auth_method,
+            "user_id": identity.user_id,
+        },
+    )
+    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=principal.client_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return principal, run
+
+
 def _deps() -> AppDeps:
     return default_deps()
 
@@ -47,6 +111,10 @@ def _completion_coordinator(
     return default_completion_coordinator(deps)
 
 
+def _runtime(deps: AppDeps = Depends(_deps)) -> AgentRuntimeService:
+    return default_runtime(deps)
+
+
 def _authorized_context(
     *,
     request: Request,
@@ -54,38 +122,13 @@ def _authorized_context(
     run_id: str,
     deps: AppDeps,
 ) -> tuple[PrincipalContext, dict[str, Any]]:
-    identity = resolve_operator_session_identity(
+    return _authorize_run_read(
         request=request,
+        deps=deps,
+        run_id=run_id,
         client_id=payload.client_id,
         user_id=payload.user_id,
-        run_id=run_id,
     )
-    principal = identity.principal
-    authenticated_user_id = identity.user_id
-    if not principal_has_scope(principal=principal, scope="agent_runs:read"):
-        raise HTTPException(
-            status_code=403,
-            detail="Missing required scope: agent_runs:read",
-        )
-    require_client_role(
-        client_id=principal.client_id,
-        user_id=authenticated_user_id,
-        allowed_roles={"owner", "admin", "operator", "analyst"},
-    )
-    ensure_principal(
-        principal_id=principal.principal_id,
-        principal_type="human",
-        tenant_id=principal.client_id,
-        display_name=authenticated_user_id,
-        metadata={
-            "auth_method": principal.auth_method,
-            "user_id": authenticated_user_id,
-        },
-    )
-    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=principal.client_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    return principal, run
 
 
 def _respond(
@@ -166,6 +209,218 @@ def stream_operator_message(
         yield _sse(response, "operator_conversation")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.get("/runs/{run_id}/commands")
+def list_operator_commands(
+    run_id: str,
+    request: Request,
+    client_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = None,
+    deps: AppDeps = Depends(_deps),
+) -> dict[str, Any]:
+    principal, _ = _authorize_run_read(
+        request=request,
+        run_id=run_id,
+        deps=deps,
+        client_id=client_id,
+        user_id=user_id,
+    )
+    try:
+        page_result = deps.operator_commands.list_records(
+            tenant_id=principal.client_id,
+            workflow_id=run_id,
+            limit=limit,
+            cursor=cursor,
+        )
+    except OperatorCommandCursorError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    records = page_result["records"]
+    page = page_result["page"]
+    return {
+        "contract": "operator-command-record-list.v1",
+        "run_id": run_id,
+        "records": [
+            {
+                "proposal": pause_proposal_view(record["proposal"]),
+                "receipt": record["receipt"],
+            }
+            for record in records
+        ],
+        "count": len(records),
+        "total_count": page["total_count"],
+        "page": page,
+        "completeness": {
+            "state": "partial"
+            if cursor is not None or page["has_more"]
+            else "complete",
+            "included_count": len(records),
+            "total_count": page["total_count"],
+            "reason": (
+                "additional_pages_available"
+                if page["has_more"]
+                else "continuation_page"
+                if cursor is not None
+                else None
+            ),
+        },
+    }
+
+
+@router.post("/runs/{run_id}/commands/{proposal_id}/confirm")
+def confirm_operator_command(
+    run_id: str,
+    proposal_id: str,
+    payload: OperatorCommandConfirmationRequest,
+    request: Request,
+    deps: AppDeps = Depends(_deps),
+    runtime: AgentRuntimeService = Depends(_runtime),
+    coordinator: SequentialCompletionCoordinator = Depends(_completion_coordinator),
+) -> dict[str, Any]:
+    identity = resolve_operator_command_identity(
+        request=request,
+        client_id=payload.client_id,
+        user_id=payload.user_id,
+        run_id=run_id,
+        proposal_id=proposal_id,
+        proposal_digest=payload.proposal_digest,
+    )
+    principal = identity.principal
+    if not (
+        principal_has_scope(principal=principal, scope="operator_commands:confirm")
+        or principal_has_scope(principal=principal, scope="agent_runs:write")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Missing required scope: operator_commands:confirm",
+        )
+    require_client_role(
+        client_id=principal.client_id,
+        user_id=identity.user_id,
+        allowed_roles={"owner", "admin", "operator"},
+    )
+    ensure_principal(
+        principal_id=principal.principal_id,
+        principal_type="human",
+        tenant_id=principal.client_id,
+        display_name=identity.user_id,
+        metadata={
+            "auth_method": principal.auth_method,
+            "user_id": identity.user_id,
+            "scopes": list(principal.scopes),
+        },
+    )
+    proposal = deps.operator_commands.get_proposal(
+        proposal_id=proposal_id,
+        tenant_id=principal.client_id,
+        workflow_id=run_id,
+    )
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Pause proposal not found")
+    if proposal["proposal_digest"] != payload.proposal_digest:
+        raise HTTPException(status_code=409, detail="Pause proposal digest changed")
+    if proposal["principal_id"] != principal.principal_id:
+        raise HTTPException(
+            status_code=403, detail="Pause proposal belongs to a different operator"
+        )
+
+    existing_receipt = deps.operator_commands.get_receipt(
+        proposal_id=proposal_id,
+        tenant_id=principal.client_id,
+        workflow_id=run_id,
+    )
+    if existing_receipt is not None:
+        replayed_run = deps.agent_runs.get_agent_run(
+            run_id=run_id, client_id=principal.client_id
+        )
+        if replayed_run is None:
+            raise HTTPException(status_code=404, detail="Agent run not found")
+        return {
+            "contract": "operator-command-confirmation.v1",
+            "run_id": run_id,
+            "proposal_id": proposal_id,
+            "command": {
+                "id": existing_receipt["event_ids"]["command"],
+                "event_type": "operator_command_pause",
+                "status": "completed",
+                "anchors": {
+                    "proposal_id": proposal_id,
+                    "proposal_digest": proposal["proposal_digest"],
+                    "receipt_id": existing_receipt["receipt_id"],
+                },
+            },
+            "receipt": existing_receipt,
+            "run": replayed_run,
+        }
+
+    snapshot = build_operator_snapshot(
+        deps=deps,
+        completion_reader=coordinator.get_completion_read_model,
+        tenant_id=principal.client_id,
+        principal_id=principal.principal_id,
+        run_id=run_id,
+    )
+    if snapshot["snapshot_digest"] != proposal["source"]["snapshot_digest"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapshot_changed",
+                "message": "The run changed after this pause proposal. Ask again for a fresh proposal.",
+            },
+        )
+    preflight = conversational_pause_preflight(
+        deps=deps, tenant_id=principal.client_id, run_id=run_id
+    )
+
+    def confirmation_state() -> dict[str, Any]:
+        current_snapshot = build_operator_snapshot(
+            deps=deps,
+            completion_reader=coordinator.get_completion_read_model,
+            tenant_id=principal.client_id,
+            principal_id=principal.principal_id,
+            run_id=run_id,
+        )
+        current_preflight = conversational_pause_preflight(
+            deps=deps, tenant_id=principal.client_id, run_id=run_id
+        )
+        return {
+            "snapshot_digest": current_snapshot["snapshot_digest"],
+            "preflight": current_preflight,
+        }
+
+    try:
+        result = issue_agent_run_command_service(
+            deps=deps,
+            runtime=runtime,
+            run_id=run_id,
+            client_id=principal.client_id,
+            user_id=identity.user_id,
+            command_type="pause",
+            action_id=None,
+            message="Confirmed from operator conversation",
+            metadata={"origin": "operator_conversation", "proposal_id": proposal_id},
+            idempotency_key=proposal["idempotency_key"],
+            conversation_proposal=proposal,
+            conversation_preflight=preflight,
+            conversation_principal_id=principal.principal_id,
+            conversation_confirmation_state=confirmation_state,
+        )
+    except OperatorCommandConflictError as exc:
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    except AgentRunCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return {
+        "contract": "operator-command-confirmation.v1",
+        "run_id": run_id,
+        "proposal_id": proposal_id,
+        "command": result["command"],
+        "receipt": result["command_receipt"],
+        "run": result["run"],
+    }
 
 
 def _sse(payload: dict[str, Any], event: str) -> str:

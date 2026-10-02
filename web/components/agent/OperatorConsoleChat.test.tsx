@@ -3,15 +3,23 @@ import userEvent from "@testing-library/user-event";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sendOperatorConversationMessageStream } from "../../lib/api";
+import {
+  confirmOperatorConversationCommand,
+  listOperatorConversationCommands,
+  sendOperatorConversationMessageStream,
+} from "../../lib/api";
 import type { OperatorConversationResponse } from "../../lib/operatorConversationTypes";
 import { OperatorConsoleChat } from "./OperatorConsoleChat";
 
 vi.mock("../../lib/api", () => ({
+  confirmOperatorConversationCommand: vi.fn(),
+  listOperatorConversationCommands: vi.fn(),
   sendOperatorConversationMessageStream: vi.fn(),
 }));
 
 const sendMessage = vi.mocked(sendOperatorConversationMessageStream);
+const confirmCommand = vi.mocked(confirmOperatorConversationCommand);
+const listCommands = vi.mocked(listOperatorConversationCommands);
 
 const run = {
   id: "run-1",
@@ -80,9 +88,64 @@ const baseProps = {
   nextRecommendedAction: { action: null, guardrails: [], hint: "" },
 };
 
+function commandProposal(proposalId: string) {
+  return {
+    contract: "workflow.operator-command-proposal.v1" as const,
+    proposal_id: proposalId,
+    proposal_digest: "b".repeat(64),
+    tenant_id: "client-1",
+    principal_id: "human:user-1",
+    run_id: "run-1",
+    command_type: "pause" as const,
+    parameters: {},
+    source: {
+      active_graph_revision: 2,
+      run_status: "running",
+      run_state: "active",
+      snapshot_digest: "a".repeat(64),
+    },
+    preflight: {
+      digest: "c".repeat(64),
+      result: {
+        allowed: true,
+        risk_level: "low",
+        blockers: [],
+        warnings: [],
+        summary: "Pause is available.",
+      },
+    },
+    idempotency_key: `operator-pause:${proposalId}`,
+    issued_at: "2026-09-30T10:00:00Z",
+    expires_at: "2020-09-30T10:05:00Z",
+    consequences: ["Autonomous progress stops."],
+  };
+}
+
 describe("OperatorConsoleChat", () => {
   beforeEach(() => {
     sendMessage.mockReset();
+    confirmCommand.mockReset();
+    listCommands.mockReset();
+    listCommands.mockResolvedValue({
+      contract: "operator-command-record-list.v1",
+      run_id: "run-1",
+      records: [],
+      count: 0,
+      total_count: 0,
+      page: {
+        limit: 50,
+        returned_count: 0,
+        total_count: 0,
+        has_more: false,
+        next_cursor: null,
+      },
+      completeness: {
+        state: "complete",
+        included_count: 0,
+        total_count: 0,
+        reason: null,
+      },
+    });
     sendMessage.mockImplementation(async (_runId, _message, _sessionId, handlers) => {
       handlers.onStatus?.("building_verified_snapshot");
       handlers.onDelta?.("The verified run is active.");
@@ -132,13 +195,212 @@ describe("OperatorConsoleChat", () => {
     expect(sendMessage.mock.calls[1][2]).toBe("session-1");
   });
 
-  it("does not expose execution or approval controls in conversation", () => {
+  it("does not expose approval controls or pause without a server proposal", () => {
     render(<OperatorConsoleChat {...baseProps} />);
 
     expect(screen.queryByRole("button", { name: /Approve/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Pause/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Retry/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Conversation cannot change execution state/i)).toBeInTheDocument();
+    expect(screen.getByText(/require a separate confirmation/i)).toBeInTheDocument();
+  });
+
+  it("requires an explicit click before confirming the exact pause proposal", async () => {
+    const user = userEvent.setup();
+    const proposal = {
+      contract: "workflow.operator-command-proposal.v1" as const,
+      proposal_id: "proposal-1",
+      proposal_digest: "b".repeat(64),
+      tenant_id: "client-1",
+      principal_id: "human:user-1",
+      run_id: "run-1",
+      command_type: "pause" as const,
+      parameters: {},
+      source: {
+        active_graph_revision: 2,
+        run_status: "running",
+        run_state: "active",
+        snapshot_digest: "a".repeat(64),
+      },
+      preflight: {
+        digest: "c".repeat(64),
+        result: {
+          allowed: true,
+          risk_level: "low",
+          blockers: [],
+          warnings: [],
+          summary: "Pause is available.",
+        },
+      },
+      idempotency_key: "operator-pause:proposal-1",
+      issued_at: "2026-09-30T10:00:00Z",
+      expires_at: "2026-09-30T10:05:00Z",
+      consequences: ["Autonomous progress stops.", "State is preserved."],
+    };
+    sendMessage.mockResolvedValueOnce(
+      response({
+        contract: "operator-conversation-response.v2",
+        intent: "pause_run",
+        interaction_mode: "proposal",
+        command_proposal: proposal,
+      }),
+    );
+    confirmCommand.mockResolvedValueOnce({
+      contract: "operator-command-confirmation.v1",
+      run_id: "run-1",
+      proposal_id: "proposal-1",
+      command: {},
+      run: { ...run, status: "paused" },
+      receipt: {
+        contract: "workflow.operator-command-receipt.v1",
+        receipt_id: "receipt-1",
+        proposal_id: "proposal-1",
+        proposal_digest: "b".repeat(64),
+        run_id: "run-1",
+        command_type: "pause",
+        outcome: "paused",
+        resulting_run_status: "paused",
+        event_ids: { command: "event-1", lifecycle: "event-2" },
+        acknowledgement: "control_plane_paused",
+        propagation_state: "runtime_propagation_not_certified",
+        completed_at: "2026-09-30T10:01:00Z",
+        receipt_digest: "d".repeat(64),
+        replayed: false,
+      },
+    });
+    const onCommitted = vi.fn();
+    render(<OperatorConsoleChat {...baseProps} onCommandCommitted={onCommitted} />);
+
+    await user.type(screen.getByLabelText(/Ask about the selected run/i), "Pause this run");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("button", { name: "Confirm pause" })).toBeInTheDocument();
+    expect(confirmCommand).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Confirm pause" }));
+
+    await waitFor(() => expect(confirmCommand).toHaveBeenCalledOnce());
+    expect(confirmCommand).toHaveBeenCalledWith("run-1", "proposal-1", "b".repeat(64));
+    expect(await screen.findByLabelText("Pause receipt")).toHaveTextContent(
+      /runtime propagation is not independently certified/i,
+    );
+    expect(onCommitted).toHaveBeenCalledOnce();
+  });
+
+  it("restores a durable proposal without an in-memory conversation response", async () => {
+    const user = userEvent.setup();
+    const proposal = {
+      contract: "workflow.operator-command-proposal.v1" as const,
+      proposal_id: "proposal-durable",
+      proposal_digest: "b".repeat(64),
+      tenant_id: "client-1",
+      principal_id: "human:user-1",
+      run_id: "run-1",
+      command_type: "pause" as const,
+      parameters: {},
+      source: {
+        active_graph_revision: 2,
+        run_status: "running",
+        run_state: "active",
+        snapshot_digest: "a".repeat(64),
+      },
+      preflight: {
+        digest: "c".repeat(64),
+        result: {
+          allowed: true,
+          risk_level: "low",
+          blockers: [],
+          warnings: [],
+          summary: "Pause is available.",
+        },
+      },
+      idempotency_key: "operator-pause:proposal-durable",
+      issued_at: "2026-09-30T10:00:00Z",
+      expires_at: "2099-09-30T10:05:00Z",
+      consequences: ["Autonomous progress stops.", "State is preserved."],
+    };
+    listCommands.mockResolvedValueOnce({
+      contract: "operator-command-record-list.v1",
+      run_id: "run-1",
+      records: [{ proposal, receipt: null }],
+      count: 1,
+      total_count: 1,
+      page: {
+        limit: 50,
+        returned_count: 1,
+        total_count: 1,
+        has_more: false,
+        next_cursor: null,
+      },
+      completeness: {
+        state: "complete",
+        included_count: 1,
+        total_count: 1,
+        reason: null,
+      },
+    });
+    render(<OperatorConsoleChat {...baseProps} />);
+
+    expect((await screen.findAllByText(/proposal-dur/i)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Confirm pause" })).toBeInTheDocument();
+    await user.click(screen.getByText(/Durable command history/i));
+    expect(screen.getByText(/awaiting confirmation/i)).toBeInTheDocument();
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("exposes incomplete history and loads older durable command evidence", async () => {
+    const user = userEvent.setup();
+    listCommands
+      .mockResolvedValueOnce({
+        contract: "operator-command-record-list.v1",
+        run_id: "run-1",
+        records: [{ proposal: commandProposal("proposal-new"), receipt: null }],
+        count: 1,
+        total_count: 2,
+        page: {
+          limit: 1,
+          returned_count: 1,
+          total_count: 2,
+          has_more: true,
+          next_cursor: "older-page",
+        },
+        completeness: {
+          state: "partial",
+          included_count: 1,
+          total_count: 2,
+          reason: "additional_pages_available",
+        },
+      })
+      .mockResolvedValueOnce({
+        contract: "operator-command-record-list.v1",
+        run_id: "run-1",
+        records: [{ proposal: commandProposal("proposal-old"), receipt: null }],
+        count: 1,
+        total_count: 2,
+        page: {
+          limit: 1,
+          returned_count: 1,
+          total_count: 2,
+          has_more: false,
+          next_cursor: null,
+        },
+        completeness: {
+          state: "partial",
+          included_count: 1,
+          total_count: 2,
+          reason: "continuation_page",
+        },
+      });
+
+    render(<OperatorConsoleChat {...baseProps} />);
+
+    expect(await screen.findByText(/Showing the newest 1 of 2 durable commands/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load older commands" }));
+    await user.click(await screen.findByText(/Durable command history \(2\)/i));
+    expect(screen.getByText(/proposal-old/i)).toBeInTheDocument();
+    expect(listCommands).toHaveBeenLastCalledWith("run-1", {
+      cursor: "older-page",
+      signal: undefined,
+    });
+    expect(screen.queryByText(/Showing the newest 1 of 2 durable commands/i)).not.toBeInTheDocument();
   });
 
   it("shows stale-snapshot warnings and structured recommendations", async () => {
@@ -231,5 +493,46 @@ describe("OperatorConsoleChat", () => {
       expect(screen.queryByText("The verified run is active.")).not.toBeInTheDocument();
     });
     expect(screen.getByText(/server-verified run context/i)).toBeInTheDocument();
+  });
+
+  it("discards a late command-history failure after run navigation", async () => {
+    let rejectOldRequest: (reason: Error) => void = () => undefined;
+    listCommands
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectOldRequest = reject;
+          }),
+      )
+      .mockResolvedValueOnce({
+        contract: "operator-command-record-list.v1",
+        run_id: "run-2",
+        records: [],
+        count: 0,
+        total_count: 0,
+        page: {
+          limit: 50,
+          returned_count: 0,
+          total_count: 0,
+          has_more: false,
+          next_cursor: null,
+        },
+        completeness: {
+          state: "complete",
+          included_count: 0,
+          total_count: 0,
+          reason: null,
+        },
+      });
+    const view = render(<OperatorConsoleChat {...baseProps} />);
+
+    view.rerender(<OperatorConsoleChat {...baseProps} run={{ ...run, id: "run-2" }} />);
+    await waitFor(() => expect(listCommands).toHaveBeenCalledTimes(2));
+    rejectOldRequest(new Error("late run-1 failure"));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/late run-1 failure/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/No conversational operator commands/i)).toBeInTheDocument();
   });
 });

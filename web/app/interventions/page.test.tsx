@@ -14,6 +14,7 @@ const controlAgentRunMock = vi.fn();
 const issueAgentRunCommandMock = vi.fn();
 const preflightAgentRunCommandMock = vi.fn();
 const listAgentRuntimeRegistryMock = vi.fn();
+const listOperatorConversationCommandsMock = vi.fn();
 let searchParamsValue = "";
 
 vi.mock("next/navigation", () => ({
@@ -57,6 +58,8 @@ vi.mock("../../lib/api", () => ({
   controlAgentRun: (...args: unknown[]) => controlAgentRunMock(...args),
   issueAgentRunCommand: (...args: unknown[]) => issueAgentRunCommandMock(...args),
   listAgentRuntimeRegistry: (...args: unknown[]) => listAgentRuntimeRegistryMock(...args),
+  listOperatorConversationCommands: (...args: unknown[]) =>
+    listOperatorConversationCommandsMock(...args),
   preflightAgentRunCommand: (...args: unknown[]) =>
     preflightAgentRunCommandMock(...args),
 }));
@@ -72,6 +75,27 @@ describe("InterventionsPage", () => {
     issueAgentRunCommandMock.mockReset();
     preflightAgentRunCommandMock.mockReset();
     listAgentRuntimeRegistryMock.mockReset();
+    listOperatorConversationCommandsMock.mockReset();
+    listOperatorConversationCommandsMock.mockResolvedValue({
+      contract: "operator-command-record-list.v1",
+      run_id: "run-1",
+      records: [],
+      count: 0,
+      total_count: 0,
+      page: {
+        limit: 50,
+        returned_count: 0,
+        total_count: 0,
+        has_more: false,
+        next_cursor: null,
+      },
+      completeness: {
+        state: "complete",
+        included_count: 0,
+        total_count: 0,
+        reason: null,
+      },
+    });
     searchParamsValue = "";
 
     listAgentRunsMock.mockResolvedValue({
@@ -372,6 +396,196 @@ describe("InterventionsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText(/variants ready/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
+  });
+
+  it("renders durable conversational proposals and exact receipts", async () => {
+    listOperatorConversationCommandsMock.mockImplementation(async (runId: string) => ({
+      contract: "operator-command-record-list.v1",
+      run_id: runId,
+      count: runId === "run-4" ? 1 : 0,
+      total_count: runId === "run-4" ? 1 : 0,
+      page: {
+        limit: 50,
+        returned_count: runId === "run-4" ? 1 : 0,
+        total_count: runId === "run-4" ? 1 : 0,
+        has_more: false,
+        next_cursor: null,
+      },
+      completeness: {
+        state: "complete",
+        included_count: runId === "run-4" ? 1 : 0,
+        total_count: runId === "run-4" ? 1 : 0,
+        reason: null,
+      },
+      records:
+        runId === "run-4"
+          ? [
+              {
+                proposal: {
+                  contract: "workflow.operator-command-proposal.v1",
+                  proposal_id: "proposal-pause-1",
+                  proposal_digest: "b".repeat(64),
+                  tenant_id: "client-1",
+                  principal_id: "human:user-a",
+                  run_id: "run-4",
+                  command_type: "pause",
+                  parameters: {},
+                  source: {
+                    active_graph_revision: 1,
+                    run_status: "running",
+                    run_state: "active",
+                    snapshot_digest: "a".repeat(64),
+                  },
+                  preflight: { digest: "c".repeat(64), result: { allowed: true } },
+                  idempotency_key: "operator-pause:proposal-pause-1",
+                  issued_at: "2026-09-30T10:00:00Z",
+                  expires_at: "2026-09-30T10:05:00Z",
+                  consequences: [],
+                },
+                receipt: {
+                  contract: "workflow.operator-command-receipt.v1",
+                  receipt_id: "receipt-pause-1",
+                  proposal_id: "proposal-pause-1",
+                  proposal_digest: "b".repeat(64),
+                  run_id: "run-4",
+                  command_type: "pause",
+                  outcome: "paused",
+                  resulting_run_status: "paused",
+                  event_ids: { command: "event-command-1", lifecycle: "event-pause-1" },
+                  acknowledgement: "control_plane_paused",
+                  propagation_state: "runtime_propagation_not_certified",
+                  completed_at: "2026-09-30T10:01:00Z",
+                  receipt_digest: "d".repeat(64),
+                },
+              },
+            ]
+          : [],
+    }));
+
+    render(<InterventionsPage />);
+
+    expect(await screen.findByText(/pause command completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/proposal-pause-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/receipt-pause-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/control plane paused/i)).toBeInTheDocument();
+  });
+
+  it("loads the exact run referenced by a receipt when it is absent from the queue", async () => {
+    searchParamsValue = "run_id=run-17";
+    getAgentRunMock.mockImplementation(async (runId: string) => ({
+      run: {
+        id: runId,
+        experiment_id: runId === "run-17" ? "exp-17" : `exp-${runId}`,
+        harness_id: "operator_supervised",
+        policy_profile_id: "human_approval_required",
+        run_mode: "plan_only",
+        status: "paused",
+        state: "active",
+      },
+      actions: [],
+    }));
+    listOperatorConversationCommandsMock.mockImplementation(async (runId: string) => {
+      const records =
+        runId === "run-17"
+          ? [
+              {
+                proposal: {
+                  contract: "workflow.operator-command-proposal.v1",
+                  proposal_id: "proposal-run-17",
+                  proposal_digest: "b".repeat(64),
+                  tenant_id: "client-1",
+                  principal_id: "human:user-a",
+                  run_id: "run-17",
+                  command_type: "pause",
+                  parameters: {},
+                  source: {
+                    active_graph_revision: 1,
+                    run_status: "running",
+                    run_state: "active",
+                    snapshot_digest: "a".repeat(64),
+                  },
+                  preflight: { digest: "c".repeat(64), result: { allowed: true } },
+                  idempotency_key: "operator-pause:proposal-run-17",
+                  issued_at: "2026-09-30T10:00:00Z",
+                  expires_at: "2026-09-30T10:05:00Z",
+                  consequences: [],
+                },
+                receipt: null,
+              },
+            ]
+          : [];
+      return {
+        contract: "operator-command-record-list.v1",
+        run_id: runId,
+        records,
+        count: records.length,
+        total_count: records.length,
+        page: {
+          limit: 50,
+          returned_count: records.length,
+          total_count: records.length,
+          has_more: false,
+          next_cursor: null,
+        },
+        completeness: {
+          state: "complete",
+          included_count: records.length,
+          total_count: records.length,
+          reason: null,
+        },
+      };
+    });
+
+    render(<InterventionsPage />);
+
+    expect(await screen.findByText(/proposal-run-17/i)).toBeInTheDocument();
+    expect(getAgentRunMock).toHaveBeenCalledWith("run-17", { limit: 50 }, "user-a");
+    expect(listOperatorConversationCommandsMock).toHaveBeenCalledWith("run-17", {
+      cursor: null,
+    });
+  });
+
+  it("reports an unavailable durable command projection instead of hiding it", async () => {
+    listOperatorConversationCommandsMock.mockRejectedValue(
+      new Error("command projection unavailable"),
+    );
+
+    render(<InterventionsPage />);
+
+    expect(
+      await screen.findByText(/Durable operator command history is unavailable/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/counts may be incomplete/i)).toBeInTheDocument();
+  });
+
+  it("reports paginated durable command history instead of presenting it as complete", async () => {
+    listOperatorConversationCommandsMock.mockImplementation(async (runId: string) => ({
+      contract: "operator-command-record-list.v1",
+      run_id: runId,
+      records: [],
+      count: 0,
+      total_count: runId === "run-4" ? 51 : 0,
+      page: {
+        limit: 50,
+        returned_count: 0,
+        total_count: runId === "run-4" ? 51 : 0,
+        has_more: runId === "run-4",
+        next_cursor: runId === "run-4" ? "older-run-4" : null,
+      },
+      completeness: {
+        state: runId === "run-4" ? "partial" : "complete",
+        included_count: 0,
+        total_count: runId === "run-4" ? 51 : 0,
+        reason: runId === "run-4" ? "additional_pages_available" : null,
+      },
+    }));
+
+    render(<InterventionsPage />);
+
+    expect(
+      await screen.findByText(/Showing only the newest durable operator commands/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Older proposal and receipt evidence remains available/i)).toBeInTheDocument();
   });
 
   it("approves queued actions from the interventions queue", async () => {

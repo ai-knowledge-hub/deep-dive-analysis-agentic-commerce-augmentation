@@ -31,10 +31,16 @@ and receipt-linked fulfillment make revocation races, retries, and uncertain
 outcomes explicit without claiming the broader task-attempt, compensation, or
 parallel-workflow controls that remain planned.
 
-Phase 2.1 keeps operator conversation outside the control path. The gateway can
-explain verified run evidence and recommend navigation, but it has no command
-dependency and refuses mutation language. Run lifecycle status cannot be used
-as completion evidence, stale snapshots are marked after a second authority
-fence read, and conversation state is excluded from workflow replay. This
-preserves SC-10, SC-11, and SC-13 while later write-capable conversation remains
-subject to the existing governed-command controls.
+Phase 2.1 keeps explanation outside the control path: run lifecycle status
+cannot be used as completion evidence, stale snapshots are marked after a
+second authority-fence read, and conversation state is excluded from workflow
+replay. Phase 2.2 adds one closed control action, pause, as an immutable proposal
+followed by a separate human confirmation. Exact scope, revision, snapshot,
+event head, governing pins, preflight, expiry, idempotency, audit events, and
+receipt are host-owned; the final run/event/receipt outcome is atomic. The
+complete snapshot and preflight are reconstructed again after the final SQLite
+write lock is acquired, preventing an action, approval, effect, validation, or
+completion-projection change from crossing the confirmation boundary. The
+receipt explicitly limits its acknowledgement to the control-plane pause.
+Worker and external-operation propagation remains uncertified and SEC-17 stays
+planned, avoiding a false claim that the broader stop hazard is closed.

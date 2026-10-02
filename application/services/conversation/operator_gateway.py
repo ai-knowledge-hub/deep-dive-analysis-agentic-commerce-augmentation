@@ -8,7 +8,12 @@ from typing import Any, Callable
 from urllib.parse import urlencode
 
 from application.ports.deps import AppDeps
+from application.services.conversation.operator_commands import (
+    create_conversational_pause_proposal,
+    pause_proposal_view,
+)
 from application.services.conversation.operator_snapshot import build_operator_snapshot
+from domain.workflow.operator_commands import OperatorCommandConflictError
 
 
 INTENTS = frozenset(
@@ -21,11 +26,16 @@ INTENTS = frozenset(
         "recommend_next_action",
         "navigate_to_related_record",
         "clarify",
+        "pause_run",
         "mutation_request",
     }
 )
 MUTATION_PATTERN = re.compile(
     r"\b(approve|reject|retry|rerun|pause|resume|cancel|start|stop|step|execute|change(?: the)? plan|delete|update)\b",
+    re.IGNORECASE,
+)
+PAUSE_REQUEST_PATTERN = re.compile(
+    r"\b(?:pause|stop)(?:\s+(?:this|the|my|current))?\s+(?:run|workflow|execution)\b|\b(?:pause|stop)\s+(?:it|now)\b",
     re.IGNORECASE,
 )
 
@@ -76,7 +86,7 @@ class OperatorConversationService:
         facts = _facts(snapshot)
         intent = _classify_locally(question)
         selected_ids: list[str] = []
-        if intent != "mutation_request":
+        if intent not in {"mutation_request", "pause_run"}:
             intent, selected_ids = self._model_selection(
                 question=question, facts=facts, fallback_intent=intent
             )
@@ -109,8 +119,52 @@ class OperatorConversationService:
                 }
             )
 
+        command_proposal: dict[str, Any] | None = None
+        if intent == "pause_run":
+            if is_stale:
+                answer = "The run changed while the pause request was being checked, so no proposal was created. Ask again to build a fresh proposal."
+            else:
+                try:
+                    proposal_result = create_conversational_pause_proposal(
+                        deps=self._deps,
+                        tenant_id=tenant_id,
+                        principal_id=principal_id,
+                        snapshot=snapshot,
+                        current_snapshot_digest=lambda: str(
+                            build_operator_snapshot(
+                                deps=self._deps,
+                                completion_reader=self._completion_reader,
+                                tenant_id=tenant_id,
+                                principal_id=principal_id,
+                                run_id=run_id,
+                            )["snapshot_digest"]
+                        ),
+                    )
+                except OperatorCommandConflictError as exc:
+                    warnings.append({"code": exc.code, "message": exc.message})
+                    answer = "The run changed before the pause proposal could be recorded. Ask again to refresh the proposal."
+                else:
+                    proposal = proposal_result.get("proposal")
+                    preflight = proposal_result["preflight"]
+                    if proposal is None:
+                        answer = str(
+                            preflight.get("summary") or "The run cannot be paused."
+                        )
+                        warnings.extend(
+                            {"code": "pause_preflight_blocked", "message": str(item)}
+                            for item in preflight.get("blockers") or []
+                        )
+                    else:
+                        command_proposal = pause_proposal_view(proposal)
+                        answer = "I prepared a run-bound pause proposal. Review its exact scope and consequences, then confirm it explicitly; this message did not change execution state."
+                        recommendation = {
+                            "kind": "confirm_pause",
+                            "text": "Confirm the exact pause proposal before it expires.",
+                            "href": f"/runs?run_id={run_id}",
+                        }
+
         response = {
-            "contract": "operator-conversation-response.v1",
+            "contract": "operator-conversation-response.v2",
             "session_id": session["id"],
             "run_id": run_id,
             "intent": intent,
@@ -142,12 +196,17 @@ class OperatorConversationService:
                 "completeness": snapshot["completeness"],
             },
             "read_only": True,
+            "interaction_mode": "proposal" if command_proposal else "read_only",
+            "command_proposal": command_proposal,
         }
         metadata = {
             "conversation_kind": "operator_run",
             "run_id": run_id,
             "snapshot_digest": snapshot["snapshot_digest"],
             "intent": intent,
+            "proposal_id": (
+                command_proposal.get("proposal_id") if command_proposal else None
+            ),
         }
         self._deps.turns.add_turn(
             session_id=session["id"],
@@ -647,6 +706,8 @@ def _action_summary(actions: list[dict[str, Any]]) -> str:
 
 def _classify_locally(question: str) -> str:
     lowered = question.lower()
+    if PAUSE_REQUEST_PATTERN.search(question):
+        return "pause_run"
     if MUTATION_PATTERN.search(question):
         return "mutation_request"
     if any(word in lowered for word in ("fail", "error", "went wrong")):
@@ -689,6 +750,7 @@ def _select_facts(
         },
         "navigate_to_related_record": {"run", "evidence_summary", "validation"},
         "mutation_request": {"run", "completion"},
+        "pause_run": {"run", "event", "completion"},
     }.get(intent, {"objective", "run", "actions", "event", "completion"})
     mandatory = {
         "compare_baseline": ("metric_comparison", "metric"),
@@ -722,6 +784,11 @@ def _render(
                 "text": "Review the requested control action in Interventions.",
                 "href": f"/interventions?run_id={snapshot['run']['id']}",
             },
+        )
+    if intent == "pause_run":
+        return (
+            "The pause request is being checked against the selected run before an explicit proposal can be offered.",
+            None,
         )
     if not facts:
         return (

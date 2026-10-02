@@ -1158,6 +1158,7 @@ export type AgentRunEvent = {
     side_effects?: string[];
     rollback_guidance?: string | null;
     compensating_actions?: AgentCompensatingAction[];
+    [key: string]: unknown;
   };
 };
 

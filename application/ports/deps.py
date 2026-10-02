@@ -323,6 +323,18 @@ class GovernedEffectReceiptsStore(Protocol):
     def get_receipt_for_effect_execution(self, **kwargs: Any) -> dict | None: ...
 
 
+class OperatorCommandsStore(Protocol):
+    def create_proposal(self, **kwargs: Any) -> dict: ...
+
+    def get_proposal(self, **kwargs: Any) -> dict | None: ...
+
+    def get_receipt(self, **kwargs: Any) -> dict | None: ...
+
+    def list_records(self, **kwargs: Any) -> dict[str, Any]: ...
+
+    def commit_pause(self, **kwargs: Any) -> dict: ...
+
+
 class MemoryArtifactsStore(Protocol):
     def create_memory_artifact(self, **kwargs: Any) -> dict: ...
 
@@ -505,6 +517,7 @@ class AppDeps:
     approval_ledger: ApprovalLedgerStore
     agent_registry: AgentRegistryStore
     governed_effect_receipts: GovernedEffectReceiptsStore
+    operator_commands: OperatorCommandsStore
     workflow_compatibility: WorkflowCompatibilityStore
 
     # Semantic memory

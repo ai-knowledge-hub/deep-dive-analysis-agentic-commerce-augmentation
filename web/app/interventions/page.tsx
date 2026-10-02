@@ -27,7 +27,6 @@ import { formatActionLabel } from "../../components/interventions/interventionDi
 import {
   buildApprovalItems,
   buildCommandItems,
-  buildDetails,
   buildEscalationItem,
   buildPauseItem,
   buildRetryItem,
@@ -40,14 +39,11 @@ import type {
   PauseItem,
   RetryItem,
 } from "../../components/interventions/interventionTypes";
+import { loadInterventionDetailRows } from "../../components/interventions/operatorCommandProjection";
 import {
   controlAgentRun,
   decideAgentAction,
-  getAgentRun,
-  getAgentRunEvents,
   issueAgentRunCommand,
-  listAgentRuns,
-  listAgentRuntimeRegistry,
   preflightAgentRunCommand,
 } from "../../lib/api";
 import { buildRunsHref } from "../../lib/routes";
@@ -72,6 +68,8 @@ function InterventionsPageContent() {
   const [pauses, setPauses] = useState<PauseItem[]>([]);
   const [escalations, setEscalations] = useState<EscalationItem[]>([]);
   const [commands, setCommands] = useState<CommandItem[]>([]);
+  const [commandProjectionFailures, setCommandProjectionFailures] = useState(0);
+  const [commandProjectionTruncations, setCommandProjectionTruncations] = useState(0);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [pendingCompensatingKey, setPendingCompensatingKey] = useState<string | null>(null);
   const [compensatingPreflights, setCompensatingPreflights] = useState<
@@ -83,29 +81,15 @@ function InterventionsPageContent() {
     setLoading(true);
     setError(null);
     try {
-      const [response, registry] = await Promise.all([
-        listAgentRuns({ limit: 16 }, userId),
-        listAgentRuntimeRegistry(userId).catch(() => null),
-      ]);
-      const nextRuns = response.runs ?? [];
-      const harnessProfiles = registry?.harness_profiles ?? [];
-      const detailRows = await Promise.all(
-        nextRuns.map(async (run) => {
-          try {
-            const [detail, eventData] = await Promise.all([
-              getAgentRun(run.id, { limit: 50 }, userId),
-              getAgentRunEvents(run.id, { limit: 50, event_type: "all" }, userId),
-            ]);
-            return buildDetails(
-              { ...run, ...(detail.run ?? {}) },
-              detail.actions ?? [],
-              eventData.events ?? [],
-              harnessProfiles,
-            );
-          } catch {
-            return buildDetails(run, [], [], harnessProfiles);
-          }
-        }),
+      const detailRows = await loadInterventionDetailRows(userId, runIdParam);
+
+      setCommandProjectionFailures(
+        detailRows.filter((detail) => !detail.operatorCommandsAvailable).length,
+      );
+      setCommandProjectionTruncations(
+        detailRows.filter(
+          (detail) => detail.operatorCommandsAvailable && !detail.operatorCommandsComplete,
+        ).length,
       );
 
       setApprovals(
@@ -144,7 +128,7 @@ function InterventionsPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [runIdParam, userId]);
 
   useEffect(() => {
     void loadInterventions();
@@ -377,6 +361,21 @@ function InterventionsPageContent() {
           ) : null}
 
           <section className="control-grid control-grid--compact control-grid--full">
+            {commandProjectionFailures ? (
+              <div className="panel__notice panel__notice--warning control-grid__full">
+                Durable operator command history is unavailable for{" "}
+                {commandProjectionFailures} run{commandProjectionFailures === 1 ? "" : "s"}.
+                Proposal and receipt counts may be incomplete until the projection reloads.
+              </div>
+            ) : null}
+            {commandProjectionTruncations ? (
+              <div className="panel__notice panel__notice--warning control-grid__full">
+                Showing only the newest durable operator commands for{" "}
+                {commandProjectionTruncations} run
+                {commandProjectionTruncations === 1 ? "" : "s"}. Older proposal and receipt
+                evidence remains available by opening each run&apos;s paginated command history.
+              </div>
+            ) : null}
             <InterventionStartGuide
               escalations={visibleEscalations}
               commands={visibleCommands}

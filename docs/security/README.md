@@ -46,8 +46,11 @@ blocked by the immutable beta release contract.
 The Phase 2.1 operator gateway accepts normal browser traffic only through the
 same-origin Clerk/mock-authenticated web BFF. The BFF replaces request identity
 and creates a short-lived server assertion bound to tenant, user, and exact run;
-its dedicated signing secret never reaches the browser and cannot mint agent or
-write authority. Direct API clients require a signed human bearer token. Body
+its read-only signing secret never reaches the browser and cannot mint agent or
+write authority. Phase 2.2 uses a different command-only secret and assertion
+audience for one exact pause proposal; it binds the proposal ID and digest as
+well as tenant, human, run, expiry, and nonce. Reusing the read assertion cannot
+cross that boundary. Direct API clients require a signed human bearer token. Body
 tenant/user selectors must match verified claims; membership and the fixed
 read scope are then checked. Sessions are bound
 to one authorized run and cannot be carried across run or tenant boundaries.
@@ -57,7 +60,17 @@ while raw generated prose is never exposed as fact or authority. Mandatory
 intent facts, typed provenance, evidence completeness states—including missing,
 unavailable, and contradictory linked validation jobs—and resolved source links
 are server-owned. Client-supplied lifecycle, revision, cursor, and completion
-claims are rejected. The gateway contains no execution-command dependency.
+claims are rejected. Explanation remains isolated from execution; only the
+closed pause intent may create a non-mutating proposal, and only explicit
+confirmation reaches the existing command service. Stale or substituted
+proposal scope fails closed, the full evidence digest is reconstructed under
+the final write lock, and exact retries return one immutable receipt. A
+tenant-and-run-scoped authenticated read projection verifies and exposes the
+immutable proposal and receipt to both Runs and Interventions without trusting
+browser conversation memory. Its run-bound opaque cursor is rejected outside
+the originating tenant and run, and every bounded page reports total and
+remaining evidence so authorization-safe pagination cannot masquerade as a
+complete audit history.
 Governed validation completion records its verified job link atomically with
 the effect receipt. Compatibility reads of the older output-only shape require
 the exact tenant, action, approval, effect-execution, idempotency, and receipt

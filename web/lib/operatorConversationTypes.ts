@@ -13,7 +13,7 @@ export type OperatorConversationFact = {
 };
 
 export type OperatorConversationResponse = {
-  contract: "operator-conversation-response.v1";
+  contract: "operator-conversation-response.v1" | "operator-conversation-response.v2";
   session_id: string;
   run_id: string;
   intent: string;
@@ -59,4 +59,100 @@ export type OperatorConversationResponse = {
     completeness: Record<string, unknown>;
   };
   read_only: true;
+  interaction_mode?: "read_only" | "proposal";
+  command_proposal?: OperatorCommandProposal | null;
+};
+
+export type OperatorCommandProposal = {
+  contract: "workflow.operator-command-proposal.v1";
+  proposal_id: string;
+  proposal_digest: string;
+  tenant_id: string;
+  principal_id: string;
+  run_id: string;
+  command_type: "pause";
+  parameters: Record<string, never>;
+  source: {
+    active_graph_revision: number;
+    run_status: string;
+    run_state: string;
+    snapshot_digest: string;
+    snapshot_cursor?: string | null;
+    latest_event_id?: string | null;
+    latest_event_timestamp?: string | null;
+    harness_id?: string | null;
+    policy_profile_id?: string | null;
+    registry_version?: string | null;
+    registry_fingerprint?: string | null;
+  };
+  preflight: {
+    digest: string;
+    result: {
+      allowed: boolean;
+      risk_level: string;
+      blockers: string[];
+      warnings: string[];
+      summary: string;
+    };
+  };
+  idempotency_key: string;
+  issued_at: string;
+  expires_at: string;
+  consequences: string[];
+};
+
+export type OperatorCommandReceipt = {
+  contract: "workflow.operator-command-receipt.v1";
+  receipt_id: string;
+  proposal_id: string;
+  proposal_digest: string;
+  run_id: string;
+  command_type: "pause";
+  outcome: "paused";
+  resulting_run_status: "paused";
+  event_ids: {
+    command: string;
+    lifecycle: string;
+    stopping_condition?: string | null;
+  };
+  acknowledgement: "control_plane_paused";
+  propagation_state: "runtime_propagation_not_certified";
+  completed_at: string;
+  receipt_digest: string;
+  replayed?: boolean;
+};
+
+export type OperatorCommandRecord = {
+  proposal: OperatorCommandProposal;
+  receipt: OperatorCommandReceipt | null;
+};
+
+export type OperatorCommandRecordListResponse = {
+  contract: "operator-command-record-list.v1";
+  run_id: string;
+  records: OperatorCommandRecord[];
+  count: number;
+  total_count: number;
+  page: {
+    limit: number;
+    returned_count: number;
+    total_count: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  };
+  completeness: {
+    state: "complete" | "partial";
+    included_count: number;
+    total_count: number;
+    reason: "additional_pages_available" | "continuation_page" | null;
+  };
+};
+
+export type OperatorCommandConfirmationResponse = {
+  contract: "operator-command-confirmation.v1";
+  run_id: string;
+  proposal_id: string;
+  command: Record<string, unknown>;
+  receipt: OperatorCommandReceipt;
+  run: AgentRun;
 };

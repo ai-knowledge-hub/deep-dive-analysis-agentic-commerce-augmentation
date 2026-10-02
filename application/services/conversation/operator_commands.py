@@ -1,0 +1,115 @@
+"""Application boundary for conversational pause proposals."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from application.ports.deps import AppDeps
+from application.services.agent_runtime.commands.context import command_context
+from application.services.agent_runtime.commands.preflight import (
+    _command_preflight,
+)
+from domain.workflow.operator_commands import build_pause_proposal
+
+
+PAUSE_PROPOSAL_CONSEQUENCES = (
+    "Autonomous control-plane progress will stop until a separate resume command is authorized.",
+    "Current run state and evidence are preserved.",
+    "This receipt does not certify that every in-flight external operation has stopped.",
+)
+
+
+def conversational_pause_preflight(
+    *, deps: AppDeps, tenant_id: str, run_id: str
+) -> dict[str, Any]:
+    run, action, command_type = command_context(
+        deps=deps,
+        run_id=run_id,
+        client_id=tenant_id,
+        command_type="pause",
+        action_id=None,
+    )
+    result = _command_preflight(
+        deps=deps,
+        run=run,
+        command_type=command_type,
+        action=action,
+        metadata={"origin": "operator_conversation"},
+    )
+    blockers = list(result.get("blockers") or [])
+    if run.get("lock_token"):
+        blockers.append(
+            "The run has in-flight or unreconciled locked work. This compatibility pause cannot certify interruption, so wait for the step to settle or use governed recovery."
+        )
+    warnings = list(result.get("warnings") or [])
+    warnings.append(
+        "Confirmation pauses control-plane progress but does not certify that every in-flight external operation has stopped."
+    )
+    return {
+        **result,
+        "allowed": not blockers,
+        "blockers": blockers,
+        "requires_confirmation": True,
+        "warnings": warnings,
+        "confirmation_scope": "exact_pause_proposal",
+        "summary": (
+            f"Preflight blocked pause: {blockers[0]}"
+            if blockers
+            else result.get("summary")
+        ),
+    }
+
+
+def create_conversational_pause_proposal(
+    *,
+    deps: AppDeps,
+    tenant_id: str,
+    principal_id: str,
+    snapshot: dict[str, Any],
+    current_snapshot_digest: Callable[[], str],
+) -> dict[str, Any]:
+    run_id = str(snapshot["run"]["id"])
+    run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=tenant_id)
+    if run is None:
+        raise LookupError("Agent run not found")
+    preflight = conversational_pause_preflight(
+        deps=deps, tenant_id=tenant_id, run_id=run_id
+    )
+    if preflight.get("allowed") is not True:
+        return {
+            "state": "blocked",
+            "preflight": preflight,
+            "proposal": None,
+        }
+    events = list(snapshot.get("events") or [])
+    proposal = build_pause_proposal(
+        tenant_id=tenant_id,
+        principal_id=principal_id,
+        run=run,
+        snapshot_digest=str(snapshot["snapshot_digest"]),
+        snapshot_cursor=snapshot["event_page"].get("after_cursor"),
+        latest_event=events[-1] if events else None,
+        preflight=preflight,
+    )
+    durable = deps.operator_commands.create_proposal(
+        proposal=proposal,
+        current_snapshot_digest=current_snapshot_digest,
+    )
+    return {"state": "proposed", "preflight": preflight, "proposal": durable}
+
+
+def pause_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
+    """Add operator-facing consequences without changing the canonical proposal."""
+
+    return {
+        **proposal,
+        "consequences": list(PAUSE_PROPOSAL_CONSEQUENCES),
+    }
+
+
+__all__ = [
+    "conversational_pause_preflight",
+    "create_conversational_pause_proposal",
+    "pause_proposal_view",
+]

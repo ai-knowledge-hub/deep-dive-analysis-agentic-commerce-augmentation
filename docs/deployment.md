@@ -217,7 +217,11 @@ is recorded outside this application.
 4. Set the same high-entropy `OPERATOR_BFF_SIGNING_SECRET` on the web and API
    services. Set server-only `OPERATOR_API_URL` on the web service when the API
    has an internal address.
-5. Deploy automatically on push
+5. Set a distinct high-entropy `OPERATOR_COMMAND_BFF_SIGNING_SECRET` on both
+   services for the bounded conversational pause confirmation. Do not reuse the
+   read-only conversation secret; the assertion audiences are intentionally
+   separate.
+6. Deploy automatically on push
 
 ### Vercel (Full‑stack) — Planned, Not Built
 

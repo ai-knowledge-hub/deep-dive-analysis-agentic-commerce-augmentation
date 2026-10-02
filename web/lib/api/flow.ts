@@ -32,7 +32,11 @@ import {
   ValidationJobResponse,
   ValidationProviderRunResponse,
 } from "./types";
-import type { OperatorConversationResponse } from "../operatorConversationTypes";
+import type {
+  OperatorCommandConfirmationResponse,
+  OperatorCommandRecordListResponse,
+  OperatorConversationResponse,
+} from "../operatorConversationTypes";
 import type {
   AgentRunCompletionRepairResponse,
   AgentRunCompletionResponse,
@@ -91,6 +95,48 @@ export async function sendOperatorConversationMessageStream(
     handlers,
     { sameOrigin: true },
   );
+}
+
+export async function confirmOperatorConversationCommand(
+  runId: string,
+  proposalId: string,
+  proposalDigest: string,
+): Promise<OperatorCommandConfirmationResponse> {
+  const clientId = getClientId();
+  const response = await fetch(
+    `/api/operator-conversation/runs/${encodeURIComponent(runId)}/commands/${encodeURIComponent(proposalId)}/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        proposal_digest: proposalDigest,
+      }),
+    },
+  );
+  if (!response.ok) throw new Error(`API error ${response.status}`);
+  return response.json();
+}
+
+export async function listOperatorConversationCommands(
+  runId: string,
+  options: {
+    cursor?: string | null;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<OperatorCommandRecordListResponse> {
+  const clientId = getClientId();
+  const query = new URLSearchParams();
+  if (clientId) query.set("client_id", clientId);
+  if (options.cursor) query.set("cursor", options.cursor);
+  if (options.limit) query.set("limit", String(options.limit));
+  const response = await fetch(
+    `/api/operator-conversation/runs/${encodeURIComponent(runId)}/commands?${query.toString()}`,
+    { method: "GET", cache: "no-store", signal: options.signal },
+  );
+  if (!response.ok) throw new Error(`API error ${response.status}`);
+  return response.json();
 }
 
 export async function startConversationStream(
