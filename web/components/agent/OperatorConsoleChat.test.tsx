@@ -278,11 +278,50 @@ describe("OperatorConsoleChat", () => {
     await user.click(screen.getByRole("button", { name: "Confirm pause" }));
 
     await waitFor(() => expect(confirmCommand).toHaveBeenCalledOnce());
-    expect(confirmCommand).toHaveBeenCalledWith("run-1", "proposal-1", "b".repeat(64));
+    expect(confirmCommand).toHaveBeenCalledWith("run-1", "proposal-1", "b".repeat(64), "pause");
     expect(await screen.findByLabelText("Pause receipt")).toHaveTextContent(
       /runtime propagation is not independently certified/i,
     );
     expect(onCommitted).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])("requires exact resume confirmation and fences navigation during history refresh (%s)", async (navigateDuringRefresh) => {
+    const user = userEvent.setup();
+    const proposal = { ...commandProposal("resume-proposal"), contract: "workflow.operator-command-proposal.v2" as const,
+      command_type: "resume" as const, expires_at: "2099-01-01T00:00:00Z", source: { ...commandProposal("resume-proposal").source, run_status: "paused", run_mode: "plan_only" as const },
+      predicted_run_status: "planned" as const, consequences: ["Plan-only remains non-executing."] };
+    const receipt = { contract: "workflow.operator-command-receipt.v2" as const, receipt_id: "resume-receipt",
+      proposal_id: "resume-proposal", proposal_digest: proposal.proposal_digest, run_id: "run-1", command_type: "resume" as const,
+      outcome: "planned" as const, resulting_run_status: "planned" as const, event_ids: { command: "resume-event", lifecycle: "resumed-event" },
+      acknowledgement: "control_plane_resume_eligible" as const, propagation_state: "runtime_propagation_not_certified" as const,
+      completed_at: new Date().toISOString(), receipt_digest: "e".repeat(64) };
+    listCommands.mockResolvedValue({ contract: "operator-command-record-list.v1", run_id: "run-1", records: [{ proposal, receipt: null }],
+      count: 1, total_count: 1, page: { limit: 50, returned_count: 1, total_count: 1, has_more: false, next_cursor: null },
+      completeness: { state: "complete", included_count: 1, total_count: 1, reason: null } });
+    confirmCommand.mockResolvedValue({ contract: "operator-command-confirmation.v1", run_id: "run-1", proposal_id: "resume-proposal", command: {}, receipt, run: { ...run, status: "planned" } });
+    const onCommitted = vi.fn();
+    const view = render(<OperatorConsoleChat {...baseProps} run={{ ...run, status: "paused" }} onCommandCommitted={onCommitted} />);
+    const button = await screen.findByRole("button", { name: "Confirm resume" });
+    expect(confirmCommand).not.toHaveBeenCalled();
+    expect(screen.getByText("Plan-only remains non-executing.")).toBeInTheDocument();
+    let finishHistory: () => void = () => undefined;
+    if (navigateDuringRefresh) {
+      listCommands.mockImplementationOnce(() => new Promise((resolve) => {
+        finishHistory = () => resolve({ contract: "operator-command-record-list.v1", run_id: "run-1", records: [{ proposal, receipt }], count: 1, total_count: 1,
+          page: { limit: 50, returned_count: 1, total_count: 1, has_more: false, next_cursor: null }, completeness: { state: "complete", included_count: 1, total_count: 1, reason: null } });
+      }));
+    }
+    await user.click(button);
+    expect(confirmCommand).toHaveBeenCalledWith("run-1", "resume-proposal", proposal.proposal_digest, "resume");
+    expect(await screen.findByLabelText("Resume receipt")).toHaveTextContent("Recorded outcome: planned");
+    if (navigateDuringRefresh) {
+      view.rerender(<OperatorConsoleChat {...baseProps} run={{ ...run, id: "run-2" }} onCommandCommitted={onCommitted} />);
+      finishHistory();
+      await waitFor(() => expect(screen.queryByLabelText("Resume receipt")).not.toBeInTheDocument());
+      expect(onCommitted).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());
+    }
   });
 
   it("restores a durable proposal without an in-memory conversation response", async () => {

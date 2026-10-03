@@ -89,7 +89,17 @@ def issue_agent_run_command(
 
     if conversation_proposal is not None:
         if (
-            normalized_command != "pause"
+            normalized_command
+            != (
+                "start"
+                if conversation_proposal.get("command_type") == "resume"
+                else "pause"
+            )
+            or conversation_proposal.get("command_type") not in {"pause", "resume"}
+            or conversation_proposal.get("run_id") != run_id
+            or conversation_proposal.get("tenant_id") != client_id
+            or conversation_proposal.get("idempotency_key") != idempotency_key
+            or action_id is not None
             or conversation_preflight is None
             or not conversation_principal_id
             or conversation_confirmation_state is None
@@ -98,10 +108,15 @@ def issue_agent_run_command(
                 status_code=400,
                 detail={
                     "code": "invalid_conversation_proposal",
-                    "message": "Only an exact conversational pause proposal is supported.",
+                    "message": "Only an exact conversational pause or resume proposal is supported.",
                 },
             )
-        receipt = deps.operator_commands.commit_pause(
+        commit = (
+            deps.operator_commands.commit_resume
+            if conversation_proposal["command_type"] == "resume"
+            else deps.operator_commands.commit_pause
+        )
+        receipt = commit(
             proposal=conversation_proposal,
             principal_id=conversation_principal_id,
             confirmation_state=conversation_confirmation_state,
@@ -110,7 +125,7 @@ def issue_agent_run_command(
         return {
             "command": {
                 "id": receipt["event_ids"]["command"],
-                "event_type": "operator_command_pause",
+                "event_type": f"operator_command_{receipt['command_type']}",
                 "status": "completed",
                 "anchors": {
                     "proposal_id": receipt["proposal_id"],

@@ -33,6 +33,10 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
     );
   }
 
+  const commandType = body.command_type ?? "pause";
+  if (commandType !== "pause" && commandType !== "resume") {
+    return NextResponse.json({ detail: "Unsupported command type" }, { status: 400 });
+  }
   let assertion: string;
   try {
     assertion = createOperatorCommandAssertion(
@@ -41,6 +45,7 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
       params.runId,
       params.proposalId,
       proposalDigest,
+      commandType,
     );
   } catch {
     return NextResponse.json(
@@ -62,6 +67,7 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
         client_id: clientId,
         user_id: userId,
         proposal_digest: proposalDigest,
+        command_type: commandType,
       }),
     },
   );

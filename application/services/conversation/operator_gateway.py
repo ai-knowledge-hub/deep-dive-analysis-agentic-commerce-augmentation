@@ -9,9 +9,10 @@ from urllib.parse import urlencode
 
 from application.ports.deps import AppDeps
 from application.services.conversation.operator_commands import (
-    create_conversational_pause_proposal,
-    pause_proposal_view,
+    create_conversational_proposal,
+    operator_proposal_view,
 )
+from application.services.conversation.operator_resume import build_resume_snapshot
 from application.services.conversation.operator_snapshot import build_operator_snapshot
 from domain.workflow.operator_commands import OperatorCommandConflictError
 
@@ -27,6 +28,7 @@ INTENTS = frozenset(
         "navigate_to_related_record",
         "clarify",
         "pause_run",
+        "resume_run",
         "mutation_request",
     }
 )
@@ -36,6 +38,11 @@ MUTATION_PATTERN = re.compile(
 )
 PAUSE_REQUEST_PATTERN = re.compile(
     r"\b(?:pause|stop)(?:\s+(?:this|the|my|current))?\s+(?:run|workflow|execution)\b|\b(?:pause|stop)\s+(?:it|now)\b",
+    re.IGNORECASE,
+)
+
+RESUME_REQUEST_PATTERN = re.compile(
+    r"\bresume(?:\s+(?:this|the|my|current))?\s+(?:run|workflow|execution)\b|\bresume\s+(?:it|now)\b",
     re.IGNORECASE,
 )
 
@@ -86,16 +93,28 @@ class OperatorConversationService:
         facts = _facts(snapshot)
         intent = _classify_locally(question)
         selected_ids: list[str] = []
-        if intent not in {"mutation_request", "pause_run"}:
+        if intent not in {"mutation_request", "pause_run", "resume_run"}:
             intent, selected_ids = self._model_selection(
                 question=question, facts=facts, fallback_intent=intent
             )
+        snapshot_builder = (
+            build_resume_snapshot if intent == "resume_run" else build_operator_snapshot
+        )
+        if intent == "resume_run":
+            snapshot = snapshot_builder(
+                deps=self._deps,
+                completion_reader=self._completion_reader,
+                tenant_id=tenant_id,
+                principal_id=principal_id,
+                run_id=run_id,
+            )
+            facts = _facts(snapshot)
         selected = _select_facts(facts, intent=intent, selected_ids=selected_ids)
         answer, recommendation = _render(
             intent=intent, facts=selected, snapshot=snapshot
         )
 
-        latest = build_operator_snapshot(
+        latest = snapshot_builder(
             deps=self._deps,
             completion_reader=self._completion_reader,
             tenant_id=tenant_id,
@@ -120,18 +139,20 @@ class OperatorConversationService:
             )
 
         command_proposal: dict[str, Any] | None = None
-        if intent == "pause_run":
+        if intent in {"pause_run", "resume_run"}:
+            command_type = "resume" if intent == "resume_run" else "pause"
             if is_stale:
-                answer = "The run changed while the pause request was being checked, so no proposal was created. Ask again to build a fresh proposal."
+                answer = f"The run changed while the {command_type} request was being checked, so no proposal was created. Ask again to build a fresh proposal."
             else:
                 try:
-                    proposal_result = create_conversational_pause_proposal(
+                    proposal_result = create_conversational_proposal(
+                        command_type=command_type,
                         deps=self._deps,
                         tenant_id=tenant_id,
                         principal_id=principal_id,
                         snapshot=snapshot,
                         current_snapshot_digest=lambda: str(
-                            build_operator_snapshot(
+                            snapshot_builder(
                                 deps=self._deps,
                                 completion_reader=self._completion_reader,
                                 tenant_id=tenant_id,
@@ -142,7 +163,7 @@ class OperatorConversationService:
                     )
                 except OperatorCommandConflictError as exc:
                     warnings.append({"code": exc.code, "message": exc.message})
-                    answer = "The run changed before the pause proposal could be recorded. Ask again to refresh the proposal."
+                    answer = f"The run changed before the {command_type} proposal could be recorded. Ask again to refresh the proposal."
                 else:
                     proposal = proposal_result.get("proposal")
                     preflight = proposal_result["preflight"]
@@ -151,15 +172,18 @@ class OperatorConversationService:
                             preflight.get("summary") or "The run cannot be paused."
                         )
                         warnings.extend(
-                            {"code": "pause_preflight_blocked", "message": str(item)}
+                            {
+                                "code": f"{command_type}_preflight_blocked",
+                                "message": str(item),
+                            }
                             for item in preflight.get("blockers") or []
                         )
                     else:
-                        command_proposal = pause_proposal_view(proposal)
-                        answer = "I prepared a run-bound pause proposal. Review its exact scope and consequences, then confirm it explicitly; this message did not change execution state."
+                        command_proposal = operator_proposal_view(proposal)
+                        answer = f"I prepared a run-bound {command_type} proposal. Review its exact scope and consequences, then confirm it explicitly; this message did not change execution state."
                         recommendation = {
-                            "kind": "confirm_pause",
-                            "text": "Confirm the exact pause proposal before it expires.",
+                            "kind": f"confirm_{command_type}",
+                            "text": f"Confirm the exact {command_type} proposal before it expires.",
                             "href": f"/runs?run_id={run_id}",
                         }
 
@@ -706,6 +730,8 @@ def _action_summary(actions: list[dict[str, Any]]) -> str:
 
 def _classify_locally(question: str) -> str:
     lowered = question.lower()
+    if RESUME_REQUEST_PATTERN.search(question):
+        return "resume_run"
     if PAUSE_REQUEST_PATTERN.search(question):
         return "pause_run"
     if MUTATION_PATTERN.search(question):
@@ -751,6 +777,7 @@ def _select_facts(
         "navigate_to_related_record": {"run", "evidence_summary", "validation"},
         "mutation_request": {"run", "completion"},
         "pause_run": {"run", "event", "completion"},
+        "resume_run": {"run", "event", "completion"},
     }.get(intent, {"objective", "run", "actions", "event", "completion"})
     mandatory = {
         "compare_baseline": ("metric_comparison", "metric"),
@@ -785,9 +812,9 @@ def _render(
                 "href": f"/interventions?run_id={snapshot['run']['id']}",
             },
         )
-    if intent == "pause_run":
+    if intent in {"pause_run", "resume_run"}:
         return (
-            "The pause request is being checked against the selected run before an explicit proposal can be offered.",
+            "The control request is being checked against the selected run before an explicit proposal can be offered.",
             None,
         )
     if not facts:

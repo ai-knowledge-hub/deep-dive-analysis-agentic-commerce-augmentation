@@ -12,6 +12,7 @@ export function createOperatorCommandAssertion(
   runId: string,
   proposalId: string,
   proposalDigest: string,
+  commandType: "pause" | "resume" = "pause",
   nowSeconds = Math.floor(Date.now() / 1000),
 ): string {
   const secret = process.env.OPERATOR_COMMAND_BFF_SIGNING_SECRET?.trim();
@@ -30,7 +31,7 @@ export function createOperatorCommandAssertion(
     run_id: requiredIdentity("runId", runId),
     proposal_id: requiredIdentity("proposalId", proposalId),
     proposal_digest: proposalDigest,
-    command_type: "pause",
+    command_type: commandType,
     iat: nowSeconds,
     exp: nowSeconds + ASSERTION_TTL_SECONDS,
     jti: randomUUID(),

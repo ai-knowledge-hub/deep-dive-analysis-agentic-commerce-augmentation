@@ -398,7 +398,7 @@ describe("InterventionsPage", () => {
     expect(screen.queryByText(/variants_ready/i)).not.toBeInTheDocument();
   });
 
-  it("renders durable conversational proposals and exact receipts", async () => {
+  it.each(["pause", "resume"] as const)("renders durable conversational proposals and exact receipts", async (commandType) => {
     listOperatorConversationCommandsMock.mockImplementation(async (runId: string) => ({
       contract: "operator-command-record-list.v1",
       run_id: runId,
@@ -428,7 +428,7 @@ describe("InterventionsPage", () => {
                   tenant_id: "client-1",
                   principal_id: "human:user-a",
                   run_id: "run-4",
-                  command_type: "pause",
+                  command_type: commandType,
                   parameters: {},
                   source: {
                     active_graph_revision: 1,
@@ -448,11 +448,11 @@ describe("InterventionsPage", () => {
                   proposal_id: "proposal-pause-1",
                   proposal_digest: "b".repeat(64),
                   run_id: "run-4",
-                  command_type: "pause",
-                  outcome: "paused",
-                  resulting_run_status: "paused",
+                  command_type: commandType,
+                  outcome: commandType === "pause" ? "paused" : "planned",
+                  resulting_run_status: commandType === "pause" ? "paused" : "planned",
                   event_ids: { command: "event-command-1", lifecycle: "event-pause-1" },
-                  acknowledgement: "control_plane_paused",
+                  acknowledgement: commandType === "pause" ? "control_plane_paused" : "control_plane_resume_eligible",
                   propagation_state: "runtime_propagation_not_certified",
                   completed_at: "2026-09-30T10:01:00Z",
                   receipt_digest: "d".repeat(64),
@@ -464,10 +464,10 @@ describe("InterventionsPage", () => {
 
     render(<InterventionsPage />);
 
-    expect(await screen.findByText(/pause command completed/i)).toBeInTheDocument();
+    expect(await screen.findByText(new RegExp(`${commandType} command completed`, "i"))).toBeInTheDocument();
     expect(screen.getByText(/proposal-pause-1/i)).toBeInTheDocument();
     expect(screen.getByText(/receipt-pause-1/i)).toBeInTheDocument();
-    expect(screen.getByText(/control plane paused/i)).toBeInTheDocument();
+    expect(screen.getByText(commandType === "pause" ? /control plane paused/i : /control plane resume eligible/i)).toBeInTheDocument();
   });
 
   it("loads the exact run referenced by a receipt when it is absent from the queue", async () => {

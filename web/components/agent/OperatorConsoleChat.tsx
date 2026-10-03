@@ -176,7 +176,7 @@ export function OperatorConsoleChat({
     return () => controller.abort();
   }, [refreshCommandRecords]);
 
-  async function confirmPause(proposal: OperatorCommandProposal) {
+  async function confirmCommand(proposal: OperatorCommandProposal) {
     if (!run || !proposal || confirmingProposalId) return;
     const confirmationRequestId = confirmationRequestRef.current + 1;
     confirmationRequestRef.current = confirmationRequestId;
@@ -187,14 +187,16 @@ export function OperatorConsoleChat({
         run.id,
         proposal.proposal_id,
         proposal.proposal_digest,
+        proposal.command_type,
       );
       if (confirmationRequestRef.current !== confirmationRequestId) return;
       setCommandReceipt(response.receipt);
       await refreshCommandRecords();
+      if (confirmationRequestRef.current !== confirmationRequestId) return;
       await onCommandCommitted?.();
     } catch (caught) {
       if (confirmationRequestRef.current !== confirmationRequestId) return;
-      setError(caught instanceof Error ? caught.message : "Pause confirmation failed.");
+      setError(caught instanceof Error ? caught.message : "Command confirmation failed.");
     } finally {
       if (confirmationRequestRef.current === confirmationRequestId) {
         setConfirmingProposalId(null);
@@ -291,7 +293,7 @@ export function OperatorConsoleChat({
         run={run}
         briefing={
           run
-            ? "Ask about verified execution, evidence, blockers, or next steps. Pause requests become reviewable proposals and require a separate confirmation."
+            ? "Ask about verified execution, evidence, blockers, or next steps. Pause and resume requests become reviewable proposals and require a separate confirmation."
             : "Select a run to start a grounded operator conversation."
         }
         proposedCount={counts.proposed}
@@ -435,9 +437,9 @@ export function OperatorConsoleChat({
           {pendingProposal &&
           !dismissedProposalIds.includes(pendingProposal.proposal_id) &&
           durableReceipt?.proposal_id !== pendingProposal.proposal_id ? (
-            <section className="operator-chat__proposal" aria-label="Pause proposal">
+            <section className="operator-chat__proposal" aria-label={`${pendingProposal.command_type === "resume" ? "Resume" : "Pause"} proposal`}>
               <div>
-                <strong>Pause this run?</strong>
+                <strong>{pendingProposal.command_type === "resume" ? "Resume" : "Pause"} this run?</strong>
                 <div className="panel__muted">
                   Revision {pendingProposal.source.active_graph_revision} · status{" "}
                   {pendingProposal.source.run_status} · expires{" "}
@@ -458,9 +460,9 @@ export function OperatorConsoleChat({
                   type="button"
                   className="button button--primary button--sm"
                   disabled={Boolean(confirmingProposalId)}
-                  onClick={() => void confirmPause(pendingProposal)}
+                  onClick={() => void confirmCommand(pendingProposal)}
                 >
-                  {confirmingProposalId ? "Confirming…" : "Confirm pause"}
+                  {confirmingProposalId ? "Confirming…" : `Confirm ${pendingProposal.command_type}`}
                 </button>
                 <button
                   type="button"
@@ -479,10 +481,10 @@ export function OperatorConsoleChat({
             </section>
           ) : null}
           {durableReceipt ? (
-            <div className="panel__notice panel__notice--info" aria-label="Pause receipt">
-              <strong>Pause acknowledged.</strong> Receipt {durableReceipt.receipt_id} · proposal{" "}
+            <div className="panel__notice panel__notice--info" aria-label={`${durableReceipt.command_type === "resume" ? "Resume" : "Pause"} receipt`}>
+              <strong>{durableReceipt.command_type === "resume" ? "Resume eligibility" : "Pause"} acknowledged.</strong> Receipt {durableReceipt.receipt_id} · proposal{" "}
               {durableReceipt.proposal_id} · {durableReceipt.acknowledgement.replaceAll("_", " ")}.
-              Runtime propagation is not independently certified.{" "}
+              Recorded outcome: {durableReceipt.resulting_run_status}. Runtime propagation is not independently certified.{" "}
               <a href={`/interventions?run_id=${run.id}`}>Open Interventions</a>
             </div>
           ) : null}
@@ -498,7 +500,7 @@ export function OperatorConsoleChat({
                 {commandRecords.map((record) => (
                   <li key={record.proposal.proposal_id}>
                     <span>
-                      Pause proposal {record.proposal.proposal_id} ·{" "}
+                      {record.proposal.command_type === "resume" ? "Resume" : "Pause"} proposal {record.proposal.proposal_id} ·{" "}
                       {record.receipt ? "completed" : "awaiting confirmation"}
                     </span>
                     <small>

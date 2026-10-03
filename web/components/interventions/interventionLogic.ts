@@ -320,7 +320,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       run_id: detail.run.id,
       action_id: null,
       sequence: 0,
-      event_type: receipt ? "operator_command_pause" : "operator_command_pause_proposed",
+      event_type: `operator_command_${proposal.command_type}${receipt ? "" : "_proposed"}`,
       status: receipt ? "completed" : "proposed",
       capability_name: null,
       capability_version: null,
@@ -330,8 +330,8 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       skill_id: null,
       effect_class: null,
       note: receipt
-        ? "A conversational pause command committed with an immutable receipt."
-        : "A conversational pause proposal is awaiting explicit confirmation.",
+        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.resulting_run_status}. Worker continuation is not certified.`
+        : `A conversational ${proposal.command_type} proposal is awaiting explicit confirmation.`,
       is_policy_event: false,
       anchors: {
         origin: "operator_conversation",
@@ -349,8 +349,8 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       priority: receipt ? "low" : "medium",
       risk: "low",
       title: receipt
-        ? `${formatRunLabel(detail.run)} pause command completed`
-        : `${formatRunLabel(detail.run)} has a pause proposal`,
+        ? `${formatRunLabel(detail.run)} ${proposal.command_type} command completed`
+        : `${formatRunLabel(detail.run)} has a ${proposal.command_type} proposal`,
       summary: event.note || "Conversational operator command evidence is available.",
       operatorCommandRecord: record,
     };

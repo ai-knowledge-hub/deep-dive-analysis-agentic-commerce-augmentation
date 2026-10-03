@@ -44,3 +44,12 @@ completion-projection change from crossing the confirmation boundary. The
 receipt explicitly limits its acknowledgement to the control-plane pause.
 Worker and external-operation propagation remains uncertified and SEC-17 stays
 planned, avoiding a false claim that the broader stop hazard is closed.
+
+Phase 2.3a adds paused-only conversational resume eligibility using a distinct
+immutable v2 proposal and explicit confirmation. Under the same final write
+lock, the host rechecks full control state and live preflight. Active execution,
+started or uncertain effects, and unrelated stopping conditions block resume.
+Only the recorded operator-pause marker may be cleared. The sequential mode
+mapping preserves plan-only non-execution, approvals, budgets, policy, attempts,
+and committed effects. The atomic receipt records eligibility and exact status;
+worker continuation and external propagation remain uncertified.

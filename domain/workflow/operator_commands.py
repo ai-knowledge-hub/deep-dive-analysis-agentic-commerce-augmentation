@@ -12,6 +12,10 @@ from typing import Any
 PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v1"
 RECEIPT_CONTRACT = "workflow.operator-command-receipt.v1"
 PAUSE_COMMAND = "pause"
+RESUME_COMMAND = "resume"
+RESUME_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v2"
+RESUME_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v2"
+RESUME_MODES = frozenset({"plan_only", "auto_execute_safe"})
 DEFAULT_PROPOSAL_TTL_SECONDS = 300
 
 
@@ -43,8 +47,9 @@ def canonical_digest(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def build_pause_proposal(
+def _build_proposal(
     *,
+    command_type: str,
     tenant_id: str,
     principal_id: str,
     run: dict[str, Any],
@@ -59,12 +64,14 @@ def build_pause_proposal(
     expires = issued + timedelta(seconds=max(30, int(ttl_seconds)))
     proposal_id = str(uuid.uuid4())
     core = {
-        "contract": PROPOSAL_CONTRACT,
+        "contract": PROPOSAL_CONTRACT
+        if command_type == PAUSE_COMMAND
+        else RESUME_PROPOSAL_CONTRACT,
         "proposal_id": proposal_id,
         "tenant_id": _required("tenant_id", tenant_id),
         "principal_id": _required("principal_id", principal_id),
         "run_id": _required("run_id", run.get("id")),
-        "command_type": PAUSE_COMMAND,
+        "command_type": command_type,
         "parameters": {},
         "source": {
             "active_graph_revision": _positive_int(
@@ -93,16 +100,19 @@ def build_pause_proposal(
             "digest": canonical_digest(preflight),
             "result": preflight,
         },
-        "idempotency_key": f"operator-pause:{proposal_id}",
+        "idempotency_key": f"operator-{command_type}:{proposal_id}",
         "issued_at": issued.isoformat(),
         "expires_at": expires.isoformat(),
     }
+    if command_type == RESUME_COMMAND:
+        core["source"]["run_mode"] = run.get("run_mode")
+        core["predicted_run_status"] = resume_target_status(run)
     proposal = {**core, "proposal_digest": canonical_digest(core)}
-    validate_pause_proposal(proposal)
+    validate_operator_proposal(proposal)
     return proposal
 
 
-def validate_pause_proposal(proposal: dict[str, Any]) -> None:
+def validate_operator_proposal(proposal: dict[str, Any]) -> None:
     expected = {
         "contract",
         "proposal_id",
@@ -118,20 +128,27 @@ def validate_pause_proposal(proposal: dict[str, Any]) -> None:
         "expires_at",
         "proposal_digest",
     }
+    resume = (
+        isinstance(proposal, dict) and proposal.get("command_type") == RESUME_COMMAND
+    )
+    if resume:
+        expected.add("predicted_run_status")
     if type(proposal) is not dict or set(proposal) != expected:
         raise OperatorCommandInvariantError(
             "operator command proposal shape is invalid"
         )
-    if proposal.get("contract") != PROPOSAL_CONTRACT:
+    if proposal.get("contract") != (
+        RESUME_PROPOSAL_CONTRACT if resume else PROPOSAL_CONTRACT
+    ):
         raise OperatorCommandInvariantError(
             "operator command proposal contract is invalid"
         )
     if (
-        proposal.get("command_type") != PAUSE_COMMAND
+        proposal.get("command_type") not in {PAUSE_COMMAND, RESUME_COMMAND}
         or proposal.get("parameters") != {}
     ):
         raise OperatorCommandInvariantError(
-            "operator command proposal is not an exact pause"
+            "operator command proposal is not an exact pause or resume"
         )
     for field in (
         "proposal_id",
@@ -142,7 +159,7 @@ def validate_pause_proposal(proposal: dict[str, Any]) -> None:
     ):
         _required(field, proposal.get(field))
     source = proposal.get("source")
-    if type(source) is not dict or set(source) != {
+    source_fields = {
         "active_graph_revision",
         "run_status",
         "run_state",
@@ -154,8 +171,15 @@ def validate_pause_proposal(proposal: dict[str, Any]) -> None:
         "policy_profile_id",
         "registry_version",
         "registry_fingerprint",
-    }:
+    }
+    if resume:
+        source_fields.add("run_mode")
+    if type(source) is not dict or set(source) != source_fields:
         raise OperatorCommandInvariantError("operator command source fence is invalid")
+    if resume and proposal["predicted_run_status"] != resume_target_status(
+        {"status": source["run_status"], "run_mode": source["run_mode"]}
+    ):
+        raise OperatorCommandInvariantError("resume outcome changed")
     _positive_int("active_graph_revision", source.get("active_graph_revision"))
     _required("run_status", source.get("run_status"))
     _required("run_state", source.get("run_state"))
@@ -176,7 +200,7 @@ def validate_pause_proposal(proposal: dict[str, Any]) -> None:
         raise OperatorCommandInvariantError(
             "operator command preflight result is invalid"
         )
-    if preflight["result"].get("command_type") != PAUSE_COMMAND:
+    if preflight["result"].get("command_type") != proposal["command_type"]:
         raise OperatorCommandInvariantError("operator command preflight type changed")
     if preflight["result"].get("allowed") is not True:
         raise OperatorCommandInvariantError(
@@ -194,10 +218,39 @@ def validate_pause_proposal(proposal: dict[str, Any]) -> None:
         raise OperatorCommandInvariantError("operator command proposal digest changed")
 
 
+def resume_target_status(run: dict[str, Any]) -> str:
+    """Restrict the existing start mapping to an exactly paused source run.
+
+    The sequential compatibility runtime returns planned for plan_only; this
+    does not add a paused->planned edge to the portable workflow kernel.
+    """
+    if run.get("status") != "paused" or run.get("run_mode") not in RESUME_MODES:
+        raise OperatorCommandInvariantError(
+            "resume requires a paused run in a supported mode"
+        )
+    return "planned" if run["run_mode"] == "plan_only" else "running"
+
+
+def build_pause_proposal(**kwargs: Any) -> dict[str, Any]:
+    return _build_proposal(command_type=PAUSE_COMMAND, **kwargs)
+
+
+def build_resume_proposal(**kwargs: Any) -> dict[str, Any]:
+    return _build_proposal(command_type=RESUME_COMMAND, **kwargs)
+
+
+def validate_pause_proposal(proposal: dict[str, Any]) -> None:
+    validate_operator_proposal(proposal)
+    if proposal["command_type"] != PAUSE_COMMAND:
+        raise OperatorCommandInvariantError(
+            "operator command proposal is not an exact pause"
+        )
+
+
 def proposal_is_expired(
     proposal: dict[str, Any], *, now: datetime | None = None
 ) -> bool:
-    validate_pause_proposal(proposal)
+    validate_operator_proposal(proposal)
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     return current >= _timestamp("expires_at", proposal["expires_at"])
 
@@ -250,8 +303,15 @@ __all__ = [
     "PAUSE_COMMAND",
     "PROPOSAL_CONTRACT",
     "RECEIPT_CONTRACT",
+    "RESUME_COMMAND",
+    "RESUME_MODES",
+    "RESUME_PROPOSAL_CONTRACT",
+    "RESUME_RECEIPT_CONTRACT",
     "build_pause_proposal",
+    "build_resume_proposal",
     "canonical_digest",
     "proposal_is_expired",
+    "resume_target_status",
+    "validate_operator_proposal",
     "validate_pause_proposal",
 ]

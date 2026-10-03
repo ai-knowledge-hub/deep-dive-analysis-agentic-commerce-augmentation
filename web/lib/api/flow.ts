@@ -101,6 +101,7 @@ export async function confirmOperatorConversationCommand(
   runId: string,
   proposalId: string,
   proposalDigest: string,
+  commandType: "pause" | "resume" = "pause",
 ): Promise<OperatorCommandConfirmationResponse> {
   const clientId = getClientId();
   const response = await fetch(
@@ -111,6 +112,7 @@ export async function confirmOperatorConversationCommand(
       body: JSON.stringify({
         client_id: clientId,
         proposal_digest: proposalDigest,
+        command_type: commandType,
       }),
     },
   );
