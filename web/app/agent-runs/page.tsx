@@ -137,6 +137,14 @@ function formatRunModeLabel(mode?: string | null): string {
   return formatOperatorIdentifier(mode || "plan_only");
 }
 
+function matchesSelection(
+  scope: { runId: string | null; userId: string | null },
+  runId: string | null,
+  userId: string | null,
+): boolean {
+  return scope.runId === runId && scope.userId === userId;
+}
+
 function AgentRunsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -173,6 +181,9 @@ function AgentRunsPageContent() {
 
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(runIdParam || null);
+  const selectionScopeRef = useRef({ runId: selectedRunId, userId });
+  selectionScopeRef.current = { runId: selectedRunId, userId };
+  const selectedReadGeneration = useRef(0);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
   const [externalAgentJob, setExternalAgentJob] =
@@ -293,26 +304,21 @@ function AgentRunsPageContent() {
         { experiment_id: experimentIdParam || null, limit: 50 },
         userId,
       );
+      if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
       const nextRuns = response.runs ?? [];
       setRuns(nextRuns);
       if (nextRuns.length > 0) {
-        if (runIdParam) {
-          const match = nextRuns.find((item) => item.id === runIdParam);
-          if (match && selectedRunId !== runIdParam) {
-            setSelectedRunId(runIdParam);
-            return;
-          }
-        }
         if (!selectedRunId) {
           setSelectedRunId(sortRunsForOperatorAttention(nextRuns)[0].id);
         }
       }
     } catch (err) {
+      if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
       setError(err instanceof Error ? err.message : "Unable to load agent runs.");
     } finally {
-      setLoading(false);
+      if (matchesSelection(selectionScopeRef.current, selectedRunId, userId)) setLoading(false);
     }
-  }, [experimentIdParam, runIdParam, selectedRunId, userId]);
+  }, [experimentIdParam, selectedRunId, userId]);
 
   const runRegistryBackfill = useCallback(
     async (dryRun: boolean) => {
@@ -411,6 +417,11 @@ function AgentRunsPageContent() {
 
   const loadSelected = useCallback(async () => {
     if (!userId || !selectedRunId) return;
+    if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
+    const generation = ++selectedReadGeneration.current;
+    const ownsView = () =>
+      selectedReadGeneration.current === generation &&
+      matchesSelection(selectionScopeRef.current, selectedRunId, userId);
     setLoading(true);
     setError(null);
     try {
@@ -429,6 +440,7 @@ function AgentRunsPageContent() {
           userId,
         ),
       ]);
+      if (!ownsView()) return;
       setSelectedRun(response.run ?? null);
       setActions(response.actions ?? []);
       setRunEvents(eventsResponse.events ?? []);
@@ -436,18 +448,19 @@ function AgentRunsPageContent() {
       if (response.run?.principal_type === "external_agent") {
         try {
           const jobResponse = await getExternalAgentJobForRun(response.run.id, userId);
-          setExternalAgentJob(jobResponse);
+          if (ownsView()) setExternalAgentJob(jobResponse);
         } catch {
-          setExternalAgentJob(null);
+          if (ownsView()) setExternalAgentJob(null);
         }
       } else {
         setExternalAgentJob(null);
       }
     } catch (err) {
+      if (!ownsView()) return;
       setError(err instanceof Error ? err.message : "Unable to load agent run.");
       setExternalAgentJob(null);
     } finally {
-      setLoading(false);
+      if (ownsView()) setLoading(false);
     }
   }, [
     selectedRunId,
@@ -488,6 +501,7 @@ function AgentRunsPageContent() {
         },
         userId,
       );
+      if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
       const older = response.events ?? [];
       setRunEvents((current) => [...older, ...current]);
       setEventsPage((current) => ({
@@ -527,6 +541,7 @@ function AgentRunsPageContent() {
           },
           userId,
         );
+        if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
         const incoming = bootstrap.events ?? [];
         setRunEvents((current) => {
           if (current.length === 0) return incoming;
@@ -553,6 +568,7 @@ function AgentRunsPageContent() {
         },
         userId,
       );
+      if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
       const newer = response.events ?? [];
       if (newer.length === 0) {
         setEventsPage((current) => ({
@@ -606,6 +622,7 @@ function AgentRunsPageContent() {
         },
         userId,
       );
+      if (!matchesSelection(selectionScopeRef.current, selectedRunId, userId)) return;
       const recovered = response.events ?? [];
       if (recovered.length === 0) return;
       setRunEvents(recovered);
@@ -629,12 +646,24 @@ function AgentRunsPageContent() {
   }, [loadRuns]);
 
   useEffect(() => {
+    if (runIdParam) setSelectedRunId(runIdParam);
+  }, [runIdParam]);
+
+  useEffect(() => {
     loadExperiments();
   }, [loadExperiments]);
 
   useEffect(() => {
     void loadRuntimeRegistry();
   }, [loadRuntimeRegistry]);
+
+  useEffect(() => {
+    setSelectedRun(null);
+    setActions([]);
+    setRunEvents([]);
+    setEventsPage(null);
+    setExternalAgentJob(null);
+  }, [selectedRunId, userId]);
 
   useEffect(() => {
     loadSelected();

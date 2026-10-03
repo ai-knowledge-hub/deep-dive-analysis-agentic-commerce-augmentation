@@ -59,6 +59,7 @@ describe("operator command browser BFF", () => {
       client_id: "client-1",
       user_id: "clerk-user-1",
       proposal_digest: digest,
+      command_type: "pause",
     });
     const headers = new Headers(init?.headers);
     expect(headers.has("authorization")).toBe(false);
@@ -84,6 +85,23 @@ describe("operator command browser BFF", () => {
       command_type: "pause",
     });
     expect(claims.exp - claims.iat).toBe(30);
+  });
+
+  it("binds resume explicitly in both signed claims and upstream body", async () => {
+    await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "resume" }),
+      { params: { runId: "run-1", proposalId: "proposal-1" } });
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const assertion = new Headers(init?.headers).get("x-operator-command-assertion")!;
+    const claims = JSON.parse(Buffer.from(assertion.split(".")[0], "base64url").toString("utf8"));
+    expect(claims.command_type).toBe("resume");
+    expect(JSON.parse(String(init?.body)).command_type).toBe("resume");
+  });
+
+  it("rejects commands outside the closed pause/resume boundary", async () => {
+    const result = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "start" }),
+      { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(result.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("fails closed without a signed-in user", async () => {

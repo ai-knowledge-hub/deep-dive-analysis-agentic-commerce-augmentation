@@ -8,16 +8,18 @@ import json
 import sqlite3
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from domain.workflow.operator_commands import (
     OperatorCommandConflictError,
     OperatorCommandCursorError,
     RECEIPT_CONTRACT,
+    RESUME_RECEIPT_CONTRACT,
+    resume_target_status,
     canonical_digest,
     proposal_is_expired,
-    validate_pause_proposal,
+    validate_operator_proposal,
 )
 from infrastructure.db.core.connection import get_connection
 
@@ -25,16 +27,17 @@ from infrastructure.db.core.connection import get_connection
 def create_proposal(
     *, proposal: dict[str, Any], current_snapshot_digest: Callable[[], str]
 ) -> dict[str, Any]:
-    validate_pause_proposal(proposal)
+    validate_operator_proposal(proposal)
     source = proposal["source"]
     conn = get_connection()
+    proposal_table, _ = _tables(proposal)
     try:
         conn.execute("BEGIN IMMEDIATE")
         _require_snapshot_digest(proposal, current_snapshot_digest())
         _require_event_head(conn, proposal)
         conn.execute(
-            """
-            INSERT INTO operator_command_proposals (
+            f"""
+            INSERT INTO {proposal_table} (
                 proposal_id, tenant_id, workflow_id, principal_id, command_type,
                 proposal_digest, proposal_json, active_graph_revision,
                 source_run_status, source_run_state, snapshot_digest,
@@ -77,7 +80,7 @@ def create_proposal(
         conn.rollback()
         raise OperatorCommandConflictError(
             "proposal_source_changed",
-            "The run changed before the pause proposal could be recorded. Ask again to refresh it.",
+            "The run changed before the command proposal could be recorded. Ask again to refresh it.",
         ) from exc
     except Exception:
         conn.rollback()
@@ -99,7 +102,7 @@ def get_proposal(
         get_connection()
         .execute(
             """
-        SELECT * FROM operator_command_proposals
+        SELECT * FROM operator_all_proposals
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
             (proposal_id, tenant_id, workflow_id),
@@ -109,7 +112,7 @@ def get_proposal(
     if row is None:
         return None
     proposal = json.loads(row["proposal_json"])
-    validate_pause_proposal(proposal)
+    validate_operator_proposal(proposal)
     _require_proposal_row_matches(row, proposal)
     return proposal
 
@@ -122,7 +125,7 @@ def get_receipt(
         .execute(
             """
         SELECT *
-        FROM operator_command_receipts
+        FROM operator_all_receipts
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
             (proposal_id, tenant_id, workflow_id),
@@ -146,7 +149,7 @@ def list_records(
             conn.execute(
                 """
                 SELECT COUNT(*) AS record_count
-                FROM operator_command_proposals
+                FROM operator_all_proposals
                 WHERE tenant_id = ? AND workflow_id = ?
                 """,
                 (tenant_id, workflow_id),
@@ -155,7 +158,7 @@ def list_records(
         proposal_rows = conn.execute(
             """
             SELECT *
-            FROM operator_command_proposals
+            FROM operator_all_proposals
             WHERE tenant_id = ? AND workflow_id = ?
               AND (
                 ? IS NULL
@@ -220,11 +223,11 @@ def _record_from_row(
     workflow_id: str,
 ) -> dict[str, Any]:
     proposal = json.loads(row["proposal_json"])
-    validate_pause_proposal(proposal)
+    validate_operator_proposal(proposal)
     _require_proposal_row_matches(row, proposal)
     receipt_row = conn.execute(
         """
-        SELECT * FROM operator_command_receipts
+        SELECT * FROM operator_all_receipts
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
         (proposal["proposal_id"], tenant_id, workflow_id),
@@ -289,45 +292,48 @@ def _decode_cursor(
     }
 
 
-def commit_pause(
+def _commit_command(
     *,
     proposal: dict[str, Any],
     principal_id: str,
     confirmation_state: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    validate_pause_proposal(proposal)
+    validate_operator_proposal(proposal)
+    command_type = proposal["command_type"]
+    resume = command_type == "resume"
+    _, receipt_table = _tables(proposal)
     if proposal["principal_id"] != principal_id:
         raise OperatorCommandConflictError(
             "proposal_principal_mismatch",
-            "This pause proposal belongs to a different operator.",
+            "This command proposal belongs to a different operator.",
         )
     conn = get_connection()
     try:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             """
-            SELECT * FROM operator_command_proposals
+            SELECT * FROM operator_all_proposals
             WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
             """,
             (proposal["proposal_id"], proposal["tenant_id"], proposal["run_id"]),
         ).fetchone()
         if row is None:
             raise OperatorCommandConflictError(
-                "proposal_not_found", "The pause proposal is not available."
+                "proposal_not_found", "The command proposal is not available."
             )
         stored = json.loads(row["proposal_json"])
-        validate_pause_proposal(stored)
+        validate_operator_proposal(stored)
         _require_proposal_row_matches(row, stored)
         if stored != proposal:
             raise OperatorCommandConflictError(
                 "proposal_changed",
-                "The pause proposal does not match durable evidence.",
+                "The command proposal does not match durable evidence.",
             )
 
         replay_row = conn.execute(
             """
             SELECT *
-            FROM operator_command_receipts
+            FROM operator_all_receipts
             WHERE proposal_id = ?
             """,
             (proposal["proposal_id"],),
@@ -340,29 +346,29 @@ def commit_pause(
         if proposal_is_expired(proposal):
             raise OperatorCommandConflictError(
                 "proposal_expired",
-                "The pause proposal expired. Ask again for a fresh proposal.",
+                "The command proposal expired. Ask again for a fresh proposal.",
             )
         current = confirmation_state()
         if type(current) is not dict:
             raise OperatorCommandConflictError(
                 "confirmation_state_unavailable",
-                "Current pause evidence could not be verified under the commit lock.",
+                "Current command evidence could not be verified under the commit lock.",
             )
         _require_snapshot_digest(proposal, current.get("snapshot_digest"))
         current_preflight = current.get("preflight")
         if type(current_preflight) is not dict:
             raise OperatorCommandConflictError(
                 "preflight_changed",
-                "Pause conditions could not be verified under the commit lock.",
+                "Command conditions could not be verified under the commit lock.",
             )
         if canonical_digest(current_preflight) != proposal["preflight"]["digest"]:
             raise OperatorCommandConflictError(
                 "preflight_changed",
-                "Pause conditions changed after the proposal. Ask again for a fresh proposal.",
+                "Command conditions changed after the proposal. Ask again for a fresh proposal.",
             )
         if current_preflight.get("allowed") is not True:
             raise OperatorCommandConflictError(
-                "preflight_blocked", "The run can no longer be paused."
+                "preflight_blocked", "The run can no longer accept this command."
             )
 
         source = proposal["source"]
@@ -377,16 +383,23 @@ def commit_pause(
         _require_run_fence(run_row, source)
         _require_event_head(conn, proposal)
 
+        if proposal_is_expired(proposal):
+            raise OperatorCommandConflictError(
+                "proposal_expired", "The proposal expired during confirmation."
+            )
+        target_status = resume_target_status(dict(run_row)) if resume else "paused"
+        _require_active_principal(conn, proposal)
         updated = conn.execute(
             """
             UPDATE agent_runs
-            SET status = 'paused', updated_at = datetime('now')
+            SET status = ?, updated_at = datetime('now')
             WHERE id = ? AND client_id = ?
               AND status = ? AND state = ? AND active_graph_revision = ?
               AND harness_id IS ? AND policy_profile_id IS ?
               AND registry_version IS ? AND registry_fingerprint IS ?
             """,
             (
+                target_status,
                 proposal["run_id"],
                 proposal["tenant_id"],
                 source["run_status"],
@@ -400,7 +413,7 @@ def commit_pause(
         )
         if updated.rowcount != 1:
             raise OperatorCommandConflictError(
-                "run_changed", "The run changed before pause confirmation committed."
+                "run_changed", "The run changed before command confirmation committed."
             )
 
         receipt_id = str(uuid.uuid4())
@@ -414,7 +427,7 @@ def commit_pause(
             "preflight_digest": proposal["preflight"]["digest"],
             "idempotency_key": proposal["idempotency_key"],
             "receipt_id": receipt_id,
-            "command_type": "pause",
+            "command_type": command_type,
             "source_snapshot_digest": source["snapshot_digest"],
             "active_graph_revision": source["active_graph_revision"],
             "origin": "operator_conversation",
@@ -423,56 +436,76 @@ def commit_pause(
             conn,
             event_id=command_event_id,
             run_row=run_row,
-            event_type="operator_command_pause",
+            event_type=f"operator_command_{command_type}",
             status="completed",
             principal_id=principal_id,
-            note="Operator confirmed a conversational pause proposal.",
+            note=f"Operator confirmed a conversational {command_type} proposal.",
             anchors=anchors,
         )
         _insert_event(
             conn,
             event_id=lifecycle_event_id,
             run_row=run_row,
-            event_type="run_paused",
-            status="paused",
+            event_type="run_resumed" if resume else "run_paused",
+            status=target_status,
             principal_id=principal_id,
-            note="Run paused by confirmed operator conversation command.",
+            note=f"Run {target_status} by confirmed operator conversation command.",
             anchors=anchors,
         )
         stopping_event_id: str | None = None
         stopping_conditions = set(
             current_preflight.get("harness", {}).get("stopping_conditions", [])
         )
-        if "operator_pause" in stopping_conditions:
+        if (
+            current_preflight.get("operator_pause_event_id")
+            if resume
+            else "operator_pause" in stopping_conditions
+        ):
             stopping_event_id = str(uuid.uuid4())
             _insert_event(
                 conn,
                 event_id=stopping_event_id,
                 run_row=run_row,
-                event_type="run_stopping_condition_met",
-                status="paused",
+                event_type="run_stopping_condition_cleared"
+                if resume
+                else "run_stopping_condition_met",
+                status=target_status,
                 principal_id=principal_id,
-                note="Run paused by operator.",
-                anchors={**anchors, "stopping_condition": "operator_pause"},
+                note="Recorded operator pause cleared."
+                if resume
+                else "Run paused by operator.",
+                anchors={
+                    **anchors,
+                    "stopping_condition": "operator_pause",
+                    **(
+                        {
+                            "cleared_event_id": current_preflight[
+                                "operator_pause_event_id"
+                            ]
+                        }
+                        if resume
+                        else {}
+                    ),
+                },
             )
 
         request_hash = canonical_digest(
             {"proposal_digest": proposal["proposal_digest"], "confirmed": True}
         )
         receipt_core = {
-            "contract": RECEIPT_CONTRACT,
+            "contract": RESUME_RECEIPT_CONTRACT if resume else RECEIPT_CONTRACT,
             "receipt_id": receipt_id,
             "proposal_id": proposal["proposal_id"],
             "proposal_digest": proposal["proposal_digest"],
             "tenant_id": proposal["tenant_id"],
             "principal_id": principal_id,
             "run_id": proposal["run_id"],
-            "command_type": "pause",
+            "command_type": command_type,
             "idempotency_key": proposal["idempotency_key"],
             "request_hash": request_hash,
-            "outcome": "paused",
+            "outcome": target_status,
             "prior_run_status": source["run_status"],
-            "resulting_run_status": "paused",
+            "resulting_run_status": target_status,
             "resulting_run_state": source["run_state"],
             "active_graph_revision": source["active_graph_revision"],
             "event_ids": {
@@ -480,15 +513,19 @@ def commit_pause(
                 "lifecycle": lifecycle_event_id,
                 "stopping_condition": stopping_event_id,
             },
-            "acknowledgement": "control_plane_paused",
+            "acknowledgement": "control_plane_resume_eligible"
+            if resume
+            else "control_plane_paused",
             "propagation_state": "runtime_propagation_not_certified",
             "completed_at": completed_at,
         }
+        if resume:
+            receipt_core["run_mode"] = source["run_mode"]
         receipt_digest = canonical_digest(receipt_core)
         receipt = {**receipt_core, "receipt_digest": receipt_digest}
         conn.execute(
-            """
-            INSERT INTO operator_command_receipts (
+            f"""
+            INSERT INTO {receipt_table} (
                 receipt_id, proposal_id, tenant_id, workflow_id, principal_id,
                 command_type, proposal_digest, idempotency_key, request_hash,
                 outcome, prior_run_status, resulting_run_status,
@@ -505,19 +542,19 @@ def commit_pause(
                 proposal["tenant_id"],
                 proposal["run_id"],
                 principal_id,
-                "pause",
+                command_type,
                 proposal["proposal_digest"],
                 proposal["idempotency_key"],
                 request_hash,
-                "paused",
+                target_status,
                 source["run_status"],
-                "paused",
+                target_status,
                 source["run_state"],
                 source["active_graph_revision"],
                 command_event_id,
                 lifecycle_event_id,
                 stopping_event_id,
-                "control_plane_paused",
+                receipt_core["acknowledgement"],
                 "runtime_propagation_not_certified",
                 _json(receipt),
                 receipt_digest,
@@ -544,15 +581,17 @@ def _require_run_fence(row: sqlite3.Row, source: dict[str, Any]) -> None:
         "registry_version": source["registry_version"],
         "registry_fingerprint": source["registry_fingerprint"],
     }
+    if "run_mode" in source:
+        expected["run_mode"] = source["run_mode"]
     if any(row[field] != value for field, value in expected.items()):
         raise OperatorCommandConflictError(
             "run_changed",
-            "The run lifecycle, revision, or governing pins changed. Ask again for a fresh pause proposal.",
+            "The run lifecycle, revision, or governing pins changed. Ask again for a fresh command proposal.",
         )
     if row["lock_token"]:
         raise OperatorCommandConflictError(
             "run_busy",
-            "The run acquired in-flight work before pause committed. Wait for it to settle and ask again.",
+            "The run acquired in-flight work before command committed. Wait for it to settle and ask again.",
         )
 
 
@@ -560,7 +599,7 @@ def _require_snapshot_digest(proposal: dict[str, Any], observed: Any) -> None:
     if observed != proposal["source"]["snapshot_digest"]:
         raise OperatorCommandConflictError(
             "snapshot_changed",
-            "The run evidence changed after this pause proposal. Ask again for a fresh proposal.",
+            "The run evidence changed after this command proposal. Ask again for a fresh proposal.",
         )
 
 
@@ -580,7 +619,7 @@ def _require_event_head(conn: sqlite3.Connection, proposal: dict[str, Any]) -> N
     if observed != expected:
         raise OperatorCommandConflictError(
             "event_cursor_changed",
-            "The run event history changed. Ask again for a fresh pause proposal.",
+            "The run event history changed. Ask again for a fresh command proposal.",
         )
 
 
@@ -595,15 +634,26 @@ def _insert_event(
     note: str,
     anchors: dict[str, Any],
 ) -> None:
+    latest = conn.execute(
+        "SELECT MAX(created_at) AS timestamp FROM agent_events WHERE agent_run_id = ?",
+        (run_row["id"],),
+    ).fetchone()["timestamp"]
+    timestamp = datetime.now(timezone.utc)
+    if latest:
+        previous = datetime.fromisoformat(latest.replace("Z", "+00:00"))
+        if previous.tzinfo is None:
+            previous = previous.replace(tzinfo=timezone.utc)
+        timestamp = max(timestamp, previous + timedelta(microseconds=1))
+    created_at = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")
     conn.execute(
         """
         INSERT INTO agent_events (
             id, agent_run_id, action_id, sequence, event_type, status,
             capability_name, capability_version, principal_type, principal_id,
             tool_id, skill_id, effect_class, trace_id, note_text,
-            is_policy_event, anchors_json
+            is_policy_event, anchors_json, created_at
         ) VALUES (?, ?, NULL, 0, ?, ?, NULL, NULL, 'human', ?, NULL, NULL,
-                  NULL, ?, ?, 0, json(?))
+                  NULL, ?, ?, 0, json(?), ?)
         """,
         (
             event_id,
@@ -614,6 +664,7 @@ def _insert_event(
             run_row["trace_id"],
             note,
             _json(anchors),
+            created_at,
         ),
     )
 
@@ -655,7 +706,9 @@ def _verified_receipt(row: sqlite3.Row) -> dict[str, Any]:
     if digest != row["receipt_digest"] or digest != canonical_digest(receipt):
         raise ValueError("operator command receipt integrity check failed")
     expected = {
-        "contract": RECEIPT_CONTRACT,
+        "contract": RESUME_RECEIPT_CONTRACT
+        if row["command_type"] == "resume"
+        else RECEIPT_CONTRACT,
         "receipt_id": row["receipt_id"],
         "proposal_id": row["proposal_id"],
         "proposal_digest": row["proposal_digest"],
@@ -679,9 +732,55 @@ def _verified_receipt(row: sqlite3.Row) -> dict[str, Any]:
         "propagation_state": row["propagation_state"],
         "completed_at": row["completed_at"],
     }
+    if row["command_type"] == "resume":
+        expected["run_mode"] = resume_mode_from_receipt(receipt)
     if receipt != expected:
         raise ValueError("operator command receipt column integrity check failed")
     return {**receipt, "receipt_digest": digest}
+
+
+def resume_mode_from_receipt(receipt: dict[str, Any]) -> str:
+    mode = receipt.get("run_mode")
+    if resume_target_status({"status": "paused", "run_mode": mode}) != receipt.get(
+        "resulting_run_status"
+    ):
+        raise ValueError("resume receipt mode outcome is invalid")
+    return mode
+
+
+def _tables(proposal: dict[str, Any]) -> tuple[str, str]:
+    if proposal["command_type"] == "resume":
+        return "operator_resume_proposals", "operator_resume_receipts"
+    return "operator_command_proposals", "operator_command_receipts"
+
+
+def _require_active_principal(
+    conn: sqlite3.Connection, proposal: dict[str, Any]
+) -> None:
+    row = conn.execute(
+        "SELECT 1 FROM principals WHERE id = ? AND tenant_id = ? AND principal_type = 'human' AND status = 'active'",
+        (proposal["principal_id"], proposal["tenant_id"]),
+    ).fetchone()
+    if row is None:
+        raise OperatorCommandConflictError(
+            "principal_inactive", "The confirming human is no longer active."
+        )
+
+
+def commit_pause(**kwargs: Any) -> dict[str, Any]:
+    if kwargs["proposal"]["command_type"] != "pause":
+        raise OperatorCommandConflictError(
+            "command_mismatch", "Expected an exact command proposal."
+        )
+    return _commit_command(**kwargs)
+
+
+def commit_resume(**kwargs: Any) -> dict[str, Any]:
+    if kwargs["proposal"]["command_type"] != "resume":
+        raise OperatorCommandConflictError(
+            "command_mismatch", "Expected an exact resume proposal."
+        )
+    return _commit_command(**kwargs)
 
 
 def _json(value: Any) -> str:
@@ -696,6 +795,7 @@ def _json(value: Any) -> str:
 
 __all__ = [
     "commit_pause",
+    "commit_resume",
     "create_proposal",
     "get_proposal",
     "get_receipt",

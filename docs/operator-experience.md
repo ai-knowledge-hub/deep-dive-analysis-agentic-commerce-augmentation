@@ -71,16 +71,19 @@ The top of Runs should keep one start-here decision visible before detailed queu
 
 The operator chat on this screen accepts free-form questions grounded in the
 selected run. Its answer shows a snapshot digest, freshness, warnings, and
-links to related records. A request to pause can create a reviewable,
+links to related records. A request to pause or resume can create a reviewable,
 time-limited proposal, but execution changes only after the operator presses
-**Confirm pause**. The resulting receipt is linked to Interventions. Requests
-to approve, retry, cancel, resume, or otherwise change execution are not
+**Confirm pause** or **Confirm resume**. Resume accepts only a paused run:
+`plan_only` returns to `planned`, and `auto_execute_safe` returns to `running`.
+It grants no approval or additional execution authority and invokes no capability.
+The resulting receipt records that exact outcome and is linked to Interventions. Requests
+to approve, retry, cancel, or otherwise change execution are not
 performed and direct the operator to the governed Interventions workspace.
 Selecting another run clears chat and pending proposal context so evidence
 cannot bleed across runs. Normal signed-in browser sessions authenticate
 through the same-origin web gateway; operators do not load a registry-write
-credential to ask questions or confirm this bounded pause.
-Pending pause proposals and completed receipts are reloaded from the durable,
+credential to ask questions or confirm these bounded commands.
+Pending pause/resume proposals and completed receipts are reloaded from the durable,
 run-scoped command ledger rather than retained only in browser conversation
 memory. Runs shows the exact proposal and receipt identities and offers older
 pages when the history exceeds the current page. Interventions fetches an

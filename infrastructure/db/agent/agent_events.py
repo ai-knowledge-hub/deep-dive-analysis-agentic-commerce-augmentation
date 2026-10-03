@@ -155,6 +155,28 @@ def list_agent_events(
     return list(reversed(mapped)) if should_reverse else mapped
 
 
+def list_run_control_events(
+    *, agent_run_id: str, limit: int = 501
+) -> List[Dict[str, Any]]:
+    """Insertion order avoids second-resolution legacy timestamp ambiguity.
+
+    This is a bounded compatibility projection, never workflow-kernel authority.
+    """
+    rows = (
+        get_connection()
+        .execute(
+            """
+        SELECT * FROM agent_events WHERE agent_run_id = ?
+        AND event_type IN ('run_started', 'run_resumed', 'run_stopping_condition_met', 'run_stopping_condition_cleared')
+        ORDER BY rowid DESC LIMIT ?
+        """,
+            (agent_run_id, limit),
+        )
+        .fetchall()
+    )
+    return [_row(row) for row in reversed(rows)]
+
+
 def _row(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -180,4 +202,9 @@ def _row(row) -> Dict[str, Any]:
     }
 
 
-__all__ = ["create_agent_event", "get_agent_event", "list_agent_events"]
+__all__ = [
+    "create_agent_event",
+    "get_agent_event",
+    "list_agent_events",
+    "list_run_control_events",
+]

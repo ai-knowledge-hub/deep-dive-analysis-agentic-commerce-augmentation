@@ -376,7 +376,7 @@ mutate run, action, approval, effect, evidence, or completion state.
 
 Implemented boundary:
 
-- only the closed `pause_run` intent can leave the read-only answer path; all
+- initially only the closed `pause_run` intent could leave the read-only answer path; all
   other mutation language remains a refusal and Interventions deep link;
 - a pause request creates an immutable, expiring proposal bound to the exact
   tenant, human principal, run, active revision, lifecycle state, snapshot and
@@ -385,8 +385,8 @@ Implemented boundary:
 - a separate browser confirmation uses a dedicated short-lived assertion that
   cannot be minted with the read-only conversation secret. Direct API callers
   require equivalent human write authority;
-- confirmation reloads the durable proposal, performs an early snapshot check,
-  and then reconstructs the complete server-owned snapshot plus preflight again
+- confirmation reloads the durable proposal and reconstructs the complete
+  server-owned snapshot plus preflight
   under the final SQLite `BEGIN IMMEDIATE` write lock. Stale, expired,
   cross-principal, cross-run, cross-tenant, or digest-substituted proposals fail
   closed;
@@ -405,8 +405,37 @@ Interventions link fetches that exact run even when it is outside the newest
 queue window, and pages through its command history before rendering the
 proposal, proposal digest, receipt identity, and acknowledgement. Unscoped
 queue reads explicitly warn when older command evidence remains instead of
-presenting a bounded page as complete. Approval, retry, cancel, resume, plan changes,
+presenting a bounded page as complete. Approval, retry, cancel, plan changes,
 and broader natural-language command generation remain out of scope.
+
+#### Slice 2.3a: governed conversational resume eligibility
+
+The closed `resume_run` intent adds a separate v2 proposal and receipt contract.
+Only an existing paused run is eligible. The sequential runtime's existing
+start mapping returns `plan_only` to `planned` and `auto_execute_safe` to
+`running`; confirmation invokes no capability. This compatibility mapping does
+not change the portable workflow lifecycle contract.
+
+The proposal binds the exact mode, predicted status, authenticated scope,
+revision, governing pins, full private control-state digest, preflight, and
+expiry. The command-only BFF assertion also binds the command type. Under
+`BEGIN IMMEDIATE`, confirmation rechecks membership, active human principal,
+complete snapshot and preflight before atomically recording status,
+`operator_command_resume`, `run_resumed`, the exact cleared operator-pause
+marker if present, and the receipt. Other unresolved stops, active execution
+locks, executing actions, and started or uncertain effects block admission.
+Completion authority must be successfully read at proposal creation and final
+admission; missing or corrupt views block, while verified legacy views remain
+compatible. Starts do not resolve earlier stops: a later same-run clear must
+name the exact stopping event. Incomplete bounded history blocks admission.
+Approvals, budgets, policies, modes, attempts, and prior effects remain intact.
+Exact concurrent confirmations and retries replay the original receipt even
+after a later pause. The receipt acknowledges control-plane resume eligibility;
+worker continuation and external propagation remain uncertified.
+
+Migration 057 adds resume tables and mixed command-history views while preserving
+all v1 pause rows and digests. Runs and Interventions render both contracts and
+the recorded mode/status outcome from the same durable paginated history.
 
 ### Phase 3: Durable workflow kernel
 

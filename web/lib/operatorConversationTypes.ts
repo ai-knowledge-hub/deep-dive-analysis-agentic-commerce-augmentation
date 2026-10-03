@@ -64,16 +64,18 @@ export type OperatorConversationResponse = {
 };
 
 export type OperatorCommandProposal = {
-  contract: "workflow.operator-command-proposal.v1";
+  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2";
   proposal_id: string;
   proposal_digest: string;
   tenant_id: string;
   principal_id: string;
   run_id: string;
-  command_type: "pause";
+  command_type: "pause" | "resume";
+  predicted_run_status?: "planned" | "running";
   parameters: Record<string, never>;
   source: {
     active_graph_revision: number;
+    run_mode?: "plan_only" | "auto_execute_safe";
     run_status: string;
     run_state: string;
     snapshot_digest: string;
@@ -102,20 +104,21 @@ export type OperatorCommandProposal = {
 };
 
 export type OperatorCommandReceipt = {
-  contract: "workflow.operator-command-receipt.v1";
+  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2";
   receipt_id: string;
   proposal_id: string;
   proposal_digest: string;
   run_id: string;
-  command_type: "pause";
-  outcome: "paused";
-  resulting_run_status: "paused";
+  command_type: "pause" | "resume";
+  outcome: "paused" | "planned" | "running";
+  resulting_run_status: "paused" | "planned" | "running";
+  run_mode?: "plan_only" | "auto_execute_safe";
   event_ids: {
     command: string;
     lifecycle: string;
     stopping_condition?: string | null;
   };
-  acknowledgement: "control_plane_paused";
+  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible";
   propagation_state: "runtime_propagation_not_certified";
   completed_at: string;
   receipt_digest: string;

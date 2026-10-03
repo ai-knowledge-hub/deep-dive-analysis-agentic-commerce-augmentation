@@ -204,6 +204,7 @@ def _command_headers(
     run_id: str,
     proposal_id: str,
     proposal_digest: str,
+    command_type: str = "pause",
     user_id: str = USER,
     client_id: str = TENANT,
 ) -> dict[str, str]:
@@ -217,7 +218,7 @@ def _command_headers(
         "run_id": run_id,
         "proposal_id": proposal_id,
         "proposal_digest": proposal_digest,
-        "command_type": "pause",
+        "command_type": command_type,
         "iat": now,
         "exp": now + 30,
         "jti": "browser-command-test",

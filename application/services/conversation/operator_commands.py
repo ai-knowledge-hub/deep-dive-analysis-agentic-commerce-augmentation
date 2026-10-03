@@ -1,4 +1,4 @@
-"""Application boundary for conversational pause proposals."""
+"""Application boundary for closed conversational pause and resume proposals."""
 
 from __future__ import annotations
 
@@ -10,7 +10,14 @@ from application.services.agent_runtime.commands.context import command_context
 from application.services.agent_runtime.commands.preflight import (
     _command_preflight,
 )
-from domain.workflow.operator_commands import build_pause_proposal
+from domain.workflow.operator_commands import (
+    OperatorCommandInvariantError,
+    build_pause_proposal,
+    build_resume_proposal,
+)
+from application.services.conversation.operator_resume import (
+    conversational_resume_preflight,
+)
 
 
 PAUSE_PROPOSAL_CONSEQUENCES = (
@@ -61,20 +68,26 @@ def conversational_pause_preflight(
     }
 
 
-def create_conversational_pause_proposal(
+def create_conversational_proposal(
     *,
+    command_type: str,
     deps: AppDeps,
     tenant_id: str,
     principal_id: str,
     snapshot: dict[str, Any],
     current_snapshot_digest: Callable[[], str],
 ) -> dict[str, Any]:
+    if command_type not in {"pause", "resume"}:
+        raise OperatorCommandInvariantError("unsupported conversational command")
     run_id = str(snapshot["run"]["id"])
     run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=tenant_id)
     if run is None:
         raise LookupError("Agent run not found")
-    preflight = conversational_pause_preflight(
-        deps=deps, tenant_id=tenant_id, run_id=run_id
+    scope = {"deps": deps, "tenant_id": tenant_id, "run_id": run_id}
+    preflight = (
+        conversational_resume_preflight(**scope, snapshot=snapshot)
+        if command_type == "resume"
+        else conversational_pause_preflight(**scope)
     )
     if preflight.get("allowed") is not True:
         return {
@@ -83,7 +96,10 @@ def create_conversational_pause_proposal(
             "proposal": None,
         }
     events = list(snapshot.get("events") or [])
-    proposal = build_pause_proposal(
+    proposal_builder = (
+        build_resume_proposal if command_type == "resume" else build_pause_proposal
+    )
+    proposal = proposal_builder(
         tenant_id=tenant_id,
         principal_id=principal_id,
         run=run,
@@ -99,17 +115,36 @@ def create_conversational_pause_proposal(
     return {"state": "proposed", "preflight": preflight, "proposal": durable}
 
 
-def pause_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
+def operator_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
     """Add operator-facing consequences without changing the canonical proposal."""
 
     return {
         **proposal,
-        "consequences": list(PAUSE_PROPOSAL_CONSEQUENCES),
+        "consequences": list(PAUSE_PROPOSAL_CONSEQUENCES)
+        if proposal["command_type"] == "pause"
+        else [
+            f"Run mode {proposal['source']['run_mode']} returns to {proposal['predicted_run_status']}.",
+            "Plan-only remains non-executing."
+            if proposal["source"]["run_mode"] == "plan_only"
+            else "The run becomes eligible for normal governed continuation.",
+            "Resume grants no action approval, budget, policy relaxation, mode change, attempt reset, or repeated effect.",
+            "The receipt acknowledges eligibility; it does not certify worker continuation or external completion.",
+        ],
     }
 
 
 __all__ = [
     "conversational_pause_preflight",
     "create_conversational_pause_proposal",
+    "create_conversational_proposal",
+    "operator_proposal_view",
     "pause_proposal_view",
 ]
+
+
+def create_conversational_pause_proposal(**kwargs: Any) -> dict[str, Any]:
+    return create_conversational_proposal(command_type="pause", **kwargs)
+
+
+def pause_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
+    return operator_proposal_view(proposal)

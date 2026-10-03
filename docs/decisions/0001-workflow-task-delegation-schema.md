@@ -927,9 +927,44 @@ revision, policy, or authority.
   later answer, navigation, reload, or queue-window change cannot hide a pending
   proposal or its exact receipt identity.
 
-Other conversational mutations remain read-only refusals. A later slice must
-add each command as its own typed contract rather than generalizing this pause
-proposal into model-authored executable payloads.
+Other conversational mutations require their own closed typed contracts rather
+than model-authored executable payloads.
+
+## Phase 2.3a conversational resume command contract
+
+- `resume_run` selects a host-owned `resume` command with v2 proposal and receipt
+  contracts. Source status must be `paused`; source `run_mode` and predicted
+  outcome are immutable. The sequential start mapping is `plan_only -> planned`
+  or `auto_execute_safe -> running`. It does not add a portable lifecycle edge.
+- A separate explicit confirmation binds command type, proposal ID/digest,
+  tenant, human, run, and idempotency. The final write lock fences membership,
+  principal activity, lifecycle, revision, full control inputs, approvals,
+  effects, linked validation, completion evidence, pins, live registry and
+  preflight. Exact committed retries are recognized before stale-state checks.
+- New resume proposals and final admission require a successful scoped
+  completion-authority read. Reader integrity errors and missing views block
+  admission even when repeated failures produce an unchanged snapshot digest.
+  A verified legacy view with no completion decision remains compatible;
+  explanatory reads retain warnings and committed receipts remain replayable.
+- Busy runs, executing actions, started or uncertain effects, current harness
+  stops, and unresolved recorded stops other than an exact operator-pause marker
+  are ineligible. Bounded control-event reads fail closed when they cannot
+  establish the relevant stopping history.
+- A compatibility `run_started` or `run_resumed` event does not resolve earlier
+  stopping conditions. Only a later clear event in the same run naming the
+  exact stopping-event ID resolves that marker. Starts cannot bypass the
+  bounded history completeness check.
+- The status, `operator_command_resume`, `run_resumed`, exact optional
+  `run_stopping_condition_cleared`, and receipt commit together. No capability
+  runs here; no approval, budget, policy, mode, attempt, or effect is rewritten.
+  A succeeded effect remains succeeded and governed pre-effect checks still
+  apply to subsequent scheduling.
+- Receipt acknowledgement is `control_plane_resume_eligible`, with the recorded
+  `run_mode`, outcome status, and `runtime_propagation_not_certified`. This is
+  neither completion evidence nor worker acknowledgement; SEC-17 remains planned.
+- Additive migration 057 preserves immutable v1 pause records and exposes mixed
+  v1/v2 history through the existing scoped cursor projection. Old pause-only
+  readers remain valid, though they cannot display resume records.
 
 ## Validation criteria
 

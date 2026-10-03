@@ -691,6 +691,25 @@ describe("AgentRunsPage timeline presets", () => {
     expect(typeof payload.since).toBe("string");
   });
 
+  it("keeps the selected run when an older detail read completes after navigation", async () => {
+    const user = userEvent.setup();
+    searchParamsValue = "run_id=run-1";
+    const first = { id: "run-1", objective: { goal: "First paused run" }, status: "paused", state: "active", run_mode: "plan_only", requires_approval: true };
+    const second = { ...first, id: "run-2", objective: { goal: "Second paused run" } };
+    listAgentRunsMock.mockResolvedValue({ runs: [first, second] });
+    let finishFirst: () => void = () => undefined;
+    getAgentRunMock.mockImplementation((runId: string) => runId === "run-1"
+      ? new Promise((resolve) => { finishFirst = () => resolve({ run: { ...first, status: "running" }, actions: [] }); })
+      : Promise.resolve({ run: second, actions: [] }));
+    render(<AgentRunsPage />);
+    await waitFor(() => expect(getAgentRunMock).toHaveBeenCalledWith("run-1", expect.anything(), "user-a"));
+    await user.click(await screen.findByRole("button", { name: /Second paused run/i }));
+    await waitFor(() => expect(getAgentRunMock).toHaveBeenCalledWith("run-2", expect.anything(), "user-a"));
+    finishFirst();
+    await waitFor(() => expect(screen.getByText("Status: paused")).toBeInTheDocument());
+    expect(screen.queryByText("Status: running")).not.toBeInTheDocument();
+  });
+
   it("sorts run selection by operator attention", async () => {
     listAgentRunsMock.mockResolvedValue({
       runs: [

@@ -68,6 +68,15 @@ Notes:
 
 ### Approval and governed-effect migrations
 
+Conversational resume requires migration 057 after the existing 056 pause
+ledger. Apply it before enabling the matching API and web writers; deploy both
+together so the BFF signs the exact pause/resume command type. Migration 057 is
+additive: v1 pause rows and digests stay unchanged. Rolling back to a pause-only
+application preserves resume records but hides them from that older reader;
+quiesce new resume confirmations before rollback. Local acceptance uses mock
+authentication and does not verify a production Clerk rollout or SEC-17 worker
+propagation.
+
 Migrations 044-049 are one ordered compatibility sequence:
 
 - 044 creates durable approval effect execution;
@@ -218,7 +227,7 @@ is recorded outside this application.
    services. Set server-only `OPERATOR_API_URL` on the web service when the API
    has an internal address.
 5. Set a distinct high-entropy `OPERATOR_COMMAND_BFF_SIGNING_SECRET` on both
-   services for the bounded conversational pause confirmation. Do not reuse the
+   services for bounded conversational pause/resume confirmation. Do not reuse the
    read-only conversation secret; the assertion audiences are intentionally
    separate.
 6. Deploy automatically on push

@@ -1,4 +1,4 @@
-"""Verify the narrow browser assertion for one pause-proposal confirmation."""
+"""Verify the narrow browser assertion for one exact command confirmation."""
 
 from __future__ import annotations
 
@@ -45,6 +45,7 @@ def resolve_operator_command_identity(
     run_id: str,
     proposal_id: str,
     proposal_digest: str,
+    command_type: str = "pause",
 ) -> OperatorSessionIdentity:
     authorization = request.headers.get("authorization") or ""
     if authorization.lower().startswith("bearer "):
@@ -74,6 +75,7 @@ def resolve_operator_command_identity(
             detail="Operator command confirmation requires an authenticated human session",
         )
     claims = _verify(assertion)
+    _match("command_type", command_type, str(claims["command_type"]))
     _match("client_id", client_id, str(claims["client_id"]))
     _match("user_id", user_id, str(claims["sub"]))
     _match("run_id", run_id, str(claims["run_id"]))
@@ -132,7 +134,7 @@ def _verify(assertion: str) -> dict[str, object]:
         payload.get("schema_version") != ASSERTION_SCHEMA_VERSION
         or payload.get("aud") != ASSERTION_AUDIENCE
         or payload.get("iss") != ASSERTION_ISSUER
-        or payload.get("command_type") != "pause"
+        or payload.get("command_type") not in {"pause", "resume"}
     ):
         raise HTTPException(status_code=401, detail="Invalid operator command scope")
     for field in ("sub", "client_id", "run_id", "proposal_id", "jti"):

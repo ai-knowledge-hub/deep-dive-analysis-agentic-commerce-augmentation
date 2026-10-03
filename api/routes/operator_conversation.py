@@ -1,9 +1,9 @@
-"""Read-only operator conversation routes grounded in one authorized run."""
+"""Grounded operator conversation and explicitly confirmed scoped commands."""
 
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -23,7 +23,11 @@ from application.services.conversation.operator_gateway import (
 )
 from application.services.conversation.operator_commands import (
     conversational_pause_preflight,
-    pause_proposal_view,
+    operator_proposal_view,
+)
+from application.services.conversation.operator_resume import (
+    build_resume_snapshot,
+    conversational_resume_preflight,
 )
 from application.services.conversation.operator_snapshot import build_operator_snapshot
 from application.services.agent_runtime.commands import (
@@ -55,6 +59,7 @@ class OperatorMessageRequest(BaseModel):
 class OperatorCommandConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    command_type: Literal["pause", "resume"] = "pause"
     proposal_digest: str = Field(..., min_length=64, max_length=64)
     user_id: str | None = None
     client_id: str | None = None
@@ -244,7 +249,7 @@ def list_operator_commands(
         "run_id": run_id,
         "records": [
             {
-                "proposal": pause_proposal_view(record["proposal"]),
+                "proposal": operator_proposal_view(record["proposal"]),
                 "receipt": record["receipt"],
             }
             for record in records
@@ -286,6 +291,7 @@ def confirm_operator_command(
         run_id=run_id,
         proposal_id=proposal_id,
         proposal_digest=payload.proposal_digest,
+        command_type=payload.command_type,
     )
     principal = identity.principal
     if not (
@@ -318,12 +324,16 @@ def confirm_operator_command(
         workflow_id=run_id,
     )
     if proposal is None:
-        raise HTTPException(status_code=404, detail="Pause proposal not found")
+        raise HTTPException(status_code=404, detail="Command proposal not found")
+    if proposal["command_type"] != payload.command_type:
+        raise HTTPException(
+            status_code=409, detail="Command type does not match the exact proposal"
+        )
     if proposal["proposal_digest"] != payload.proposal_digest:
-        raise HTTPException(status_code=409, detail="Pause proposal digest changed")
+        raise HTTPException(status_code=409, detail="Command proposal digest changed")
     if proposal["principal_id"] != principal.principal_id:
         raise HTTPException(
-            status_code=403, detail="Pause proposal belongs to a different operator"
+            status_code=403, detail="Command proposal belongs to a different operator"
         )
 
     existing_receipt = deps.operator_commands.get_receipt(
@@ -343,7 +353,7 @@ def confirm_operator_command(
             "proposal_id": proposal_id,
             "command": {
                 "id": existing_receipt["event_ids"]["command"],
-                "event_type": "operator_command_pause",
+                "event_type": f"operator_command_{existing_receipt['command_type']}",
                 "status": "completed",
                 "anchors": {
                     "proposal_id": proposal_id,
@@ -355,35 +365,54 @@ def confirm_operator_command(
             "run": replayed_run,
         }
 
-    snapshot = build_operator_snapshot(
+    snapshot_builder = (
+        build_resume_snapshot
+        if payload.command_type == "resume"
+        else build_operator_snapshot
+    )
+    preflight_builder = (
+        conversational_resume_preflight
+        if payload.command_type == "resume"
+        else conversational_pause_preflight
+    )
+    snapshot = snapshot_builder(
         deps=deps,
         completion_reader=coordinator.get_completion_read_model,
         tenant_id=principal.client_id,
         principal_id=principal.principal_id,
         run_id=run_id,
     )
-    if snapshot["snapshot_digest"] != proposal["source"]["snapshot_digest"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "snapshot_changed",
-                "message": "The run changed after this pause proposal. Ask again for a fresh proposal.",
-            },
-        )
-    preflight = conversational_pause_preflight(
-        deps=deps, tenant_id=principal.client_id, run_id=run_id
+    # The transaction owns rejection as well as replay. A competing exact
+    # confirmation may commit after the early read and before this lock.
+    preflight = preflight_builder(
+        deps=deps,
+        tenant_id=principal.client_id,
+        run_id=run_id,
+        **({"snapshot": snapshot} if payload.command_type == "resume" else {}),
     )
 
     def confirmation_state() -> dict[str, Any]:
-        current_snapshot = build_operator_snapshot(
+        require_client_role(
+            client_id=principal.client_id,
+            user_id=identity.user_id,
+            allowed_roles={"owner", "admin", "operator"},
+        )
+        current_snapshot = snapshot_builder(
             deps=deps,
             completion_reader=coordinator.get_completion_read_model,
             tenant_id=principal.client_id,
             principal_id=principal.principal_id,
             run_id=run_id,
         )
-        current_preflight = conversational_pause_preflight(
-            deps=deps, tenant_id=principal.client_id, run_id=run_id
+        current_preflight = preflight_builder(
+            deps=deps,
+            tenant_id=principal.client_id,
+            run_id=run_id,
+            **(
+                {"snapshot": current_snapshot}
+                if payload.command_type == "resume"
+                else {}
+            ),
         )
         return {
             "snapshot_digest": current_snapshot["snapshot_digest"],
@@ -397,7 +426,7 @@ def confirm_operator_command(
             run_id=run_id,
             client_id=principal.client_id,
             user_id=identity.user_id,
-            command_type="pause",
+            command_type="start" if payload.command_type == "resume" else "pause",
             action_id=None,
             message="Confirmed from operator conversation",
             metadata={"origin": "operator_conversation", "proposal_id": proposal_id},
