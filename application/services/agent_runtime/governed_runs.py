@@ -33,14 +33,19 @@ def create_governed_agent_run_with_initial_plan(
                 "governed production runs require at least one planned task"
             )
     except Exception:
-        deps.agent_runs.update_agent_run(
-            run_id=str(run["id"]), status="failed", error="completion_governance_failed"
+        deps.agent_runs.transition_agent_run_status(
+            run_id=str(run["id"]),
+            expected_statuses=("planning",),
+            status="failed",
+            error="completion_governance_failed",
         )
         raise
     if not release_to_planned:
-        return governed
-    activated = deps.agent_runs.update_agent_run(run_id=str(run["id"]), status="planned")
-    return activated or governed
+        return deps.agent_runs.get_agent_run(run_id=str(run["id"])) or governed
+    activated = deps.agent_runs.transition_agent_run_status(
+        run_id=str(run["id"]), expected_statuses=("planning",), status="planned"
+    )
+    return activated or deps.agent_runs.get_agent_run(run_id=str(run["id"])) or governed
 
 
 __all__ = ["create_governed_agent_run_with_initial_plan"]

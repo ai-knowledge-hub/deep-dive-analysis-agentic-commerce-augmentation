@@ -317,13 +317,16 @@ class AgentRuntimeService:
 
     def reconcile_run_status(self, *, run_id: str) -> RuntimeResult:
         run = self._require_run(run_id)
+        if self._normalized_status(run) in _TERMINAL_STATUSES:
+            return RuntimeResult(run=run)
         status = compute_next_run_status(deps=self._deps, run=run, run_id=run_id)
-        updated = self._deps.agent_runs.update_agent_run(
+        updated = self._deps.agent_runs.transition_agent_run_status(
             run_id=run_id,
+            expected_statuses=(str(run["status"]),),
             status=status,
             error=None if status != "failed" else run.get("error"),
         )
-        return RuntimeResult(run=updated or run)
+        return RuntimeResult(run=updated or self._require_run(run_id))
 
     def _require_run(self, run_id: str) -> Dict[str, Any]:
         run = self._deps.agent_runs.get_agent_run(run_id=run_id)

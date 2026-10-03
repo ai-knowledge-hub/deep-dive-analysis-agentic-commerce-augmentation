@@ -14,9 +14,13 @@ from domain.workflow.operator_commands import (
     OperatorCommandInvariantError,
     build_pause_proposal,
     build_resume_proposal,
+    build_cancel_proposal,
 )
 from application.services.conversation.operator_resume import (
     conversational_resume_preflight,
+)
+from application.services.conversation.operator_cancel import (
+    conversational_cancel_preflight,
 )
 
 
@@ -77,7 +81,7 @@ def create_conversational_proposal(
     snapshot: dict[str, Any],
     current_snapshot_digest: Callable[[], str],
 ) -> dict[str, Any]:
-    if command_type not in {"pause", "resume"}:
+    if command_type not in {"pause", "resume", "cancel"}:
         raise OperatorCommandInvariantError("unsupported conversational command")
     run_id = str(snapshot["run"]["id"])
     run = deps.agent_runs.get_agent_run(run_id=run_id, client_id=tenant_id)
@@ -85,7 +89,9 @@ def create_conversational_proposal(
         raise LookupError("Agent run not found")
     scope = {"deps": deps, "tenant_id": tenant_id, "run_id": run_id}
     preflight = (
-        conversational_resume_preflight(**scope, snapshot=snapshot)
+        conversational_cancel_preflight(**scope, snapshot=snapshot)
+        if command_type == "cancel"
+        else conversational_resume_preflight(**scope, snapshot=snapshot)
         if command_type == "resume"
         else conversational_pause_preflight(**scope)
     )
@@ -97,7 +103,11 @@ def create_conversational_proposal(
         }
     events = list(snapshot.get("events") or [])
     proposal_builder = (
-        build_resume_proposal if command_type == "resume" else build_pause_proposal
+        build_cancel_proposal
+        if command_type == "cancel"
+        else build_resume_proposal
+        if command_type == "resume"
+        else build_pause_proposal
     )
     proposal = proposal_builder(
         tenant_id=tenant_id,
@@ -120,7 +130,14 @@ def operator_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
 
     return {
         **proposal,
-        "consequences": list(PAUSE_PROPOSAL_CONSEQUENCES)
+        "consequences": [
+            "Cancellation is terminal: this run cannot be resumed or receive new work.",
+            "Continue only through a separately authorized new run.",
+            "Existing approvals, results, evidence, stopping markers, and completed effects are preserved.",
+            "This receipt does not certify worker interruption or undo external operations.",
+        ]
+        if proposal["command_type"] == "cancel"
+        else list(PAUSE_PROPOSAL_CONSEQUENCES)
         if proposal["command_type"] == "pause"
         else [
             f"Run mode {proposal['source']['run_mode']} returns to {proposal['predicted_run_status']}.",

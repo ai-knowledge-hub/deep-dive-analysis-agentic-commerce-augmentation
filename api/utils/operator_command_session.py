@@ -134,7 +134,7 @@ def _verify(assertion: str) -> dict[str, object]:
         payload.get("schema_version") != ASSERTION_SCHEMA_VERSION
         or payload.get("aud") != ASSERTION_AUDIENCE
         or payload.get("iss") != ASSERTION_ISSUER
-        or payload.get("command_type") not in {"pause", "resume"}
+        or payload.get("command_type") not in {"pause", "resume", "cancel"}
     ):
         raise HTTPException(status_code=401, detail="Invalid operator command scope")
     for field in ("sub", "client_id", "run_id", "proposal_id", "jti"):
