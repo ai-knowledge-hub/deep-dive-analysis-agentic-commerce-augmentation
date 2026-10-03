@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from domain.workflow.lifecycle import WorkflowStatus, require_workflow_transition
+
 
 PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v1"
 RECEIPT_CONTRACT = "workflow.operator-command-receipt.v1"
@@ -16,6 +18,13 @@ RESUME_COMMAND = "resume"
 RESUME_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v2"
 RESUME_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v2"
 RESUME_MODES = frozenset({"plan_only", "auto_execute_safe"})
+CANCEL_COMMAND = "cancel"
+CANCEL_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v3"
+CANCEL_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v3"
+CANCEL_SOURCE_STATUSES = frozenset(
+    {"created", "planning", "planned", "running", "paused"}
+)
+CANCEL_MODES = RESUME_MODES
 DEFAULT_PROPOSAL_TTL_SECONDS = 300
 
 
@@ -64,9 +73,11 @@ def _build_proposal(
     expires = issued + timedelta(seconds=max(30, int(ttl_seconds)))
     proposal_id = str(uuid.uuid4())
     core = {
-        "contract": PROPOSAL_CONTRACT
-        if command_type == PAUSE_COMMAND
-        else RESUME_PROPOSAL_CONTRACT,
+        "contract": {
+            PAUSE_COMMAND: PROPOSAL_CONTRACT,
+            RESUME_COMMAND: RESUME_PROPOSAL_CONTRACT,
+            CANCEL_COMMAND: CANCEL_PROPOSAL_CONTRACT,
+        }[command_type],
         "proposal_id": proposal_id,
         "tenant_id": _required("tenant_id", tenant_id),
         "principal_id": _required("principal_id", principal_id),
@@ -104,9 +115,13 @@ def _build_proposal(
         "issued_at": issued.isoformat(),
         "expires_at": expires.isoformat(),
     }
-    if command_type == RESUME_COMMAND:
+    if command_type in {RESUME_COMMAND, CANCEL_COMMAND}:
         core["source"]["run_mode"] = run.get("run_mode")
-        core["predicted_run_status"] = resume_target_status(run)
+        core["predicted_run_status"] = (
+            cancel_target_status(run)
+            if command_type == CANCEL_COMMAND
+            else resume_target_status(run)
+        )
     proposal = {**core, "proposal_digest": canonical_digest(core)}
     validate_operator_proposal(proposal)
     return proposal
@@ -131,24 +146,32 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
     resume = (
         isinstance(proposal, dict) and proposal.get("command_type") == RESUME_COMMAND
     )
-    if resume:
+    cancel = (
+        isinstance(proposal, dict) and proposal.get("command_type") == CANCEL_COMMAND
+    )
+    if resume or cancel:
         expected.add("predicted_run_status")
     if type(proposal) is not dict or set(proposal) != expected:
         raise OperatorCommandInvariantError(
             "operator command proposal shape is invalid"
         )
     if proposal.get("contract") != (
-        RESUME_PROPOSAL_CONTRACT if resume else PROPOSAL_CONTRACT
+        CANCEL_PROPOSAL_CONTRACT
+        if cancel
+        else RESUME_PROPOSAL_CONTRACT
+        if resume
+        else PROPOSAL_CONTRACT
     ):
         raise OperatorCommandInvariantError(
             "operator command proposal contract is invalid"
         )
     if (
-        proposal.get("command_type") not in {PAUSE_COMMAND, RESUME_COMMAND}
+        proposal.get("command_type")
+        not in {PAUSE_COMMAND, RESUME_COMMAND, CANCEL_COMMAND}
         or proposal.get("parameters") != {}
     ):
         raise OperatorCommandInvariantError(
-            "operator command proposal is not an exact pause or resume"
+            "operator command proposal is not an exact supported command"
         )
     for field in (
         "proposal_id",
@@ -172,7 +195,7 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         "registry_version",
         "registry_fingerprint",
     }
-    if resume:
+    if resume or cancel:
         source_fields.add("run_mode")
     if type(source) is not dict or set(source) != source_fields:
         raise OperatorCommandInvariantError("operator command source fence is invalid")
@@ -180,6 +203,10 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         {"status": source["run_status"], "run_mode": source["run_mode"]}
     ):
         raise OperatorCommandInvariantError("resume outcome changed")
+    if cancel and proposal["predicted_run_status"] != cancel_target_status(
+        {"status": source["run_status"], "run_mode": source["run_mode"]}
+    ):
+        raise OperatorCommandInvariantError("cancel outcome changed")
     _positive_int("active_graph_revision", source.get("active_graph_revision"))
     _required("run_status", source.get("run_status"))
     _required("run_state", source.get("run_state"))
@@ -237,6 +264,22 @@ def build_pause_proposal(**kwargs: Any) -> dict[str, Any]:
 
 def build_resume_proposal(**kwargs: Any) -> dict[str, Any]:
     return _build_proposal(command_type=RESUME_COMMAND, **kwargs)
+
+
+def cancel_target_status(run: dict[str, Any]) -> str:
+    if (
+        run.get("status") not in CANCEL_SOURCE_STATUSES
+        or run.get("run_mode") not in CANCEL_MODES
+    ):
+        raise OperatorCommandInvariantError(
+            "cancel requires a nonterminal run in a supported mode"
+        )
+    require_workflow_transition(WorkflowStatus(run["status"]), WorkflowStatus.CANCELED)
+    return "canceled"
+
+
+def build_cancel_proposal(**kwargs: Any) -> dict[str, Any]:
+    return _build_proposal(command_type=CANCEL_COMMAND, **kwargs)
 
 
 def validate_pause_proposal(proposal: dict[str, Any]) -> None:
@@ -297,6 +340,11 @@ def _timestamp(field: str, value: Any) -> datetime:
 
 
 __all__ = [
+    "CANCEL_COMMAND",
+    "CANCEL_MODES",
+    "CANCEL_SOURCE_STATUSES",
+    "CANCEL_PROPOSAL_CONTRACT",
+    "CANCEL_RECEIPT_CONTRACT",
     "DEFAULT_PROPOSAL_TTL_SECONDS",
     "OperatorCommandConflictError",
     "OperatorCommandInvariantError",
@@ -309,6 +357,8 @@ __all__ = [
     "RESUME_RECEIPT_CONTRACT",
     "build_pause_proposal",
     "build_resume_proposal",
+    "build_cancel_proposal",
+    "cancel_target_status",
     "canonical_digest",
     "proposal_is_expired",
     "resume_target_status",

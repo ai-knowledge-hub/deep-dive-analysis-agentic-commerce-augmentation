@@ -16,6 +16,8 @@ from domain.workflow.operator_commands import (
     OperatorCommandCursorError,
     RECEIPT_CONTRACT,
     RESUME_RECEIPT_CONTRACT,
+    CANCEL_RECEIPT_CONTRACT,
+    cancel_target_status,
     resume_target_status,
     canonical_digest,
     proposal_is_expired,
@@ -102,7 +104,7 @@ def get_proposal(
         get_connection()
         .execute(
             """
-        SELECT * FROM operator_all_proposals
+        SELECT * FROM operator_all_proposals_v3
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
             (proposal_id, tenant_id, workflow_id),
@@ -125,7 +127,7 @@ def get_receipt(
         .execute(
             """
         SELECT *
-        FROM operator_all_receipts
+        FROM operator_all_receipts_v3
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
             (proposal_id, tenant_id, workflow_id),
@@ -149,7 +151,7 @@ def list_records(
             conn.execute(
                 """
                 SELECT COUNT(*) AS record_count
-                FROM operator_all_proposals
+                FROM operator_all_proposals_v3
                 WHERE tenant_id = ? AND workflow_id = ?
                 """,
                 (tenant_id, workflow_id),
@@ -158,7 +160,7 @@ def list_records(
         proposal_rows = conn.execute(
             """
             SELECT *
-            FROM operator_all_proposals
+            FROM operator_all_proposals_v3
             WHERE tenant_id = ? AND workflow_id = ?
               AND (
                 ? IS NULL
@@ -227,7 +229,7 @@ def _record_from_row(
     _require_proposal_row_matches(row, proposal)
     receipt_row = conn.execute(
         """
-        SELECT * FROM operator_all_receipts
+        SELECT * FROM operator_all_receipts_v3
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
         (proposal["proposal_id"], tenant_id, workflow_id),
@@ -301,6 +303,7 @@ def _commit_command(
     validate_operator_proposal(proposal)
     command_type = proposal["command_type"]
     resume = command_type == "resume"
+    cancel = command_type == "cancel"
     _, receipt_table = _tables(proposal)
     if proposal["principal_id"] != principal_id:
         raise OperatorCommandConflictError(
@@ -312,7 +315,7 @@ def _commit_command(
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             """
-            SELECT * FROM operator_all_proposals
+            SELECT * FROM operator_all_proposals_v3
             WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
             """,
             (proposal["proposal_id"], proposal["tenant_id"], proposal["run_id"]),
@@ -333,7 +336,7 @@ def _commit_command(
         replay_row = conn.execute(
             """
             SELECT *
-            FROM operator_all_receipts
+            FROM operator_all_receipts_v3
             WHERE proposal_id = ?
             """,
             (proposal["proposal_id"],),
@@ -387,7 +390,13 @@ def _commit_command(
             raise OperatorCommandConflictError(
                 "proposal_expired", "The proposal expired during confirmation."
             )
-        target_status = resume_target_status(dict(run_row)) if resume else "paused"
+        target_status = (
+            cancel_target_status(dict(run_row))
+            if cancel
+            else resume_target_status(dict(run_row))
+            if resume
+            else "paused"
+        )
         _require_active_principal(conn, proposal)
         updated = conn.execute(
             """
@@ -446,7 +455,11 @@ def _commit_command(
             conn,
             event_id=lifecycle_event_id,
             run_row=run_row,
-            event_type="run_resumed" if resume else "run_paused",
+            event_type="run_canceled"
+            if cancel
+            else "run_resumed"
+            if resume
+            else "run_paused",
             status=target_status,
             principal_id=principal_id,
             note=f"Run {target_status} by confirmed operator conversation command.",
@@ -456,7 +469,7 @@ def _commit_command(
         stopping_conditions = set(
             current_preflight.get("harness", {}).get("stopping_conditions", [])
         )
-        if (
+        if not cancel and (
             current_preflight.get("operator_pause_event_id")
             if resume
             else "operator_pause" in stopping_conditions
@@ -493,7 +506,11 @@ def _commit_command(
             {"proposal_digest": proposal["proposal_digest"], "confirmed": True}
         )
         receipt_core = {
-            "contract": RESUME_RECEIPT_CONTRACT if resume else RECEIPT_CONTRACT,
+            "contract": CANCEL_RECEIPT_CONTRACT
+            if cancel
+            else RESUME_RECEIPT_CONTRACT
+            if resume
+            else RECEIPT_CONTRACT,
             "receipt_id": receipt_id,
             "proposal_id": proposal["proposal_id"],
             "proposal_digest": proposal["proposal_digest"],
@@ -513,13 +530,15 @@ def _commit_command(
                 "lifecycle": lifecycle_event_id,
                 "stopping_condition": stopping_event_id,
             },
-            "acknowledgement": "control_plane_resume_eligible"
+            "acknowledgement": "control_plane_canceled"
+            if cancel
+            else "control_plane_resume_eligible"
             if resume
             else "control_plane_paused",
             "propagation_state": "runtime_propagation_not_certified",
             "completed_at": completed_at,
         }
-        if resume:
+        if resume or cancel:
             receipt_core["run_mode"] = source["run_mode"]
         receipt_digest = canonical_digest(receipt_core)
         receipt = {**receipt_core, "receipt_digest": receipt_digest}
@@ -708,6 +727,8 @@ def _verified_receipt(row: sqlite3.Row) -> dict[str, Any]:
     expected = {
         "contract": RESUME_RECEIPT_CONTRACT
         if row["command_type"] == "resume"
+        else CANCEL_RECEIPT_CONTRACT
+        if row["command_type"] == "cancel"
         else RECEIPT_CONTRACT,
         "receipt_id": row["receipt_id"],
         "proposal_id": row["proposal_id"],
@@ -734,6 +755,14 @@ def _verified_receipt(row: sqlite3.Row) -> dict[str, Any]:
     }
     if row["command_type"] == "resume":
         expected["run_mode"] = resume_mode_from_receipt(receipt)
+    if row["command_type"] == "cancel":
+        mode = receipt.get("run_mode")
+        if (
+            cancel_target_status({"status": row["prior_run_status"], "run_mode": mode})
+            != row["resulting_run_status"]
+        ):
+            raise ValueError("cancel receipt mode outcome is invalid")
+        expected["run_mode"] = mode
     if receipt != expected:
         raise ValueError("operator command receipt column integrity check failed")
     return {**receipt, "receipt_digest": digest}
@@ -749,6 +778,8 @@ def resume_mode_from_receipt(receipt: dict[str, Any]) -> str:
 
 
 def _tables(proposal: dict[str, Any]) -> tuple[str, str]:
+    if proposal["command_type"] == "cancel":
+        return "operator_cancel_proposals", "operator_cancel_receipts"
     if proposal["command_type"] == "resume":
         return "operator_resume_proposals", "operator_resume_receipts"
     return "operator_command_proposals", "operator_command_receipts"
@@ -783,6 +814,14 @@ def commit_resume(**kwargs: Any) -> dict[str, Any]:
     return _commit_command(**kwargs)
 
 
+def commit_cancel(**kwargs: Any) -> dict[str, Any]:
+    if kwargs["proposal"]["command_type"] != "cancel":
+        raise OperatorCommandConflictError(
+            "command_mismatch", "Expected an exact cancel proposal."
+        )
+    return _commit_command(**kwargs)
+
+
 def _json(value: Any) -> str:
     return json.dumps(
         value,
@@ -796,6 +835,7 @@ def _json(value: Any) -> str:
 __all__ = [
     "commit_pause",
     "commit_resume",
+    "commit_cancel",
     "create_proposal",
     "get_proposal",
     "get_receipt",

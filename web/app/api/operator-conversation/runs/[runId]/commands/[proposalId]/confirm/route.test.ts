@@ -87,17 +87,17 @@ describe("operator command browser BFF", () => {
     expect(claims.exp - claims.iat).toBe(30);
   });
 
-  it("binds resume explicitly in both signed claims and upstream body", async () => {
-    await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "resume" }),
+  it.each(["resume", "cancel"])("binds %s explicitly in signed claims and upstream body", async (commandType) => {
+    await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: commandType }),
       { params: { runId: "run-1", proposalId: "proposal-1" } });
     const [, init] = vi.mocked(global.fetch).mock.calls[0];
     const assertion = new Headers(init?.headers).get("x-operator-command-assertion")!;
     const claims = JSON.parse(Buffer.from(assertion.split(".")[0], "base64url").toString("utf8"));
-    expect(claims.command_type).toBe("resume");
-    expect(JSON.parse(String(init?.body)).command_type).toBe("resume");
+    expect(claims.command_type).toBe(commandType);
+    expect(JSON.parse(String(init?.body)).command_type).toBe(commandType);
   });
 
-  it("rejects commands outside the closed pause/resume boundary", async () => {
+  it("rejects commands outside the closed conversational command boundary", async () => {
     const result = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "start" }),
       { params: { runId: "run-1", proposalId: "proposal-1" } });
     expect(result.status).toBe(400);

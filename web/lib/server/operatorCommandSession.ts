@@ -12,7 +12,7 @@ export function createOperatorCommandAssertion(
   runId: string,
   proposalId: string,
   proposalDigest: string,
-  commandType: "pause" | "resume" = "pause",
+  commandType: "pause" | "resume" | "cancel" = "pause",
   nowSeconds = Math.floor(Date.now() / 1000),
 ): string {
   const secret = process.env.OPERATOR_COMMAND_BFF_SIGNING_SECRET?.trim();

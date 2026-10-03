@@ -101,7 +101,7 @@ export async function confirmOperatorConversationCommand(
   runId: string,
   proposalId: string,
   proposalDigest: string,
-  commandType: "pause" | "resume" = "pause",
+  commandType: "pause" | "resume" | "cancel" = "pause",
 ): Promise<OperatorCommandConfirmationResponse> {
   const clientId = getClientId();
   const response = await fetch(

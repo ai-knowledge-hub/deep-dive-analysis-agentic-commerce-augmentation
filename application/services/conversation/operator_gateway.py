@@ -13,6 +13,7 @@ from application.services.conversation.operator_commands import (
     operator_proposal_view,
 )
 from application.services.conversation.operator_resume import build_resume_snapshot
+from application.services.conversation.operator_cancel import build_cancel_snapshot
 from application.services.conversation.operator_snapshot import build_operator_snapshot
 from domain.workflow.operator_commands import OperatorCommandConflictError
 
@@ -29,6 +30,7 @@ INTENTS = frozenset(
         "clarify",
         "pause_run",
         "resume_run",
+        "cancel_run",
         "mutation_request",
     }
 )
@@ -43,6 +45,10 @@ PAUSE_REQUEST_PATTERN = re.compile(
 
 RESUME_REQUEST_PATTERN = re.compile(
     r"\bresume(?:\s+(?:this|the|my|current))?\s+(?:run|workflow|execution)\b|\bresume\s+(?:it|now)\b",
+    re.IGNORECASE,
+)
+CANCEL_REQUEST_PATTERN = re.compile(
+    r"\bcancel(?:\s+(?:this|the|my|current))?\s+(?:run|workflow|execution)\b|\bcancel\s+(?:it|now)\b",
     re.IGNORECASE,
 )
 
@@ -93,14 +99,15 @@ class OperatorConversationService:
         facts = _facts(snapshot)
         intent = _classify_locally(question)
         selected_ids: list[str] = []
-        if intent not in {"mutation_request", "pause_run", "resume_run"}:
+        if intent not in {"mutation_request", "pause_run", "resume_run", "cancel_run"}:
             intent, selected_ids = self._model_selection(
                 question=question, facts=facts, fallback_intent=intent
             )
-        snapshot_builder = (
-            build_resume_snapshot if intent == "resume_run" else build_operator_snapshot
-        )
-        if intent == "resume_run":
+        snapshot_builder = {
+            "resume_run": build_resume_snapshot,
+            "cancel_run": build_cancel_snapshot,
+        }.get(intent, build_operator_snapshot)
+        if intent in {"resume_run", "cancel_run"}:
             snapshot = snapshot_builder(
                 deps=self._deps,
                 completion_reader=self._completion_reader,
@@ -139,8 +146,12 @@ class OperatorConversationService:
             )
 
         command_proposal: dict[str, Any] | None = None
-        if intent in {"pause_run", "resume_run"}:
-            command_type = "resume" if intent == "resume_run" else "pause"
+        if intent in {"pause_run", "resume_run", "cancel_run"}:
+            command_type = {
+                "pause_run": "pause",
+                "resume_run": "resume",
+                "cancel_run": "cancel",
+            }[intent]
             if is_stale:
                 answer = f"The run changed while the {command_type} request was being checked, so no proposal was created. Ask again to build a fresh proposal."
             else:
@@ -178,6 +189,12 @@ class OperatorConversationService:
                             }
                             for item in preflight.get("blockers") or []
                         )
+                        if command_type == "cancel":
+                            recommendation = {
+                                "kind": "navigate",
+                                "text": "Review cancellation blockers and governed recovery in Interventions.",
+                                "href": f"/interventions?run_id={run_id}",
+                            }
                     else:
                         command_proposal = operator_proposal_view(proposal)
                         answer = f"I prepared a run-bound {command_type} proposal. Review its exact scope and consequences, then confirm it explicitly; this message did not change execution state."
@@ -730,6 +747,8 @@ def _action_summary(actions: list[dict[str, Any]]) -> str:
 
 def _classify_locally(question: str) -> str:
     lowered = question.lower()
+    if CANCEL_REQUEST_PATTERN.search(question):
+        return "cancel_run"
     if RESUME_REQUEST_PATTERN.search(question):
         return "resume_run"
     if PAUSE_REQUEST_PATTERN.search(question):
@@ -778,6 +797,7 @@ def _select_facts(
         "mutation_request": {"run", "completion"},
         "pause_run": {"run", "event", "completion"},
         "resume_run": {"run", "event", "completion"},
+        "cancel_run": {"run", "event", "completion", "effect"},
     }.get(intent, {"objective", "run", "actions", "event", "completion"})
     mandatory = {
         "compare_baseline": ("metric_comparison", "metric"),
@@ -812,7 +832,7 @@ def _render(
                 "href": f"/interventions?run_id={snapshot['run']['id']}",
             },
         )
-    if intent in {"pause_run", "resume_run"}:
+    if intent in {"pause_run", "resume_run", "cancel_run"}:
         return (
             "The control request is being checked against the selected run before an explicit proposal can be offered.",
             None,

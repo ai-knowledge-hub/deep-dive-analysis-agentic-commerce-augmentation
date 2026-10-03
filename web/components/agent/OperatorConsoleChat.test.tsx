@@ -204,6 +204,43 @@ describe("OperatorConsoleChat", () => {
     expect(screen.getByText(/require a separate confirmation/i)).toBeInTheDocument();
   });
 
+  it("requires exact cancel confirmation and shows the terminal receipt", async () => {
+    const user = userEvent.setup();
+    const proposal = {
+      ...commandProposal("proposal-cancel"),
+      contract: "workflow.operator-command-proposal.v3" as const,
+      command_type: "cancel" as const,
+      predicted_run_status: "canceled" as const,
+      source: { ...commandProposal("proposal-cancel").source, run_mode: "auto_execute_safe" as const },
+      consequences: ["Cancellation is terminal: this run cannot be resumed.", "Completed effects are preserved."],
+    };
+    sendMessage.mockResolvedValueOnce(response({ intent: "cancel_run", interaction_mode: "proposal", command_proposal: proposal }));
+    const receipt = {
+      contract: "workflow.operator-command-receipt.v3" as const,
+      receipt_id: "receipt-cancel", proposal_id: proposal.proposal_id,
+      proposal_digest: proposal.proposal_digest, run_id: run.id,
+      command_type: "cancel" as const, outcome: "canceled" as const,
+      resulting_run_status: "canceled" as const, run_mode: "auto_execute_safe" as const,
+      event_ids: { command: "cancel-command", lifecycle: "cancel-lifecycle", stopping_condition: null },
+      acknowledgement: "control_plane_canceled" as const,
+      propagation_state: "runtime_propagation_not_certified" as const,
+      completed_at: "2026-10-03T10:00:00Z", receipt_digest: "d".repeat(64),
+    };
+    confirmCommand.mockResolvedValueOnce({ contract: "operator-command-confirmation.v1", run_id: run.id,
+      proposal_id: proposal.proposal_id, command: {}, run: { ...run, status: "canceled" }, receipt });
+    render(<OperatorConsoleChat {...baseProps} />);
+    await user.type(screen.getByLabelText(/Ask about the selected run/i), "Cancel this run");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByRole("region", { name: "Cancel proposal" })).toBeInTheDocument();
+    expect(screen.getByText(/Cancellation is terminal/i)).toBeInTheDocument();
+    expect(confirmCommand).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Confirm cancel" }));
+    await waitFor(() => expect(confirmCommand).toHaveBeenCalledWith(run.id, proposal.proposal_id, proposal.proposal_digest, "cancel"));
+    expect(await screen.findByText(/Cancellation acknowledged/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded outcome: canceled/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Pause acknowledged/i)).not.toBeInTheDocument();
+  });
+
   it("requires an explicit click before confirming the exact pause proposal", async () => {
     const user = userEvent.setup();
     const proposal = {

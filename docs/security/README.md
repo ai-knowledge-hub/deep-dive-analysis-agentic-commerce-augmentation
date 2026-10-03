@@ -48,7 +48,7 @@ same-origin Clerk/mock-authenticated web BFF. The BFF replaces request identity
 and creates a short-lived server assertion bound to tenant, user, and exact run;
 its read-only signing secret never reaches the browser and cannot mint agent or
 write authority. Phase 2.2 uses a different command-only secret and assertion
-audience for one exact pause or resume proposal; it binds the command type,
+audience for one exact pause, resume, or cancel proposal; it binds the command type,
 proposal ID and digest as
 well as tenant, human, run, expiry, and nonce. Reusing the read assertion cannot
 cross that boundary. Direct API clients require a signed human bearer token. Body
@@ -62,7 +62,7 @@ intent facts, typed provenance, evidence completeness states—including missing
 unavailable, and contradictory linked validation jobs—and resolved source links
 are server-owned. Client-supplied lifecycle, revision, cursor, and completion
 claims are rejected. Explanation remains isolated from execution; only the
-closed pause and resume intents may create non-mutating proposals, and only explicit
+closed pause, resume, and cancel intents may create non-mutating proposals, and only explicit
 confirmation reaches the existing command service. Stale or substituted
 proposal scope fails closed, the full evidence digest is reconstructed under
 the final write lock, and exact retries return one immutable receipt. A
@@ -85,3 +85,10 @@ provenance; an output value alone cannot introduce operator evidence.
 Recovery actions carry a prior validation job only as non-authoritative source
 context. They begin with no result link, preventing a stale source job from
 blocking or being mistaken for the retry's separately authorized effect.
+
+Phase 2.3b uses a distinct v3 cancel contract with the same authenticated exact
+proposal boundary and final locked authority check. Cancellation grants no
+capability or effect authority, retains prior approvals/evidence, and rejects
+in-flight or unreconciled work. Migration 058 preserves v1/v2 evidence while
+adding immutable v3 history. Terminal cancellation receipts do not close the
+planned worker-interruption and late-worker controls.

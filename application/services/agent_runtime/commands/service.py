@@ -93,9 +93,10 @@ def issue_agent_run_command(
             != (
                 "start"
                 if conversation_proposal.get("command_type") == "resume"
-                else "pause"
+                else conversation_proposal.get("command_type")
             )
-            or conversation_proposal.get("command_type") not in {"pause", "resume"}
+            or conversation_proposal.get("command_type")
+            not in {"pause", "resume", "cancel"}
             or conversation_proposal.get("run_id") != run_id
             or conversation_proposal.get("tenant_id") != client_id
             or conversation_proposal.get("idempotency_key") != idempotency_key
@@ -108,11 +109,13 @@ def issue_agent_run_command(
                 status_code=400,
                 detail={
                     "code": "invalid_conversation_proposal",
-                    "message": "Only an exact conversational pause or resume proposal is supported.",
+                    "message": "Only an exact supported conversational command proposal is supported.",
                 },
             )
         commit = (
-            deps.operator_commands.commit_resume
+            deps.operator_commands.commit_cancel
+            if conversation_proposal["command_type"] == "cancel"
+            else deps.operator_commands.commit_resume
             if conversation_proposal["command_type"] == "resume"
             else deps.operator_commands.commit_pause
         )
