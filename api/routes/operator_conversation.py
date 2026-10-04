@@ -30,6 +30,10 @@ from application.services.conversation.operator_resume import (
     conversational_resume_preflight,
 )
 from application.services.conversation.operator_snapshot import build_operator_snapshot
+from application.services.conversation.operator_cancel import (
+    build_cancel_snapshot,
+    conversational_cancel_preflight,
+)
 from application.services.agent_runtime.commands import (
     AgentRunCommandError,
     issue_agent_run_command as issue_agent_run_command_service,
@@ -59,7 +63,7 @@ class OperatorMessageRequest(BaseModel):
 class OperatorCommandConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command_type: Literal["pause", "resume"] = "pause"
+    command_type: Literal["pause", "resume", "cancel"] = "pause"
     proposal_digest: str = Field(..., min_length=64, max_length=64)
     user_id: str | None = None
     client_id: str | None = None
@@ -366,12 +370,16 @@ def confirm_operator_command(
         }
 
     snapshot_builder = (
-        build_resume_snapshot
+        build_cancel_snapshot
+        if payload.command_type == "cancel"
+        else build_resume_snapshot
         if payload.command_type == "resume"
         else build_operator_snapshot
     )
     preflight_builder = (
-        conversational_resume_preflight
+        conversational_cancel_preflight
+        if payload.command_type == "cancel"
+        else conversational_resume_preflight
         if payload.command_type == "resume"
         else conversational_pause_preflight
     )
@@ -388,7 +396,11 @@ def confirm_operator_command(
         deps=deps,
         tenant_id=principal.client_id,
         run_id=run_id,
-        **({"snapshot": snapshot} if payload.command_type == "resume" else {}),
+        **(
+            {"snapshot": snapshot}
+            if payload.command_type in {"resume", "cancel"}
+            else {}
+        ),
     )
 
     def confirmation_state() -> dict[str, Any]:
@@ -410,7 +422,7 @@ def confirm_operator_command(
             run_id=run_id,
             **(
                 {"snapshot": current_snapshot}
-                if payload.command_type == "resume"
+                if payload.command_type in {"resume", "cancel"}
                 else {}
             ),
         )
@@ -426,7 +438,9 @@ def confirm_operator_command(
             run_id=run_id,
             client_id=principal.client_id,
             user_id=identity.user_id,
-            command_type="start" if payload.command_type == "resume" else "pause",
+            command_type="start"
+            if payload.command_type == "resume"
+            else payload.command_type,
             action_id=None,
             message="Confirmed from operator conversation",
             metadata={"origin": "operator_conversation", "proposal_id": proposal_id},

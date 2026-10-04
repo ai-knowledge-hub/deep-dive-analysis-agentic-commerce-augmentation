@@ -330,7 +330,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       skill_id: null,
       effect_class: null,
       note: receipt
-        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.resulting_run_status}. Worker continuation is not certified.`
+        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.resulting_run_status}. ${proposal.command_type === "cancel" ? "Worker interruption" : "Worker continuation"} is not certified.`
         : `A conversational ${proposal.command_type} proposal is awaiting explicit confirmation.`,
       is_policy_event: false,
       anchors: {
@@ -347,7 +347,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       harness: detail.harness,
       event,
       priority: receipt ? "low" : "medium",
-      risk: "low",
+      risk: proposal.command_type === "cancel" ? "high" : "low",
       title: receipt
         ? `${formatRunLabel(detail.run)} ${proposal.command_type} command completed`
         : `${formatRunLabel(detail.run)} has a ${proposal.command_type} proposal`,

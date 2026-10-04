@@ -437,6 +437,34 @@ Migration 057 adds resume tables and mixed command-history views while preservin
 all v1 pause rows and digests. Runs and Interventions render both contracts and
 the recorded mode/status outcome from the same durable paginated history.
 
+#### Slice 2.3b: governed conversational cancellation
+
+The closed `cancel_run` intent creates a v3 proposal for an existing quiescent
+run in `created`, `planning`, `planned`, `running`, or `paused`, using only
+`plan_only` or `auto_execute_safe`. Explicit authenticated confirmation makes
+that run terminal as `canceled`; it never invokes a capability. Failed,
+completed, canceled, unknown, and noncanonical sources are ineligible.
+
+Cancellation shares resume's full private control-state fence and requires
+successfully verified completion evidence, including verified legacy views.
+Under the final SQLite write lock, confirmation reconstructs membership,
+active-human authority, snapshot, registry, and preflight. Locks, executing
+actions, started or uncertain effects, and incomplete bounded action state
+block admission. Existing policy, budget, operator, or unknown stop markers do
+not block terminal exit and are retained without a clearance event.
+
+Status, `operator_command_cancel`, `run_canceled`, workflow-event projection,
+and the immutable receipt commit together. Exact retries replay that receipt
+before checking new admission, including after completion corruption or expiry.
+Cancellation preserves mode, revision, governing pins, approvals, budgets,
+attempts, evidence, pending actions, and committed effects. It provides no
+compensation or worker-interruption certification. Continued work requires a
+separately authorized new run; Phase 3 propagation controls remain planned.
+Migration 058 adds immutable cancel tables and separate v3 three-command history views,
+preserving v1 pause and v2 resume bytes, identities, cursors, and their original
+history views for previous backend readers. Runs and
+Interventions display terminal consequences and the recorded receipt.
+
 ### Phase 3: Durable workflow kernel
 
 Deliverables:

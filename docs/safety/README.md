@@ -53,3 +53,11 @@ Only the recorded operator-pause marker may be cleared. The sequential mode
 mapping preserves plan-only non-execution, approvals, budgets, policy, attempts,
 and committed effects. The atomic receipt records eligibility and exact status;
 worker continuation and external propagation remain uncertified.
+
+Phase 2.3b adds terminal conversational cancellation of quiescent nonterminal
+runs. Successful completion verification and full control-state revalidation
+under the final write lock are required. Executing actions and started or
+uncertain effects block admission. Existing stops and evidence remain intact;
+status, audits, workflow projection, and receipt commit atomically. The receipt
+certifies control-plane cancellation only. Worker interruption, propagation,
+and compensation remain outside this slice; SEC-17 remains planned.

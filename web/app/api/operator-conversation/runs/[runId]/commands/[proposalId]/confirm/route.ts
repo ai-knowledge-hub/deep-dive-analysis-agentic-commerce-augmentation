@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
   }
 
   const commandType = body.command_type ?? "pause";
-  if (commandType !== "pause" && commandType !== "resume") {
+  if (commandType !== "pause" && commandType !== "resume" && commandType !== "cancel") {
     return NextResponse.json({ detail: "Unsupported command type" }, { status: 400 });
   }
   let assertion: string;

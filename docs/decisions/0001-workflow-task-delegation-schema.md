@@ -996,3 +996,38 @@ revocation race orders are deterministic; uncertain outcomes reconcile without
 blind re-execution; and receipt, fulfillment, action, and audit projections
 commit as one outcome. SEC-06/CTRL-03 are executable, while independent beta
 release prerequisites remain blocked.
+
+
+## Phase 2.3b conversational cancel command contract
+
+- `cancel_run` selects only a host-owned v3 `cancel` proposal and receipt.
+  Existing v1 pause and v2 resume contracts retain their exact digest shapes.
+- Admission is restricted to canonical created/planning/planned/running/paused
+  runs in plan_only/auto_execute_safe modes. The sole target is `canceled`, as
+  permitted by the canonical lifecycle. Terminal and unknown sources fail closed.
+- The proposal binds authenticated tenant/human/run, revision, mode, governing
+  pins, private control-state digest, preflight, event head, expiry, and identity.
+  The dedicated command assertion binds that exact proposal and command type.
+- Completion verification must succeed at proposal creation and final admission;
+  verified legacy evidence remains compatible. Missing or corrupt evidence fails
+  closed. Final admission runs under SQLite BEGIN IMMEDIATE and rechecks live
+  membership, principal, registry, all fenced evidence, and quiescence.
+- A runtime lock, executing action, started/uncertain effect, or incomplete
+  bounded action state prevents this quiescent cancellation path. Existing stop
+  markers remain unresolved: cancellation creates no stop-clear event.
+- Status, human command audit, run_canceled lifecycle audit, required workflow
+  event projection, and immutable receipt commit atomically. No capability runs.
+  Exact receipt replay precedes new admission and cannot revive the run.
+- Migration 059 makes v3 receipt-backed cancellation terminal at persistence,
+  including legacy runs without completion governance. Background reconciliation
+  and planning activation use conditional status transitions and reread the run
+  when a concurrent control action wins; they cannot revive a canceled run or
+  replace its terminal status with a planning failure.
+- The v3 receipt acknowledges `control_plane_canceled`, preserves the source mode,
+  records the terminal target, and declares `runtime_propagation_not_certified`.
+  It certifies neither worker interruption nor external-effect reversal.
+- Mode, revision, approvals, budgets, attempts, pending actions, completed effects,
+  and evidence remain intact. Further work requires a new authorized run.
+- Migration 058 is additive for v1/v2 evidence and introduces separate v3 scoped
+  paginated views for all three contracts. Old readers retain their original
+  tables and v1/v2 views, excluding v3 rows they cannot deserialize. Deploy the migration and backend before the new UI.

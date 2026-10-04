@@ -1,5 +1,4 @@
 "use client";
-
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   confirmOperatorConversationCommand,
@@ -17,6 +16,8 @@ import { OperatorChatSummary } from "./OperatorChatSummary";
 import { OperatorChatThread } from "./OperatorChatThread";
 import type { ChatMessage, PromptId } from "./operatorChatTypes";
 
+const commandLabels = { pause: "Pause", resume: "Resume", cancel: "Cancel" };
+const receiptLabels = { pause: "Pause", resume: "Resume eligibility", cancel: "Cancellation" };
 type Props = {
   run: AgentRun | null;
   actions: AgentAction[];
@@ -293,7 +294,7 @@ export function OperatorConsoleChat({
         run={run}
         briefing={
           run
-            ? "Ask about verified execution, evidence, blockers, or next steps. Pause and resume requests become reviewable proposals and require a separate confirmation."
+            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, and cancel requests become reviewable proposals and require a separate confirmation."
             : "Select a run to start a grounded operator conversation."
         }
         proposedCount={counts.proposed}
@@ -437,9 +438,9 @@ export function OperatorConsoleChat({
           {pendingProposal &&
           !dismissedProposalIds.includes(pendingProposal.proposal_id) &&
           durableReceipt?.proposal_id !== pendingProposal.proposal_id ? (
-            <section className="operator-chat__proposal" aria-label={`${pendingProposal.command_type === "resume" ? "Resume" : "Pause"} proposal`}>
+            <section className="operator-chat__proposal" aria-label={`${commandLabels[pendingProposal.command_type]} proposal`}>
               <div>
-                <strong>{pendingProposal.command_type === "resume" ? "Resume" : "Pause"} this run?</strong>
+                <strong>{commandLabels[pendingProposal.command_type]} this run?</strong>
                 <div className="panel__muted">
                   Revision {pendingProposal.source.active_graph_revision} · status{" "}
                   {pendingProposal.source.run_status} · expires{" "}
@@ -481,8 +482,8 @@ export function OperatorConsoleChat({
             </section>
           ) : null}
           {durableReceipt ? (
-            <div className="panel__notice panel__notice--info" aria-label={`${durableReceipt.command_type === "resume" ? "Resume" : "Pause"} receipt`}>
-              <strong>{durableReceipt.command_type === "resume" ? "Resume eligibility" : "Pause"} acknowledged.</strong> Receipt {durableReceipt.receipt_id} · proposal{" "}
+            <div className="panel__notice panel__notice--info" aria-label={`${commandLabels[durableReceipt.command_type]} receipt`}>
+              <strong>{receiptLabels[durableReceipt.command_type]} acknowledged.</strong> Receipt {durableReceipt.receipt_id} · proposal{" "}
               {durableReceipt.proposal_id} · {durableReceipt.acknowledgement.replaceAll("_", " ")}.
               Recorded outcome: {durableReceipt.resulting_run_status}. Runtime propagation is not independently certified.{" "}
               <a href={`/interventions?run_id=${run.id}`}>Open Interventions</a>
@@ -500,7 +501,7 @@ export function OperatorConsoleChat({
                 {commandRecords.map((record) => (
                   <li key={record.proposal.proposal_id}>
                     <span>
-                      {record.proposal.command_type === "resume" ? "Resume" : "Pause"} proposal {record.proposal.proposal_id} ·{" "}
+                      {commandLabels[record.proposal.command_type]} proposal {record.proposal.proposal_id} ·{" "}
                       {record.receipt ? "completed" : "awaiting confirmation"}
                     </span>
                     <small>

@@ -488,7 +488,7 @@ def test_other_mutations_remain_refused_and_cannot_shape_pause_fields(operator_a
     )
 
     assert cancel.status_code == 200
-    assert cancel.json()["intent"] == "mutation_request"
+    assert cancel.json()["intent"] == "cancel_run"
     assert cancel.json()["command_proposal"] is None
     proposal = poisoned_pause.json()["command_proposal"]
     assert proposal["command_type"] == "pause"

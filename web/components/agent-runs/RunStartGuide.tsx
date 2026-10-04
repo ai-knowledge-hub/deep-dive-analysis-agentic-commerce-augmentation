@@ -41,6 +41,16 @@ function buildGuide(
     };
   }
 
+  if (selectedRun.status === "canceled" || selectedRun.status === "cancelled") {
+    return {
+      title: "Run canceled",
+      summary: "This run is terminal. Create a separately authorized new run to continue; prior evidence and effects are preserved.",
+      cta: "View cancellation record",
+      tone: "default",
+      action: "interventions",
+    };
+  }
+
   if (nextRecommendedAction.action && nextRecommendedAction.guardrails.length > 0) {
     return {
       title: "Intervention needed",

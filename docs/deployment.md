@@ -227,10 +227,19 @@ is recorded outside this application.
    services. Set server-only `OPERATOR_API_URL` on the web service when the API
    has an internal address.
 5. Set a distinct high-entropy `OPERATOR_COMMAND_BFF_SIGNING_SECRET` on both
-   services for bounded conversational pause/resume confirmation. Do not reuse the
+   services for bounded conversational pause/resume/cancel confirmation. Do not reuse the
    read-only conversation secret; the assertion audiences are intentionally
    separate.
-6. Deploy automatically on push
+6. Apply migrations 058–059 and deploy the backend before enabling conversational
+   cancellation in the frontend. The migration adds v3 tables and extends the
+   history through separate v3 views while preserving v1/v2 rows, digests and
+   original views. Rollback readers retain their original tables and views,
+   which exclude v3 cancellation history.
+   Migration 059 protects every durable v3 cancellation against later status
+   writes, including runs without completion governance and receipts already
+   created under migration 058.
+   Keep the database expansion during an application rollback.
+7. Deploy automatically on push
 
 ### Vercel (Full‑stack) — Planned, Not Built
 
