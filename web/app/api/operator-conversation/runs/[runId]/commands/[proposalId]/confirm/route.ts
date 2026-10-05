@@ -34,8 +34,13 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
   }
 
   const commandType = body.command_type ?? "pause";
-  if (commandType !== "pause" && commandType !== "resume" && commandType !== "cancel") {
+  if (commandType !== "pause" && commandType !== "resume" && commandType !== "cancel" && commandType !== "approve" && commandType !== "reject") {
     return NextResponse.json({ detail: "Unsupported command type" }, { status: 400 });
+  }
+  const review = commandType === "approve" || commandType === "reject";
+  const actionId = typeof body.action_id === "string" ? body.action_id.trim() : "";
+  if (review && (!actionId || actionId.length > 256)) {
+    return NextResponse.json({ detail: "An exact action_id is required" }, { status: 400 });
   }
   let assertion: string;
   try {
@@ -46,6 +51,8 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
       params.proposalId,
       proposalDigest,
       commandType,
+      undefined,
+      review ? actionId : undefined,
     );
   } catch {
     return NextResponse.json(
@@ -68,6 +75,7 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
         user_id: userId,
         proposal_digest: proposalDigest,
         command_type: commandType,
+        ...(review ? { action_id: actionId } : {}),
       }),
     },
   );

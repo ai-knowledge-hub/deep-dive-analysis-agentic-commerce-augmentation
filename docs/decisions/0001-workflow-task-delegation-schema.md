@@ -1031,3 +1031,41 @@ release prerequisites remain blocked.
 - Migration 058 is additive for v1/v2 evidence and introduces separate v3 scoped
   paginated views for all three contracts. Old readers retain their original
   tables and v1/v2 views, excluding v3 rows they cannot deserialize. Deploy the migration and backend before the new UI.
+
+
+## Phase 2.4a conversational exact action review
+
+- One proposed action per immutable v4 approve/reject proposal. Eligible run
+  states are planned/running/paused, using plan_only/auto_execute_safe. Terminal,
+  unknown, executing and already decided sources cannot receive a new decision.
+- The host resolves an exact action ID or sequence; a unique pending action may
+  be selected automatically. Ambiguous, batch and combined execute requests do
+  not create proposals. Model output cannot select a mutating intent or grant
+  authority. Proposal preparation and normalization are read-only.
+- The proposal binds full private state and exact normalized inputs, effect and
+  registry identity, policy/harness pins, evidence, revision and pending approval
+  identity/sequence/digest. An existing request must match rebuilt current
+  binding, verified immutable history and an unexpired lifetime.
+- Browser confirmation verifies schema-v2 `operator-action-review-api` assertions
+  from `operator-action-review-web-bff`, signed with the server-only command
+  secret and bound to human, tenant, run, action, decision, proposal and digest.
+  Its approval authority is recorded as `operator-action-review-bff` /
+  `operator-command-signing-secret:v2`. Direct human bearer authority keeps the
+  existing source/version. Neither read nor lifecycle-control assertions can
+  cross this exact approval boundary.
+- The conversational adapter owns BEGIN IMMEDIATE; the existing approval adapter
+  joins through a savepoint and commits only its owned transaction. Approval
+  command, canonical envelope history, compatibility action, approval audit,
+  required workflow projection, operator audit and v4 receipt commit together.
+  Inner rejection preserves caller ownership; outer failure rolls back both
+  ledgers. Confirmation leaves run status, mode, budgets and stops unchanged.
+- The v4 receipt names action, approval command, approval ID, envelope digest and
+  sequence, exact decision, unchanged run status and attributable audit IDs.
+  It acknowledges only `exact_action_decision_recorded`; capability execution,
+  worker continuation and completion are separate facts.
+- Exact replay checks current human access under the lock before inspecting new
+  eligibility. Cancellation, later execution or revocation does not erase a
+  historical decision receipt. Replay grants no fresh execution authority.
+- Migration 060 adds separate v4 history views; previous views exclude contracts
+  previous readers cannot deserialize. Existing approval and command identities
+  remain intact. Existing beta blocks are not relaxed by chat confirmation.

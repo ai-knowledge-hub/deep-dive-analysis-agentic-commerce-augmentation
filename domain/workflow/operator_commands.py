@@ -18,6 +18,10 @@ RESUME_COMMAND = "resume"
 RESUME_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v2"
 RESUME_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v2"
 RESUME_MODES = frozenset({"plan_only", "auto_execute_safe"})
+REVIEW_COMMANDS = frozenset({"approve", "reject"})
+REVIEW_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v4"
+REVIEW_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v4"
+REVIEW_SOURCE_STATUSES = frozenset({"planned", "running", "paused"})
 CANCEL_COMMAND = "cancel"
 CANCEL_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v3"
 CANCEL_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v3"
@@ -68,6 +72,7 @@ def _build_proposal(
     preflight: dict[str, Any],
     now: datetime | None = None,
     ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
+    parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     issued = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     expires = issued + timedelta(seconds=max(30, int(ttl_seconds)))
@@ -77,13 +82,15 @@ def _build_proposal(
             PAUSE_COMMAND: PROPOSAL_CONTRACT,
             RESUME_COMMAND: RESUME_PROPOSAL_CONTRACT,
             CANCEL_COMMAND: CANCEL_PROPOSAL_CONTRACT,
+            "approve": REVIEW_PROPOSAL_CONTRACT,
+            "reject": REVIEW_PROPOSAL_CONTRACT,
         }[command_type],
         "proposal_id": proposal_id,
         "tenant_id": _required("tenant_id", tenant_id),
         "principal_id": _required("principal_id", principal_id),
         "run_id": _required("run_id", run.get("id")),
         "command_type": command_type,
-        "parameters": {},
+        "parameters": parameters or {},
         "source": {
             "active_graph_revision": _positive_int(
                 "active_graph_revision", run.get("active_graph_revision")
@@ -115,6 +122,8 @@ def _build_proposal(
         "issued_at": issued.isoformat(),
         "expires_at": expires.isoformat(),
     }
+    if command_type in REVIEW_COMMANDS:
+        core["source"]["run_mode"] = run.get("run_mode")
     if command_type in {RESUME_COMMAND, CANCEL_COMMAND}:
         core["source"]["run_mode"] = run.get("run_mode")
         core["predicted_run_status"] = (
@@ -149,6 +158,9 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
     cancel = (
         isinstance(proposal, dict) and proposal.get("command_type") == CANCEL_COMMAND
     )
+    review = (
+        isinstance(proposal, dict) and proposal.get("command_type") in REVIEW_COMMANDS
+    )
     if resume or cancel:
         expected.add("predicted_run_status")
     if type(proposal) is not dict or set(proposal) != expected:
@@ -156,7 +168,9 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
             "operator command proposal shape is invalid"
         )
     if proposal.get("contract") != (
-        CANCEL_PROPOSAL_CONTRACT
+        REVIEW_PROPOSAL_CONTRACT
+        if review
+        else CANCEL_PROPOSAL_CONTRACT
         if cancel
         else RESUME_PROPOSAL_CONTRACT
         if resume
@@ -165,11 +179,12 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         raise OperatorCommandInvariantError(
             "operator command proposal contract is invalid"
         )
-    if (
-        proposal.get("command_type")
-        not in {PAUSE_COMMAND, RESUME_COMMAND, CANCEL_COMMAND}
-        or proposal.get("parameters") != {}
-    ):
+    if proposal.get("command_type") not in {
+        PAUSE_COMMAND,
+        RESUME_COMMAND,
+        CANCEL_COMMAND,
+        *REVIEW_COMMANDS,
+    } or (not review and proposal.get("parameters") != {}):
         raise OperatorCommandInvariantError(
             "operator command proposal is not an exact supported command"
         )
@@ -195,7 +210,7 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         "registry_version",
         "registry_fingerprint",
     }
-    if resume or cancel:
+    if resume or cancel or review:
         source_fields.add("run_mode")
     if type(source) is not dict or set(source) != source_fields:
         raise OperatorCommandInvariantError("operator command source fence is invalid")
@@ -207,6 +222,27 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         {"status": source["run_status"], "run_mode": source["run_mode"]}
     ):
         raise OperatorCommandInvariantError("cancel outcome changed")
+    if review:
+        if (
+            source["run_status"] not in REVIEW_SOURCE_STATUSES
+            or source["run_mode"] not in RESUME_MODES
+        ):
+            raise OperatorCommandInvariantError("action review source is invalid")
+        parameters = proposal["parameters"]
+        if type(parameters) is not dict or set(parameters) != {
+            "action_id",
+            "action_status",
+            "review",
+        }:
+            raise OperatorCommandInvariantError("action review parameters are invalid")
+        _required("action_id", parameters["action_id"])
+        if (
+            parameters["action_status"] != "proposed"
+            or type(parameters["review"]) is not dict
+        ):
+            raise OperatorCommandInvariantError(
+                "only an exact pending action can be reviewed"
+            )
     _positive_int("active_graph_revision", source.get("active_graph_revision"))
     _required("run_status", source.get("run_status"))
     _required("run_state", source.get("run_state"))
@@ -232,6 +268,13 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
     if preflight["result"].get("allowed") is not True:
         raise OperatorCommandInvariantError(
             "blocked operator command cannot be proposed"
+        )
+    if review and (
+        parameters["review"] != preflight["result"].get("review")
+        or parameters["action_id"] != preflight["result"].get("action_id")
+    ):
+        raise OperatorCommandInvariantError(
+            "action review binding differs from preflight"
         )
     issued = _timestamp("issued_at", proposal.get("issued_at"))
     expires = _timestamp("expires_at", proposal.get("expires_at"))
@@ -365,3 +408,11 @@ __all__ = [
     "validate_operator_proposal",
     "validate_pause_proposal",
 ]
+
+
+def build_action_review_proposal(
+    *, command_type: str, parameters: dict[str, Any], **kwargs: Any
+) -> dict[str, Any]:
+    if command_type not in REVIEW_COMMANDS:
+        raise OperatorCommandInvariantError("unsupported action review decision")
+    return _build_proposal(command_type=command_type, parameters=parameters, **kwargs)

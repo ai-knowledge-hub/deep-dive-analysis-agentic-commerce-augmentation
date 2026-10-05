@@ -128,6 +128,12 @@ def create_conversational_proposal(
 def operator_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
     """Add operator-facing consequences without changing the canonical proposal."""
 
+    if proposal['command_type'] in {'approve', 'reject'}:
+        return {**proposal, 'consequences': [
+            'This records the decision for the exact reviewed action only.',
+            'Approval does not execute the action or start or resume this run.',
+            'Execution rechecks policy, budgets, revocation and the exact approval at the effect boundary.',
+        ]}
     return {
         **proposal,
         "consequences": [

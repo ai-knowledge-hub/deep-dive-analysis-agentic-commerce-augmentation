@@ -1,7 +1,7 @@
 # Security Analysis
 
 Status: current
-Last updated: 2026-09-27
+Last updated: 2026-10-04
 
 The Phase 1 agent-workflow security baseline has three synchronized artifacts:
 
@@ -92,3 +92,16 @@ capability or effect authority, retains prior approvals/evidence, and rejects
 in-flight or unreconciled work. Migration 058 preserves v1/v2 evidence while
 adding immutable v3 history. Terminal cancellation receipts do not close the
 planned worker-interruption and late-worker controls.
+
+
+Phase 2.4a adds exact conversational approve/reject review for one pending action.
+Preparation cannot mutate authority. Explicit confirmation binds the action,
+decision and durable proposal; read and lifecycle assertions do not suffice.
+Live human access and full private state are revalidated under the final lock.
+The approval ledger and conversational receipt commit together, including the
+required audit/workflow projections. Existing requested approval bindings must
+still match current action/evidence/authority. Confirmation executes nothing;
+the existing worker pre-effect, revocation, policy, budget and single-use checks
+remain authoritative. Terminal cancellation blocks new decisions, while exact
+historical receipts remain replayable to currently authorized humans. This slice
+does not upgrade planned distributed controls or change beta exclusions.

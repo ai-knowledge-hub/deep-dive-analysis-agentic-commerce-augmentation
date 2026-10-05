@@ -97,6 +97,20 @@ describe("operator command browser BFF", () => {
     expect(JSON.parse(String(init?.body)).command_type).toBe(commandType);
   });
 
+
+  it.each(["approve", "reject"])("binds exact %s action in a separate signed audience", async (commandType) => {
+    const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: commandType, action_id: "action-1", user_id: "forged" }), { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(response.status).toBe(200);
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const assertion = new Headers(init?.headers).get("x-operator-command-assertion")!;
+    const claims = JSON.parse(Buffer.from(assertion.split(".")[0], "base64url").toString("utf8"));
+    expect(claims).toMatchObject({ schema_version: 2, aud: "operator-action-review-api", iss: "operator-action-review-web-bff", sub: "clerk-user-1", action_id: "action-1", command_type: commandType, proposal_id: "proposal-1", proposal_digest: digest });
+    expect(JSON.parse(String(init?.body))).toMatchObject({ user_id: "clerk-user-1", action_id: "action-1", command_type: commandType });
+  });
+  it.each(["approve", "reject"])("rejects %s without an exact action before minting authority", async (commandType) => {
+    const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: commandType }), { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(response.status).toBe(400); expect(global.fetch).not.toHaveBeenCalled();
+  });
   it("rejects commands outside the closed conversational command boundary", async () => {
     const result = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "start" }),
       { params: { runId: "run-1", proposalId: "proposal-1" } });

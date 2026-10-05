@@ -21,6 +21,7 @@ from infrastructure.db.agent.approval_scope import (
 )
 from infrastructure.db.agent.validation_job_links import validation_job_link_conflict
 from infrastructure.db.core.connection import get_connection
+from infrastructure.db.core.transactions import JoinedTransaction
 from infrastructure.db.core.json import from_json, to_json
 
 
@@ -688,8 +689,8 @@ def commit_approval_command(
     """
 
     conn = get_connection()
+    transaction = JoinedTransaction(conn, "approval_command")
     try:
-        conn.execute("BEGIN IMMEDIATE")
         replay = conn.execute(
             """
             SELECT *
@@ -699,7 +700,7 @@ def commit_approval_command(
             (tenant_id, workflow_id, idempotency_key),
         ).fetchone()
         if replay:
-            conn.rollback()
+            transaction.rollback()
             existing = approval_persistence.command_row(replay)
             if existing["request_hash"] != request_hash:
                 return {"outcome": "idempotency_conflict", "command": existing}
@@ -711,7 +712,7 @@ def commit_approval_command(
             or (expected_action_status, action_status)
             not in (_ALLOWED_ACTION_PROJECTION_TRANSITIONS)
         ):
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "action_state_conflict",
                 "reason": "approval command requested an invalid action lifecycle transition",
@@ -727,7 +728,7 @@ def commit_approval_command(
             (action_id, workflow_id, tenant_id),
         ).fetchone()
         if not action_row or str(action_row["status"] or "") != expected_action_status:
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "action_state_conflict",
                 "reason": "governed action lifecycle state changed before approval commit",
@@ -745,7 +746,7 @@ def commit_approval_command(
                 )
             )
             if normalization_error:
-                conn.rollback()
+                transaction.rollback()
                 return {
                     "outcome": "concurrency_conflict",
                     "reason": normalization_error,
@@ -761,7 +762,7 @@ def commit_approval_command(
                 (tenant_id, workflow_id, approval_id),
             ).fetchone()
             if started_effect:
-                conn.rollback()
+                transaction.rollback()
                 return {
                     "outcome": "validation_error",
                     "code": "effect_already_started",
@@ -781,7 +782,7 @@ def commit_approval_command(
             mutations=mutations,
         )
         if supersession_error:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "validation_error", **supersession_error}
 
         for mutation in mutations:
@@ -793,7 +794,7 @@ def commit_approval_command(
                 mutation=mutation,
             )
             if conflict:
-                conn.rollback()
+                transaction.rollback()
                 return {"outcome": "concurrency_conflict", "reason": conflict}
 
         if action_status is not None:
@@ -814,7 +815,7 @@ def commit_approval_command(
                 ),
             )
             if cursor.rowcount != 1:
-                conn.rollback()
+                transaction.rollback()
                 return {
                     "outcome": "concurrency_conflict",
                     "reason": "governed action no longer exists in workflow scope",
@@ -923,12 +924,12 @@ def commit_approval_command(
                     to_json(audit_event.get("anchors") or {}) or to_json({}),
                 ),
             )
-        conn.commit()
+        transaction.commit()
     except sqlite3.IntegrityError as exc:
-        conn.rollback()
+        transaction.rollback()
         return {"outcome": "concurrency_conflict", "reason": str(exc)}
     except Exception:
-        conn.rollback()
+        transaction.rollback()
         raise
 
     stored = get_command_by_idempotency_key(

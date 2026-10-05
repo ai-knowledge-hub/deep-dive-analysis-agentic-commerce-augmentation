@@ -1,7 +1,7 @@
 # Safety Analysis
 
 Status: current
-Last updated: 2026-09-27
+Last updated: 2026-10-04
 
 The Phase 1 safety baseline has two synchronized artifacts:
 
@@ -61,3 +61,16 @@ uncertain effects block admission. Existing stops and evidence remain intact;
 status, audits, workflow projection, and receipt commit atomically. The receipt
 certifies control-plane cancellation only. Worker interruption, propagation,
 and compensation remain outside this slice; SEC-17 remains planned.
+
+
+Phase 2.4a adds exact conversational approve/reject review for one pending action.
+Preparation cannot mutate authority. Explicit confirmation binds the action,
+decision and durable proposal; read and lifecycle assertions do not suffice.
+Live human access and full private state are revalidated under the final lock.
+The approval ledger and conversational receipt commit together, including the
+required audit/workflow projections. Existing requested approval bindings must
+still match current action/evidence/authority. Confirmation executes nothing;
+the existing worker pre-effect, revocation, policy, budget and single-use checks
+remain authoritative. Terminal cancellation blocks new decisions, while exact
+historical receipts remain replayable to currently authorized humans. This slice
+does not upgrade planned distributed controls or change beta exclusions.
