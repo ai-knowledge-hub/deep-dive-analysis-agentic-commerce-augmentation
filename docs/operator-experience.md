@@ -1,7 +1,7 @@
 # Operator Experience Guide
 
 Status: current
-Last updated: 2026-09-27
+Last updated: 2026-10-05
 
 This is the current user-facing product guide for the agentic commerce control plane. It replaces the older human-led lab guide as the default way to understand the web app.
 
@@ -82,14 +82,23 @@ an authorized new run. Locks, executing actions, unreconciled effects, or failed
 completion verification block this path and direct operators to recovery.
 Cancellation preserves existing evidence, approvals, effects, and stopping
 markers. Its receipt does not certify worker interruption or reverse effects.
-The resulting receipt records that exact outcome and is linked to Interventions. Requests
-to approve, retry, or otherwise change execution are not
-performed and direct the operator to the governed Interventions workspace.
+The resulting receipt records that exact outcome and is linked to Interventions. Requests to approve or reject one pending action prepare an exact review proposal
+with a separate confirmation. To retry one failed action, ask **Retry action 2**
+or provide its exact action ID. Review the same-action inputs, intended effects
+and warnings, then press **Confirm retry**. This creates one new proposed action
+with a separate identity; it executes nothing and requires fresh approval.
+Follow the receipt's exact **Approve action <new action ID>** instruction to
+review that new action. Neither confirmation starts or resumes the run.
+Only planned, running or paused runs without in-flight work are eligible.
+Terminal runs require separately authorized new work. Committed source effects,
+unresolved effects or incomplete evidence direct the operator to reconciliation.
+The failed source remains visible. Retry success does not itself establish
+workflow completion or resolve other failures and stopping conditions.
 Selecting another run clears chat and pending proposal context so evidence
 cannot bleed across runs. Normal signed-in browser sessions authenticate
 through the same-origin web gateway; operators do not load a registry-write
 credential to ask questions or confirm these bounded commands.
-Pending pause/resume/cancel proposals and completed receipts are reloaded from the durable,
+Pending pause/resume/cancel/action-review/retry proposals and completed receipts are reloaded from the durable,
 run-scoped command ledger rather than retained only in browser conversation
 memory. Runs shows the exact proposal and receipt identities and offers older
 pages when the history exceeds the current page. Interventions fetches an

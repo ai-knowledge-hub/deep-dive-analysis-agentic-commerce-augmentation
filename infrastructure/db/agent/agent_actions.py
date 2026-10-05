@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from infrastructure.db.core.connection import get_connection
+from infrastructure.db.core.transactions import JoinedTransaction
 from infrastructure.db.core.json import from_json, to_json
 from domain.workflow.action_lifecycle import is_action_status
 
@@ -54,6 +55,7 @@ def create_agent_action(
     assigned_sequence = int(sequence)
     assigned_retry_count = int(retry_count)
     assigned_dedupe_key = dedupe_key
+    transaction = JoinedTransaction(conn, "create_agent_action")
     try:
         if allocate_run_sequence and not guarded:
             raise ValueError("run sequence allocation requires guarded action creation")
@@ -66,7 +68,6 @@ def create_agent_action(
         if guarded:
             if not client_id:
                 raise ValueError("client_id is required for guarded action creation")
-            conn.execute("BEGIN IMMEDIATE")
             run_row = conn.execute(
                 "SELECT status FROM agent_runs WHERE id = ? AND client_id = ?",
                 (agent_run_id, client_id),
@@ -76,7 +77,7 @@ def create_agent_action(
                 str(run_row["status"] or "").strip().lower() if run_row else ""
             )
             if current_status not in allowed:
-                conn.rollback()
+                transaction.rollback()
                 return {}
             if allocate_run_sequence:
                 assigned_sequence = int(
@@ -179,9 +180,9 @@ def create_agent_action(
                 error,
             ),
         )
-        conn.commit()
+        transaction.commit()
     except Exception:
-        conn.rollback()
+        transaction.rollback()
         raise
     return get_agent_action(action_id) or {}
 
@@ -201,9 +202,7 @@ def update_agent_action_status(
     params: list[Any] = [status]
     if outputs is not None:
         canonical_outputs_hash = hashlib.sha256(
-            json.dumps(outputs, sort_keys=True, separators=(",", ":")).encode(
-                "utf-8"
-            )
+            json.dumps(outputs, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         if outputs_hash is not None and outputs_hash != canonical_outputs_hash:
             raise ValueError("outputs_hash must match the canonical outputs payload")

@@ -64,15 +64,15 @@ export type OperatorConversationResponse = {
 };
 
 export type OperatorCommandProposal = {
-  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2" | "workflow.operator-command-proposal.v3" | "workflow.operator-command-proposal.v4";
+  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2" | "workflow.operator-command-proposal.v3" | "workflow.operator-command-proposal.v4" | "workflow.operator-command-proposal.v5";
   proposal_id: string;
   proposal_digest: string;
   tenant_id: string;
   principal_id: string;
   run_id: string;
-  command_type: "pause" | "resume" | "cancel" | "approve" | "reject";
+  command_type: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry";
   predicted_run_status?: "planned" | "running" | "canceled";
-  parameters: { action_id?: string; action_status?: string; review?: {
+  parameters: { action_id?: string; action_status?: string; retry_strategy?: "same_action"; retry_plan?: { strategy: "same_action"; capability_name: string; normalized_inputs: Record<string, unknown>; inputs_hash: string; side_effects: string[]; review_checklist: string[] }; review?: {
     capability_name: string; normalized_inputs: Record<string, unknown>; inputs_hash: string;
     side_effects: string[]; review_checklist: string[]; approval_id: string | null;
     approval_sequence: number | null; approval_envelope_digest: string | null;
@@ -109,14 +109,15 @@ export type OperatorCommandProposal = {
 };
 
 export type OperatorCommandReceipt = {
-  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2" | "workflow.operator-command-receipt.v3" | "workflow.operator-command-receipt.v4";
+  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2" | "workflow.operator-command-receipt.v3" | "workflow.operator-command-receipt.v4" | "workflow.operator-command-receipt.v5";
   receipt_id: string;
   proposal_id: string;
   proposal_digest: string;
   run_id: string;
-  command_type: "pause" | "resume" | "cancel" | "approve" | "reject";
-  outcome: "paused" | "planned" | "running" | "canceled" | "approved" | "rejected";
+  command_type: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry";
+  outcome: "paused" | "planned" | "running" | "canceled" | "approved" | "rejected" | "proposed";
   resulting_run_status: "paused" | "planned" | "running" | "canceled";
+  source_action_id?: string; retry_strategy?: "same_action"; retry_count?: number; action_sequence?: number; effect_idempotency_key?: string;
   action_id?: string; approval_id?: string; approval_envelope_digest?: string; approval_sequence?: number; approval_command_id?: string;
   run_mode?: "plan_only" | "auto_execute_safe";
   event_ids: {
@@ -124,7 +125,7 @@ export type OperatorCommandReceipt = {
     lifecycle: string;
     stopping_condition?: string | null;
   };
-  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible" | "control_plane_canceled" | "exact_action_decision_recorded";
+  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible" | "control_plane_canceled" | "exact_action_decision_recorded" | "retry_action_proposed";
   propagation_state: "runtime_propagation_not_certified";
   completed_at: string;
   receipt_digest: string;

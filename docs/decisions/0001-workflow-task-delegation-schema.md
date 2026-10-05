@@ -1069,3 +1069,32 @@ release prerequisites remain blocked.
 - Migration 060 adds separate v4 history views; previous views exclude contracts
   previous readers cannot deserialize. Existing approval and command identities
   remain intact. Existing beta blocks are not relaxed by chat confirmation.
+
+
+## Phase 2.5a conversational retry compatibility
+
+The current sequential adapter appends one proposed action for an exact failed
+source, using only the same-action strategy and a distinct effect identity.
+Immutable v5 proposals pin full private state and normalized inputs; explicit
+human confirmation revalidates current authority and eligibility under the
+write lock. Sequence and retry ordinal allocation, child action, human audit
+and workflow events, and receipt form one transaction. The child inherits no
+approval, outcome or result link. Existing exact approval and pre-effect
+controls govern execution, with no budget or authority expansion. The same
+pre-effect write transaction checks the complete related retry family before
+reserving a new effect. A started, uncertain or succeeded related effect blocks
+roots, descendants and prequeued siblings, even with distinct fresh approvals
+and effect keys. Immutable v5 receipts retain source/child membership when
+action keys change; legacy keys and committed effect identities remain linked.
+Exact effect replay still requests reconciliation and never invokes the provider.
+
+A verified receipt permits status derivation to hold its exact source failure
+while that child is proposed, approved or executing. Other failures and stopping
+conditions remain effective. The hold is released when the child is finished,
+failed or rejected; historical failure evidence and required completion task
+membership are never rewritten. This is action retry compatibility, not an
+independent task-attempt replacement or a goal-completion rule. Terminal runs
+and any related source-family committed effect require separate recovery. A receipt
+acknowledges only `retry_action_proposed`, with execution, propagation and
+completion remaining separately verified facts. Migration 061 adds v5 views
+without rewriting older command contracts; older workers lack the receipt hold and pre-effect family fence.

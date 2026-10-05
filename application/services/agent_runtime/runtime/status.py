@@ -47,14 +47,22 @@ def record_operator_pause_condition(*, deps: AppDeps, run: Dict[str, Any]) -> No
 
 def compute_next_run_status(*, deps: AppDeps, run: Dict[str, Any], run_id: str) -> str:
     actions = deps.agent_actions.list_agent_actions(agent_run_id=run_id, limit=500)
-    status, stop = derive_next_run_status(run=run, actions=actions)
+    held = deps.operator_commands.active_retry_source_ids(
+        tenant_id=run["client_id"], workflow_id=run_id
+    )
+    status, stop = derive_next_run_status(
+        run=run, actions=actions, held_failure_ids=held
+    )
     if stop:
         record_stopping_decision(deps=deps, run_id=run_id, stop=stop)
     return status
 
 
 def derive_next_run_status(
-    *, run: Dict[str, Any], actions: list[Dict[str, Any]]
+    *,
+    run: Dict[str, Any],
+    actions: list[Dict[str, Any]],
+    held_failure_ids: frozenset[str] = frozenset(),
 ) -> tuple[str, StopDecision | None]:
     """Derive status from one caller-owned action snapshot without side effects."""
 
@@ -64,7 +72,11 @@ def derive_next_run_status(
             return "planned", None
         return stop.status, stop
     statuses = {str(item.get("status") or "").lower() for item in actions}
-    if "failed" in statuses:
+    if any(
+        str(item.get("status") or "").lower() == "failed"
+        and item.get("id") not in held_failure_ids
+        for item in actions
+    ):
         return "failed", None
     if "approved" in statuses or "executing" in statuses:
         return "running", None

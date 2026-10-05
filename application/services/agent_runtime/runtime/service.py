@@ -319,10 +319,23 @@ class AgentRuntimeService:
         run = self._require_run(run_id)
         if self._normalized_status(run) in _TERMINAL_STATUSES:
             return RuntimeResult(run=run)
+        actions = self._deps.agent_actions.list_agent_actions(
+            agent_run_id=run_id, limit=501
+        )
+        if len(actions) > 500:
+            return RuntimeResult(
+                run=run,
+                message="Action status evidence exceeds the reconciliation safety bound.",
+            )
+        expected = tuple(
+            (action["id"], action["status"])
+            for action in sorted(actions, key=lambda action: action["id"])
+        )
         status = compute_next_run_status(deps=self._deps, run=run, run_id=run_id)
         updated = self._deps.agent_runs.transition_agent_run_status(
             run_id=run_id,
             expected_statuses=(str(run["status"]),),
+            expected_action_statuses=expected,
             status=status,
             error=None if status != "failed" else run.get("error"),
         )

@@ -19,6 +19,22 @@ from infrastructure.db.core.connection import get_connection
 from infrastructure.db.core.json import from_json, to_json
 
 
+def effect_replay_outcome(
+    row: sqlite3.Row, *, expected_identity: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Replay only the identical immutable effect-start authorization."""
+    current = effect_execution_row(row)
+    if all(current[field] == expected for field, expected in expected_identity.items()):
+        return {
+            "outcome": "completed" if current["status"] == "succeeded" else "reconcile",
+            "execution": current,
+        }
+    return {
+        "outcome": "identity_conflict",
+        "reason": "approval or effect identity was already consumed differently",
+    }
+
+
 def approval_row(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "approval_id": row["approval_id"],

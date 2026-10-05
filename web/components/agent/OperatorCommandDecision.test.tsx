@@ -27,3 +27,26 @@ describe("exact action review", () => {
     expect(screen.queryByRole("button", { name: "Confirm approve" })).not.toBeInTheDocument(); expect(screen.getByLabelText("Action approval receipt")).toHaveTextContent("Recorded outcome: approved"); expect(screen.getByLabelText("Action approval receipt")).toHaveTextContent("approval-1"); expect(screen.getByText("This decision did not execute the action or start or resume the run.")).toBeInTheDocument();
   });
 });
+
+it("shows exact retry scope, requires confirmation and reports a proposed child needing fresh approval", async () => {
+  const user = userEvent.setup(), onConfirm = vi.fn(), onDismiss = vi.fn();
+  const base = proposal("approve");
+  const retry: OperatorCommandProposal = { ...base, contract: "workflow.operator-command-proposal.v5", command_type: "retry", parameters: { action_id: "failed-action", action_status: "failed", retry_strategy: "same_action", retry_plan: { strategy: "same_action", capability_name: "request_synthetic_validation", normalized_inputs: { experiment_id: "retry-experiment" }, inputs_hash: "b".repeat(64), side_effects: ["Creates a validation job"], review_checklist: ["Verify experiment scope"] } }, consequences: ["Fresh approval is required before execution; prior approval is not copied."] };
+  const view = render(<OperatorCommandDecision proposal={retry} receipt={null} runId="run-1" confirming={false} onConfirm={onConfirm} onDismiss={onDismiss} />);
+  expect(screen.getByText(/Failed source action failed-action/)).toBeInTheDocument();
+  expect(screen.getByText(/retry-experiment/)).toBeInTheDocument();
+  expect(onConfirm).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(onConfirm).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Confirm retry" }));
+  expect(onConfirm).toHaveBeenCalledExactlyOnceWith(retry);
+  const receipt: OperatorCommandReceipt = { contract: "workflow.operator-command-receipt.v5", receipt_id: "retry-receipt", proposal_id: retry.proposal_id, proposal_digest: retry.proposal_digest, run_id: "run-1", command_type: "retry", outcome: "proposed", resulting_run_status: "paused", event_ids: { command: "command-1", lifecycle: "retry-event" }, acknowledgement: "retry_action_proposed", propagation_state: "runtime_propagation_not_certified", completed_at: "2026-10-05T00:00:01Z", receipt_digest: "e".repeat(64), source_action_id: "failed-action", action_id: "new-action", retry_strategy: "same_action", retry_count: 1, action_sequence: 2, effect_idempotency_key: "retry:failed-action:same_action:1" };
+  view.rerender(<OperatorCommandDecision proposal={retry} receipt={receipt} runId="run-1" confirming={false} onConfirm={onConfirm} onDismiss={onDismiss} />);
+  expect(screen.queryByRole("button", { name: "Confirm retry" })).not.toBeInTheDocument();
+  const recorded = screen.getByLabelText("Retry action proposed receipt");
+  expect(recorded).toHaveTextContent("Recorded outcome: proposed");
+  expect(recorded).toHaveTextContent("failed-action → proposed action new-action");
+  expect(recorded).toHaveTextContent("Approve action new-action");
+  expect(recorded).toHaveTextContent("Confirmation did not execute work or start or resume the run.");
+  expect(recorded).not.toHaveTextContent("approval undefined");
+});

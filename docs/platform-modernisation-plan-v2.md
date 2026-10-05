@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 ## Purpose
 
@@ -488,8 +488,49 @@ Runs and Interventions display the same decision and approval envelope digest.
 Receipt replay verifies current access before new decision eligibility. Additive
 migration 060 supplies immutable v4 records and separate four-contract history
 views while preserving v1/v2/v3 rows, digests and previous readers. Batch review,
-conversational revocation/supersession, retry/recovery and chat-created runs are
+conversational revocation/supersession, broader recovery and chat-created runs are
 separate follow-on slices; beta capability exclusions remain unchanged.
+
+#### Slice 2.5a: governed conversational same-action retry
+
+The closed `retry_action` intent prepares one exact failed action on a quiescent
+planned, running or paused sequential run in plan_only or auto_execute_safe
+mode. Batch, unresolved or combined mutation requests do not create proposals.
+Only `same_action` is supported. The immutable v5 proposal pins normalized
+inputs, registry/policy/harness identity, evidence, revision, budgets and full
+private control state. Preparation changes no execution or approval state.
+
+Separate human confirmation uses an action- and strategy-bound schema-v3
+`operator-retry-api` assertion. The final write transaction rechecks live access,
+completion verification, all fenced state and preflight, allocates the sequence,
+retry ordinal and independent effect identity, then atomically commits one new
+proposed action, two human audits, workflow projections and its receipt. It
+copies no approval, outcome or result link; fresh approval and existing worker
+pre-effect controls remain necessary. Confirmation executes nothing, changes no
+run status, starts or resumes no work and resets no budget.
+
+Committed effects anywhere in the related source retry family, unresolved run effects,
+incomplete linked evidence, unsupported effect fences and terminal runs block
+admission. Such cases require reconciliation or separately authorized new work.
+The atomic pre-effect transaction rechecks related family effects before any
+new reservation or provider call, including siblings approved before the first
+effect began. Immutable retry receipts preserve the family across mutable action
+projections. Started and uncertain effects block repetition as well as success;
+exact replay retains its reconciliation path and unrelated actions remain eligible.
+A verified receipt holds only its exact source failure while the child is
+proposed, approved or executing, allowing existing workers and reconciliation to
+await the fresh decision. Other failures and stopping conditions still apply.
+Finished or rejected children release that hold. Original failure evidence and
+completion requirements remain intact; retry success alone does not establish
+workflow completion or repair required task membership.
+
+Runs and Interventions reload the same source/child identities, retry ordinal,
+effect identity and immutable receipt. Exact replay verifies current access
+before new eligibility. Migration 061 adds separate five-contract history views
+while preserving v1-v4 records and previous readers. Deploy the migration and
+updated backend/workers before the UI; old workers cannot apply the receipt hold or pre-effect family fence.
+Broader recovery strategies, terminal revival, task-attempt replacement,
+distributed propagation and beta-excluded capabilities remain outside this slice.
 
 ### Phase 3: Durable workflow kernel
 

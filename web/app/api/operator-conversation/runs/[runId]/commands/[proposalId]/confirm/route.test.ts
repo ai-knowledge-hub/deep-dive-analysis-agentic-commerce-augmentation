@@ -40,6 +40,19 @@ describe("operator command browser BFF", () => {
     vi.unstubAllEnvs();
   });
 
+  it("binds exact retry source and strategy in its own audience and replaces body identity", async () => {
+    const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "retry", action_id: "failed-action", retry_strategy: "same_action", user_id: "forged" }), { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(response.status).toBe(200);
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const assertion = new Headers(init?.headers).get("x-operator-command-assertion")!;
+    const claims = JSON.parse(Buffer.from(assertion.split(".")[0], "base64url").toString("utf8"));
+    expect(claims).toMatchObject({ schema_version: 3, aud: "operator-retry-api", iss: "operator-retry-web-bff", sub: "clerk-user-1", action_id: "failed-action", command_type: "retry", retry_strategy: "same_action", proposal_id: "proposal-1", proposal_digest: digest });
+    expect(JSON.parse(String(init?.body))).toMatchObject({ user_id: "clerk-user-1", action_id: "failed-action", command_type: "retry", retry_strategy: "same_action" });
+  });
+  it.each([undefined, "last_safe_checkpoint", "create_recovery_action"])("rejects an unsupported retry strategy %s before minting authority", async (strategy) => {
+    const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "retry", action_id: "failed-action", retry_strategy: strategy }), { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(response.status).toBe(400); expect(global.fetch).not.toHaveBeenCalled();
+  });
   it("binds one human session to one exact pause proposal", async () => {
     const response = await POST(
       request({

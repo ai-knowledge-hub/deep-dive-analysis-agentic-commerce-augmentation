@@ -178,7 +178,12 @@ def _restore_run_projection(
                 "run action projection exceeds the reconciliation safety bound",
                 code="effect_projection_too_large",
             )
-        next_status, stop = derive_next_run_status(run=current_run, actions=actions)
+        held = deps.operator_commands.active_retry_source_ids(
+            tenant_id=tenant_id, workflow_id=workflow_id
+        )
+        next_status, stop = derive_next_run_status(
+            run=current_run, actions=actions, held_failure_ids=held
+        )
         restore = deps.agent_runs.restore_agent_run_after_effect_reconciliation(
             run_id=workflow_id,
             client_id=tenant_id,

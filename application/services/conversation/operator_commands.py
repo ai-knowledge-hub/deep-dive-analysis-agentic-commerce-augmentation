@@ -128,6 +128,12 @@ def create_conversational_proposal(
 def operator_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
     """Add operator-facing consequences without changing the canonical proposal."""
 
+    if proposal["command_type"] == "retry":
+        return {**proposal, "consequences": [
+            "Creates one new proposed action with its own retry identity.",
+            "Fresh approval is required before execution; prior approval is not copied.",
+            "Confirmation does not execute work, start or resume this run, or reset budgets.",
+        ]}
     if proposal['command_type'] in {'approve', 'reject'}:
         return {**proposal, 'consequences': [
             'This records the decision for the exact reviewed action only.',

@@ -70,6 +70,7 @@ def _insert_event(
     principal_id: str,
     note: str,
     anchors: dict[str, Any],
+    action: dict[str, Any] | None = None,
 ) -> None:
     latest = conn.execute(
         "SELECT MAX(created_at) AS timestamp FROM agent_events WHERE agent_run_id = ?",
@@ -89,15 +90,22 @@ def _insert_event(
             capability_name, capability_version, principal_type, principal_id,
             tool_id, skill_id, effect_class, trace_id, note_text,
             is_policy_event, anchors_json, created_at
-        ) VALUES (?, ?, NULL, 0, ?, ?, NULL, NULL, 'human', ?, NULL, NULL,
-                  NULL, ?, ?, 0, json(?), ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'human', ?, ?, ?,
+                  ?, ?, ?, 0, json(?), ?)
         """,
         (
             event_id,
             run_row["id"],
+            action["id"] if action else None,
+            action["sequence"] if action else 0,
             event_type,
             status,
+            action.get("capability_name") if action else None,
+            action.get("capability_version") if action else None,
             principal_id,
+            action.get("tool_id") if action else None,
+            action.get("skill_id") if action else None,
+            action.get("effect_class") if action else None,
             run_row["trace_id"],
             note,
             _json(anchors),
