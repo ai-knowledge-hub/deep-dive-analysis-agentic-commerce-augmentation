@@ -256,12 +256,20 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
   const durableProposalIds = new Set(
     detail.operatorCommandRecords.map((record) => record.proposal.proposal_id),
   );
+  const durableApprovalCommandIds = new Set(
+    detail.operatorCommandRecords.flatMap((record) =>
+      record.receipt?.approval_command_id ? [record.receipt.approval_command_id] : [],
+    ),
+  );
   const eventItems = detail.events
     .filter((event) => {
       const eventType = String(event.event_type || "");
       const proposalId = String(event.anchors?.proposal_id || "");
+      const approvalCommandId = String(event.anchors?.approval_command_id || "");
       return (
-        (eventType.startsWith("operator_command_") && !durableProposalIds.has(proposalId)) ||
+        (eventType.startsWith("operator_command_") &&
+          !durableProposalIds.has(proposalId) &&
+          !durableApprovalCommandIds.has(approvalCommandId)) ||
         eventType === "action_retry_proposed" ||
         eventType === "action_recovery_proposed"
       );
@@ -330,7 +338,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       skill_id: null,
       effect_class: null,
       note: receipt
-        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.resulting_run_status}. ${proposal.command_type === "cancel" ? "Worker interruption" : "Worker continuation"} is not certified.`
+        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.action_id ? receipt.outcome : receipt.resulting_run_status}. ${receipt.action_id ? `Action ${receipt.action_id}; approval ${receipt.approval_id}; envelope ${receipt.approval_envelope_digest}. This decision did not execute the action.` : `${proposal.command_type === "cancel" ? "Worker interruption" : "Worker continuation"} is not certified.`}`
         : `A conversational ${proposal.command_type} proposal is awaiting explicit confirmation.`,
       is_policy_event: false,
       anchors: {
@@ -347,7 +355,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       harness: detail.harness,
       event,
       priority: receipt ? "low" : "medium",
-      risk: proposal.command_type === "cancel" ? "high" : "low",
+      risk: ["cancel", "approve", "reject"].includes(proposal.command_type) ? "high" : "low",
       title: receipt
         ? `${formatRunLabel(detail.run)} ${proposal.command_type} command completed`
         : `${formatRunLabel(detail.run)} has a ${proposal.command_type} proposal`,

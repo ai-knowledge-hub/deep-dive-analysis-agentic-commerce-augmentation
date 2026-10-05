@@ -64,15 +64,20 @@ export type OperatorConversationResponse = {
 };
 
 export type OperatorCommandProposal = {
-  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2" | "workflow.operator-command-proposal.v3";
+  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2" | "workflow.operator-command-proposal.v3" | "workflow.operator-command-proposal.v4";
   proposal_id: string;
   proposal_digest: string;
   tenant_id: string;
   principal_id: string;
   run_id: string;
-  command_type: "pause" | "resume" | "cancel";
+  command_type: "pause" | "resume" | "cancel" | "approve" | "reject";
   predicted_run_status?: "planned" | "running" | "canceled";
-  parameters: Record<string, never>;
+  parameters: { action_id?: string; action_status?: string; review?: {
+    capability_name: string; normalized_inputs: Record<string, unknown>; inputs_hash: string;
+    side_effects: string[]; review_checklist: string[]; approval_id: string | null;
+    approval_sequence: number | null; approval_envelope_digest: string | null;
+    registry_authority: Record<string, unknown>;
+  } };
   source: {
     active_graph_revision: number;
     run_mode?: "plan_only" | "auto_execute_safe";
@@ -104,21 +109,22 @@ export type OperatorCommandProposal = {
 };
 
 export type OperatorCommandReceipt = {
-  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2" | "workflow.operator-command-receipt.v3";
+  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2" | "workflow.operator-command-receipt.v3" | "workflow.operator-command-receipt.v4";
   receipt_id: string;
   proposal_id: string;
   proposal_digest: string;
   run_id: string;
-  command_type: "pause" | "resume" | "cancel";
-  outcome: "paused" | "planned" | "running" | "canceled";
+  command_type: "pause" | "resume" | "cancel" | "approve" | "reject";
+  outcome: "paused" | "planned" | "running" | "canceled" | "approved" | "rejected";
   resulting_run_status: "paused" | "planned" | "running" | "canceled";
+  action_id?: string; approval_id?: string; approval_envelope_digest?: string; approval_sequence?: number; approval_command_id?: string;
   run_mode?: "plan_only" | "auto_execute_safe";
   event_ids: {
     command: string;
     lifecycle: string;
     stopping_condition?: string | null;
   };
-  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible" | "control_plane_canceled";
+  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible" | "control_plane_canceled" | "exact_action_decision_recorded";
   propagation_state: "runtime_propagation_not_certified";
   completed_at: string;
   receipt_digest: string;

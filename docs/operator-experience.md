@@ -254,3 +254,18 @@ to validate whether new operators can complete the primary loop without
 understanding internal runtime mechanics.
 
 For a product-to-runtime map of the agents, skills, and tools behind the main platform verbs, use `docs/agent-capability-map.md`.
+
+
+### Exact action review from the run conversation
+
+An approve or reject request selects one pending proposed action. When several
+are plausible, select the action offered by the run-bound review controls.
+Review normalized inputs, intended effects, checklist and consequences, then
+use the separate confirm button. Dismissal and conversational agreement alone
+record no decision. Stale evidence requires a fresh review.
+
+The receipt identifies the action, approval ID, decision sequence and envelope
+digest in both Runs and Interventions. Approval does not execute an action or
+start/resume its run. The worker still checks exact authorization at execution;
+plan-only remains non-executing, and cancellation remains terminal. A recorded
+approval decision does not certify a completed effect or objective.

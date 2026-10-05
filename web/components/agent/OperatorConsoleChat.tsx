@@ -16,8 +16,7 @@ import { OperatorChatSummary } from "./OperatorChatSummary";
 import { OperatorChatThread } from "./OperatorChatThread";
 import type { ChatMessage, PromptId } from "./operatorChatTypes";
 
-const commandLabels = { pause: "Pause", resume: "Resume", cancel: "Cancel" };
-const receiptLabels = { pause: "Pause", resume: "Resume eligibility", cancel: "Cancellation" };
+import { commandLabels, OperatorCommandDecision } from "./OperatorCommandDecision";
 type Props = {
   run: AgentRun | null;
   actions: AgentAction[];
@@ -189,6 +188,7 @@ export function OperatorConsoleChat({
         proposal.proposal_id,
         proposal.proposal_digest,
         proposal.command_type,
+        ...(proposal.parameters.action_id ? [proposal.parameters.action_id] as const : [] as const),
       );
       if (confirmationRequestRef.current !== confirmationRequestId) return;
       setCommandReceipt(response.receipt);
@@ -294,7 +294,7 @@ export function OperatorConsoleChat({
         run={run}
         briefing={
           run
-            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, and cancel requests become reviewable proposals and require a separate confirmation."
+            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, cancel, approve and reject requests become reviewable proposals and require a separate confirmation."
             : "Select a run to start a grounded operator conversation."
         }
         proposedCount={counts.proposed}
@@ -350,6 +350,16 @@ export function OperatorConsoleChat({
               {warning.message}
             </div>
           ))}
+          {latestResponse.warnings.some((warning) => warning.code === "action_review_target_required") ? (
+            <div className="panel__actions" aria-label="Select an action to review">
+              {actions.filter((action) => action.status === "proposed").map((action) => (
+                <button type="button" key={action.id} className="button button--ghost button--sm" disabled={Boolean(status)}
+                  onClick={() => void sendQuestion(`${latestResponse.intent === "reject_action" ? "Reject" : "Approve"} action ${action.id}`)}>
+                  Review action {action.sequence}: {action.capability_name.replaceAll("_", " ")}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {latestResponse.recommendation ? (
             <div className="panel__notice panel__notice--info">
               <strong>Recommendation:</strong> {latestResponse.recommendation.text}
@@ -435,60 +445,12 @@ export function OperatorConsoleChat({
               </div>
             </div>
           ) : null}
-          {pendingProposal &&
-          !dismissedProposalIds.includes(pendingProposal.proposal_id) &&
-          durableReceipt?.proposal_id !== pendingProposal.proposal_id ? (
-            <section className="operator-chat__proposal" aria-label={`${commandLabels[pendingProposal.command_type]} proposal`}>
-              <div>
-                <strong>{commandLabels[pendingProposal.command_type]} this run?</strong>
-                <div className="panel__muted">
-                  Revision {pendingProposal.source.active_graph_revision} · status{" "}
-                  {pendingProposal.source.run_status} · expires{" "}
-                  {new Date(pendingProposal.expires_at).toLocaleTimeString()}
-                </div>
-              </div>
-              <ul className="operator-chat__fact-list">
-                {pendingProposal.consequences.map((consequence) => (
-                  <li key={consequence}>{consequence}</li>
-                ))}
-              </ul>
-              <div className="panel__muted">
-                Proposal {pendingProposal.proposal_id.slice(0, 12)} · digest{" "}
-                {pendingProposal.proposal_digest.slice(0, 12)}
-              </div>
-              <div className="panel__actions">
-                <button
-                  type="button"
-                  className="button button--primary button--sm"
-                  disabled={Boolean(confirmingProposalId)}
-                  onClick={() => void confirmCommand(pendingProposal)}
-                >
-                  {confirmingProposalId ? "Confirming…" : `Confirm ${pendingProposal.command_type}`}
-                </button>
-                <button
-                  type="button"
-                  className="button button--ghost button--sm"
-                  disabled={Boolean(confirmingProposalId)}
-                  onClick={() =>
-                    setDismissedProposalIds((current) => [
-                      ...current,
-                      pendingProposal.proposal_id,
-                    ])
-                  }
-                >
-                  Dismiss
-                </button>
-              </div>
-            </section>
-          ) : null}
-          {durableReceipt ? (
-            <div className="panel__notice panel__notice--info" aria-label={`${commandLabels[durableReceipt.command_type]} receipt`}>
-              <strong>{receiptLabels[durableReceipt.command_type]} acknowledged.</strong> Receipt {durableReceipt.receipt_id} · proposal{" "}
-              {durableReceipt.proposal_id} · {durableReceipt.acknowledgement.replaceAll("_", " ")}.
-              Recorded outcome: {durableReceipt.resulting_run_status}. Runtime propagation is not independently certified.{" "}
-              <a href={`/interventions?run_id=${run.id}`}>Open Interventions</a>
-            </div>
-          ) : null}
+          <OperatorCommandDecision
+            proposal={pendingProposal && !dismissedProposalIds.includes(pendingProposal.proposal_id) ? pendingProposal : null}
+            receipt={durableReceipt} runId={run.id} confirming={Boolean(confirmingProposalId)}
+            onConfirm={(proposal) => void confirmCommand(proposal)}
+            onDismiss={(id) => setDismissedProposalIds((current) => [...current, id])}
+          />
           {!pendingProposal && !durableReceipt && !commandRecordsError ? (
             <div className="panel__muted">No conversational operator commands are recorded.</div>
           ) : null}

@@ -14,7 +14,16 @@ from api.runtime_composition import default_completion_coordinator, default_runt
 from api.utils.agent_run_authorization import principal_has_scope
 from api.utils.operator_command_session import resolve_operator_command_identity
 from api.utils.operator_session import resolve_operator_session_identity
-from api.utils.principals import PrincipalContext, ensure_principal
+from api.utils.principals import (
+    PrincipalContext,
+    ensure_principal,
+    _assert_principal_is_active,
+)
+from domain.workflow.approval import ApprovalAuthority, PrincipalType
+from application.services.agent_runtime.approval_ledger import ApprovalLedgerError
+from application.services.conversation.operator_review_confirmation import (
+    confirm_action_review,
+)
 from api.utils.tenancy import require_client_role
 from application.ports.deps import AppDeps
 from application.services.conversation.operator_gateway import (
@@ -63,7 +72,8 @@ class OperatorMessageRequest(BaseModel):
 class OperatorCommandConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command_type: Literal["pause", "resume", "cancel"] = "pause"
+    command_type: Literal["pause", "resume", "cancel", "approve", "reject"] = "pause"
+    action_id: str | None = None
     proposal_digest: str = Field(..., min_length=64, max_length=64)
     user_id: str | None = None
     client_id: str | None = None
@@ -296,10 +306,17 @@ def confirm_operator_command(
         proposal_id=proposal_id,
         proposal_digest=payload.proposal_digest,
         command_type=payload.command_type,
+        action_id=payload.action_id,
     )
     principal = identity.principal
+    review = payload.command_type in {"approve", "reject"}
     if not (
-        principal_has_scope(principal=principal, scope="operator_commands:confirm")
+        principal_has_scope(
+            principal=principal,
+            scope="operator_action_reviews:confirm"
+            if review
+            else "operator_commands:confirm",
+        )
         or principal_has_scope(principal=principal, scope="agent_runs:write")
     ):
         raise HTTPException(
@@ -339,6 +356,54 @@ def confirm_operator_command(
         raise HTTPException(
             status_code=403, detail="Command proposal belongs to a different operator"
         )
+
+    if review:
+        if payload.action_id != proposal["parameters"]["action_id"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Action does not match the exact review proposal",
+            )
+
+        def require_review_access():
+            require_client_role(
+                client_id=principal.client_id,
+                user_id=identity.user_id,
+                allowed_roles={"owner", "admin", "operator"},
+            )
+            _assert_principal_is_active(
+                principal_id=principal.principal_id,
+                principal_type="human",
+                tenant_id=principal.client_id,
+            )
+
+        require_review_access()
+        authority = ApprovalAuthority(
+            principal_type=PrincipalType.HUMAN,
+            principal_id=principal.principal_id,
+            authority_source="agent-principal-token"
+            if principal.auth_method == "bearer_token"
+            else "operator-action-review-bff",
+            authority_version="agent-principal-signing-secret:v1"
+            if principal.auth_method == "bearer_token"
+            else "operator-command-signing-secret:v2",
+        )
+        try:
+            return confirm_action_review(
+                deps=deps,
+                proposal=proposal,
+                authority=authority,
+                completion_reader=coordinator.get_completion_read_model,
+                require_access=require_review_access,
+            )
+        except OperatorCommandConflictError as exc:
+            raise HTTPException(
+                status_code=409, detail={"code": exc.code, "message": exc.message}
+            ) from exc
+        except ApprovalLedgerError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
 
     existing_receipt = deps.operator_commands.get_receipt(
         proposal_id=proposal_id,

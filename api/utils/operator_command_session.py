@@ -46,6 +46,7 @@ def resolve_operator_command_identity(
     proposal_id: str,
     proposal_digest: str,
     command_type: str = "pause",
+    action_id: str | None = None,
 ) -> OperatorSessionIdentity:
     authorization = request.headers.get("authorization") or ""
     if authorization.lower().startswith("bearer "):
@@ -75,6 +76,12 @@ def resolve_operator_command_identity(
             detail="Operator command confirmation requires an authenticated human session",
         )
     claims = _verify(assertion)
+    if command_type in {"approve", "reject"}:
+        if not action_id:
+            raise HTTPException(
+                status_code=400, detail="An exact action_id is required"
+            )
+        _match("action_id", action_id, str(claims.get("action_id") or ""))
     _match("command_type", command_type, str(claims["command_type"]))
     _match("client_id", client_id, str(claims["client_id"]))
     _match("user_id", user_id, str(claims["sub"]))
@@ -89,7 +96,9 @@ def resolve_operator_command_identity(
             user_id=str(claims["sub"]),
             agent_profile_id=None,
             auth_method="operator_command_bff_assertion",
-            scopes=("operator_commands:confirm",),
+            scopes=("operator_action_reviews:confirm",)
+            if command_type in {"approve", "reject"}
+            else ("operator_commands:confirm",),
         ),
         user_id=str(claims["sub"]),
     )
@@ -126,18 +135,33 @@ def _verify(assertion: str) -> dict[str, object]:
         raise HTTPException(
             status_code=401, detail="Invalid operator command assertion payload"
         ) from exc
-    if type(payload) is not dict or set(payload) != _FIELDS:
+    review = type(payload) is dict and payload.get("command_type") in {
+        "approve",
+        "reject",
+    }
+    fields = _FIELDS | {"action_id"} if review else _FIELDS
+    if type(payload) is not dict or set(payload) != fields:
         raise HTTPException(
             status_code=401, detail="Invalid operator command assertion contract"
         )
     if (
-        payload.get("schema_version") != ASSERTION_SCHEMA_VERSION
-        or payload.get("aud") != ASSERTION_AUDIENCE
-        or payload.get("iss") != ASSERTION_ISSUER
-        or payload.get("command_type") not in {"pause", "resume", "cancel"}
+        payload.get("schema_version") != (2 if review else ASSERTION_SCHEMA_VERSION)
+        or payload.get("aud")
+        != ("operator-action-review-api" if review else ASSERTION_AUDIENCE)
+        or payload.get("iss")
+        != ("operator-action-review-web-bff" if review else ASSERTION_ISSUER)
+        or payload.get("command_type")
+        not in {"pause", "resume", "cancel", "approve", "reject"}
     ):
         raise HTTPException(status_code=401, detail="Invalid operator command scope")
-    for field in ("sub", "client_id", "run_id", "proposal_id", "jti"):
+    for field in (
+        "sub",
+        "client_id",
+        "run_id",
+        "proposal_id",
+        "jti",
+        *(("action_id",) if review else ()),
+    ):
         value = payload.get(field)
         if (
             type(value) is not str

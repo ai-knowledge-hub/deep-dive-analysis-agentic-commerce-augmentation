@@ -230,7 +230,7 @@ is recorded outside this application.
    services for bounded conversational pause/resume/cancel confirmation. Do not reuse the
    read-only conversation secret; the assertion audiences are intentionally
    separate.
-6. Apply migrations 058–059 and deploy the backend before enabling conversational
+6. Apply migrations 058–060 and deploy the backend before enabling conversational
    cancellation in the frontend. The migration adds v3 tables and extends the
    history through separate v3 views while preserving v1/v2 rows, digests and
    original views. Rollback readers retain their original tables and views,
@@ -238,6 +238,11 @@ is recorded outside this application.
    Migration 059 protects every durable v3 cancellation against later status
    writes, including runs without completion governance and receipts already
    created under migration 058.
+   Migration 060 adds exact approve/reject review with separate v4 history views.
+   Deploy backend verification of the action-bound schema-v2 assertion before
+   enabling those controls in the UI. It uses the existing server-only command
+   signing secret with a distinct action-review audience; no browser token or
+   read assertion can authorize approval. Previous views exclude v4 history.
    Keep the database expansion during an application rollback.
 7. Deploy automatically on push
 

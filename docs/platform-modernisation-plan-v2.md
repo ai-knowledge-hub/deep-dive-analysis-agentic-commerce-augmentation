@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-09-23
+Last updated: 2026-10-04
 
 ## Purpose
 
@@ -464,6 +464,32 @@ Migration 058 adds immutable cancel tables and separate v3 three-command history
 preserving v1 pause and v2 resume bytes, identities, cursors, and their original
 history views for previous backend readers. Runs and
 Interventions display terminal consequences and the recorded receipt.
+
+#### Slice 2.4a: governed conversational action review
+
+The closed `approve_action` and `reject_action` intents review one exact proposed
+action on a planned, running or paused sequential run in plan_only or
+auto_execute_safe mode. Ambiguous or batch targets require selection rather
+than granting authority. Immutable v4 proposals bind normalized inputs, effect
+identity, registry/policy/harness pins, evidence, revision, current approval
+identity/sequence and full private control state. Preparation changes no action
+or approval; an existing requested approval must still match current state.
+
+Explicit authenticated confirmation uses a separate action-review assertion
+schema/audience bound to action, decision and proposal. Under the final write
+lock the host rechecks active human membership, authority, all fenced state and
+eligibility, then composes the existing approval ledger decision and action
+projection with audits, workflow projection and conversational receipt in one
+transaction. Confirmation executes no capability and does not start, resume or
+otherwise change the run. Execution retains the existing exact pre-effect,
+revocation, policy, budget and single-use controls.
+
+Runs and Interventions display the same decision and approval envelope digest.
+Receipt replay verifies current access before new decision eligibility. Additive
+migration 060 supplies immutable v4 records and separate four-contract history
+views while preserving v1/v2/v3 rows, digests and previous readers. Batch review,
+conversational revocation/supersession, retry/recovery and chat-created runs are
+separate follow-on slices; beta capability exclusions remain unchanged.
 
 ### Phase 3: Durable workflow kernel
 
