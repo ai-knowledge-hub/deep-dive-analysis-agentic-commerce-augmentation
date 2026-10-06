@@ -508,6 +508,7 @@ def test_receipt_verifies_in_fresh_process_after_source_state_changes(
     retry_api, tmp_path
 ):
     import subprocess
+    import sys
     from shared.db import connection
 
     client, deps, run, action, _ = source(retry_api, tmp_path)
@@ -519,7 +520,7 @@ def test_receipt_verifies_in_fresh_process_after_source_state_changes(
     program = "from shared.db.connection import set_database_path; from infrastructure.db.agent.operator_commands import get_receipt; import sys; set_database_path(sys.argv[1]); print(get_receipt(proposal_id=sys.argv[2], tenant_id=sys.argv[3], workflow_id=sys.argv[4])['receipt_digest'])"
     result = subprocess.run(
         [
-            ".venv/bin/python",
+            sys.executable,
             "-c",
             program,
             str(connection.DEFAULT_DB_PATH),

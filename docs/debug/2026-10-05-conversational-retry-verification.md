@@ -195,6 +195,14 @@ that live-provider partition remains unverified. No frontend files changed
 during this rereview; the earlier 165-test frontend verification remains the
 applicable build evidence.
 
+CI portability correction (2026-10-06): the fresh-process receipt test used a
+repository-relative `.venv/bin/python`, which is absent on the GitHub Actions
+`setup-python` runner. It now launches `sys.executable`, preserving the actual
+new process and durable receipt-digest assertion. Running the focused test from
+`runtime-path:/private/tmp` with the repository on `PYTHONPATH` reproduced the same missing
+interpreter failure before the fix and passed afterward (1 passed in 3.28
+seconds), without relying on a working-directory `.venv`.
+
 Safety VT-03 includes exact supplementary retry nodes. Security's immutable
 schema-v1 verification contract remains unchanged; its gate runs the pinned
 baseline, while the new assertion and effect-family tests run in the focused
