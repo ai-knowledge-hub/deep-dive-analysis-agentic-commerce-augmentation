@@ -417,18 +417,40 @@ def test_concurrent_retries_allocate_unique_ordinals_and_effect_identities(
         f"retry:{action['id']}:same_action:2",
     }
 
-    started_effects = []
+    executing_retries = []
     for retry_action in created:
         approved = _approve(deps, failed_run, retry_action)["action"]
-        executing = deps.agent_actions.transition_agent_action_status(
-            action_id=approved["id"], from_status="approved", to_status="executing"
+        executing_retries.append(
+            deps.agent_actions.transition_agent_action_status(
+                action_id=approved["id"], from_status="approved", to_status="executing"
+            )
         )
-        started_effects.append(_commit_effect(deps, failed_run, executing, spec))
-
-    assert {effect.effect_idempotency_key for effect in started_effects} == {
+    assert len({retry["approval_id"] for retry in executing_retries}) == 2
+    assert {retry["dedupe_key"] for retry in executing_retries} == {
         f"retry:{action['id']}:same_action:1",
         f"retry:{action['id']}:same_action:2",
     }
+    # Separate identities and fresh approvals permit proposal history, but do
+    # not authorize repeating a related effect that has already started.
+    winner, loser = executing_retries
+    effect = _commit_effect(deps, failed_run, winner, spec)
+    assert effect.effect_idempotency_key == winner["dedupe_key"]
+    with pytest.raises(ApprovalAuthorizationError) as exc:
+        _commit_effect(deps, failed_run, loser, spec)
+    assert exc.value.code == "retry_family_effect_already_started"
+    effects = (
+        get_connection()
+        .execute(
+            "SELECT action_id FROM approval_effect_executions WHERE workflow_id = ?",
+            (run["id"],),
+        )
+        .fetchall()
+    )
+    assert [row["action_id"] for row in effects] == [winner["id"]]
+    approval = deps.approval_ledger.get_approval(
+        tenant_id="client-a", workflow_id=run["id"], approval_id=loser["approval_id"]
+    )
+    assert approval["status"] == "approved"
 
 
 def test_approval_canonicalizes_payload_before_effect_start(tmp_path, monkeypatch):

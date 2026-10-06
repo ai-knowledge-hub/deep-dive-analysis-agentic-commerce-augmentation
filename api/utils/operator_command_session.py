@@ -47,6 +47,7 @@ def resolve_operator_command_identity(
     proposal_digest: str,
     command_type: str = "pause",
     action_id: str | None = None,
+    retry_strategy: str | None = None,
 ) -> OperatorSessionIdentity:
     authorization = request.headers.get("authorization") or ""
     if authorization.lower().startswith("bearer "):
@@ -76,12 +77,20 @@ def resolve_operator_command_identity(
             detail="Operator command confirmation requires an authenticated human session",
         )
     claims = _verify(assertion)
-    if command_type in {"approve", "reject"}:
+    if command_type in {"approve", "reject", "retry"}:
         if not action_id:
             raise HTTPException(
                 status_code=400, detail="An exact action_id is required"
             )
         _match("action_id", action_id, str(claims.get("action_id") or ""))
+    if command_type == "retry":
+        _match(
+            "retry_strategy", retry_strategy, str(claims.get("retry_strategy") or "")
+        )
+        if retry_strategy != "same_action":
+            raise HTTPException(
+                status_code=400, detail="An exact retry strategy is required"
+            )
     _match("command_type", command_type, str(claims["command_type"]))
     _match("client_id", client_id, str(claims["client_id"]))
     _match("user_id", user_id, str(claims["sub"]))
@@ -96,7 +105,9 @@ def resolve_operator_command_identity(
             user_id=str(claims["sub"]),
             agent_profile_id=None,
             auth_method="operator_command_bff_assertion",
-            scopes=("operator_action_reviews:confirm",)
+            scopes=("operator_retries:confirm",)
+            if command_type == "retry"
+            else ("operator_action_reviews:confirm",)
             if command_type in {"approve", "reject"}
             else ("operator_commands:confirm",),
         ),
@@ -139,28 +150,50 @@ def _verify(assertion: str) -> dict[str, object]:
         "approve",
         "reject",
     }
-    fields = _FIELDS | {"action_id"} if review else _FIELDS
+    retry = type(payload) is dict and payload.get("command_type") == "retry"
+    fields = (
+        _FIELDS | {"action_id", "retry_strategy"}
+        if retry
+        else _FIELDS | {"action_id"}
+        if review
+        else _FIELDS
+    )
     if type(payload) is not dict or set(payload) != fields:
         raise HTTPException(
             status_code=401, detail="Invalid operator command assertion contract"
         )
     if (
-        payload.get("schema_version") != (2 if review else ASSERTION_SCHEMA_VERSION)
+        payload.get("schema_version")
+        != (3 if retry else 2 if review else ASSERTION_SCHEMA_VERSION)
         or payload.get("aud")
-        != ("operator-action-review-api" if review else ASSERTION_AUDIENCE)
+        != (
+            "operator-retry-api"
+            if retry
+            else "operator-action-review-api"
+            if review
+            else ASSERTION_AUDIENCE
+        )
         or payload.get("iss")
-        != ("operator-action-review-web-bff" if review else ASSERTION_ISSUER)
+        != (
+            "operator-retry-web-bff"
+            if retry
+            else "operator-action-review-web-bff"
+            if review
+            else ASSERTION_ISSUER
+        )
         or payload.get("command_type")
-        not in {"pause", "resume", "cancel", "approve", "reject"}
+        not in {"pause", "resume", "cancel", "approve", "reject", "retry"}
     ):
         raise HTTPException(status_code=401, detail="Invalid operator command scope")
+    if retry and payload.get("retry_strategy") != "same_action":
+        raise HTTPException(status_code=401, detail="Invalid retry strategy")
     for field in (
         "sub",
         "client_id",
         "run_id",
         "proposal_id",
         "jti",
-        *(("action_id",) if review else ()),
+        *(("action_id",) if review or retry else ()),
     ):
         value = payload.get(field)
         if (

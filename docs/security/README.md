@@ -1,7 +1,7 @@
 # Security Analysis
 
 Status: current
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 The Phase 1 agent-workflow security baseline has three synchronized artifacts:
 
@@ -105,3 +105,38 @@ the existing worker pre-effect, revocation, policy, budget and single-use checks
 remain authoritative. Terminal cancellation blocks new decisions, while exact
 historical receipts remain replayable to currently authorized humans. This slice
 does not upgrade planned distributed controls or change beta exclusions.
+
+
+Phase 2.5a adds exact same-action retry proposals for one failed action on a
+quiescent nonterminal sequential run. A separate schema-v3 retry assertion binds
+human, tenant, run, source action, strategy, proposal and digest; read, lifecycle
+and action-review assertions cannot confirm it. Under the final write lock the
+host rechecks access, verified completion, full private state, registry, policy,
+harness, linked evidence and budgets. Committed source-family effects and
+unresolved run effects block admission. The new proposed action has a separate
+under-lock sequence, retry ordinal and effect identity, no copied approval or
+result link, and requires fresh approval. Child creation, human audits, workflow
+projections and immutable v5 receipt commit together; commit failure rolls back
+all pending writes. Exact replay checks current access before new eligibility.
+
+The effect-start transaction also rechecks the complete related retry family
+under its write lock. Started, uncertain and succeeded related effects block
+preapproved siblings before any reservation or provider call. Immutable v5
+receipt relationships survive rewritten action keys; legacy retry identities
+remain fenced. Exact effect replay requests reconciliation, and independent
+actions with identical inputs keep their separate approvals and effects.
+
+A verified receipt holds only its source failure while the exact child is
+proposed, approved or executing. Reconciliation checks the observed action set under the final
+write lock before projecting status; unrelated failures and stopping conditions remain effective.
+A finished or rejected child releases the hold. The failed source and required
+completion membership are unchanged, so successful retry is not workflow
+completion. Migration 061 preserves v1-v4 evidence and readers, with separate
+v5 history views. All workers must receive the receipt hold and pre-effect family fence before
+enabling the new UI. Existing beta
+exclusions, distributed cancellation/attempt controls and broader recovery
+remain unchanged; planned controls are not certified by this slice.
+
+Supplementary retry evidence, admission boundaries, failure-space coverage and
+rollout limits are recorded in
+[the issue 164 verification report](../debug/2026-10-05-conversational-retry-verification.md).

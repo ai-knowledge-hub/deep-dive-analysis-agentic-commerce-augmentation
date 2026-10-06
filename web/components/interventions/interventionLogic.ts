@@ -261,6 +261,11 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       record.receipt?.approval_command_id ? [record.receipt.approval_command_id] : [],
     ),
   );
+  const durableRetryLifecycleIds = new Set(
+    detail.operatorCommandRecords.flatMap((record) =>
+      record.receipt?.command_type === "retry" ? [record.receipt.event_ids.lifecycle] : [],
+    ),
+  );
   const eventItems = detail.events
     .filter((event) => {
       const eventType = String(event.event_type || "");
@@ -270,7 +275,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
         (eventType.startsWith("operator_command_") &&
           !durableProposalIds.has(proposalId) &&
           !durableApprovalCommandIds.has(approvalCommandId)) ||
-        eventType === "action_retry_proposed" ||
+        (eventType === "action_retry_proposed" && !durableRetryLifecycleIds.has(event.id)) ||
         eventType === "action_recovery_proposed"
       );
     })
@@ -338,7 +343,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       skill_id: null,
       effect_class: null,
       note: receipt
-        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.action_id ? receipt.outcome : receipt.resulting_run_status}. ${receipt.action_id ? `Action ${receipt.action_id}; approval ${receipt.approval_id}; envelope ${receipt.approval_envelope_digest}. This decision did not execute the action.` : `${proposal.command_type === "cancel" ? "Worker interruption" : "Worker continuation"} is not certified.`}`
+        ? `A conversational ${proposal.command_type} command committed with an immutable receipt; recorded outcome ${receipt.action_id ? receipt.outcome : receipt.resulting_run_status}. ${receipt.command_type === "retry" ? `Source action ${receipt.source_action_id}; proposed action ${receipt.action_id}; same-action retry ${receipt.retry_count}; effect identity ${receipt.effect_idempotency_key}. Fresh approval is required. No work was executed or resumed.` : receipt.action_id ? `Action ${receipt.action_id}; approval ${receipt.approval_id}; envelope ${receipt.approval_envelope_digest}. This decision did not execute the action.` : `${proposal.command_type === "cancel" ? "Worker interruption" : "Worker continuation"} is not certified.`}`
         : `A conversational ${proposal.command_type} proposal is awaiting explicit confirmation.`,
       is_policy_event: false,
       anchors: {
@@ -355,7 +360,7 @@ export function buildCommandItems(detail: InterventionDetail): CommandItem[] {
       harness: detail.harness,
       event,
       priority: receipt ? "low" : "medium",
-      risk: ["cancel", "approve", "reject"].includes(proposal.command_type) ? "high" : "low",
+      risk: ["cancel", "approve", "reject"].includes(proposal.command_type) ? "high" : proposal.command_type === "retry" ? "medium" : "low",
       title: receipt
         ? `${formatRunLabel(detail.run)} ${proposal.command_type} command completed`
         : `${formatRunLabel(detail.run)} has a ${proposal.command_type} proposal`,

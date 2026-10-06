@@ -101,7 +101,7 @@ export async function confirmOperatorConversationCommand(
   runId: string,
   proposalId: string,
   proposalDigest: string,
-  commandType: "pause" | "resume" | "cancel" | "approve" | "reject" = "pause",
+  commandType: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry" = "pause",
   actionId?: string,
 ): Promise<OperatorCommandConfirmationResponse> {
   const clientId = getClientId();
@@ -115,6 +115,7 @@ export async function confirmOperatorConversationCommand(
         proposal_digest: proposalDigest,
         command_type: commandType,
         ...(actionId ? { action_id: actionId } : {}),
+        ...(commandType === "retry" ? { retry_strategy: "same_action" } : {}),
       }),
     },
   );

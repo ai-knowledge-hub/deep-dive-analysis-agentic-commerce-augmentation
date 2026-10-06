@@ -33,6 +33,7 @@ from infrastructure.db.agent.operator_command_integrity import (
     _require_run_fence,
     _require_snapshot_digest,
 )
+from infrastructure.db.agent.operator_retries import active_retry_source_ids, commit_retry, verify_retry_receipt
 from infrastructure.db.agent.operator_action_reviews import (
     commit_review,
     verify_review_receipt,
@@ -117,7 +118,7 @@ def get_proposal(
         get_connection()
         .execute(
             """
-        SELECT * FROM operator_all_proposals_v4
+        SELECT * FROM operator_all_proposals_v5
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
             (proposal_id, tenant_id, workflow_id),
@@ -140,7 +141,7 @@ def get_receipt(
         .execute(
             """
         SELECT *
-        FROM operator_all_receipts_v4
+        FROM operator_all_receipts_v5
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
             (proposal_id, tenant_id, workflow_id),
@@ -164,7 +165,7 @@ def list_records(
             conn.execute(
                 """
                 SELECT COUNT(*) AS record_count
-                FROM operator_all_proposals_v4
+                FROM operator_all_proposals_v5
                 WHERE tenant_id = ? AND workflow_id = ?
                 """,
                 (tenant_id, workflow_id),
@@ -173,7 +174,7 @@ def list_records(
         proposal_rows = conn.execute(
             """
             SELECT *
-            FROM operator_all_proposals_v4
+            FROM operator_all_proposals_v5
             WHERE tenant_id = ? AND workflow_id = ?
               AND (
                 ? IS NULL
@@ -242,7 +243,7 @@ def _record_from_row(
     _require_proposal_row_matches(row, proposal)
     receipt_row = conn.execute(
         """
-        SELECT * FROM operator_all_receipts_v4
+        SELECT * FROM operator_all_receipts_v5
         WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
         """,
         (proposal["proposal_id"], tenant_id, workflow_id),
@@ -328,7 +329,7 @@ def _commit_command(
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             """
-            SELECT * FROM operator_all_proposals_v4
+            SELECT * FROM operator_all_proposals_v5
             WHERE proposal_id = ? AND tenant_id = ? AND workflow_id = ?
             """,
             (proposal["proposal_id"], proposal["tenant_id"], proposal["run_id"]),
@@ -349,7 +350,7 @@ def _commit_command(
         replay_row = conn.execute(
             """
             SELECT *
-            FROM operator_all_receipts_v4
+            FROM operator_all_receipts_v5
             WHERE proposal_id = ?
             """,
             (proposal["proposal_id"],),
@@ -604,6 +605,8 @@ def _commit_command(
 
 
 def _verified_receipt(row: sqlite3.Row) -> dict[str, Any]:
+    if row["command_type"] == "retry":
+        return verify_retry_receipt(row)
     if row["command_type"] in {"approve", "reject"}:
         return verify_review_receipt(row)
     receipt = json.loads(row["receipt_json"])
@@ -666,6 +669,8 @@ def resume_mode_from_receipt(receipt: dict[str, Any]) -> str:
 
 
 def _tables(proposal: dict[str, Any]) -> tuple[str, str]:
+    if proposal["command_type"] == "retry":
+        return "operator_retry_proposals", "operator_retry_receipts"
     if proposal["command_type"] in {"approve", "reject"}:
         return "operator_action_review_proposals", "operator_action_review_receipts"
     if proposal["command_type"] == "cancel":
@@ -704,6 +709,8 @@ __all__ = [
     "commit_resume",
     "commit_cancel",
     "commit_review",
+    "commit_retry",
+    "active_retry_source_ids",
     "create_proposal",
     "get_proposal",
     "get_receipt",

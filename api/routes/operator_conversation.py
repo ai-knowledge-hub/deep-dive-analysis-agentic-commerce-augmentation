@@ -21,6 +21,7 @@ from api.utils.principals import (
 )
 from domain.workflow.approval import ApprovalAuthority, PrincipalType
 from application.services.agent_runtime.approval_ledger import ApprovalLedgerError
+from application.services.conversation.operator_retry import confirm_retry
 from application.services.conversation.operator_review_confirmation import (
     confirm_action_review,
 )
@@ -72,8 +73,11 @@ class OperatorMessageRequest(BaseModel):
 class OperatorCommandConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command_type: Literal["pause", "resume", "cancel", "approve", "reject"] = "pause"
+    command_type: Literal["pause", "resume", "cancel", "approve", "reject", "retry"] = (
+        "pause"
+    )
     action_id: str | None = None
+    retry_strategy: Literal["same_action"] | None = None
     proposal_digest: str = Field(..., min_length=64, max_length=64)
     user_id: str | None = None
     client_id: str | None = None
@@ -307,13 +311,17 @@ def confirm_operator_command(
         proposal_digest=payload.proposal_digest,
         command_type=payload.command_type,
         action_id=payload.action_id,
+        retry_strategy=payload.retry_strategy,
     )
     principal = identity.principal
+    retry = payload.command_type == "retry"
     review = payload.command_type in {"approve", "reject"}
     if not (
         principal_has_scope(
             principal=principal,
-            scope="operator_action_reviews:confirm"
+            scope="operator_retries:confirm"
+            if retry
+            else "operator_action_reviews:confirm"
             if review
             else "operator_commands:confirm",
         )
@@ -357,7 +365,11 @@ def confirm_operator_command(
             status_code=403, detail="Command proposal belongs to a different operator"
         )
 
-    if review:
+    if review or retry:
+        if retry and payload.retry_strategy != proposal["parameters"]["retry_strategy"]:
+            raise HTTPException(
+                status_code=409, detail="Retry strategy does not match proposal"
+            )
         if payload.action_id != proposal["parameters"]["action_id"]:
             raise HTTPException(
                 status_code=409,
@@ -382,13 +394,17 @@ def confirm_operator_command(
             principal_id=principal.principal_id,
             authority_source="agent-principal-token"
             if principal.auth_method == "bearer_token"
+            else "operator-retry-bff"
+            if retry
             else "operator-action-review-bff",
             authority_version="agent-principal-signing-secret:v1"
             if principal.auth_method == "bearer_token"
+            else "operator-command-signing-secret:v3"
+            if retry
             else "operator-command-signing-secret:v2",
         )
         try:
-            return confirm_action_review(
+            return (confirm_retry if retry else confirm_action_review)(
                 deps=deps,
                 proposal=proposal,
                 authority=authority,

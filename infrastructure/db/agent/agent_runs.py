@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from infrastructure.db.core.connection import get_connection
+from infrastructure.db.core.transactions import JoinedTransaction
 from infrastructure.db.core.json import from_json, to_json
 from infrastructure.db.core.tenancy import ensure_client
 
@@ -161,22 +162,39 @@ def transition_agent_run_status(
     expected_statuses: tuple[str, ...],
     status: str,
     error: Optional[str] = None,
+    expected_action_statuses: tuple[tuple[str, str], ...] | None = None,
 ) -> Dict[str, Any] | None:
-    """Atomically move a run only while its observed lifecycle state still holds."""
+    """Commit lifecycle projection only while its observed status/action set holds."""
 
     if not expected_statuses:
         return None
     conn = get_connection()
-    placeholders = ", ".join("?" for _ in expected_statuses)
-    cursor = conn.execute(
-        f"""
-        UPDATE agent_runs
-        SET status = ?, error_text = ?, updated_at = datetime('now')
-        WHERE id = ? AND status IN ({placeholders})
-        """,
-        (status, error, run_id, *expected_statuses),
-    )
-    conn.commit()
+    transaction = JoinedTransaction(conn, "transition_agent_run_status")
+    try:
+        if expected_action_statuses is not None:
+            rows = conn.execute(
+                "SELECT id, status FROM agent_actions WHERE agent_run_id = ? ORDER BY id",
+                (run_id,),
+            ).fetchall()
+            if (
+                tuple((row["id"], row["status"]) for row in rows)
+                != expected_action_statuses
+            ):
+                transaction.rollback()
+                return None
+        placeholders = ", ".join("?" for _ in expected_statuses)
+        cursor = conn.execute(
+            f"""
+            UPDATE agent_runs
+            SET status = ?, error_text = ?, updated_at = datetime('now')
+            WHERE id = ? AND status IN ({placeholders})
+            """,
+            (status, error, run_id, *expected_statuses),
+        )
+        transaction.commit()
+    except Exception:
+        transaction.rollback()
+        raise
     if cursor.rowcount != 1:
         return None
     return get_agent_run(run_id)

@@ -16,6 +16,7 @@ from domain.workflow.approval_serialization import (
 )
 from domain.workflow.approval_execution import approval_execution_source_digest
 import infrastructure.db.agent.approval_persistence as approval_persistence
+from infrastructure.db.agent.approval_retry_fence import related_effect_started_locked
 from infrastructure.db.agent.approval_scope import (
     bindings_have_compatible_supersession_scope,
 )
@@ -257,10 +258,10 @@ def commit_effect_authorization(
             (approval_id, tenant_id, workflow_id, effect_idempotency_key),
         ).fetchone()
         if existing:
-            current = approval_persistence.effect_execution_row(existing)
-            same_identity = all(
-                current[field] == expected
-                for field, expected in {
+            conn.rollback()
+            return approval_persistence.effect_replay_outcome(
+                existing,
+                expected_identity={
                     "tenant_id": tenant_id,
                     "workflow_id": workflow_id,
                     "action_id": action_id,
@@ -269,19 +270,16 @@ def commit_effect_authorization(
                     "authorization_source_digest": authorization_source_digest,
                     "authorization_snapshot_digest": authorization_snapshot_digest,
                     "effect_idempotency_key": effect_idempotency_key,
-                }.items()
+                },
             )
+
+        if related_effect_started_locked(
+            conn, tenant_id=tenant_id, workflow_id=workflow_id, action_id=action_id
+        ):
             conn.rollback()
-            if same_identity:
-                return {
-                    "outcome": "completed"
-                    if current["status"] == "succeeded"
-                    else "reconcile",
-                    "execution": current,
-                }
             return {
-                "outcome": "identity_conflict",
-                "reason": "approval or effect identity was already consumed differently",
+                "outcome": "retry_family_conflict",
+                "reason": "a related retry effect already started; reconcile it before retrying",
             }
 
         budget_reason = approval_persistence.budget_reservation_conflict_locked(

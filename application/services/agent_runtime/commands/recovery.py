@@ -181,9 +181,9 @@ def _recovery_template_for_capability(
     }:
         template["inputs"]["variant_id"] = variant_id
     if validation_job_id:
-        template["inputs"]["recovery_context"][
-            "source_validation_job_id"
-        ] = validation_job_id
+        template["inputs"]["recovery_context"]["source_validation_job_id"] = (
+            validation_job_id
+        )
 
     if capability_name == "request_synthetic_validation":
         template["inputs"]["auto_run"] = False
@@ -445,9 +445,8 @@ def create_change_plan_recovery_action(
     return recovery_action
 
 
-def create_retry_action(
+def build_retry_action_payload(
     *,
-    deps: AppDeps,
     run_id: str,
     run: Dict[str, Any],
     action: Dict[str, Any],
@@ -517,7 +516,7 @@ def create_retry_action(
     rollback_guidance = recovery_template.get(
         "rollback_guidance"
     ) or _capability_rollback_guidance(capability_name, effect_class)
-    retry_action = deps.agent_actions.create_agent_action(
+    return dict(
         agent_run_id=run_id,
         sequence=0,
         status="proposed",
@@ -561,6 +560,33 @@ def create_retry_action(
         allocate_run_sequence=True,
         retry_identity_prefix=f"retry:{action.get('id')}:{retry_strategy}:",
     )
+
+
+def create_retry_action(
+    *,
+    deps: AppDeps,
+    run_id: str,
+    run: Dict[str, Any],
+    action: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = build_retry_action_payload(
+        run_id=run_id, run=run, action=action, metadata=metadata
+    )
+    retry_strategy = str(
+        metadata.get("retry_strategy") or _default_retry_strategy(run)
+    ).strip()
+    recovery_template = (
+        _recovery_template_for_capability(
+            capability_name=payload["capability_name"],
+            run=run,
+            source_action=action,
+            strategy=retry_strategy,
+        )
+        if retry_strategy == "create_recovery_action"
+        else {}
+    )
+    retry_action = deps.agent_actions.create_agent_action(**payload)
     if not retry_action:
         raise RecoveryActionCreationError(
             "Run became terminal before the retry action could be committed; "

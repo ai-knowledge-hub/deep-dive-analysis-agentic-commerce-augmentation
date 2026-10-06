@@ -286,6 +286,11 @@ def commit_pre_effect_authorization(
             str(result.get("reason") or "effect budget is exhausted"),
             code="effect_budget_exhausted",
         )
+    if outcome == "retry_family_conflict":
+        raise ApprovalAuthorizationError(
+            str(result.get("reason") or "a related retry effect already started"),
+            code="retry_family_effect_already_started",
+        )
     raise ApprovalAuthorizationError(
         str(result.get("reason") or "pre-effect authorization failed"),
         code="effect_identity_conflict"

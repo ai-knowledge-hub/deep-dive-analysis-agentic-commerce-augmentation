@@ -294,7 +294,7 @@ export function OperatorConsoleChat({
         run={run}
         briefing={
           run
-            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, cancel, approve and reject requests become reviewable proposals and require a separate confirmation."
+            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, cancel, approve, reject and retry requests become reviewable proposals and require a separate confirmation."
             : "Select a run to start a grounded operator conversation."
         }
         proposedCount={counts.proposed}

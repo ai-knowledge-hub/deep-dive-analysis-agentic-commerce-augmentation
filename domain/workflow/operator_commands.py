@@ -18,6 +18,8 @@ RESUME_COMMAND = "resume"
 RESUME_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v2"
 RESUME_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v2"
 RESUME_MODES = frozenset({"plan_only", "auto_execute_safe"})
+RETRY_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v5"
+RETRY_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v5"
 REVIEW_COMMANDS = frozenset({"approve", "reject"})
 REVIEW_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v4"
 REVIEW_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v4"
@@ -82,6 +84,7 @@ def _build_proposal(
             PAUSE_COMMAND: PROPOSAL_CONTRACT,
             RESUME_COMMAND: RESUME_PROPOSAL_CONTRACT,
             CANCEL_COMMAND: CANCEL_PROPOSAL_CONTRACT,
+            "retry": RETRY_PROPOSAL_CONTRACT,
             "approve": REVIEW_PROPOSAL_CONTRACT,
             "reject": REVIEW_PROPOSAL_CONTRACT,
         }[command_type],
@@ -122,7 +125,7 @@ def _build_proposal(
         "issued_at": issued.isoformat(),
         "expires_at": expires.isoformat(),
     }
-    if command_type in REVIEW_COMMANDS:
+    if command_type in REVIEW_COMMANDS or command_type == "retry":
         core["source"]["run_mode"] = run.get("run_mode")
     if command_type in {RESUME_COMMAND, CANCEL_COMMAND}:
         core["source"]["run_mode"] = run.get("run_mode")
@@ -161,6 +164,7 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
     review = (
         isinstance(proposal, dict) and proposal.get("command_type") in REVIEW_COMMANDS
     )
+    retry = isinstance(proposal, dict) and proposal.get("command_type") == "retry"
     if resume or cancel:
         expected.add("predicted_run_status")
     if type(proposal) is not dict or set(proposal) != expected:
@@ -168,7 +172,9 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
             "operator command proposal shape is invalid"
         )
     if proposal.get("contract") != (
-        REVIEW_PROPOSAL_CONTRACT
+        RETRY_PROPOSAL_CONTRACT
+        if retry
+        else REVIEW_PROPOSAL_CONTRACT
         if review
         else CANCEL_PROPOSAL_CONTRACT
         if cancel
@@ -184,7 +190,8 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         RESUME_COMMAND,
         CANCEL_COMMAND,
         *REVIEW_COMMANDS,
-    } or (not review and proposal.get("parameters") != {}):
+        "retry",
+    } or (not review and not retry and proposal.get("parameters") != {}):
         raise OperatorCommandInvariantError(
             "operator command proposal is not an exact supported command"
         )
@@ -210,7 +217,7 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         "registry_version",
         "registry_fingerprint",
     }
-    if resume or cancel or review:
+    if resume or cancel or review or retry:
         source_fields.add("run_mode")
     if type(source) is not dict or set(source) != source_fields:
         raise OperatorCommandInvariantError("operator command source fence is invalid")
@@ -222,27 +229,6 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         {"status": source["run_status"], "run_mode": source["run_mode"]}
     ):
         raise OperatorCommandInvariantError("cancel outcome changed")
-    if review:
-        if (
-            source["run_status"] not in REVIEW_SOURCE_STATUSES
-            or source["run_mode"] not in RESUME_MODES
-        ):
-            raise OperatorCommandInvariantError("action review source is invalid")
-        parameters = proposal["parameters"]
-        if type(parameters) is not dict or set(parameters) != {
-            "action_id",
-            "action_status",
-            "review",
-        }:
-            raise OperatorCommandInvariantError("action review parameters are invalid")
-        _required("action_id", parameters["action_id"])
-        if (
-            parameters["action_status"] != "proposed"
-            or type(parameters["review"]) is not dict
-        ):
-            raise OperatorCommandInvariantError(
-                "only an exact pending action can be reviewed"
-            )
     _positive_int("active_graph_revision", source.get("active_graph_revision"))
     _required("run_status", source.get("run_status"))
     _required("run_state", source.get("run_state"))
@@ -269,13 +255,8 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         raise OperatorCommandInvariantError(
             "blocked operator command cannot be proposed"
         )
-    if review and (
-        parameters["review"] != preflight["result"].get("review")
-        or parameters["action_id"] != preflight["result"].get("action_id")
-    ):
-        raise OperatorCommandInvariantError(
-            "action review binding differs from preflight"
-        )
+    if review or retry:
+        _validate_action_parameters(proposal)
     issued = _timestamp("issued_at", proposal.get("issued_at"))
     expires = _timestamp("expires_at", proposal.get("expires_at"))
     if expires <= issued:
@@ -286,6 +267,67 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
     core = {key: value for key, value in proposal.items() if key != "proposal_digest"}
     if digest != canonical_digest(core):
         raise OperatorCommandInvariantError("operator command proposal digest changed")
+
+
+def _validate_action_parameters(proposal: dict[str, Any]) -> None:
+    source, parameters = proposal["source"], proposal["parameters"]
+    retry = proposal["command_type"] == "retry"
+    expected = (
+        {"action_id", "action_status", "retry_strategy", "retry_plan"}
+        if retry
+        else {"action_id", "action_status", "review"}
+    )
+    if (
+        source["run_status"] not in REVIEW_SOURCE_STATUSES
+        or source["run_mode"] not in RESUME_MODES
+        or type(parameters) is not dict
+        or set(parameters) != expected
+    ):
+        raise OperatorCommandInvariantError(
+            "action command parameters or source are invalid"
+        )
+    _required("action_id", parameters["action_id"])
+    key = "retry_plan" if retry else "review"
+    if (
+        parameters["action_status"] != ("failed" if retry else "proposed")
+        or type(parameters[key]) is not dict
+        or parameters[key] != proposal["preflight"]["result"].get(key)
+        or parameters["action_id"] != proposal["preflight"]["result"].get("action_id")
+    ):
+        raise OperatorCommandInvariantError("action binding differs from preflight")
+    if retry:
+        plan = parameters[key]
+        if (
+            parameters["retry_strategy"] != "same_action"
+            or plan.get("strategy") != "same_action"
+            or set(plan)
+            != {
+                "strategy",
+                "capability_name",
+                "normalized_inputs",
+                "inputs_hash",
+                "registry_authority",
+                "side_effects",
+                "review_checklist",
+                "action_payload",
+            }
+            or plan["inputs_hash"] != canonical_digest(plan["normalized_inputs"])
+        ):
+            raise OperatorCommandInvariantError("retry plan is invalid")
+        payload = plan["action_payload"]
+        if (
+            payload.get("inputs") != plan["normalized_inputs"]
+            or payload.get("inputs_hash") != plan["inputs_hash"]
+            or payload.get("agent_run_id") != proposal["run_id"]
+            or payload.get("client_id") != proposal["tenant_id"]
+            or payload.get("status") != "proposed"
+            or payload.get("validation_job_id") is not None
+            or payload.get("outputs") != {}
+            or payload.get("dedupe_key") is not None
+            or payload.get("retry_identity_prefix")
+            != f"retry:{parameters['action_id']}:same_action:"
+        ):
+            raise OperatorCommandInvariantError("retry action payload is invalid")
 
 
 def resume_target_status(run: dict[str, Any]) -> str:
@@ -416,3 +458,7 @@ def build_action_review_proposal(
     if command_type not in REVIEW_COMMANDS:
         raise OperatorCommandInvariantError("unsupported action review decision")
     return _build_proposal(command_type=command_type, parameters=parameters, **kwargs)
+
+
+def build_retry_proposal(**kwargs: Any) -> dict[str, Any]:
+    return _build_proposal(command_type="retry", **kwargs)

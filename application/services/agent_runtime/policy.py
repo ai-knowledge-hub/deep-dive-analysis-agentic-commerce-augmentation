@@ -86,6 +86,15 @@ class PolicyEnforcer:
             effect_class=spec.effect_class,
         )
 
+    def validate_action_retry_proposal(
+        self, *, run, action, spec, inputs, all_actions
+    ) -> None:
+        """Validate a proposed retry without treating proposal as auto-execution authority."""
+        self.validate_action_approval(run=run, action=action, spec=spec, inputs=inputs)
+        self._assert_budgets(
+            run=run, all_actions=list(all_actions), capability_name=spec.name
+        )
+
     def _assert_capability_allowed(
         self,
         *,
