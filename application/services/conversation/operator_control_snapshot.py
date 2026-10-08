@@ -1,4 +1,4 @@
-"""Full private control-state fence shared by resume and cancel admission."""
+"""Full private control-state fence for lifecycle and historical recovery admission."""
 
 from __future__ import annotations
 

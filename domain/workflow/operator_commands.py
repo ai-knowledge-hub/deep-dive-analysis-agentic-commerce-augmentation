@@ -18,6 +18,13 @@ RESUME_COMMAND = "resume"
 RESUME_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v2"
 RESUME_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v2"
 RESUME_MODES = frozenset({"plan_only", "auto_execute_safe"})
+RECONCILIATION_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v6"
+RECONCILIATION_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v6"
+RECONCILIATION_ACTION_STATUSES = frozenset({"failed", "executing", "executed"})
+RECONCILIATION_RUN_STATUSES = frozenset(
+    {"planned", "running", "failed", "paused", "completed", "canceled", "cancelled"}
+)
+
 RETRY_PROPOSAL_CONTRACT = "workflow.operator-command-proposal.v5"
 RETRY_RECEIPT_CONTRACT = "workflow.operator-command-receipt.v5"
 REVIEW_COMMANDS = frozenset({"approve", "reject"})
@@ -85,6 +92,7 @@ def _build_proposal(
             RESUME_COMMAND: RESUME_PROPOSAL_CONTRACT,
             CANCEL_COMMAND: CANCEL_PROPOSAL_CONTRACT,
             "retry": RETRY_PROPOSAL_CONTRACT,
+            "reconcile_effect": RECONCILIATION_PROPOSAL_CONTRACT,
             "approve": REVIEW_PROPOSAL_CONTRACT,
             "reject": REVIEW_PROPOSAL_CONTRACT,
         }[command_type],
@@ -125,7 +133,7 @@ def _build_proposal(
         "issued_at": issued.isoformat(),
         "expires_at": expires.isoformat(),
     }
-    if command_type in REVIEW_COMMANDS or command_type == "retry":
+    if command_type in REVIEW_COMMANDS or command_type in {"retry", "reconcile_effect"}:
         core["source"]["run_mode"] = run.get("run_mode")
     if command_type in {RESUME_COMMAND, CANCEL_COMMAND}:
         core["source"]["run_mode"] = run.get("run_mode")
@@ -165,6 +173,10 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         isinstance(proposal, dict) and proposal.get("command_type") in REVIEW_COMMANDS
     )
     retry = isinstance(proposal, dict) and proposal.get("command_type") == "retry"
+    reconcile = (
+        isinstance(proposal, dict)
+        and proposal.get("command_type") == "reconcile_effect"
+    )
     if resume or cancel:
         expected.add("predicted_run_status")
     if type(proposal) is not dict or set(proposal) != expected:
@@ -172,7 +184,9 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
             "operator command proposal shape is invalid"
         )
     if proposal.get("contract") != (
-        RETRY_PROPOSAL_CONTRACT
+        RECONCILIATION_PROPOSAL_CONTRACT
+        if reconcile
+        else RETRY_PROPOSAL_CONTRACT
         if retry
         else REVIEW_PROPOSAL_CONTRACT
         if review
@@ -191,7 +205,10 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         CANCEL_COMMAND,
         *REVIEW_COMMANDS,
         "retry",
-    } or (not review and not retry and proposal.get("parameters") != {}):
+        "reconcile_effect",
+    } or (
+        not review and not retry and not reconcile and proposal.get("parameters") != {}
+    ):
         raise OperatorCommandInvariantError(
             "operator command proposal is not an exact supported command"
         )
@@ -217,7 +234,7 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         "registry_version",
         "registry_fingerprint",
     }
-    if resume or cancel or review or retry:
+    if resume or cancel or review or retry or reconcile:
         source_fields.add("run_mode")
     if type(source) is not dict or set(source) != source_fields:
         raise OperatorCommandInvariantError("operator command source fence is invalid")
@@ -257,6 +274,8 @@ def validate_operator_proposal(proposal: dict[str, Any]) -> None:
         )
     if review or retry:
         _validate_action_parameters(proposal)
+    if reconcile:
+        _validate_reconciliation_parameters(proposal)
     issued = _timestamp("issued_at", proposal.get("issued_at"))
     expires = _timestamp("expires_at", proposal.get("expires_at"))
     if expires <= issued:
@@ -462,3 +481,28 @@ def build_action_review_proposal(
 
 def build_retry_proposal(**kwargs: Any) -> dict[str, Any]:
     return _build_proposal(command_type="retry", **kwargs)
+
+
+def build_reconciliation_proposal(**kwargs: Any) -> dict[str, Any]:
+    return _build_proposal(command_type="reconcile_effect", **kwargs)
+
+
+def _validate_reconciliation_parameters(proposal: dict[str, Any]) -> None:
+    source, preflight = proposal["source"], proposal["preflight"]
+    parameters = proposal["parameters"]
+    if (
+        type(parameters) is not dict
+        or set(parameters)
+        != {"action_id", "action_status", "effect_execution_id", "reconciliation"}
+        or source["run_status"] not in RECONCILIATION_RUN_STATUSES
+        or parameters["action_status"] not in RECONCILIATION_ACTION_STATUSES
+        or parameters["reconciliation"] != preflight["result"].get("reconciliation")
+        or parameters["action_id"] != preflight["result"].get("action_id")
+    ):
+        raise OperatorCommandInvariantError("reconciliation binding is invalid")
+    _required("action_id", parameters["action_id"])
+    _required("effect_execution_id", parameters["effect_execution_id"])
+    if parameters["effect_execution_id"] != parameters["reconciliation"].get(
+        "effect_execution_id"
+    ):
+        raise OperatorCommandInvariantError("reconciliation effect changed")

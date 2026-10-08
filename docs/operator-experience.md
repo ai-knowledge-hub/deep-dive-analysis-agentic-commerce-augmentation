@@ -94,11 +94,24 @@ Terminal runs require separately authorized new work. Committed source effects,
 unresolved effects or incomplete evidence direct the operator to reconciliation.
 The failed source remains visible. Retry success does not itself establish
 workflow completion or resolve other failures and stopping conditions.
+To record a committed effect whose outcome was lost locally, ask **Reconcile
+action 2** or give its exact action ID. Review the original effect/approval,
+frozen start and verified durable evidence, then press **Confirm reconciliation**.
+This records the existing outcome and restores its action projection without
+calling the provider, creating another effect, retrying or copying an approval.
+The receipt distinguishes effect success, action status and recorded run status.
+Paused, completed and canceled state stays preserved, including late outcomes;
+this receipt alone does not certify objective completion. Live worker leases,
+missing/corrupt/contradictory evidence and unverified legacy starts require direct
+recovery inspection. If background recovery wins after preview, refresh the
+proposal to acknowledge its existing verified success. Interventions shows the
+same evidence/start/receipt identities after navigation and reload.
+
 Selecting another run clears chat and pending proposal context so evidence
 cannot bleed across runs. Normal signed-in browser sessions authenticate
 through the same-origin web gateway; operators do not load a registry-write
 credential to ask questions or confirm these bounded commands.
-Pending pause/resume/cancel/action-review/retry proposals and completed receipts are reloaded from the durable,
+Pending pause/resume/cancel/action-review/retry/reconciliation proposals and completed receipts are reloaded from the durable,
 run-scoped command ledger rather than retained only in browser conversation
 memory. Runs shows the exact proposal and receipt identities and offers older
 pages when the history exceeds the current page. Interventions fetches an

@@ -12,9 +12,10 @@ export function createOperatorCommandAssertion(
   runId: string,
   proposalId: string,
   proposalDigest: string,
-  commandType: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry" = "pause",
+  commandType: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry" | "reconcile_effect" = "pause",
   nowSeconds = Math.floor(Date.now() / 1000),
   actionId?: string,
+  effectExecutionId?: string,
 ): string {
   const secret = process.env.OPERATOR_COMMAND_BFF_SIGNING_SECRET?.trim();
   if (!secret || secret.length < 32) {
@@ -23,13 +24,15 @@ export function createOperatorCommandAssertion(
   if (!/^[a-f0-9]{64}$/.test(proposalDigest)) {
     throw new Error("proposalDigest is invalid");
   }
+  const reconcile = commandType === "reconcile_effect";
+  if (reconcile && !effectExecutionId) throw new Error("An exact effectExecutionId is required");
   const retry = commandType === "retry";
   const review = commandType === "approve" || commandType === "reject";
-  if ((review || retry) && !actionId) throw new Error("An exact actionId is required");
+  if ((review || retry || reconcile) && !actionId) throw new Error("An exact actionId is required");
   const payload = {
-    schema_version: retry ? 3 : review ? 2 : OPERATOR_COMMAND_ASSERTION_SCHEMA_VERSION,
-    aud: retry ? "operator-retry-api" : review ? "operator-action-review-api" : OPERATOR_COMMAND_ASSERTION_AUDIENCE,
-    iss: retry ? "operator-retry-web-bff" : review ? "operator-action-review-web-bff" : OPERATOR_COMMAND_ASSERTION_ISSUER,
+    schema_version: reconcile ? 4 : retry ? 3 : review ? 2 : OPERATOR_COMMAND_ASSERTION_SCHEMA_VERSION,
+    aud: reconcile ? "operator-reconciliation-api" : retry ? "operator-retry-api" : review ? "operator-action-review-api" : OPERATOR_COMMAND_ASSERTION_AUDIENCE,
+    iss: reconcile ? "operator-reconciliation-web-bff" : retry ? "operator-retry-web-bff" : review ? "operator-action-review-web-bff" : OPERATOR_COMMAND_ASSERTION_ISSUER,
     sub: requiredIdentity("userId", userId),
     client_id: requiredIdentity("clientId", clientId),
     run_id: requiredIdentity("runId", runId),
@@ -37,7 +40,8 @@ export function createOperatorCommandAssertion(
     proposal_digest: proposalDigest,
     command_type: commandType,
     ...(retry ? { retry_strategy: "same_action" } : {}),
-    ...(review || retry ? { action_id: requiredIdentity("actionId", actionId!) } : {}),
+    ...(review || retry || reconcile ? { action_id: requiredIdentity("actionId", actionId!) } : {}),
+    ...(reconcile ? { effect_execution_id: requiredIdentity("effectExecutionId", effectExecutionId!) } : {}),
     iat: nowSeconds,
     exp: nowSeconds + ASSERTION_TTL_SECONDS,
     jti: randomUUID(),

@@ -64,15 +64,15 @@ export type OperatorConversationResponse = {
 };
 
 export type OperatorCommandProposal = {
-  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2" | "workflow.operator-command-proposal.v3" | "workflow.operator-command-proposal.v4" | "workflow.operator-command-proposal.v5";
+  contract: "workflow.operator-command-proposal.v1" | "workflow.operator-command-proposal.v2" | "workflow.operator-command-proposal.v3" | "workflow.operator-command-proposal.v4" | "workflow.operator-command-proposal.v5" | "workflow.operator-command-proposal.v6";
   proposal_id: string;
   proposal_digest: string;
   tenant_id: string;
   principal_id: string;
   run_id: string;
-  command_type: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry";
+  command_type: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry" | "reconcile_effect";
   predicted_run_status?: "planned" | "running" | "canceled";
-  parameters: { action_id?: string; action_status?: string; retry_strategy?: "same_action"; retry_plan?: { strategy: "same_action"; capability_name: string; normalized_inputs: Record<string, unknown>; inputs_hash: string; side_effects: string[]; review_checklist: string[] }; review?: {
+  parameters: { effect_execution_id?: string; reconciliation?: ReconciliationProof; action_id?: string; action_status?: string; retry_strategy?: "same_action"; retry_plan?: { strategy: "same_action"; capability_name: string; normalized_inputs: Record<string, unknown>; inputs_hash: string; side_effects: string[]; review_checklist: string[] }; review?: {
     capability_name: string; normalized_inputs: Record<string, unknown>; inputs_hash: string;
     side_effects: string[]; review_checklist: string[]; approval_id: string | null;
     approval_sequence: number | null; approval_envelope_digest: string | null;
@@ -109,14 +109,15 @@ export type OperatorCommandProposal = {
 };
 
 export type OperatorCommandReceipt = {
-  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2" | "workflow.operator-command-receipt.v3" | "workflow.operator-command-receipt.v4" | "workflow.operator-command-receipt.v5";
+  contract: "workflow.operator-command-receipt.v1" | "workflow.operator-command-receipt.v2" | "workflow.operator-command-receipt.v3" | "workflow.operator-command-receipt.v4" | "workflow.operator-command-receipt.v5" | "workflow.operator-command-receipt.v6";
   receipt_id: string;
   proposal_id: string;
   proposal_digest: string;
   run_id: string;
-  command_type: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry";
-  outcome: "paused" | "planned" | "running" | "canceled" | "approved" | "rejected" | "proposed";
-  resulting_run_status: "paused" | "planned" | "running" | "canceled";
+  command_type: "pause" | "resume" | "cancel" | "approve" | "reject" | "retry" | "reconcile_effect";
+  outcome: "paused" | "planned" | "running" | "canceled" | "approved" | "rejected" | "proposed" | "succeeded";
+  resulting_run_status: "paused" | "planned" | "running" | "canceled" | "cancelled" | "failed" | "completed";
+  reconciliation?: ReconciliationProof; effect_execution_id?: string; action_status?: string; control_state_preserved?: boolean;
   source_action_id?: string; retry_strategy?: "same_action"; retry_count?: number; action_sequence?: number; effect_idempotency_key?: string;
   action_id?: string; approval_id?: string; approval_envelope_digest?: string; approval_sequence?: number; approval_command_id?: string;
   run_mode?: "plan_only" | "auto_execute_safe";
@@ -125,7 +126,7 @@ export type OperatorCommandReceipt = {
     lifecycle: string;
     stopping_condition?: string | null;
   };
-  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible" | "control_plane_canceled" | "exact_action_decision_recorded" | "retry_action_proposed";
+  acknowledgement: "control_plane_paused" | "control_plane_resume_eligible" | "control_plane_canceled" | "exact_action_decision_recorded" | "retry_action_proposed" | "existing_effect_outcome_recorded";
   propagation_state: "runtime_propagation_not_certified";
   completed_at: string;
   receipt_digest: string;
@@ -165,4 +166,13 @@ export type OperatorCommandConfirmationResponse = {
   command: Record<string, unknown>;
   receipt: OperatorCommandReceipt;
   run: AgentRun;
+};
+
+
+export type ReconciliationProof = {
+  effect_execution_id: string; effect_status: string; approval_id: string; approval_envelope_digest: string;
+  effect_idempotency_key: string; authorization_snapshot_digest: string; capability_name: string;
+  receipt_id: string; outputs: Record<string, unknown>; outputs_hash: string; evidence_digest: string;
+  evidence_id: string; result_id: string | null; verification_state: "verified";
+  observed_outcome: "succeeded"; projected_action_status: "executed";
 };
