@@ -8,10 +8,18 @@ from application.ports.deps import AppDeps
 from application.services.agent_runtime.approval_authorization import (
     ApprovalAuthorizationError,
     reconcile_authorized_effect,
+    _authorization_from_effect_start,
 )
 from application.services.agent_runtime.approval_registry import (
     ApprovalRegistryError,
     capability_spec_from_contract_json,
+)
+from application.services.agent_runtime.approval_ledger import (
+    get_authoritative_approval,
+)
+from application.services.agent_runtime.approval_receipts import (
+    ApprovalReceiptError,
+    verify_effect_receipt,
 )
 from application.services.agent_runtime.runtime.payloads import hash_payload
 from application.services.agent_runtime.runtime.status import (
@@ -40,7 +48,12 @@ _PROJECTION_RESTORE_ATTEMPTS = 5
 
 
 def reconcile_effect_from_durable_evidence(
-    *, deps: AppDeps, run: Mapping[str, Any], action: Mapping[str, Any]
+    *,
+    deps: AppDeps,
+    run: Mapping[str, Any],
+    action: Mapping[str, Any],
+    preserve_control_state: bool = False,
+    infer_legacy_completion: bool = True,
 ) -> dict[str, Any]:
     """Reconcile one effect without accepting caller-supplied outcome evidence."""
 
@@ -102,11 +115,16 @@ def reconcile_effect_from_durable_evidence(
             "reconciled action projection is unavailable",
             code="effect_projection_unavailable",
         )
-    updated_run = _restore_run_projection(
-        deps=deps,
-        tenant_id=tenant_id,
-        workflow_id=workflow_id,
-        next_state=frozen_spec.next_state,
+    updated_run = (
+        dict(run)
+        if preserve_control_state
+        else _restore_run_projection(
+            deps=deps,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            next_state=frozen_spec.next_state,
+            infer_legacy_completion=infer_legacy_completion,
+        )
     )
     return {
         "effect_execution": reconciled,
@@ -156,7 +174,12 @@ def _durable_evidence(
 
 
 def _restore_run_projection(
-    *, deps: AppDeps, tenant_id: str, workflow_id: str, next_state: str | None
+    *,
+    deps: AppDeps,
+    tenant_id: str,
+    workflow_id: str,
+    next_state: str | None,
+    infer_legacy_completion: bool = True,
 ) -> Mapping[str, Any]:
     for _ in range(_PROJECTION_RESTORE_ATTEMPTS):
         current_run = deps.agent_runs.get_agent_run(
@@ -182,7 +205,11 @@ def _restore_run_projection(
             tenant_id=tenant_id, workflow_id=workflow_id
         )
         next_status, stop = derive_next_run_status(
-            run=current_run, actions=actions, held_failure_ids=held
+            run=current_run
+            if infer_legacy_completion
+            else {**current_run, "completion_authority_required": True},
+            actions=actions,
+            held_failure_ids=held,
         )
         restore = deps.agent_runs.restore_agent_run_after_effect_reconciliation(
             run_id=workflow_id,
@@ -264,3 +291,107 @@ __all__ = [
     "EffectRecoveryError",
     "reconcile_effect_from_durable_evidence",
 ]
+
+
+def prepare_effect_reconciliation(
+    *, deps: AppDeps, run: Mapping[str, Any], action: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Discover and verify historical outcome authority without writing or executing."""
+    import json
+
+    execution = deps.approval_ledger.get_effect_execution_for_action(
+        tenant_id=run["client_id"], workflow_id=run["id"], action_id=action["id"]
+    )
+    if not execution or execution.get("status") not in {
+        "started",
+        "uncertain",
+        "succeeded",
+    }:
+        raise EffectRecoveryError(
+            "No committed effect is available for reconciliation.",
+            code="effect_execution_not_found",
+        )
+    try:
+        authorization = _authorization_from_effect_start(deps=deps, execution=execution)
+        if (
+            authorization.binding.action_id != action["id"]
+            or action.get("agent_run_id") != run["id"]
+        ):
+            raise EffectRecoveryError(
+                "Effect action scope differs.", code="effect_identity_conflict"
+            )
+        current_approval = get_authoritative_approval(
+            deps=deps,
+            tenant_id=run["client_id"],
+            workflow_id=run["id"],
+            approval_id=authorization.approval_id,
+        )
+        expected_status = (
+            "fulfilled" if execution["status"] == "succeeded" else "approved"
+        )
+        if not current_approval or current_approval["status"] != expected_status:
+            raise EffectRecoveryError(
+                "Approval history does not support recording this outcome.",
+                code="approval_changed_after_effect",
+            )
+        if execution["status"] == "succeeded" and action["status"] != "executed":
+            raise EffectRecoveryError(
+                "A succeeded effect has a contradictory action projection; inspect direct recovery.",
+                code="effect_projection_conflict",
+            )
+        spec = _frozen_capability_spec(execution)
+        outputs, receipt_id, evidence = _durable_evidence(
+            deps=deps,
+            tenant_id=run["client_id"],
+            execution_id=execution["execution_id"],
+            capability_name=spec.name,
+        )
+        verified = verify_effect_receipt(
+            deps=deps,
+            binding=authorization.binding,
+            effect_execution_id=execution["execution_id"],
+            executable_inputs=json.loads(authorization.executable_inputs_json),
+            capability_contract_json=authorization.capability_contract_json,
+            outputs=outputs,
+            claimed_outputs_hash=hash_payload(outputs),
+            receipt_id=receipt_id,
+        )
+        if execution["status"] == "succeeded" and (
+            execution.get("receipt_id") != receipt_id
+            or execution.get("outputs_hash") != verified.outputs_hash
+        ):
+            raise EffectRecoveryError(
+                "Recorded success conflicts with durable evidence.",
+                code="effect_identity_conflict",
+            )
+    except (
+        ApprovalAuthorizationError,
+        ApprovalReceiptError,
+        ApprovalRegistryError,
+    ) as exc:
+        raise EffectRecoveryError(
+            str(exc), code=getattr(exc, "code", "effect_start_authority_invalid")
+        ) from exc
+    result = (
+        deps.validation_results.get_latest_for_job(job_id=evidence["id"])
+        if spec.name == "request_synthetic_validation"
+        else None
+    )
+    return {
+        "effect_execution_id": execution["execution_id"],
+        "effect_status": execution["status"],
+        "approval_id": authorization.approval_id,
+        "approval_envelope_digest": authorization.envelope_digest,
+        "effect_idempotency_key": authorization.effect_idempotency_key,
+        "authorization_snapshot_digest": authorization.authorization_snapshot_digest,
+        "capability_name": spec.name,
+        "receipt_id": receipt_id,
+        "outputs": outputs,
+        "outputs_hash": verified.outputs_hash,
+        "evidence_digest": hash_payload({"evidence": evidence, "result": result}),
+        "evidence_id": evidence.get("id") or evidence.get("receipt_id"),
+        "result_id": result.get("id") if result else None,
+        "verification_state": "verified",
+        "observed_outcome": "succeeded",
+        "projected_action_status": "executed",
+    }

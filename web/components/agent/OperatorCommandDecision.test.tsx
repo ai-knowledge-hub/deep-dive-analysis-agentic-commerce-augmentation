@@ -50,3 +50,23 @@ it("shows exact retry scope, requires confirmation and reports a proposed child 
   expect(recorded).toHaveTextContent("Confirmation did not execute work or start or resume the run.");
   expect(recorded).not.toHaveTextContent("approval undefined");
 });
+
+it("previews existing verified evidence and preserves truthful cancellation in its receipt", async () => {
+  const base = proposal("approve"), onConfirm = vi.fn(), onDismiss = vi.fn(), user = userEvent.setup();
+  const proof = { effect_execution_id: "effect-1", effect_status: "uncertain", approval_id: "approval-1", approval_envelope_digest: "a".repeat(64), effect_idempotency_key: "effect-key", authorization_snapshot_digest: "f".repeat(64), capability_name: "request_synthetic_validation", receipt_id: "validation-job:job-1", outputs: { validation_job_id: "job-1" }, outputs_hash: "b".repeat(64), evidence_digest: "c".repeat(64), evidence_id: "job-1", result_id: "result-1", verification_state: "verified", observed_outcome: "succeeded", projected_action_status: "executed" } as const;
+  const recovery: OperatorCommandProposal = { ...base, contract: "workflow.operator-command-proposal.v6", command_type: "reconcile_effect", parameters: { action_id: "action-1", action_status: "failed", effect_execution_id: "effect-1", reconciliation: proof }, source: { ...base.source, run_status: "canceled" }, consequences: ["No provider call, new effect start, new approval or retry occurs."] };
+  const view = render(<OperatorCommandDecision proposal={recovery} receipt={null} runId="run-1" confirming={false} onConfirm={onConfirm} onDismiss={onDismiss} />);
+  expect(screen.getByText(/Verified observed effect: succeeded/)).toHaveTextContent("Current run: canceled");
+  expect(screen.getByText(/Verified observed effect: succeeded/)).toHaveTextContent("Current action: failed. After recording: executed.");
+  expect(screen.getByText(/Existing evidence job-1/)).toHaveTextContent("result-1");
+  expect(onConfirm).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Confirm reconciliation" }));
+  expect(onConfirm).toHaveBeenCalledExactlyOnceWith(recovery);
+  const receipt: OperatorCommandReceipt = { contract: "workflow.operator-command-receipt.v6", receipt_id: "receipt-1", proposal_id: recovery.proposal_id, proposal_digest: recovery.proposal_digest, run_id: "run-1", command_type: "reconcile_effect", outcome: "succeeded", action_id: "action-1", action_status: "executed", effect_execution_id: "effect-1", reconciliation: proof, resulting_run_status: "canceled", control_state_preserved: true, event_ids: { command: "command-1", lifecycle: "lifecycle-1" }, acknowledgement: "existing_effect_outcome_recorded", propagation_state: "runtime_propagation_not_certified", completed_at: "2026-10-06T00:00:00Z", receipt_digest: "e".repeat(64) };
+  view.rerender(<OperatorCommandDecision proposal={recovery} receipt={receipt} runId="run-1" confirming={false} onConfirm={onConfirm} onDismiss={onDismiss} />);
+  const recorded = screen.getByLabelText("Existing effect outcome recorded receipt");
+  expect(recorded).toHaveTextContent("Recorded run status: canceled · control state preserved");
+  expect(recorded).toHaveTextContent("Effect success alone does not certify objective completion");
+  expect(recorded).not.toHaveTextContent("approval undefined");
+  expect(screen.queryByRole("button", { name: "Confirm reconciliation" })).not.toBeInTheDocument();
+});

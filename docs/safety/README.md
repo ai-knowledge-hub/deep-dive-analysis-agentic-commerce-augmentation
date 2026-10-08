@@ -109,3 +109,11 @@ remain unchanged; planned controls are not certified by this slice.
 Supplementary retry evidence, admission boundaries, failure-space coverage and
 rollout limits are recorded in
 [the issue 164 verification report](../debug/2026-10-05-conversational-retry-verification.md).
+
+Conversational reconciliation (Phase 2.5b, issue 166) supplements CTRL-03/VT-03
+with exact schema-v4 human/effect authority, frozen evidence verification under
+the final lock, one transaction for all required records, immutable v6 replay,
+late-outcome preservation and rollback/final-commit fault tests. See
+[verification and admission matrix](../debug/2026-10-06-conversational-reconciliation-verification.md).
+Effect success does not grant another provider call or certify objective
+completion. Existing beta exclusions remain unchanged.

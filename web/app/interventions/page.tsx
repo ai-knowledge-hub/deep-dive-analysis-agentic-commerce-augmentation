@@ -27,6 +27,7 @@ import { formatActionLabel } from "../../components/interventions/interventionDi
 import {
   buildApprovalItems,
   buildCommandItems,
+  commandNeedsIntervention,
   buildEscalationItem,
   buildPauseItem,
   buildRetryItem,
@@ -159,12 +160,14 @@ function InterventionsPageContent() {
     [commands, runIdParam],
   );
 
+  const pendingCommands = visibleCommands.filter(commandNeedsIntervention);
+
   const briefing = useMemo(() => {
     return buildInterventionBriefing({
       userId,
       runIdParam,
       approvalsCount: visibleApprovals.length,
-      commandsCount: visibleCommands.length,
+      commandsCount: pendingCommands.length,
       escalationsCount: visibleEscalations.length,
       pausesCount: visiblePauses.length,
       retriesCount: visibleRetries.length,
@@ -173,7 +176,7 @@ function InterventionsPageContent() {
     runIdParam,
     userId,
     visibleApprovals.length,
-    visibleCommands.length,
+    pendingCommands.length,
     visibleEscalations.length,
     visiblePauses.length,
     visibleRetries.length,
@@ -329,7 +332,7 @@ function InterventionsPageContent() {
             summary={briefing}
             metrics={buildInterventionMetrics({
               approvalsCount: approvals.length,
-              commandsCount: commands.length,
+              commandsCount: commands.filter(commandNeedsIntervention).length,
               escalationsCount: escalations.length,
               pausesCount: pauses.length,
               retriesCount: retries.length,
@@ -378,7 +381,7 @@ function InterventionsPageContent() {
             ) : null}
             <InterventionStartGuide
               escalations={visibleEscalations}
-              commands={visibleCommands}
+              commands={pendingCommands}
               approvals={visibleApprovals}
               retries={visibleRetries}
               pauses={visiblePauses}
