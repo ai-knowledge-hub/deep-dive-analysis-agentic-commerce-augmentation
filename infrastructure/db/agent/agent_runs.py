@@ -213,25 +213,25 @@ def restore_agent_run_after_effect_reconciliation(
     """CAS a recovery projection against run state and its complete action set."""
 
     conn = get_connection()
+    transaction = JoinedTransaction(conn, "effect_projection")
     try:
-        conn.execute("BEGIN IMMEDIATE")
         run_row = conn.execute(
             "SELECT * FROM agent_runs WHERE id = ? AND client_id = ?",
             (run_id, client_id),
         ).fetchone()
         if run_row is None:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "not_found", "run": None}
         current_run = _row(run_row)
         current_status = str(current_run.get("status") or "").strip().lower()
         if current_status in {"canceled", "cancelled", "completed", "paused"}:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "control_plane_state_preserved", "run": current_run}
         if (
             current_run.get("state") != expected_run_state
             or current_status != expected_run_status
         ):
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "run_projection_changed", "run": current_run}
         action_rows = conn.execute(
             """
@@ -254,7 +254,7 @@ def restore_agent_run_after_effect_reconciliation(
             for row in action_rows
         )
         if current_action_projection != expected_action_projection:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "action_projection_changed", "run": current_run}
         conn.execute(
             """
@@ -271,10 +271,10 @@ def restore_agent_run_after_effect_reconciliation(
             "SELECT * FROM agent_runs WHERE id = ? AND client_id = ?",
             (run_id, client_id),
         ).fetchone()
-        conn.commit()
+        transaction.commit()
         return {"outcome": "restored", "run": _row(updated_row)}
     except Exception:
-        conn.rollback()
+        transaction.rollback()
         raise
 
 

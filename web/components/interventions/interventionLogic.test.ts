@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCommandItems, buildDetails } from './interventionLogic';
+import { buildCommandItems, buildDetails, buildEscalationItem, commandNeedsIntervention } from './interventionLogic';
 import type { AgentRun, AgentRunEvent } from '../../lib/types';
 import type { OperatorCommandRecord } from '../../lib/operatorConversationTypes';
 
@@ -57,4 +57,43 @@ describe('conversational retry projections', () => {
       expect(items.some((item) => item.event.id === 'retry-lifecycle')).toBe(true);
     }
   });
+});
+
+it("reloads the exact reconciliation evidence and distinguishes its effect outcome from terminal run state", () => {
+  const reconciliation = { ...record, proposal: { ...record.proposal, command_type: "reconcile_effect", source: { run_status: "canceled" }, parameters: { action_id: "action-1", action_status: "failed" } }, receipt: { ...record.receipt, command_type: "reconcile_effect", outcome: "succeeded", resulting_run_status: "canceled", control_state_preserved: true, reconciliation: { effect_execution_id: "effect-1", evidence_id: "job-1", approval_id: "original-approval", authorization_snapshot_digest: "start-digest", evidence_digest: "evidence-digest" } } } as unknown as OperatorCommandRecord;
+  const items = buildCommandItems(buildDetails(run, [], [], [], [reconciliation]));
+  expect(items).toHaveLength(1);
+  expect(items[0].operatorCommandRecord).toBe(reconciliation);
+  expect(items[0].summary).toContain("effect outcome recorded: succeeded; action executed; recorded run status canceled");
+  expect(items[0].summary).toContain("effect effect-1; evidence job-1; original approval original-approval");
+  expect(items[0].summary).toContain("No provider call or new effect start occurred");
+  expect(items[0].summary).toContain("Effect success alone does not certify objective completion");
+  expect(items[0].summary).not.toContain("undefined");
+  expect(commandNeedsIntervention(items[0])).toBe(false);
+  const pending = buildCommandItems(buildDetails(run, [], [], [], [{ ...reconciliation, receipt: null }]))[0];
+  expect(commandNeedsIntervention(pending)).toBe(true);
+});
+
+
+it("reconciliation settles only its exact uncertainty and never an unrelated policy denial", () => {
+  const settled = { ...record, receipt: { ...record.receipt, command_type: "reconcile_effect", run_id: run.id, effect_execution_id: "effect-1", outcome: "succeeded", reconciliation: { approval_id: "original-approval", effect_idempotency_key: "exact-key" } } } as unknown as OperatorCommandRecord;
+  const audit = (type: string, status: string, effect = "effect-1") => ({ id: type + effect, run_id: run.id, action_id: "action-1", sequence: 1, event_type: type, status, is_policy_event: true, anchors: { effect_execution_id: effect } }) as AgentRunEvent;
+  const governance = [audit("operator_command_approve", "approved"), audit("approval_effect_started", "started"), audit("approval_effect_uncertain", "uncertain"), audit("approval_fulfilled", "fulfilled"), audit("approval_effect_succeeded", "succeeded"), audit("action_executed", "executed")];
+  const planned = { ...run, status: "planned" };
+  expect(buildEscalationItem(buildDetails(planned, [], governance, [], [settled]))).toBeNull();
+  const legacy = { ...audit("approval_effect_uncertain", "uncertain"), anchors: { approval_id: "original-approval", effect_idempotency_key: "exact-key" } };
+  expect(buildEscalationItem(buildDetails(planned, [], [legacy], [], [settled]))).toBeNull();
+  for (const changed of [
+    { ...legacy, action_id: "other-action" }, { ...legacy, run_id: "other-run" },
+    { ...legacy, anchors: { ...legacy.anchors, approval_id: "other-approval" } },
+    { ...legacy, anchors: { ...legacy.anchors, effect_idempotency_key: "other-key" } },
+    { ...legacy, anchors: { ...legacy.anchors, effect_execution_id: "contradictory-effect" } },
+  ]) expect(buildEscalationItem(buildDetails(planned, [], [changed], [], [settled]))?.latestEvent).toBe(changed);
+
+  expect(buildEscalationItem(buildDetails(planned, [], governance, [], []))?.latestEvent?.event_type).toBe("approval_effect_uncertain");
+  const unrelated = audit("approval_effect_uncertain", "uncertain", "other-effect");
+  expect(buildEscalationItem(buildDetails(planned, [], [...governance, unrelated], [], [settled]))?.latestEvent).toBe(unrelated);
+  const denial = audit("policy_block", "failed");
+  expect(buildEscalationItem(buildDetails(planned, [], [denial, ...governance], [], [settled]))?.latestEvent).toBe(denial);
+  expect(buildEscalationItem(buildDetails({ ...planned, status: "failed" }, [], governance, [], [settled]))).not.toBeNull();
 });

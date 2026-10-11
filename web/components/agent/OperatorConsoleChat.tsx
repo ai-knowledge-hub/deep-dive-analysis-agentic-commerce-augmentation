@@ -188,7 +188,7 @@ export function OperatorConsoleChat({
         proposal.proposal_id,
         proposal.proposal_digest,
         proposal.command_type,
-        ...(proposal.parameters.action_id ? [proposal.parameters.action_id] as const : [] as const),
+        ...(proposal.parameters.effect_execution_id ? [proposal.parameters.action_id, proposal.parameters.effect_execution_id] as const : proposal.parameters.action_id ? [proposal.parameters.action_id] as const : [] as const),
       );
       if (confirmationRequestRef.current !== confirmationRequestId) return;
       setCommandReceipt(response.receipt);
@@ -294,7 +294,7 @@ export function OperatorConsoleChat({
         run={run}
         briefing={
           run
-            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, cancel, approve, reject and retry requests become reviewable proposals and require a separate confirmation."
+            ? "Ask about verified execution, evidence, blockers, or next steps. Pause, resume, cancel, approve, reject, retry and reconcile requests become reviewable proposals and require a separate confirmation."
             : "Select a run to start a grounded operator conversation."
         }
         proposedCount={counts.proposed}

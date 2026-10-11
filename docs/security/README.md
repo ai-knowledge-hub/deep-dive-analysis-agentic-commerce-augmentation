@@ -140,3 +140,12 @@ remain unchanged; planned controls are not certified by this slice.
 Supplementary retry evidence, admission boundaries, failure-space coverage and
 rollout limits are recorded in
 [the issue 164 verification report](../debug/2026-10-05-conversational-retry-verification.md).
+
+Phase 2.5b reconciliation adds a schema-v4 assertion in the separate
+`operator-reconciliation-api` audience, bound to exact human, tenant, run,
+action, effect execution and proposal digest. Current membership and active
+human checks precede replay and are repeated under the commit lock. Supplied
+outputs and model-selected mutation intent grant no authority. The supplementary
+[reconciliation verification](../debug/2026-10-06-conversational-reconciliation-verification.md)
+covers substitution, evidence scope and replay/rollback; schema-v1 SVT
+verification references remain unchanged.

@@ -4901,3 +4901,7 @@ input[type="checkbox"]:focus-visible {
     padding-left: 10px;
   }
 }
+
+.operator-chat__digest, .operator-chat__artifacts .panel__notice, .intervention-item .panel__muted {
+  overflow-wrap: anywhere;
+}

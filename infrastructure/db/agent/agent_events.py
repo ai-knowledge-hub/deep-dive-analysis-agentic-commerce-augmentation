@@ -4,6 +4,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from infrastructure.db.core.connection import get_connection
+from infrastructure.db.core.transactions import JoinedTransaction
 from infrastructure.db.core.json import from_json, to_json
 
 
@@ -28,6 +29,7 @@ def create_agent_event(
 ) -> Dict[str, Any]:
     event_id = str(uuid.uuid4())
     conn = get_connection()
+    transaction = JoinedTransaction(conn, "agent_event")
     try:
         conn.execute(
             """
@@ -72,9 +74,9 @@ def create_agent_event(
                 to_json(anchors or {}) or to_json({}),
             ),
         )
-        conn.commit()
+        transaction.commit()
     except Exception:
-        conn.rollback()
+        transaction.rollback()
         raise
     return get_agent_event(event_id) or {}
 

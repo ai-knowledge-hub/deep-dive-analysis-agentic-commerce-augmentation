@@ -423,8 +423,8 @@ def commit_effect_completion(
     """Atomically persist receipt, fulfillment, action outcome, and audit links."""
 
     conn = get_connection()
+    transaction = JoinedTransaction(conn, "effect_completion")
     try:
-        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             """
             SELECT * FROM approval_effect_executions
@@ -433,7 +433,7 @@ def commit_effect_completion(
             (execution_id, tenant_id, workflow_id),
         ).fetchone()
         if not row:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "not_found"}
         execution = approval_persistence.effect_execution_row(row)
         exact_identity = all(
@@ -446,13 +446,13 @@ def commit_effect_completion(
             }.items()
         )
         if not exact_identity:
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "identity_conflict",
                 "reason": "effect completion does not match the authorized identity",
             }
         if execution["status"] == "succeeded":
-            conn.rollback()
+            transaction.rollback()
             if (
                 execution["receipt_id"] == receipt_id
                 and execution["outputs_hash"] == outputs_hash
@@ -463,7 +463,7 @@ def commit_effect_completion(
                 "reason": "completed effect was reconciled with different evidence",
             }
         if execution["status"] not in {"started", "uncertain"}:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "state_conflict"}
 
         envelope, error = _validated_history_envelope_locked(
@@ -473,7 +473,7 @@ def commit_effect_completion(
             approval_id=approval_id,
         )
         if error or envelope is None:
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "authorization_conflict",
                 "reason": (error or {}).get("reason", "approval does not exist"),
@@ -482,7 +482,7 @@ def commit_effect_completion(
             envelope.status is not ApprovalStatus.APPROVED
             or approval_envelope_digest(envelope) != expected_envelope_digest
         ):
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "authorization_conflict",
                 "reason": "approval changed after the effect was authorized",
@@ -490,7 +490,7 @@ def commit_effect_completion(
         try:
             fulfilled = approval_envelope_from_payload(dict(mutation["envelope"]))
         except (ApprovalContractError, KeyError, TypeError):
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "validation_error",
                 "reason": "effect fulfillment is not a canonical approval envelope",
@@ -502,7 +502,7 @@ def commit_effect_completion(
             or approval_envelope_digest(fulfilled) != mutation.get("envelope_digest")
             or not can_transition_approval(envelope.status, fulfilled.status)
         ):
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "validation_error",
                 "reason": "effect fulfillment changed the approved binding or receipt",
@@ -515,7 +515,7 @@ def commit_effect_completion(
             (action_id, workflow_id),
         ).fetchone()
         if not action_row or str(action_row["status"]) not in {"executing", "failed"}:
-            conn.rollback()
+            transaction.rollback()
             return {
                 "outcome": "action_state_conflict",
                 "reason": "action is not awaiting effect completion or reconciliation",
@@ -532,7 +532,7 @@ def commit_effect_completion(
             receipt_id=receipt_id,
         )
         if link_conflict:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "identity_conflict", "reason": link_conflict}
 
         result_json = to_json(result) or to_json({})
@@ -576,7 +576,7 @@ def commit_effect_completion(
             mutation=mutation,
         )
         if conflict:
-            conn.rollback()
+            transaction.rollback()
             return {"outcome": "authorization_conflict", "reason": conflict}
         conn.execute(
             """
@@ -640,12 +640,14 @@ def commit_effect_completion(
                 action_id=action_id,
                 event=event,
             )
-        conn.commit()
+        transaction.commit()
     except sqlite3.IntegrityError as exc:
-        conn.rollback()
+        transaction.rollback()
+        if not transaction.owns_transaction:
+            raise
         return {"outcome": "identity_conflict", "reason": str(exc)}
     except Exception:
-        conn.rollback()
+        transaction.rollback()
         raise
     return {
         "outcome": "committed",

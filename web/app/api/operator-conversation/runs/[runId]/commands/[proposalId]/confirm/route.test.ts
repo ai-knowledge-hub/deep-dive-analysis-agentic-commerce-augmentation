@@ -40,6 +40,20 @@ describe("operator command browser BFF", () => {
     vi.unstubAllEnvs();
   });
 
+  it("binds historical recovery to an exact action and effect in its own audience", async () => {
+    const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "reconcile_effect", action_id: "action-1", effect_execution_id: "effect-1", user_id: "forged", outputs: { forged: true } }), { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(response.status).toBe(200);
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const assertion = new Headers(init?.headers).get("x-operator-command-assertion")!;
+    const claims = JSON.parse(Buffer.from(assertion.split(".")[0], "base64url").toString("utf8"));
+    expect(claims).toMatchObject({ schema_version: 4, aud: "operator-reconciliation-api", iss: "operator-reconciliation-web-bff", sub: "clerk-user-1", action_id: "action-1", effect_execution_id: "effect-1", command_type: "reconcile_effect", proposal_id: "proposal-1", proposal_digest: digest });
+    expect(claims).not.toHaveProperty("outputs");
+    expect(JSON.parse(String(init?.body))).toEqual({ client_id: "client-1", user_id: "clerk-user-1", proposal_digest: digest, command_type: "reconcile_effect", action_id: "action-1", effect_execution_id: "effect-1" });
+  });
+  it.each([{ action_id: "action-1" }, { effect_execution_id: "effect-1" }])("requires both exact recovery identities", async (scope) => {
+    const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "reconcile_effect", ...scope }), { params: { runId: "run-1", proposalId: "proposal-1" } });
+    expect(response.status).toBe(400); expect(global.fetch).not.toHaveBeenCalled();
+  });
   it("binds exact retry source and strategy in its own audience and replaces body identity", async () => {
     const response = await POST(request({ client_id: "client-1", proposal_digest: digest, command_type: "retry", action_id: "failed-action", retry_strategy: "same_action", user_id: "forged" }), { params: { runId: "run-1", proposalId: "proposal-1" } });
     expect(response.status).toBe(200);

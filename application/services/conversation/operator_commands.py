@@ -128,6 +128,13 @@ def create_conversational_proposal(
 def operator_proposal_view(proposal: dict[str, Any]) -> dict[str, Any]:
     """Add operator-facing consequences without changing the canonical proposal."""
 
+    if proposal["command_type"] == "reconcile_effect":
+        return {**proposal, "consequences": [
+            "Records the existing verified effect outcome and restores its action projection.",
+            "No provider call, new effect start, new approval or retry occurs.",
+            "Cancellation, completed/paused state and unresolved stopping markers are preserved.",
+            "Effect success alone does not certify objective completion.",
+        ]}
     if proposal["command_type"] == "retry":
         return {**proposal, "consequences": [
             "Creates one new proposed action with its own retry identity.",

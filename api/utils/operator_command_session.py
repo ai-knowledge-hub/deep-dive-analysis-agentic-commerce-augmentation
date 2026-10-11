@@ -48,6 +48,7 @@ def resolve_operator_command_identity(
     command_type: str = "pause",
     action_id: str | None = None,
     retry_strategy: str | None = None,
+    effect_execution_id: str | None = None,
 ) -> OperatorSessionIdentity:
     authorization = request.headers.get("authorization") or ""
     if authorization.lower().startswith("bearer "):
@@ -77,12 +78,22 @@ def resolve_operator_command_identity(
             detail="Operator command confirmation requires an authenticated human session",
         )
     claims = _verify(assertion)
-    if command_type in {"approve", "reject", "retry"}:
+    if command_type in {"approve", "reject", "retry", "reconcile_effect"}:
         if not action_id:
             raise HTTPException(
                 status_code=400, detail="An exact action_id is required"
             )
         _match("action_id", action_id, str(claims.get("action_id") or ""))
+    if command_type == "reconcile_effect":
+        if not effect_execution_id:
+            raise HTTPException(
+                status_code=400, detail="An exact effect_execution_id is required"
+            )
+        _match(
+            "effect_execution_id",
+            effect_execution_id,
+            str(claims.get("effect_execution_id") or ""),
+        )
     if command_type == "retry":
         _match(
             "retry_strategy", retry_strategy, str(claims.get("retry_strategy") or "")
@@ -105,7 +116,9 @@ def resolve_operator_command_identity(
             user_id=str(claims["sub"]),
             agent_profile_id=None,
             auth_method="operator_command_bff_assertion",
-            scopes=("operator_retries:confirm",)
+            scopes=("operator_reconciliations:confirm",)
+            if command_type == "reconcile_effect"
+            else ("operator_retries:confirm",)
             if command_type == "retry"
             else ("operator_action_reviews:confirm",)
             if command_type in {"approve", "reject"}
@@ -146,45 +159,20 @@ def _verify(assertion: str) -> dict[str, object]:
         raise HTTPException(
             status_code=401, detail="Invalid operator command assertion payload"
         ) from exc
-    review = type(payload) is dict and payload.get("command_type") in {
-        "approve",
-        "reject",
-    }
-    retry = type(payload) is dict and payload.get("command_type") == "retry"
-    fields = (
-        _FIELDS | {"action_id", "retry_strategy"}
-        if retry
-        else _FIELDS | {"action_id"}
-        if review
-        else _FIELDS
-    )
+    fields, version, audience, issuer = _assertion_contract(payload)
     if type(payload) is not dict or set(payload) != fields:
         raise HTTPException(
             status_code=401, detail="Invalid operator command assertion contract"
         )
     if (
-        payload.get("schema_version")
-        != (3 if retry else 2 if review else ASSERTION_SCHEMA_VERSION)
-        or payload.get("aud")
-        != (
-            "operator-retry-api"
-            if retry
-            else "operator-action-review-api"
-            if review
-            else ASSERTION_AUDIENCE
-        )
-        or payload.get("iss")
-        != (
-            "operator-retry-web-bff"
-            if retry
-            else "operator-action-review-web-bff"
-            if review
-            else ASSERTION_ISSUER
-        )
-        or payload.get("command_type")
-        not in {"pause", "resume", "cancel", "approve", "reject", "retry"}
+        payload.get("schema_version") != version
+        or payload.get("aud") != audience
+        or payload.get("iss") != issuer
     ):
         raise HTTPException(status_code=401, detail="Invalid operator command scope")
+    retry = payload["command_type"] == "retry"
+    review = payload["command_type"] in {"approve", "reject"}
+    reconcile = payload["command_type"] == "reconcile_effect"
     if retry and payload.get("retry_strategy") != "same_action":
         raise HTTPException(status_code=401, detail="Invalid retry strategy")
     for field in (
@@ -193,7 +181,8 @@ def _verify(assertion: str) -> dict[str, object]:
         "run_id",
         "proposal_id",
         "jti",
-        *(("action_id",) if review or retry else ()),
+        *(("action_id",) if review or retry or reconcile else ()),
+        *(("effect_execution_id",) if reconcile else ()),
     ):
         value = payload.get(field)
         if (
@@ -245,3 +234,44 @@ __all__ = [
     "ASSERTION_SCHEMA_VERSION",
     "resolve_operator_command_identity",
 ]
+
+
+def _assertion_contract(payload):
+    contracts = {
+        "pause": (1, ASSERTION_AUDIENCE, ASSERTION_ISSUER, frozenset()),
+        "resume": (1, ASSERTION_AUDIENCE, ASSERTION_ISSUER, frozenset()),
+        "cancel": (1, ASSERTION_AUDIENCE, ASSERTION_ISSUER, frozenset()),
+        "approve": (
+            2,
+            "operator-action-review-api",
+            "operator-action-review-web-bff",
+            {"action_id"},
+        ),
+        "reject": (
+            2,
+            "operator-action-review-api",
+            "operator-action-review-web-bff",
+            {"action_id"},
+        ),
+        "retry": (
+            3,
+            "operator-retry-api",
+            "operator-retry-web-bff",
+            {"action_id", "retry_strategy"},
+        ),
+        "reconcile_effect": (
+            4,
+            "operator-reconciliation-api",
+            "operator-reconciliation-web-bff",
+            {"action_id", "effect_execution_id"},
+        ),
+    }
+    contract = (
+        contracts.get(payload.get("command_type"))
+        if isinstance(payload, dict)
+        else None
+    )
+    if contract is None:
+        raise HTTPException(status_code=401, detail="Invalid operator command scope")
+    version, audience, issuer, extra = contract
+    return _FIELDS | extra, version, audience, issuer

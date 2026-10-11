@@ -1098,3 +1098,42 @@ and any related source-family committed effect require separate recovery. A rece
 acknowledges only `retry_action_proposed`, with execution, propagation and
 completion remaining separately verified facts. Migration 061 adds v5 views
 without rewriting older command contracts; older workers lack the receipt hold and pre-effect family fence.
+
+## Phase 2.5b conversational effect reconciliation compatibility
+
+Conversational reconciliation records a historical outcome under the frozen
+then-valid effect-start authority. It never grants fresh execution permission or
+consults current mutable capability semantics to reinterpret that effect.
+Validation auto-run requires the exact completed job and matching durable result;
+non-auto-run preserves bound job-creation semantics. Lab promotion requires its
+validated, exact governed receipt. Action failure is a projection, not proof that
+an effect did not happen. Legacy starts without reconstructable authority remain
+quarantined.
+
+The v6 proposal pins human/tenant/run/action/execution, original approval and
+start digests, full evidence digest, current private control state and freshness.
+A schema-v4 confirmation assertion carries action and execution identity in a
+separate audience. The final `BEGIN IMMEDIATE` rechecks access, lease, bounded
+complete state and independent evidence, then composes effect fulfillment,
+action/link, projection, two human audits and immutable receipt in one owned
+transaction. Existing effect-completion, run-projection and event adapters join
+through savepoints while retaining standalone commit ownership.
+
+There is at most one conversational receipt per execution. Competing proposals
+cannot both record it. Delivery of the winning proposal returns its immutable
+receipt after checking current access, independently of subsequent expiry or
+mutable projection changes. When background recovery commits first, stale
+confirmation returns conflict and a fresh proposal can acknowledge the existing
+success without duplicating effect fulfillment. Canceled/completed/paused states
+and event-specific unresolved stopping markers are preserved; recording success
+is not an objective completion decision. New conversational recovery does not
+infer legacy objective completion from the executed action set. The existing
+authenticated direct recovery path retains its compatibility behavior.
+Acknowledging an already-succeeded effect with a consistent executed action
+preserves the current run record, including progress from later actions and
+diagnostics. Its historical frozen next state is used for first-time recovery,
+not reapplied by an acknowledgement.
+
+Additive migration 062 retains the previous five history contracts and cursors.
+This sequential-runtime adapter does not add task attempts, compensation,
+provider polling, automatic execution or a distributed workflow kernel.

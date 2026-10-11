@@ -34,14 +34,17 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
   }
 
   const commandType = body.command_type ?? "pause";
-  if (commandType !== "pause" && commandType !== "resume" && commandType !== "cancel" && commandType !== "approve" && commandType !== "reject" && commandType !== "retry") {
+  if (commandType !== "pause" && commandType !== "resume" && commandType !== "cancel" && commandType !== "approve" && commandType !== "reject" && commandType !== "retry" && commandType !== "reconcile_effect") {
     return NextResponse.json({ detail: "Unsupported command type" }, { status: 400 });
   }
+  const reconcile = commandType === "reconcile_effect";
+  const effectExecutionId = typeof body.effect_execution_id === "string" ? body.effect_execution_id.trim() : "";
+  if (reconcile && (!effectExecutionId || effectExecutionId.length > 256)) return NextResponse.json({ detail: "An exact effect_execution_id is required" }, { status: 400 });
   const retry = commandType === "retry";
   if (retry && body.retry_strategy !== "same_action") return NextResponse.json({ detail: "An exact retry strategy is required" }, { status: 400 });
   const review = commandType === "approve" || commandType === "reject";
   const actionId = typeof body.action_id === "string" ? body.action_id.trim() : "";
-  if ((review || retry) && (!actionId || actionId.length > 256)) {
+  if ((review || retry || reconcile) && (!actionId || actionId.length > 256)) {
     return NextResponse.json({ detail: "An exact action_id is required" }, { status: 400 });
   }
   let assertion: string;
@@ -54,7 +57,8 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
       proposalDigest,
       commandType,
       undefined,
-      review || retry ? actionId : undefined,
+      review || retry || reconcile ? actionId : undefined,
+      reconcile ? effectExecutionId : undefined,
     );
   } catch {
     return NextResponse.json(
@@ -77,8 +81,9 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
         user_id: userId,
         proposal_digest: proposalDigest,
         command_type: commandType,
+        ...(reconcile ? { effect_execution_id: effectExecutionId } : {}),
         ...(retry ? { retry_strategy: "same_action" } : {}),
-        ...(review || retry ? { action_id: actionId } : {}),
+        ...(review || retry || reconcile ? { action_id: actionId } : {}),
       }),
     },
   );

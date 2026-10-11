@@ -5,9 +5,9 @@ from typing import Any
 
 
 def resolve_action_target(
-    question: str, actions: list[dict[str, Any]], *, source_status: str = "proposed"
+    question: str, actions: list[dict[str, Any]], *, source_status: str | frozenset[str] = "proposed"
 ) -> str:
-    pending = [a for a in actions if a["status"] == source_status]
+    pending = [a for a in actions if a["status"] in ({source_status} if isinstance(source_status, str) else source_status)]
     if re.search(r"\bactions\b", question, re.IGNORECASE):
         raise ValueError("Select an exact action")
     mentioned = [

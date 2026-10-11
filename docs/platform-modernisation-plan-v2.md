@@ -1,7 +1,7 @@
 # Platform Modernisation Plan v2
 
 Status: canonical execution plan
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 ## Purpose
 
@@ -531,6 +531,46 @@ while preserving v1-v4 records and previous readers. Deploy the migration and
 updated backend/workers before the UI; old workers cannot apply the receipt hold or pre-effect family fence.
 Broader recovery strategies, terminal revival, task-attempt replacement,
 distributed propagation and beta-excluded capabilities remain outside this slice.
+
+#### Slice 2.5b: governed conversational effect reconciliation
+
+The closed `reconcile_effect` intent prepares one exact committed effect using
+its immutable, then-valid approval/start snapshot and frozen capability contract.
+Only existing validation-job/result and lab-promotion receipt adapters are
+supported. Preparation discovers and verifies tenant-bound evidence, pins its
+identity and digest, and writes only an immutable v6 proposal. Model output,
+user-supplied outcomes and current registry metadata cannot grant authority.
+
+An action/effect/proposal-bound schema-v4 `operator-reconciliation-api` assertion
+requires a separate human confirmation. Under one final write lock, current
+access, expiry, private control state, exact start/evidence, event head, revision
+and worker quiescence are rechecked. Effect success, approval fulfillment,
+action/link, workflow projections, human audits and the conversational receipt
+commit together. Nested recovery writers join through savepoints. Required-write
+or final-commit failure rolls back all new records; existing provider evidence
+remains intact. One human receipt per effect execution prevents competing
+proposals from duplicating recorded decisions; exact delivery replays after a
+current-access check, including after expiry or cancellation.
+
+Failed, paused, completed and canceled runs can record verified late outcomes.
+Canceled/completed/paused state and unresolved stopping markers are preserved;
+effect success alone never certifies objective completion. A live run lease,
+other executing actions, incomplete/contradictory evidence, unreconstructable
+legacy starts or unbounded action/control history blocks admission. A background
+winner invalidates a stale proposal: refresh to review and acknowledge its exact
+already-recorded success without another fulfillment or effect execution.
+Acknowledging consistent existing success preserves the current run projection,
+including newer state, status and diagnostics; it does not reapply the older
+effect's frozen next state. First-time recovery still repairs its projection.
+
+Runs and Interventions show the same durable identities, observed effect,
+resulting action and recorded run status after navigation/reload. Migration 062
+adds v6 tables/views without changing v1-v5 records, digests, cursors or readers.
+Deploy migration/backend before the updated UI. Provider polling, new effects,
+new approvals, batch recovery, automatic recovery, compensation, terminal revival
+and completion-projection repair remain excluded. After this bounded recovery
+slice, return to the Phase 2 conversation workspace and governed sequential-run
+creation, with the operator usability gate before the next major platform slice.
 
 ### Phase 3: Durable workflow kernel
 
