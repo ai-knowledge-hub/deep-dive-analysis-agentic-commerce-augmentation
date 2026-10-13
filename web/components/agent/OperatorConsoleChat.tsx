@@ -14,6 +14,9 @@ import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
 import { OperatorChatPrompts } from "./OperatorChatPrompts";
 import { OperatorChatSummary } from "./OperatorChatSummary";
 import { OperatorChatThread } from "./OperatorChatThread";
+import { RunCreationDecision } from "../workspace/RunCreationDecision";
+import type { CreationDecision } from "../../lib/workspace";
+import { mergeRecordedMessages, recordLiveAnswer } from "./operatorChatHistory";
 import type { ChatMessage, PromptId } from "./operatorChatTypes";
 
 import { commandLabels, OperatorCommandDecision } from "./OperatorCommandDecision";
@@ -28,6 +31,9 @@ type Props = {
     guardrails: string[];
     hint: string;
   };
+  showCreationDecision?: boolean;
+  initialSessionId?: string;
+  initialMessages?: ChatMessage[];
   onJumpToNextAction?: () => void;
   onCommandCommitted?: () => void | Promise<void>;
 };
@@ -48,6 +54,9 @@ export function OperatorConsoleChat({
   userId,
   selectedAction,
   nextRecommendedAction,
+  showCreationDecision = true,
+  initialSessionId,
+  initialMessages,
   onJumpToNextAction,
   onCommandCommitted,
 }: Props) {
@@ -59,6 +68,7 @@ export function OperatorConsoleChat({
   const [confirmingProposalId, setConfirmingProposalId] = useState<string | null>(null);
   const [dismissedProposalIds, setDismissedProposalIds] = useState<string[]>([]);
   const [commandReceipt, setCommandReceipt] = useState<OperatorCommandReceipt | null>(null);
+  const [creationDecision, setCreationDecision] = useState<CreationDecision | null>(null);
   const [commandRecords, setCommandRecords] = useState<OperatorCommandRecord[]>([]);
   const [commandHistoryPage, setCommandHistoryPage] = useState<{
     hasMore: boolean;
@@ -95,6 +105,7 @@ export function OperatorConsoleChat({
       if (!run) {
         commandRecordsRequestRef.current += 1;
         setCommandRecords([]);
+        setCreationDecision(null);
         setCommandHistoryPage({ hasMore: false, nextCursor: null, totalCount: 0 });
         setCommandRecordsError(null);
         return;
@@ -112,6 +123,7 @@ export function OperatorConsoleChat({
         ) {
           return;
         }
+        setCreationDecision(response.creation_decision ?? null);
         setCommandRecords((current) => {
           if (!append) return response.records;
           const records = new Map(
@@ -151,13 +163,17 @@ export function OperatorConsoleChat({
     }
   }, [commandHistoryPage, refreshCommandRecords]);
 
+  const chatContext = JSON.stringify([run?.id, initialSessionId, userId]);
+  const initializedContext = useRef<string | null>(null);
   useEffect(() => {
+    if (initializedContext.current === chatContext) return;
+    initializedContext.current = chatContext;
     abortRef.current?.abort();
     requestRef.current += 1;
     confirmationRequestRef.current += 1;
     commandRecordsRequestRef.current += 1;
-    setMessages([]);
-    setSessionId(null);
+    setMessages(initialMessages ?? []);
+    setSessionId(initialSessionId ?? null);
     setDraft("");
     setStatus(null);
     setError(null);
@@ -165,10 +181,16 @@ export function OperatorConsoleChat({
     setDismissedProposalIds([]);
     setCommandReceipt(null);
     setCommandRecords([]);
+    setCreationDecision(null);
     setCommandHistoryPage({ hasMore: false, nextCursor: null, totalCount: 0 });
     setLoadingOlderCommands(false);
     setCommandRecordsError(null);
-  }, [run?.id]);
+  }, [chatContext, initialSessionId, initialMessages]);
+
+  useEffect(() => {
+    if (!initialMessages?.length) return;
+    setMessages((current) => mergeRecordedMessages(current, initialMessages));
+  }, [chatContext, initialMessages]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -246,13 +268,7 @@ export function OperatorConsoleChat({
       if (requestRef.current !== requestId) return;
       setSessionId(response.session_id);
       setStatus(null);
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === assistantId
-            ? { ...message, content: response.answer, response }
-            : message,
-        ),
-      );
+      setMessages((current) => recordLiveAnswer(current, requestId, response));
       await refreshCommandRecords();
     } catch (caught) {
       if (controller.signal.aborted || requestRef.current !== requestId) return;
@@ -284,7 +300,14 @@ export function OperatorConsoleChat({
       new Date(record.proposal.expires_at).getTime() > Date.now() &&
       !dismissedProposalIds.includes(record.proposal.proposal_id),
   )?.proposal;
-  const pendingProposal = durablePendingProposal ?? latestResponse?.command_proposal ?? null;
+  const answerProposal = latestResponse?.command_proposal;
+  const uncommittedAnswerProposal = answerProposal
+    && new Date(answerProposal.expires_at).getTime() > Date.now()
+    && !dismissedProposalIds.includes(answerProposal.proposal_id)
+    && commandReceipt?.proposal_id !== answerProposal.proposal_id
+    && !commandRecords.some((record) => record.proposal.proposal_id === answerProposal.proposal_id && record.receipt)
+    ? answerProposal : null;
+  const pendingProposal = durablePendingProposal ?? uncommittedAnswerProposal;
   const durableReceipt =
     commandReceipt ?? commandRecords.find((record) => Boolean(record.receipt))?.receipt ?? null;
 
@@ -345,6 +368,7 @@ export function OperatorConsoleChat({
             {" · "}Data {latestResponse.freshness.data_state}
             {" · "}Cursor {latestResponse.freshness.snapshot_cursor?.slice(0, 12) ?? "no events"}
           </div>
+          <p className="panel__muted">Answer recorded: {new Date(latestResponse.snapshot.fetched_at).toLocaleString()}. Freshness reflects answer time; progress refresh preserves this evidence.</p>
           {latestResponse.warnings.map((warning) => (
             <div key={warning.code} className="panel__notice panel__notice--warning">
               {warning.message}
@@ -413,6 +437,7 @@ export function OperatorConsoleChat({
           </div>
         </div>
       ) : null}
+      {showCreationDecision && creationDecision ? <RunCreationDecision proposal={creationDecision.proposal} receipt={creationDecision.receipt} busy={false} onConfirm={() => {}} /> : null}
       {run ? (
         <section className="operator-chat__artifacts" aria-label="Durable operator commands">
           <div className="control-section__header">

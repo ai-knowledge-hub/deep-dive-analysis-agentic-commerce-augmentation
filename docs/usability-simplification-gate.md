@@ -1,7 +1,7 @@
 # Usability Simplification Gate
 
 Status: current
-Last updated: 2026-05-30
+Last updated: 2026-10-11
 
 This gate exists to prevent backend and agent-runtime complexity from leaking into the default operator experience.
 
@@ -138,3 +138,14 @@ make web-ui-language-check
 ```
 
 The guard scans the main operator surfaces for internal mechanism terms such as `preflight`, `harness`, `registry`, `posterior`, `snapshot`, and `compensating action`. Advanced/admin surfaces may still use those terms when the operator intentionally opens implementation details.
+
+## Phase 2.6 conversation entry
+
+The home conversation uses objective, product, experiment, plan and limits before
+creation. Confirmation is the primary action on a prepared proposal; revising is
+secondary. Historical creation identifies the business goal and scope, with the
+receipt digest behind Recorded decision disclosure. Current run progress remains
+a separate dated snapshot. Runs and Interventions share the immutable decision,
+without adding it to pending action command counts. Isolated browser acceptance
+is documented in the workspace verification report. Participant sessions and a
+live approved objective remain required evidence before the next major slice.

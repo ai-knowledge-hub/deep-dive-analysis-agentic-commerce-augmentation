@@ -14,6 +14,8 @@ from application.ports.workflow_compatibility import WorkflowCompatibilityStore
 
 
 class SessionsStore(Protocol):
+    def is_operator_session(self, *, session_id: str) -> bool: ...
+
     def create_session(
         self,
         *,
@@ -48,7 +50,9 @@ class TurnsStore(Protocol):
 
     def list_turns(self, *, session_id: str, limit: int = 100) -> list[dict]: ...
 
-    def list_recent_turns(self, *, session_id: str, limit: int = 1) -> list[dict]: ...
+    def list_recent_turns(
+        self, *, session_id: str, limit: int = 1, before_id: int | None = None
+    ) -> list[dict]: ...
 
 
 class GoalsStore(Protocol):
@@ -563,3 +567,6 @@ class AppDeps:
     protocol_discover_ucp: Callable[..., list]
     protocol_validate_acp: Callable[..., list]
     protocol_validate_ucp: Callable[..., list]
+
+    # Durable pre-run conversation/creation store (additive compatibility).
+    operator_workspace: Any = None

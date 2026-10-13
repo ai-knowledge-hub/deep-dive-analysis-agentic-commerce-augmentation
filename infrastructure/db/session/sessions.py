@@ -32,7 +32,9 @@ def create_session(
     return _row_to_dict(row)
 
 
-def get_session(*, session_id: str, client_id: str | None = None) -> Optional[Dict[str, Any]]:
+def get_session(
+    *, session_id: str, client_id: str | None = None
+) -> Optional[Dict[str, Any]]:
     if client_id:
         row = (
             get_connection()
@@ -60,6 +62,28 @@ def update_state(*, session_id: str, state: dict) -> None:
     conn.commit()
 
 
+# Legacy discovery has caller-supplied identity. Operator sessions are readable
+# only through authenticated operator endpoints, including if state is damaged.
+_LEGACY_SESSION_PREDICATE = """
+    NOT EXISTS (SELECT 1 FROM operator_workspaces w WHERE w.session_id = sessions.id)
+    AND COALESCE(json_extract(CASE WHEN json_valid(state_json) THEN state_json ELSE '{}' END,
+                             '$.conversation_kind'), '')
+        NOT IN ('operator_workspace', 'operator_run')
+"""
+
+
+def is_operator_session(*, session_id: str) -> bool:
+    return (
+        get_connection()
+        .execute(
+            f"SELECT 1 FROM sessions WHERE id = ? AND NOT ({_LEGACY_SESSION_PREDICATE})",
+            (session_id,),
+        )
+        .fetchone()
+        is not None
+    )
+
+
 def list_sessions(
     *,
     client_id: str,
@@ -70,9 +94,9 @@ def list_sessions(
     conn = get_connection()
     if user_id:
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM sessions
-            WHERE user_id = ? AND client_id = ?
+            WHERE user_id = ? AND client_id = ? AND {_LEGACY_SESSION_PREDICATE}
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -80,9 +104,9 @@ def list_sessions(
         ).fetchall()
     else:
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM sessions
-            WHERE client_id = ?
+            WHERE client_id = ? AND {_LEGACY_SESSION_PREDICATE}
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -111,8 +135,8 @@ def _row_to_dict(row) -> Dict[str, Any]:
 __all__ = [
     "create_session",
     "get_session",
+    "is_operator_session",
     "update_state",
     "list_sessions",
     "delete_session",
 ]
-

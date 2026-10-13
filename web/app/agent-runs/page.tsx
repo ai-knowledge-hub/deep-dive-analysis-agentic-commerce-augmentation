@@ -1350,7 +1350,7 @@ function AgentRunsPageContent() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/lab")}
+        onNewConversation={() => router.push("/")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}

@@ -1507,7 +1507,7 @@ function ExperimentsPageContent() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/lab")}
+        onNewConversation={() => router.push("/")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(id) => router.push(`/?session=${id}`)}

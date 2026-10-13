@@ -21,7 +21,9 @@ from api.utils.principals import (
 )
 from domain.workflow.approval import ApprovalAuthority, PrincipalType
 from application.services.agent_runtime.approval_ledger import ApprovalLedgerError
-from application.services.conversation.operator_reconciliation import confirm_reconciliation
+from application.services.conversation.operator_reconciliation import (
+    confirm_reconciliation,
+)
 from application.services.agent_runtime.effect_recovery import EffectRecoveryError
 from application.services.conversation.operator_retry import confirm_retry
 from application.services.conversation.operator_review_confirmation import (
@@ -75,9 +77,9 @@ class OperatorMessageRequest(BaseModel):
 class OperatorCommandConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command_type: Literal["pause", "resume", "cancel", "approve", "reject", "retry", "reconcile_effect"] = (
-        "pause"
-    )
+    command_type: Literal[
+        "pause", "resume", "cancel", "approve", "reject", "retry", "reconcile_effect"
+    ] = "pause"
     action_id: str | None = None
     retry_strategy: Literal["same_action"] | None = None
     effect_execution_id: str | None = None
@@ -267,6 +269,11 @@ def list_operator_commands(
     page = page_result["page"]
     return {
         "contract": "operator-command-record-list.v1",
+        "creation_decision": deps.operator_workspace.get_creation_for_run(
+            run_id=run_id, tenant_id=principal.client_id
+        )
+        if deps.operator_workspace is not None
+        else None,
         "run_id": run_id,
         "records": [
             {
@@ -373,8 +380,14 @@ def confirm_operator_command(
         )
 
     if review or retry or reconcile:
-        if reconcile and payload.effect_execution_id != proposal["parameters"]["effect_execution_id"]:
-            raise HTTPException(status_code=409, detail="Effect execution does not match the proposal")
+        if (
+            reconcile
+            and payload.effect_execution_id
+            != proposal["parameters"]["effect_execution_id"]
+        ):
+            raise HTTPException(
+                status_code=409, detail="Effect execution does not match the proposal"
+            )
         if retry and payload.retry_strategy != proposal["parameters"]["retry_strategy"]:
             raise HTTPException(
                 status_code=409, detail="Retry strategy does not match proposal"
@@ -417,7 +430,13 @@ def confirm_operator_command(
             else "operator-command-signing-secret:v2",
         )
         try:
-            return (confirm_reconciliation if reconcile else confirm_retry if retry else confirm_action_review)(
+            return (
+                confirm_reconciliation
+                if reconcile
+                else confirm_retry
+                if retry
+                else confirm_action_review
+            )(
                 deps=deps,
                 proposal=proposal,
                 authority=authority,
@@ -429,7 +448,10 @@ def confirm_operator_command(
                 status_code=409, detail={"code": exc.code, "message": exc.message}
             ) from exc
         except EffectRecoveryError as exc:
-            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
         except ApprovalLedgerError as exc:
             raise HTTPException(
                 status_code=exc.status_code,

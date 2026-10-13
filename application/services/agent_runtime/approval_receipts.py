@@ -1,4 +1,4 @@
-"""Independent evidence checks for all governed-effect completions."""
+"""Receipt checks for provider evidence and trusted host completions."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from application.services.agent_runtime.approval_registry import (
     capability_spec_from_contract_json,
 )
 from application.services.agent_runtime.registry import validate_outputs
+from application.services.agent_runtime.host_receipts import host_receipt_id
 from domain.workflow.approval import ApprovalBinding
 
 
@@ -46,8 +47,9 @@ def verify_effect_receipt(
     outputs: Mapping[str, Any],
     claimed_outputs_hash: str,
     receipt_id: str | None,
+    host_completed: bool = False,
 ) -> VerifiedEffectReceipt:
-    """Return the independently recomputed hash for valid durable evidence."""
+    """Validate output binding and provider evidence or trusted host completion."""
 
     try:
         spec = capability_spec_from_contract_json(capability_contract_json)
@@ -87,6 +89,16 @@ def verify_effect_receipt(
             receipt_id=receipt_id,
         )
     if spec.name != "request_synthetic_validation":
+        local_receipt = host_receipt_id(
+            deps=deps, spec=spec, binding=binding,
+            effect_execution_id=effect_execution_id, outputs=outputs,
+            outputs_hash=computed_hash, receipt_id=receipt_id,
+            host_completed=host_completed,
+        )
+        if local_receipt is not None:
+            return VerifiedEffectReceipt(
+                receipt_id=local_receipt, outputs_hash=computed_hash,
+            )
         raise ApprovalReceiptError(
             "this governed capability has no executable receipt-provenance verifier",
             code="effect_receipt_unverifiable",

@@ -46,17 +46,19 @@ def list_turns(*, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     return [_row_to_dict(row) for row in rows]
 
 
-def list_recent_turns(*, session_id: str, limit: int = 1) -> List[Dict[str, Any]]:
+def list_recent_turns(
+    *, session_id: str, limit: int = 1, before_id: int | None = None
+) -> List[Dict[str, Any]]:
     rows = (
         get_connection()
         .execute(
             """
         SELECT * FROM turns
-        WHERE session_id = ?
-        ORDER BY created_at DESC
+        WHERE session_id = ? AND (? IS NULL OR id < ?)
+        ORDER BY id DESC
         LIMIT ?
         """,
-            (session_id, limit),
+            (session_id, before_id, before_id, limit),
         )
         .fetchall()
     )

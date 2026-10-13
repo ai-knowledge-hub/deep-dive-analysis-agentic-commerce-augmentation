@@ -17,6 +17,7 @@ from shared.db.connection import init_db
 from api.routes import products as products_route
 from api.routes import conversation as conversation_route
 from api.routes import operator_conversation as operator_conversation_route
+from api.routes import operator_workspace as operator_workspace_route
 from api.routes import intent as intent_route
 from api.routes import evidence as evidence_route
 from api.routes import simulation as simulation_route
@@ -68,6 +69,7 @@ if FastAPI:
     app.include_router(products_route.router)
     app.include_router(conversation_route.router)
     app.include_router(operator_conversation_route.router)
+    app.include_router(operator_workspace_route.router)
     app.include_router(intent_route.router)
     app.include_router(evidence_route.router)
     app.include_router(evidence_route.representation_router)

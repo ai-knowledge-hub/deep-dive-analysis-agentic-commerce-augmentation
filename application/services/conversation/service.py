@@ -8,7 +8,11 @@ from fastapi import HTTPException
 
 from application.ports.deps import AppDeps
 from application.services.conversation.context_builder import context_for
-from application.services.conversation.session_manager import SessionManager
+from application.services.conversation.session_manager import (
+    SessionManager,
+    is_operator_session,
+    require_legacy_session,
+)
 from domain.intent.goals import extract_intent_goals
 
 
@@ -153,6 +157,8 @@ class ConversationService:
         )
         payload = []
         for session in sessions:
+            if is_operator_session(self._deps, session["id"]):
+                continue
             recent = self._deps.turns.list_recent_turns(
                 session_id=session["id"], limit=1
             )
@@ -175,6 +181,7 @@ class ConversationService:
         user_id: str | None,
         client_id: str,
     ) -> Dict[str, str]:
+        require_legacy_session(self._deps, session_id)
         if user_id:
             session = self._deps.sessions.get_session(
                 session_id=session_id, client_id=client_id

@@ -1,3 +1,4 @@
+import type { CreationDecision } from "./runCreationTypes";
 import type { AgentRun } from "./types";
 
 export type OperatorConversationFact = {
@@ -16,6 +17,8 @@ export type OperatorConversationResponse = {
   contract: "operator-conversation-response.v1" | "operator-conversation-response.v2";
   session_id: string;
   run_id: string;
+  turn_id?: number;
+  user_turn_id?: number;
   intent: string;
   answer: string;
   verified_facts: OperatorConversationFact[];
@@ -140,6 +143,7 @@ export type OperatorCommandRecord = {
 
 export type OperatorCommandRecordListResponse = {
   contract: "operator-command-record-list.v1";
+  creation_decision?: CreationDecision | null;
   run_id: string;
   records: OperatorCommandRecord[];
   count: number;

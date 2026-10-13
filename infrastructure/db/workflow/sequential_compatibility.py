@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from infrastructure.db.core.transactions import JoinedTransaction
+
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -25,7 +27,7 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
 
     conn = get_connection()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        transaction = JoinedTransaction(conn, "creation_shadow")
         run = _load_run_locked(conn, tenant_id=tenant_id, run_id=run_id)
         if run is None:
             raise ValueError("agent run was not found in the tenant scope")
@@ -70,7 +72,7 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
                 ),
                 error_code="structural_drift",
             )
-            conn.commit()
+            transaction.commit()
             return {
                 "outcome": "drifted",
                 "tenant_id": tenant_id,
@@ -137,7 +139,7 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
             completion=semantic_state["completion"],
             error_code=semantic_state["error_code"],
         )
-        conn.commit()
+        transaction.commit()
         return {
             "outcome": state,
             "operation": structural_outcome,
@@ -150,7 +152,7 @@ def project_sequential_run(*, tenant_id: str, run_id: str) -> dict[str, Any]:
             "structural_digest": compiled.structural_digest,
         }
     except Exception:
-        conn.rollback()
+        transaction.rollback()
         raise
 
 

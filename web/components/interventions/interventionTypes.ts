@@ -1,3 +1,4 @@
+import type { CreationDecision } from "../../lib/workspace";
 import type {
   AgentAction,
   AgentCompensatingAction,
@@ -19,6 +20,7 @@ export type InterventionDetail = {
   latestFailureEvent: AgentRunEvent | null;
   proposedActions: AgentAction[];
   approvedActions: AgentAction[];
+  creationDecision?: CreationDecision | null;
   operatorCommandRecords: OperatorCommandRecord[];
   operatorCommandsAvailable: boolean;
   operatorCommandsComplete: boolean;

@@ -1,7 +1,7 @@
 # User Testing Plan
 
 Status: current
-Last updated: 2026-06-17
+Last updated: 2026-10-11
 
 This plan validates whether the current agentic commerce control plane is ready
 for broader product development after the first usability simplification pass.
@@ -170,3 +170,16 @@ Before the next major platform slice:
 
 The next platform slice is safe to start only when users can complete Tasks 1-5
 without moderator explanation of internal runtime concepts.
+
+## Phase 2.6 objective-to-supervision journey
+
+Start at `/` with two tenant-owned experiments and enabled query batteries. Ask
+participants to improve product performance without opening Lab. Observe whether
+they choose the exact experiment, explain the reviewed plan and limits, and
+understand that confirmation creates work without approving its actions. Reload
+the saved conversation, locate the same creation receipt in Runs/Interventions,
+approve a single action and explain its effect versus objective completion.
+Challenge an expired proposal, missing query setup and a read-only participant.
+Measure time to the next action and mistakes in scope/approval interpretation.
+Automated browser acceptance is not participant evidence: retain the 5–7-session
+usability gate and collect an approved end-to-end objective before Phase 3.

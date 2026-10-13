@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from application.agents.goal_clarification_agent import GoalClarificationAgent
 from application.services.conversation.service import ConversationService
+from application.services.conversation.session_manager import require_legacy_session
 from application.services.conversation.agents import (
     CommerceAgent,
     ExplainAgent,
@@ -266,6 +267,7 @@ def continue_conversation_stream(
     session_id: str, request: MessageRequest
 ) -> StreamingResponse:
     deps = _deps()
+    require_legacy_session(deps, session_id)
     alignment = _alignment(deps)
     service = _service(deps=deps)
     goal_agent = GOAL_AGENT or _goal_agent()

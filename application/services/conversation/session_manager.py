@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
+from fastapi import HTTPException
+
 from application.ports.deps import AppDeps
 from domain.memory.types import SessionSnapshot
 
@@ -17,6 +19,23 @@ def _normalize_goal_text(goal: str | None) -> str | None:
     if not goal:
         return None
     return goal.replace("_", " ").strip()
+
+
+def is_operator_session(deps: AppDeps, session_id: str) -> bool:
+    check = getattr(deps.sessions, "is_operator_session", None)
+    if check is not None:
+        return bool(check(session_id=session_id))
+    session = deps.sessions.get_session(session_id=session_id)
+    return bool(
+        session
+        and (session.get("state") or {}).get("conversation_kind")
+        in {"operator_workspace", "operator_run"}
+    )
+
+
+def require_legacy_session(deps: AppDeps, session_id: str) -> None:
+    if is_operator_session(deps, session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
 
 
 class SessionManager:
@@ -41,6 +60,8 @@ class SessionManager:
         self.user_id = user_id or deps.default_user_id
         self.client_id = client_id or deps.default_client_id
         self.brand_id = brand_id
+        if session_id:
+            require_legacy_session(deps, session_id)
         deps.users.ensure_user(self.user_id)
 
         self._session = self._resolve_session(session_id=session_id, state=state or {})

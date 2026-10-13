@@ -286,7 +286,11 @@ class OperatorConversationService:
                             }
                     else:
                         command_proposal = operator_proposal_view(proposal)
-                        display_command = "reconciliation" if command_type == "reconcile_effect" else command_type
+                        display_command = (
+                            "reconciliation"
+                            if command_type == "reconcile_effect"
+                            else command_type
+                        )
                         answer = f"I prepared a run-bound {display_command} proposal. Review its exact scope and consequences, then confirm it explicitly; this message did not change execution state."
                         recommendation = {
                             "kind": f"confirm_{command_type}",
@@ -339,19 +343,38 @@ class OperatorConversationService:
                 command_proposal.get("proposal_id") if command_proposal else None
             ),
         }
-        self._deps.turns.add_turn(
+        user_turn = self._deps.turns.add_turn(
             session_id=session["id"],
             speaker="user",
             content=question,
             metadata=metadata,
         )
-        self._deps.turns.add_turn(
+        answer_turn = self._deps.turns.add_turn(
             session_id=session["id"],
             speaker="agent",
             content=answer,
-            metadata={**metadata, "freshness": freshness["state"]},
+            metadata={
+                **metadata,
+                "freshness": freshness["state"],
+                "operator_response": response,
+            },
         )
-        return response
+        return {
+            **response,
+            "user_turn_id": user_turn["id"],
+            "turn_id": answer_turn["id"],
+        }
+
+    def prepare_objective(
+        self, *, workspace, message, experiment_id, registry, prepare
+    ):
+        return prepare(
+            self._deps,
+            workspace=workspace,
+            message=message,
+            experiment_id=experiment_id,
+            registry=registry,
+        )
 
     def _resolve_session(
         self,
