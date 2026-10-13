@@ -1,7 +1,8 @@
 """Read current registry pins without committing inside creation admission."""
 
 from application.services.agent_runtime import registry
-from infrastructure.db.agent import agent_registry, agent_profiles
+import infrastructure.db.agent.agent_registry as agent_registry
+import infrastructure.db.agent.agent_profiles as agent_profiles
 
 
 def current_registry(tenant_id: str):

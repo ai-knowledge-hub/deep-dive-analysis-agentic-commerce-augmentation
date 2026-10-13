@@ -124,3 +124,13 @@ the original append-older merge killed the component regression (1/1 bounded
 mutation); the source was restored byte-for-byte in a finally block. No backend
 source changed for this follow-up; the earlier 1,715-pass backend run was not repeated. Live
 providers, browser acceptance and human usability remain unverified.
+
+## Initial PR CI guard correction
+
+PR #169's first backend job stopped at the legacy DB import guard before dependency
+installation or tests. The registry helper imported modules from the grouped
+package root, which matched that guard's prohibited pattern. Explicit grouped
+module imports preserve behavior and comply with the guard. Local lint,
+architecture, the matching legacy-import pattern scan and all 50 creation tests
+passed before pushing the correction. Earlier full-suite and frontend evidence
+remain the validation baseline; the new remote CI run is separate evidence.
