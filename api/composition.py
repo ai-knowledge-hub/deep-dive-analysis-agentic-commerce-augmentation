@@ -46,6 +46,7 @@ import infrastructure.db.session.goals as goals_repo
 import infrastructure.db.session.recommendations as recommendations_repo
 import infrastructure.db.session.replays as replays_repo
 import infrastructure.db.session.sessions as sessions_repo
+import infrastructure.db.session.operator_workspace as operator_workspace_repo
 import infrastructure.db.session.turns as turns_repo
 import infrastructure.db.validation.validation_callback_tokens as validation_callback_tokens_repo
 import infrastructure.db.validation.validation_jobs as validation_jobs_repo
@@ -67,6 +68,7 @@ def default_deps() -> AppDeps:
         init_db=init_db,
         set_database_path=lambda p: set_database_path(Path(p)),
         sessions=sessions_repo,
+        operator_workspace=operator_workspace_repo,
         turns=turns_repo,
         goals=goals_repo,
         episodes=episodes_repo,

@@ -322,6 +322,22 @@ describe("InterventionsPage", () => {
     });
   });
 
+
+  it("shows the creation receipt without adding an operator command intervention", async () => {
+    const base = await listOperatorConversationCommandsMock();
+    searchParamsValue = "run_id=run-1";
+    listOperatorConversationCommandsMock.mockResolvedValue({ ...base, creation_decision: {
+      proposal: { proposal_id: "creation", session_id: "session", proposal_digest: "c".repeat(64), expires_at: "2099-01-01", preflight: {
+        scope: { product: "Product", experiment: "Experiment" }, execution_posture: "Approval required",
+        parameters: { objective: { goal: "Improve performance" }, experiment_id: "exp-1", budgets: { max_actions: 12, max_variant_runs: 1, max_cost_usd: 5 } }, plan: [] } },
+      receipt: { receipt_id: "created", receipt_digest: "d".repeat(64), run_id: "run-1", acknowledgement: "governed_run_created" },
+    } });
+    render(<InterventionsPage />);
+    expect(await screen.findByRole("heading", { name: "Run created" })).toBeInTheDocument();
+    expect(screen.getByText(/does not mean the objective is complete/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm and create run" })).not.toBeInTheDocument();
+  });
+
   it("renders escalation, approval, retry, and pause queues", async () => {
     render(<InterventionsPage />);
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from infrastructure.db.core.transactions import JoinedTransaction
+
 import hashlib
 import json
 import sqlite3
@@ -70,7 +72,7 @@ def register_sequential_attempt_authority(
     """Derive compatibility attempt identity only from durable host state."""
 
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        transaction = JoinedTransaction(conn, "creation_attempt")
         row = conn.execute(
             """
             SELECT action.id, action.retry_count, action.inputs_json,
@@ -139,7 +141,7 @@ def register_sequential_attempt_authority(
         )
         if actual != (attempt_id, row["principal_id"], action_id):
             raise ValueError("sequential attempt authority conflicts")
-        conn.commit()
+        transaction.commit()
         return {
             "task_id": action_id,
             "attempt_id": attempt_id,
@@ -147,8 +149,12 @@ def register_sequential_attempt_authority(
             "action_id": action_id,
         }
     except (ValueError, sqlite3.IntegrityError, sqlite3.OperationalError) as exc:
-        conn.rollback()
+        transaction.rollback()
         raise ValueError(str(exc)) from exc
+
+    except Exception:
+        transaction.rollback()
+        raise
 
 
 __all__ = ["register_sequential_attempt_authority", "validate_attempt_result_locked"]

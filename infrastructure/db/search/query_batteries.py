@@ -42,7 +42,9 @@ def create_battery(
     return get_battery(battery_id) or {}
 
 
-def get_battery(battery_id: str, *, client_id: str | None = None) -> Dict[str, Any] | None:
+def get_battery(
+    battery_id: str, *, client_id: str | None = None
+) -> Dict[str, Any] | None:
     conn = get_connection()
     if client_id:
         row = conn.execute(
@@ -168,7 +170,7 @@ def get_query(query_id: str) -> Dict[str, Any] | None:
     return _query_row(row) if row else None
 
 
-def list_queries(battery_id: str) -> List[Dict[str, Any]]:
+def list_queries(battery_id: str, *, limit: int | None = None) -> List[Dict[str, Any]]:
     if not battery_id:
         return []
     battery_id = str(battery_id)
@@ -179,8 +181,9 @@ def list_queries(battery_id: str) -> List[Dict[str, Any]]:
             SELECT * FROM query_battery_queries
             WHERE battery_id = ?
             ORDER BY created_at ASC
-            """,
-            (battery_id,),
+            """
+            + (" LIMIT ?" if limit is not None else ""),
+            (battery_id, max(1, int(limit))) if limit is not None else (battery_id,),
         )
         .fetchall()
     )

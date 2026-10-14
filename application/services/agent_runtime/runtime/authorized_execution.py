@@ -90,6 +90,7 @@ def execute_with_exact_authorization(
         authorization=state.authorization,
         outputs=outputs,
         outputs_hash=hash_payload(outputs),
+        host_completed=True,
     )
     return outputs
 

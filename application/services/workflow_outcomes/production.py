@@ -389,7 +389,12 @@ class SequentialCompletionCoordinator:
             )
             if item["result"].task_id in publication["criteria"].required_task_ids
         )
-        snapshot_key = _digest(result_ids)
+        # Approval preparation can canonicalize a not-yet-executed action's
+        # inputs and publish a new contract while accepted results stay equal.
+        # A snapshot belongs to that exact contract, not only its result set.
+        snapshot_key = _digest(
+            [int(run["active_graph_revision"]), criteria_id, criteria_hash, result_ids]
+        )
         snapshot_id = f"sequential-snapshot:{snapshot_key}"
         snapshot_write = self._service.issue_authority_snapshot(
             command=_command(

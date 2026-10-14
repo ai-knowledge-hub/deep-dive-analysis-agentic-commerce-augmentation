@@ -1,7 +1,7 @@
 # Safety Analysis
 
 Status: current
-Last updated: 2026-10-05
+Last updated: 2026-10-11
 
 The Phase 1 safety baseline has two synchronized artifacts:
 
@@ -117,3 +117,31 @@ late-outcome preservation and rollback/final-commit fault tests. See
 [verification and admission matrix](../debug/2026-10-06-conversational-reconciliation-verification.md).
 Effect success does not grant another provider call or certify objective
 completion. Existing beta exclusions remain unchanged.
+
+Phase 2.6 conversation creation freezes one existing sequential objective and
+requires a separate exact confirmation. The final owned lock rechecks authority,
+scope, harness/policy and materialised plan. Creation, compatibility/completion
+and attempt governance, binding, audit and receipt compose atomically; failed
+writes or commits leave no runnable orphan or pending transaction. All nine
+actions still require individual human approval. Historical creation is separate
+from effect success and verified completion in every operator view. Supplemental
+fault, schedule and worker evidence is recorded in the
+[workspace verification](../debug/2026-10-11-conversation-workspace-verification.md).
+Existing controls retain their certified boundaries; this is not distributed
+workflow or live-provider acceptance.
+
+The conversation harness stops on global action/cost exhaustion while the
+one-candidate limit remains enforced at candidate execution admission and
+reservation. Validation and recommendation remain eligible afterward. Its eight
+bounded local capabilities commit trusted host completion receipts under exact
+approval; validation and high-risk effects retain independent provenance
+verification. Caller-authored local outputs cannot resolve an uncertain effect.
+Completion snapshot identity includes the exact contract and graph revision so
+approval input canonicalization cannot reuse another contract's snapshot.
+
+Conversation creation now requires a control variant recognized by the existing
+baseline capability. Its selected record is pinned in the reviewed scope and
+rechecked under the final creation lock; deletion, loss of control identity or
+replacement rejects confirmation. Supplemental prerequisite and real capability
+selection evidence is recorded in the
+[2026-10-13 rereview report](../debug/2026-10-13-conversation-workspace-rereview.md).

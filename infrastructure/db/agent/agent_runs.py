@@ -40,71 +40,76 @@ def create_agent_run(
     workflow_event_projection_required: bool = False,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
-    ensure_client(client_id)
     conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO agent_runs (
-            id,
-            client_id,
-            brand_id,
-            product_id,
-            experiment_id,
-            objective_json,
-            allowed_capabilities_json,
-            capability_versions_json,
-            budgets_json,
-            approval_policy_json,
-            requires_approval,
-            run_mode,
-            state,
-            status,
-            principal_type,
-            principal_id,
-            agent_profile_id,
-            harness_id,
-            policy_profile_id,
-            idempotency_key,
-            trace_id,
-            root_run_id,
-            parent_run_id,
-            registry_version,
-            registry_fingerprint,
-            workflow_event_projection_required
+    transaction = JoinedTransaction(conn, "create_agent_run")
+    try:
+        ensure_client(client_id)
+        conn.execute(
+            """
+            INSERT INTO agent_runs (
+                id,
+                client_id,
+                brand_id,
+                product_id,
+                experiment_id,
+                objective_json,
+                allowed_capabilities_json,
+                capability_versions_json,
+                budgets_json,
+                approval_policy_json,
+                requires_approval,
+                run_mode,
+                state,
+                status,
+                principal_type,
+                principal_id,
+                agent_profile_id,
+                harness_id,
+                policy_profile_id,
+                idempotency_key,
+                trace_id,
+                root_run_id,
+                parent_run_id,
+                registry_version,
+                registry_fingerprint,
+                workflow_event_projection_required
+            )
+            VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                client_id,
+                brand_id,
+                product_id,
+                experiment_id,
+                to_json(objective) or to_json({}),
+                to_json(allowed_capabilities) or to_json([]),
+                to_json(capability_versions) or to_json({}),
+                to_json(budgets) or to_json({}),
+                to_json(approval_policy) or to_json({}),
+                1 if requires_approval else 0,
+                run_mode,
+                state,
+                status,
+                principal_type,
+                principal_id,
+                agent_profile_id,
+                harness_id,
+                policy_profile_id,
+                idempotency_key,
+                trace_id,
+                root_run_id,
+                parent_run_id,
+                registry_version,
+                registry_fingerprint,
+                1 if workflow_event_projection_required else 0,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, json(?), json(?), json(?), json(?), json(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            run_id,
-            client_id,
-            brand_id,
-            product_id,
-            experiment_id,
-            to_json(objective) or to_json({}),
-            to_json(allowed_capabilities) or to_json([]),
-            to_json(capability_versions) or to_json({}),
-            to_json(budgets) or to_json({}),
-            to_json(approval_policy) or to_json({}),
-            1 if requires_approval else 0,
-            run_mode,
-            state,
-            status,
-            principal_type,
-            principal_id,
-            agent_profile_id,
-            harness_id,
-            policy_profile_id,
-            idempotency_key,
-            trace_id,
-            root_run_id,
-            parent_run_id,
-            registry_version,
-            registry_fingerprint,
-            1 if workflow_event_projection_required else 0,
-        ),
-    )
-    conn.commit()
-    return get_agent_run(run_id) or {}
+        transaction.commit()
+        return get_agent_run(run_id) or {}
+    except Exception:
+        transaction.rollback()
+        raise
 
 
 def update_agent_run(

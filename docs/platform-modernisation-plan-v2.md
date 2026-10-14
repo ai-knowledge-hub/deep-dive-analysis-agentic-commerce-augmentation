@@ -572,6 +572,37 @@ and completion-projection repair remain excluded. After this bounded recovery
 slice, return to the Phase 2 conversation workspace and governed sequential-run
 creation, with the operator usability gate before the next major platform slice.
 
+#### Slice 2.6: primary conversation and governed sequential-run creation
+
+Issue 168 implements `/` as the primary objective workspace, extending the shared
+operator gateway before a run exists. Authenticated tenant/human conversations
+persist across clarification, exact proposal review, creation and supervision.
+Ambiguous experiments require exact selection. The bounded existing optimisation
+objective requires a tenant-owned product, experiment and enabled query battery.
+
+An immutable, ten-minute proposal freezes the exact objective, scope, nine-step
+plan, capability versions, registry and policy. Limits are 12 actions, one
+candidate evaluation and $5 recorded cost. The conversation-supervised harness
+allows scheduling with a separate human approval for every action. A distinct
+creation confirmation audience requires current write authority; the final owned
+transaction rechecks scope, policy and the actual materialised plan.
+
+Run insertion, planning, compatibility projection, completion/attempt governance,
+conversation binding, human audit and immutable creation receipt commit together.
+Creation releases a governed planned run, grants no action approval and invokes no
+provider. Duplicate delivery replays the same receipt after current access;
+competing proposals cannot create a second run for the conversation. Home, Runs
+and Interventions read the same creation decision, separate from pending action
+commands and verified objective completion. Existing v1–v6 commands remain intact.
+
+Migration 063 and the updated backend/workers precede the workspace UI. Unsupported
+objectives, cross-scope inputs, stale proposals and unsupported policies fail
+closed. New experiment creation, batch work, publication and a distributed kernel
+remain excluded. Browser acceptance and automated verification are recorded in
+[the workspace report](debug/2026-10-11-conversation-workspace-verification.md).
+Human usability and a live approved end-to-end objective remain exit evidence to
+collect before advancing the major platform slice.
+
 ### Phase 3: Durable workflow kernel
 
 Deliverables:

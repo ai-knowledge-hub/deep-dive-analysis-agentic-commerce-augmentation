@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
-from application.services.agent_runtime.registry import get_capability_spec, get_harness_profile
+from application.services.agent_runtime.registry import (
+    get_capability_spec,
+    get_harness_profile,
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,14 @@ def evaluate_stopping_conditions(
             status="paused",
             condition="external_side_effect_required",
             note="Run paused before external side-effect capability required by harness.",
+        )
+    if "global_budget_exhausted" in conditions and _budget_exhausted(
+        run=run, actions=actions, include_variant_runs=False
+    ):
+        return StopDecision(
+            status="paused",
+            condition="global_budget_exhausted",
+            note="Run paused because its action or cost budget is exhausted.",
         )
     if "budget_exhausted" in conditions and _budget_exhausted(run=run, actions=actions):
         return StopDecision(
@@ -78,7 +89,12 @@ def evaluate_stopping_conditions(
     return None
 
 
-def _budget_exhausted(*, run: Dict[str, Any], actions: List[Dict[str, Any]]) -> bool:
+def _budget_exhausted(
+    *,
+    run: Dict[str, Any],
+    actions: List[Dict[str, Any]],
+    include_variant_runs: bool = True,
+) -> bool:
     budgets = dict(run.get("budgets") or {})
     max_actions = _safe_int(budgets.get("max_actions"))
     executed = [
@@ -87,7 +103,7 @@ def _budget_exhausted(*, run: Dict[str, Any], actions: List[Dict[str, Any]]) -> 
     if max_actions is not None and len(executed) >= max_actions:
         return True
     max_variant_runs = _safe_int(budgets.get("max_variant_runs"))
-    if max_variant_runs is not None:
+    if include_variant_runs and max_variant_runs is not None:
         variant_runs = [
             item
             for item in executed
@@ -108,9 +124,7 @@ def _has_pending_external_effect(actions: List[Dict[str, Any]]) -> bool:
     if claimable:
         return _has_external_effect(claimable[0])
     proposed = [
-        item
-        for item in actions
-        if str(item.get("status") or "").lower() == "proposed"
+        item for item in actions if str(item.get("status") or "").lower() == "proposed"
     ]
     return bool(proposed) and _has_external_effect(proposed[0])
 
@@ -156,8 +170,16 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _consumed_cost_usd(actions: List[Dict[str, Any]]) -> float:
-    cost_keys = {"cost_usd", "total_cost_usd", "validation_cost_usd", "estimated_cost_usd"}
-    return sum(_sum_numeric_fields(action.get("outputs") or {}, cost_keys) for action in actions)
+    cost_keys = {
+        "cost_usd",
+        "total_cost_usd",
+        "validation_cost_usd",
+        "estimated_cost_usd",
+    }
+    return sum(
+        _sum_numeric_fields(action.get("outputs") or {}, cost_keys)
+        for action in actions
+    )
 
 
 def _sum_numeric_fields(value: Any, keys: set[str]) -> float:

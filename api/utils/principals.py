@@ -334,7 +334,10 @@ def _assert_principal_is_active(
             detail="Authenticated principal type does not match registry record",
         )
     row_tenant = str(row["tenant_id"] or "")
-    if row_tenant and row_tenant != tenant_id:
+    # human:<user_id> is global. Its last recorded tenant is not membership
+    # authority; human endpoints check membership in the requested tenant.
+    # Agent identities remain bound to their registered tenant.
+    if principal_type != "human" and row_tenant and row_tenant != tenant_id:
         raise HTTPException(
             status_code=403,
             detail="Authenticated principal tenant does not match registry record",

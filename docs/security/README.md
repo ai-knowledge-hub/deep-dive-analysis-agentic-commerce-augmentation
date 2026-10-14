@@ -1,7 +1,7 @@
 # Security Analysis
 
 Status: current
-Last updated: 2026-10-05
+Last updated: 2026-10-11
 
 The Phase 1 agent-workflow security baseline has three synchronized artifacts:
 
@@ -149,3 +149,28 @@ outputs and model-selected mutation intent grant no authority. The supplementary
 [reconciliation verification](../debug/2026-10-06-conversational-reconciliation-verification.md)
 covers substitution, evidence scope and replay/rollback; schema-v1 SVT
 verification references remain unchanged.
+
+Phase 2.6 private workspace sessions bind authenticated human and tenant before
+execution. A separate operator-run-creation-api assertion binds exact session,
+proposal and digest; read signing authority cannot create runs. Current human,
+role and write scopes are checked again under the final creation lock. Exact
+replay checks current access; another same-tenant human cannot read private
+transcripts or confirm the proposal. Authorized run readers can inspect the
+immutable creation decision through the existing run command reader, without
+private transcript access. Scope, policy and materialised plan drift reject
+creation before release. Supplementary substitution and rollback evidence is in
+[the workspace report](../debug/2026-10-11-conversation-workspace-verification.md);
+schema-v1 verification membership is unchanged.
+
+Legacy conversation listing excludes operator sessions before pagination;
+legacy transcript, message/stream, goal, research and delete routes reject them
+before reads or writes. Durable workspace membership protects sessions even
+when their state marker is missing. Deploy these guards on every API replica
+before enabling private workspaces; rollback must retain the guards.
+
+Human principal IDs are global; their recorded tenant is not membership
+authority. Current requested-tenant membership and role checks authorize
+workspace access while registry status/type checks remain mandatory. Non-human
+principals retain registered tenant binding. Older history pages retain the same
+owner/tenant boundary. See the
+[2026-10-13 rereview evidence](../debug/2026-10-13-conversation-workspace-rereview.md).

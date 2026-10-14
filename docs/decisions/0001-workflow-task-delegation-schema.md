@@ -1137,3 +1137,22 @@ not reapplied by an acknowledgement.
 Additive migration 062 retains the previous five history contracts and cursors.
 This sequential-runtime adapter does not add task attempts, compensation,
 provider polling, automatic execution or a distributed workflow kernel.
+
+## Phase 2.6 conversation creation compatibility
+
+Migration 063 adds private human/tenant conversations, immutable creation proposals
+and receipts. The session becomes run-bound once, without changing sequential
+workflow identity or adding a Phase 3 task kernel. The proposal pins objective,
+exact scope, bounded plan, capability versions and registry/policy. Final owned
+creation composes existing writers through savepoints, including attempt authority,
+then binds the conversation and writes audit/receipt. Nested writers retain their
+standalone commit behavior. Partial creation and final commit failure roll back
+all execution records; existing proposal evidence remains.
+
+A separate creation assertion grants only confirmation of the exact proposal.
+Each action remains proposed under human_approval_required. One receipt per
+proposal/conversation/run enforces replay and competing-proposal exclusion. Run
+readers receive an additive creation_decision outside v1–v6 command pagination and
+pending counts; private transcripts still require the conversation owner. Deploy
+updated workers/backend and migration before UI; rollback retains immutable
+evidence and hides entry points. Old workers do not know the new harness.

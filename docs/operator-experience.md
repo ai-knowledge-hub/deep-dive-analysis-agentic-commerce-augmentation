@@ -1,7 +1,7 @@
 # Operator Experience Guide
 
 Status: current
-Last updated: 2026-10-05
+Last updated: 2026-10-11
 
 This is the current user-facing product guide for the agentic commerce control plane. It replaces the older human-led lab guide as the default way to understand the web app.
 
@@ -30,7 +30,7 @@ The lab remains available, but it is no longer the primary mental model for the 
 The primary control-plane loop is:
 
 ```text
-Inbox -> Runs -> Interventions -> Insights -> Lab only when deeper exploration is needed
+Conversation -> Review objective -> Supervise run -> Interventions -> Insights -> Lab when needed
 ```
 
 The usability gate for this loop is documented in `docs/usability-simplification-gate.md`.
@@ -44,9 +44,26 @@ detail when the operator intentionally opens them.
 
 ### `/`
 
-Role: control-plane entry.
+Role: primary conversation workspace.
 
-Use it to understand the current operational posture and pick the right next workspace. It should stay lightweight and guide the operator toward the right surface rather than becoming another dashboard.
+Describe a bounded product experiment objective. Choose the exact experiment if
+asked, then review the objective, product, experiment, sequential plan and limits.
+Confirming creates one governed run; it approves no action and completes no goal.
+Continue in the same conversation or return through the saved conversation list.
+Every action requires its own review in Runs or Interventions. Current progress
+is a dated server snapshot; refresh it to observe new work. The immutable creation
+receipt records the earlier decision and is also visible in Runs/Interventions.
+Unsupported objectives and unavailable scope require correction or control-plane
+setup. Advanced Lab remains available for deliberate deeper exploration.
+
+Refreshing progress or confirming a command preserves the draft and verified
+answer artifacts within the current conversation. Reopening restores saved
+facts, evidence links and freshness from the original answer time; refreshing
+progress does not turn historical evidence into a fresh answer. Older text-only
+answers have no stored structured provenance to restore. Reopening starts with
+the latest 500 messages; Load older messages restores earlier pages while keeping
+recent evidence and current progress. Run creation requires an existing control
+variant for the experiment baseline, rechecked at confirmation.
 
 ### `/inbox`
 

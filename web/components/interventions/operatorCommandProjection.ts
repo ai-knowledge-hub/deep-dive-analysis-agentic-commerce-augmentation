@@ -1,3 +1,4 @@
+import type { CreationDecision } from "../../lib/workspace";
 import {
   getAgentRun,
   getAgentRunEvents,
@@ -12,12 +13,14 @@ const MAX_SCOPED_COMMAND_PAGES = 20;
 
 async function loadCommandProjection(runId: string, exhaustive: boolean) {
   const records = new Map<string, OperatorCommandRecord>();
+  let creationDecision: CreationDecision | null = null;
   let cursor: string | null = null;
   let hasMore = false;
   let totalCount = 0;
   let pageCount = 0;
   do {
     const response = await listOperatorConversationCommands(runId, { cursor });
+    creationDecision = response.creation_decision ?? null;
     response.records.forEach((record) => {
       records.set(record.proposal.proposal_id, record);
     });
@@ -27,6 +30,7 @@ async function loadCommandProjection(runId: string, exhaustive: boolean) {
     pageCount += 1;
   } while (exhaustive && hasMore && cursor && pageCount < MAX_SCOPED_COMMAND_PAGES);
   return {
+    creationDecision,
     records: [...records.values()],
     available: true,
     complete: !hasMore,
@@ -62,13 +66,14 @@ export async function loadInterventionDetailRows(
             : getAgentRun(run.id, { limit: 50 }, userId),
           getAgentRunEvents(run.id, { limit: 50, event_type: "all" }, userId),
           loadCommandProjection(run.id, run.id === requestedRunId).catch(() => ({
+            creationDecision: null,
             records: [],
             available: false,
             complete: false,
             totalCount: 0,
           })),
         ]);
-        return buildDetails(
+        return { creationDecision: operatorCommands.creationDecision, ...buildDetails(
           { ...run, ...(detail.run ?? {}) },
           detail.actions ?? [],
           eventData.events ?? [],
@@ -77,7 +82,7 @@ export async function loadInterventionDetailRows(
           operatorCommands.available,
           operatorCommands.complete,
           operatorCommands.totalCount,
-        );
+        ) };
       } catch {
         return buildDetails(run, [], [], harnessProfiles, [], false);
       }

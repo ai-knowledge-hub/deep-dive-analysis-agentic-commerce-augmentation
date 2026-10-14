@@ -10,6 +10,8 @@ import {
 } from "../../lib/api";
 import type { OperatorConversationResponse } from "../../lib/operatorConversationTypes";
 import { OperatorConsoleChat } from "./OperatorConsoleChat";
+import { restoreWorkspaceMessages, mergeRecordedMessages, recordLiveAnswer } from "./operatorChatHistory";
+import type { WorkspaceHistory } from "../../lib/workspace";
 
 vi.mock("../../lib/api", () => ({
   confirmOperatorConversationCommand: vi.fn(),
@@ -153,6 +155,109 @@ describe("OperatorConsoleChat", () => {
     });
   });
 
+
+  it("shows verified creation separately from pending operator commands", async () => {
+    const base = await listCommands("run-1");
+    listCommands.mockResolvedValue({ ...base, creation_decision: {
+      proposal: { proposal_id: "creation", session_id: "session", proposal_digest: "c".repeat(64), expires_at: "2099-01-01", preflight: {
+        scope: { product: "Product", experiment: "Experiment" }, execution_posture: "Approval required",
+        parameters: { objective: { goal: "Improve performance" }, experiment_id: "exp-1", budgets: { max_actions: 12, max_variant_runs: 1, max_cost_usd: 5 } }, plan: [] } },
+      receipt: { receipt_id: "created", receipt_digest: "d".repeat(64), run_id: "run-1", acknowledgement: "governed_run_created" },
+    } });
+    render(<OperatorConsoleChat {...baseProps} />);
+    expect(await screen.findByRole("heading", { name: "Run created" })).toBeInTheDocument();
+    expect(screen.getByText(/does not mean the objective is complete/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirm/ })).not.toBeInTheDocument();
+  });
+
+
+
+  it("restores stored answer facts, evidence and freshness only for the original session and run", () => {
+    const original = response({ evidence: [{ kind: "validation", record: { id: "original-evidence" }, href: "/validation?job_id=original" }] });
+    const history = { session_id: "session-1", run_id: "run-1", run, actions: [], events: [], proposals: [], receipt: null, has_more: false, turns_has_more: false,
+      turns: [{ id: 22, speaker: "agent", content: original.answer, metadata: { operator_response: original } }] } satisfies WorkspaceHistory;
+    expect(restoreWorkspaceMessages(history)[0].response).toEqual({ ...original, turn_id: 22 });
+    expect(restoreWorkspaceMessages({ ...history, session_id: "other-session" })[0].response).toBeUndefined();
+    expect(restoreWorkspaceMessages({ ...history, run_id: "other-run" })[0].response).toBeUndefined();
+  });
+
+  it("preserves original verified artifacts and draft through same-session progress refresh", async () => {
+    const user = userEvent.setup();
+    const original = response({ turn_id: 2, user_turn_id: 1,
+      evidence: [{ kind: "validation", record: { id: "validation-original", source_type: "validation" }, href: "/validation?job_id=original" }],
+    });
+    sendMessage.mockResolvedValueOnce(original);
+    const view = render(<OperatorConsoleChat {...baseProps} initialSessionId="session-1" initialMessages={[]} />);
+    await user.type(screen.getByLabelText("Ask about the selected run"), "Explain this run");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByLabelText("Verified answer details")).toHaveTextContent("aaaaaaaaaaaa");
+    await user.type(screen.getByLabelText("Ask about the selected run"), "Keep my next question");
+    const messages = [{ id: "history-1", role: "user" as const, content: "Explain this run" }, { id: "history-2", role: "assistant" as const, content: original.answer }];
+    view.rerender(<OperatorConsoleChat {...baseProps} run={{ ...run, status: "paused" }} initialSessionId="session-1" initialMessages={messages} />);
+    expect(screen.getByLabelText("Ask about the selected run")).toHaveValue("Keep my next question");
+    expect(screen.getByLabelText("Verified answer details")).toHaveTextContent("aaaaaaaaaaaa");
+    expect(screen.getByLabelText("Verified answer details")).toHaveTextContent("Cursor cursor-1");
+    expect(screen.getByText("Run is active.")).toBeInTheDocument();
+    expect(screen.getByText("validation-original")).toBeInTheDocument();
+    expect(screen.getAllByText(original.answer)).toHaveLength(1);
+    view.rerender(<OperatorConsoleChat {...baseProps} initialSessionId="session-1" initialMessages={[...messages]} />);
+    expect(screen.getByLabelText("Ask about the selected run")).toHaveValue("Keep my next question");
+    expect(screen.getAllByText(original.answer)).toHaveLength(1);
+  });
+
+  it("keeps recent answer artifacts latest after loading older messages then refreshing progress", async () => {
+    const user = userEvent.setup();
+    const older = response({ answer: "Earlier answer", verified_facts: [{ id: "older-fact", category: "run", text: "Older fact", source: "/older", provenance: { record_type: "agent_run", record_id: "run-1" } }],
+      warnings: [{ code: "older-warning", message: "Older warning" }], recommendation: { kind: "review", text: "Older recommendation" },
+      evidence: [{ kind: "validation", record: { id: "older-evidence" }, href: "/older-evidence" }] });
+    const recent = response({ answer: "Recent answer", verified_facts: [{ id: "recent-fact", category: "run", text: "Recent fact", source: "/recent", provenance: { record_type: "agent_run", record_id: "run-1" } }],
+      warnings: [{ code: "recent-warning", message: "Recent warning" }], recommendation: { kind: "review", text: "Recent recommendation" },
+      evidence: [{ kind: "validation", record: { id: "recent-evidence" }, href: "/recent-evidence" }] });
+    const oldMessages = [{ id: "history-2", role: "assistant" as const, content: older.answer, response: older }];
+    const recentMessages = [{ id: "history-10", role: "assistant" as const, content: recent.answer, response: recent }];
+    const view = render(<OperatorConsoleChat {...baseProps} initialSessionId="session-1" initialMessages={recentMessages} />);
+    view.rerender(<OperatorConsoleChat {...baseProps} initialSessionId="session-1" initialMessages={[...oldMessages, ...recentMessages]} />);
+    await user.type(screen.getByLabelText("Ask about the selected run"), "Keep this draft");
+    view.rerender(<OperatorConsoleChat {...baseProps} run={{ ...run, status: "paused" }} initialSessionId="session-1" initialMessages={[...recentMessages]} />);
+    expect(screen.getByText("Recent fact")).toBeInTheDocument();
+    expect(screen.getByText("Recent warning")).toBeInTheDocument();
+    expect(screen.getByText("Recent recommendation")).toBeInTheDocument();
+    expect(screen.getByText("recent-evidence")).toBeInTheDocument();
+    expect(screen.queryByText("Older fact")).not.toBeInTheDocument();
+    expect(screen.queryByText("Older warning")).not.toBeInTheDocument();
+    expect(screen.queryByText("Older recommendation")).not.toBeInTheDocument();
+    expect(screen.queryByText("older-evidence")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ask about the selected run")).toHaveValue("Keep this draft");
+    expect(screen.getByText(older.answer).compareDocumentPosition(screen.getByText(recent.answer)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText(older.answer)).toHaveLength(1);
+    expect(screen.getAllByText(recent.answer)).toHaveLength(1);
+    view.rerender(<OperatorConsoleChat {...baseProps} initialSessionId="session-1" initialMessages={recentMessages.map(({ response: _response, ...message }) => message)} />);
+    expect(screen.getByText("Recent fact")).toBeInTheDocument();
+  });
+
+  it("orders recorded turn IDs numerically and keeps in-flight messages after recorded history", () => {
+    const pending = [{ id: "user-7", role: "user" as const, content: "Pending question" }, { id: "assistant-7", role: "assistant" as const, content: "Pending answer" }];
+    const current = [{ id: "history-2", role: "assistant" as const, content: "Older" }, { id: "history-10", role: "assistant" as const, content: "Recent" }, ...pending];
+    const merged = mergeRecordedMessages(current, [current[1], { id: "history-1", role: "user", content: "Oldest" }]);
+    expect(merged.map((message) => message.id)).toEqual(["history-1", "history-2", "history-10", "user-7", "assistant-7"]);
+    const recorded = recordLiveAnswer(merged, 7, response({ turn_id: 12, user_turn_id: 11 }));
+    expect(recorded.map((message) => message.id)).toEqual(["history-1", "history-2", "history-10", "history-11", "history-12"]);
+  });
+
+  it("restores original provenance after remount and resets only when the conversation changes", async () => {
+    const user = userEvent.setup();
+    const original = response({ warnings: [{ code: "snapshot_changed_during_generation", message: "Original freshness warning" }], freshness: { state: "stale", data_state: "partial", snapshot_cursor: "original-cursor", latest_cursor: "later-cursor", snapshot_digest: "a".repeat(64) } });
+    const messages = [{ id: "history-2", role: "assistant" as const, content: original.answer, response: original }];
+    const view = render(<OperatorConsoleChat {...baseProps} initialSessionId="session-1" initialMessages={messages} />);
+    expect(await screen.findByLabelText("Verified answer details")).toHaveTextContent("original-cur");
+    expect(screen.getByText("Original freshness warning")).toBeInTheDocument();
+    expect(screen.getByText("Run is active.")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Ask about the selected run"), "Unsaved draft");
+    view.rerender(<OperatorConsoleChat {...baseProps} initialSessionId="another-session" initialMessages={[]} />);
+    expect(screen.getByLabelText("Ask about the selected run")).toHaveValue("");
+    expect(screen.queryByLabelText("Verified answer details")).not.toBeInTheDocument();
+  });
+
   it("sends free-form questions to the run-grounded streaming gateway", async () => {
     const user = userEvent.setup();
     render(<OperatorConsoleChat {...baseProps} />);
@@ -208,6 +313,7 @@ describe("OperatorConsoleChat", () => {
     const user = userEvent.setup();
     const proposal = {
       ...commandProposal("proposal-cancel"),
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
       contract: "workflow.operator-command-proposal.v3" as const,
       command_type: "cancel" as const,
       predicted_run_status: "canceled" as const,
@@ -270,7 +376,7 @@ describe("OperatorConsoleChat", () => {
       },
       idempotency_key: "operator-pause:proposal-1",
       issued_at: "2026-09-30T10:00:00Z",
-      expires_at: "2026-09-30T10:05:00Z",
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
       consequences: ["Autonomous progress stops.", "State is preserved."],
     };
     sendMessage.mockResolvedValueOnce(
@@ -304,14 +410,17 @@ describe("OperatorConsoleChat", () => {
         replayed: false,
       },
     });
-    const onCommitted = vi.fn();
-    render(<OperatorConsoleChat {...baseProps} onCommandCommitted={onCommitted} />);
+    const onCommitted = vi.fn(() => {
+      view.rerender(<OperatorConsoleChat {...baseProps} run={{ ...run, status: "paused" }} initialMessages={[]} onCommandCommitted={onCommitted} />);
+    });
+    const view = render(<OperatorConsoleChat {...baseProps} onCommandCommitted={onCommitted} />);
 
     await user.type(screen.getByLabelText(/Ask about the selected run/i), "Pause this run");
     await user.click(screen.getByRole("button", { name: "Ask" }));
 
     expect(await screen.findByRole("button", { name: "Confirm pause" })).toBeInTheDocument();
     expect(confirmCommand).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("Ask about the selected run"), "Keep this draft after confirmation");
     await user.click(screen.getByRole("button", { name: "Confirm pause" }));
 
     await waitFor(() => expect(confirmCommand).toHaveBeenCalledOnce());
@@ -320,6 +429,9 @@ describe("OperatorConsoleChat", () => {
       /runtime propagation is not independently certified/i,
     );
     expect(onCommitted).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText("Ask about the selected run")).toHaveValue("Keep this draft after confirmation");
+    expect(screen.getByLabelText("Verified answer details")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm pause" })).not.toBeInTheDocument();
   });
 
   it.each([false, true])("requires exact resume confirmation and fences navigation during history refresh (%s)", async (navigateDuringRefresh) => {

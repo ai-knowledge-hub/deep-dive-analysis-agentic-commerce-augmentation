@@ -1,4 +1,6 @@
 "use client";
+import { RunCreationDecision } from "../../components/workspace/RunCreationDecision";
+import type { CreationDecision } from "../../lib/workspace";
 
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -68,6 +70,7 @@ function InterventionsPageContent() {
   const [retries, setRetries] = useState<RetryItem[]>([]);
   const [pauses, setPauses] = useState<PauseItem[]>([]);
   const [escalations, setEscalations] = useState<EscalationItem[]>([]);
+  const [creationDecisions, setCreationDecisions] = useState<CreationDecision[]>([]);
   const [commands, setCommands] = useState<CommandItem[]>([]);
   const [commandProjectionFailures, setCommandProjectionFailures] = useState(0);
   const [commandProjectionTruncations, setCommandProjectionTruncations] = useState(0);
@@ -84,6 +87,7 @@ function InterventionsPageContent() {
     try {
       const detailRows = await loadInterventionDetailRows(userId, runIdParam);
 
+      setCreationDecisions(detailRows.filter((d) => !runIdParam || d.run.id === runIdParam).flatMap((d) => d.creationDecision ? [d.creationDecision] : []));
       setCommandProjectionFailures(
         detailRows.filter((detail) => !detail.operatorCommandsAvailable).length,
       );
@@ -296,7 +300,7 @@ function InterventionsPageContent() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/lab")}
+        onNewConversation={() => router.push("/")}
         sessions={[]}
         activeSessionId={null}
         onSelectSession={() => {}}
@@ -362,6 +366,8 @@ function InterventionsPageContent() {
               </div>
             </section>
           ) : null}
+
+          {creationDecisions.map((decision) => <RunCreationDecision key={decision.receipt.run_id} proposal={decision.proposal} receipt={decision.receipt} busy={false} onConfirm={() => {}} />)}
 
           <section className="control-grid control-grid--compact control-grid--full">
             {commandProjectionFailures ? (

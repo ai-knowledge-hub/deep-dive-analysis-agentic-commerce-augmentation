@@ -309,8 +309,13 @@ def complete_authorized_effect(
     outputs_hash: str,
     now: datetime | None = None,
     receipt_id: str | None = None,
+    host_completed: bool = False,
 ) -> dict[str, Any] | None:
-    """Persist the receipt and fulfillment atomically for a governed effect."""
+    """Persist receipt and fulfillment atomically after exact authorization.
+
+    Only the normal executing host supplies host_completed. Recovery leaves
+    it false and requires independently durable completion evidence.
+    """
 
     if authorization is None:
         return None
@@ -326,6 +331,7 @@ def complete_authorized_effect(
             outputs=outputs,
             claimed_outputs_hash=outputs_hash,
             receipt_id=receipt_id,
+            host_completed=host_completed,
         )
     except ApprovalReceiptError as exc:
         raise ApprovalAuthorizationError(

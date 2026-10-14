@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from infrastructure.db.core.transactions import JoinedTransaction
+
 import hashlib
 import json
 import re
@@ -708,6 +710,7 @@ def _write(
     authority_check,
     operation,
 ) -> dict[str, Any]:
+    transaction = JoinedTransaction(conn, "outcome_write")
     expected_type = command.get("command_type")
     try:
         _validate_command(command)
@@ -722,7 +725,6 @@ def _write(
             raise _WriteConflict("command scope does not match artifact scope")
         if request_hash != _request_hash(expected_type, request_payload):
             raise _WriteConflict("command request hash does not match exact artifact")
-        conn.execute("BEGIN IMMEDIATE")
         replay = _command_replay(
             conn,
             command=command,
@@ -732,7 +734,7 @@ def _write(
             artifact_digest=artifact_digest,
         )
         if replay is not None:
-            conn.commit()
+            transaction.commit()
             return replay
         if not conn.execute(
             "SELECT 1 FROM agent_runs WHERE client_id = ? AND id = ?",
@@ -766,7 +768,7 @@ def _write(
             ),
         )
         operation()
-        conn.commit()
+        transaction.commit()
         return {
             "outcome": "applied",
             "command_id": command["command_id"],
@@ -780,8 +782,12 @@ def _write(
         sqlite3.IntegrityError,
         sqlite3.OperationalError,
     ) as exc:
-        conn.rollback()
+        transaction.rollback()
         return {"outcome": "conflict", "reason": str(exc)}
+
+    except Exception:
+        transaction.rollback()
+        raise
 
 
 def _command_replay(
@@ -1087,4 +1093,10 @@ def _require_digest(field_name: str, value: object) -> None:
         raise _WriteConflict(f"{field_name} must be a lowercase SHA-256 digest")
 
 
-__all__ = ["append_evidence", "append_task_result", "commit_authority_snapshot", "commit_completion_decision", "publish_completion_contract"]
+__all__ = [
+    "append_evidence",
+    "append_task_result",
+    "commit_authority_snapshot",
+    "commit_completion_decision",
+    "publish_completion_contract",
+]

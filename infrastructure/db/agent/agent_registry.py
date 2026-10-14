@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from infrastructure.db.core.transactions import JoinedTransaction
+
 import json
 import uuid
 from typing import Any, Dict, Optional
@@ -18,73 +20,80 @@ def ensure_agent_registry_version(
     status: str = "active",
 ) -> Dict[str, Any]:
     conn = get_connection()
-    release_status = status or "active"
-    active_before = get_active_agent_registry_version()
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO agent_registry_versions (
-            id,
-            registry_version,
-            registry_fingerprint,
-            hash_algorithm,
-            source,
-            payload_json,
-            status
+    transaction = JoinedTransaction(conn, "create_registry_version")
+    try:
+        release_status = status or "active"
+        active_before = get_active_agent_registry_version()
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO agent_registry_versions (
+                id,
+                registry_version,
+                registry_fingerprint,
+                hash_algorithm,
+                source,
+                payload_json,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, json(?), ?)
+            """,
+            (
+                registry_fingerprint,
+                registry_version,
+                registry_fingerprint,
+                hash_algorithm,
+                source,
+                to_json(payload) or to_json({}),
+                release_status,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, json(?), ?)
-        """,
-        (
-            registry_fingerprint,
-            registry_version,
-            registry_fingerprint,
-            hash_algorithm,
-            source,
-            to_json(payload) or to_json({}),
-            release_status,
-        ),
-    )
-    conn.execute(
-        """
-        UPDATE agent_registry_versions
-        SET
-            registry_version = ?,
-            hash_algorithm = ?,
-            source = ?,
-            payload_json = json(?),
-            status = ?
-        WHERE registry_fingerprint = ?
-        """,
-        (
-            registry_version,
-            hash_algorithm,
-            source,
-            to_json(payload) or to_json({}),
-            release_status,
-            registry_fingerprint,
-        ),
-    )
-    if (
-        release_status == "active"
-        and active_before
-        and active_before["registry_fingerprint"] != registry_fingerprint
-    ):
         conn.execute(
             """
             UPDATE agent_registry_versions
-            SET status = 'retired'
-            WHERE status = 'active' AND registry_fingerprint != ?
+            SET
+                registry_version = ?,
+                hash_algorithm = ?,
+                source = ?,
+                payload_json = json(?),
+                status = ?
+            WHERE registry_fingerprint = ?
             """,
-            (registry_fingerprint,),
+            (
+                registry_version,
+                hash_algorithm,
+                source,
+                to_json(payload) or to_json({}),
+                release_status,
+                registry_fingerprint,
+            ),
         )
-        _create_registry_transition_event(
-            previous=active_before,
-            registry_version=registry_version,
-            registry_fingerprint=registry_fingerprint,
-            payload=payload,
-            source=source,
+        if (
+            release_status == "active"
+            and active_before
+            and active_before["registry_fingerprint"] != registry_fingerprint
+        ):
+            conn.execute(
+                """
+                UPDATE agent_registry_versions
+                SET status = 'retired'
+                WHERE status = 'active' AND registry_fingerprint != ?
+                """,
+                (registry_fingerprint,),
+            )
+            _create_registry_transition_event(
+                previous=active_before,
+                registry_version=registry_version,
+                registry_fingerprint=registry_fingerprint,
+                payload=payload,
+                source=source,
+            )
+        transaction.commit()
+        return (
+            get_agent_registry_version(registry_fingerprint=registry_fingerprint) or {}
         )
-    conn.commit()
-    return get_agent_registry_version(registry_fingerprint=registry_fingerprint) or {}
+    except Exception:
+        transaction.rollback()
+        raise
 
 
 def get_agent_registry_version(
@@ -267,7 +276,12 @@ def ensure_agent_registry_harness_profiles(
         default_policy_profile_id = str(
             profile.get("default_policy_profile_id") or ""
         ).strip()
-        if not profile_id or not name or not default_run_mode or not default_policy_profile_id:
+        if (
+            not profile_id
+            or not name
+            or not default_run_mode
+            or not default_policy_profile_id
+        ):
             continue
         conn.execute(
             """
@@ -422,12 +436,10 @@ def update_agent_registry_harness_profile(
         ),
     )
     conn.commit()
-    row = (
-        conn.execute(
-            "SELECT * FROM agent_registry_harness_profiles WHERE id = ?",
-            (normalized_id,),
-        ).fetchone()
-    )
+    row = conn.execute(
+        "SELECT * FROM agent_registry_harness_profiles WHERE id = ?",
+        (normalized_id,),
+    ).fetchone()
     return _harness_profile_row(row) if row else {}
 
 
@@ -462,16 +474,14 @@ def update_agent_registry_tool_ownership(
         (normalized_tool_id, normalized_owner, normalized_steward, source),
     )
     conn.commit()
-    row = (
-        conn.execute(
-            """
+    row = conn.execute(
+        """
             SELECT *
             FROM agent_registry_tool_ownership
             WHERE tool_id = ?
             """,
-            (normalized_tool_id,),
-        ).fetchone()
-    )
+        (normalized_tool_id,),
+    ).fetchone()
     return _ownership_row(row) if row else {}
 
 
@@ -510,12 +520,10 @@ def create_agent_registry_audit_event(
         ),
     )
     conn.commit()
-    row = (
-        conn.execute(
-            "SELECT * FROM agent_registry_audit_events WHERE id = ?",
-            (event_id,),
-        ).fetchone()
-    )
+    row = conn.execute(
+        "SELECT * FROM agent_registry_audit_events WHERE id = ?",
+        (event_id,),
+    ).fetchone()
     return _audit_row(row) if row else {}
 
 
@@ -557,7 +565,13 @@ def _diff_registry_payload(
     previous: Dict[str, Any], current: Dict[str, Any]
 ) -> Dict[str, Any]:
     diff: Dict[str, Any] = {}
-    for key in ("skills", "tools", "capabilities", "policy_profiles", "harness_profiles"):
+    for key in (
+        "skills",
+        "tools",
+        "capabilities",
+        "policy_profiles",
+        "harness_profiles",
+    ):
         previous_items = _items_by_identity(previous.get(key))
         current_items = _items_by_identity(current.get(key))
         previous_ids = set(previous_items)

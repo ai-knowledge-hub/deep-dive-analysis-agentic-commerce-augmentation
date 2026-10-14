@@ -1201,7 +1201,7 @@ function SimulationPageContent() {
       <Sidebar
         mobileOpen={isSidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
-        onNewConversation={() => router.push("/lab")}
+        onNewConversation={() => router.push("/")}
         sessions={sessions}
         activeSessionId={null}
         onSelectSession={(sessionId) => router.push(`/?session=${sessionId}`)}
