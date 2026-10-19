@@ -54,3 +54,8 @@ tmp/
 
 # TypeScript incremental build artifacts (should not be tracked)
 web/tsconfig.tsbuildinfo
+
+# Local browser verification artifacts
+.playwright-cli/
+output/playwright/
+.playwright-mcp/

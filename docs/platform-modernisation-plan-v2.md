@@ -603,6 +603,16 @@ remain excluded. Browser acceptance and automated verification are recorded in
 Human usability and a live approved end-to-end objective remain exit evidence to
 collect before advancing the major platform slice.
 
+Issue 170 begins Phase 2 acceptance and UI consolidation with an isolated
+interactive screen prototype. [ADR 0004](decisions/0004-conversation-workspace-interaction.md)
+selects a conversation-first workspace, one commerce assistant and optional
+evidence/plan inspection. The owner-selected monochrome shell is now integrated
+locally with the authenticated Home workspace, preserving existing creation,
+individual approvals, history and evidence contracts. The sample route remains
+available for comparison. [Integration verification](debug/2026-10-15-workspace-integration-verification.md)
+records automated and isolated browser evidence; the real approved provider
+objective and human usability exit evidence remain pending.
+
 ### Phase 3: Durable workflow kernel
 
 Deliverables:

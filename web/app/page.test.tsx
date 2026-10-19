@@ -6,7 +6,7 @@ import HomePage from "./page";
 const api = vi.hoisted(() => ({ listAgentRuns: vi.fn(), clientId: "tenant-1", userId: "human" as string | null }));
 vi.mock("../lib/auth", () => ({ useAppUser: () => ({ user: api.userId ? { id: api.userId } : null }) }));
 vi.mock("../components/tenant/TenantProvider", () => ({ useTenant: () => ({ clientId: api.clientId }) }));
-vi.mock("../components/layout/Sidebar", () => ({ Sidebar: ({ onNewConversation }: { onNewConversation: () => void }) => <button onClick={onNewConversation}>New chat</button> }));
+vi.mock("../components/workspace/WorkspaceAccount", () => ({ WorkspaceAccount: () => <div>Account</div> }));
 vi.mock("../lib/api", () => ({ listAgentRuns: api.listAgentRuns }));
 vi.mock("../components/agent/OperatorConsoleChat", () => ({ OperatorConsoleChat: ({ initialSessionId, initialMessages }: { initialSessionId: string; initialMessages: Array<{ content: string }> }) => <section aria-label="Run supervision">{initialSessionId}{initialMessages.map((m,i) => <p key={i}>{m.content}</p>)}</section> }));
 const proposal = { proposal_id: "proposal", proposal_digest: "a".repeat(64), session_id: "session", expires_at: "2099-01-01T00:00:00Z",
@@ -17,6 +17,7 @@ function history() { return { session_id: "session", run_id: created ? "run-1" :
   actions: [], events: [], proposals: [proposal], turns: [{ id: 1, speaker: "user", content: "Improve product performance", metadata: {} }],
   receipt: created ? { receipt_id: "receipt", receipt_digest: "b".repeat(64), run_id: "run-1" } : null }; }
 beforeEach(() => {
+  window.matchMedia = vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
   created = false; api.userId = "human"; api.clientId = "tenant-1"; window.history.replaceState(null, "", "/");
   api.listAgentRuns.mockResolvedValue({ runs: [] });
   global.fetch = vi.fn().mockImplementation(async (_url, init) => {
@@ -55,7 +56,7 @@ describe("primary conversation workspace", () => {
     });
     render(<HomePage />);
     await user.type(screen.getByLabelText("Your objective"), "Improve product performance"); await user.click(screen.getByRole("button", { name: "Review objective" }));
-    await user.click(screen.getByRole("button", { name: "New chat" }));
+    await user.click(screen.getByRole("button", { name: "New conversation" }));
     resolveMessage(new Response(JSON.stringify({ state: "proposed", session_id: "old", proposal })));
     await waitFor(() => expect(screen.getByLabelText("Your objective")).toHaveValue(""));
     expect(screen.queryByRole("button", { name: "Confirm and create run" })).not.toBeInTheDocument();
