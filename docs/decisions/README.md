@@ -17,3 +17,6 @@ constraints future implementations must preserve.
   as a rebuildable routing projection, adopt durable-history integrity and
   recovery-journal patterns, and preserve explicit migration and rollback
   boundaries.
+- `0004-conversation-workspace-interaction.md`: accepted conversation-first
+  interaction direction, isolated preview and authenticated Home integration; preserves
+  individual approval, evidence and Phase 2 acceptance boundaries.

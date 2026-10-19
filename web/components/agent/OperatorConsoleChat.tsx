@@ -1,4 +1,5 @@
 "use client";
+import { createPortal } from "react-dom";
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   confirmOperatorConversationCommand,
@@ -11,6 +12,8 @@ import type {
   OperatorCommandRecord,
 } from "../../lib/operatorConversationTypes";
 import type { AgentAction, AgentRun, AgentRunEvent } from "../../lib/types";
+import { OperatorAnswerDetails } from "./OperatorAnswerDetails";
+import { OperatorWorkspacePrompts } from "./OperatorWorkspacePrompts";
 import { OperatorChatPrompts } from "./OperatorChatPrompts";
 import { OperatorChatSummary } from "./OperatorChatSummary";
 import { OperatorChatThread } from "./OperatorChatThread";
@@ -31,6 +34,10 @@ type Props = {
     guardrails: string[];
     hint: string;
   };
+  presentation?: "workspace";
+  detailsTarget?: HTMLElement | null;
+  draftValue?: string;
+  onDraftChange?: (value: string) => void;
   showCreationDecision?: boolean;
   initialSessionId?: string;
   initialMessages?: ChatMessage[];
@@ -54,6 +61,7 @@ export function OperatorConsoleChat({
   userId,
   selectedAction,
   nextRecommendedAction,
+  presentation, detailsTarget, draftValue, onDraftChange,
   showCreationDecision = true,
   initialSessionId,
   initialMessages,
@@ -62,7 +70,9 @@ export function OperatorConsoleChat({
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [localDraft, setLocalDraft] = useState("");
+  const draft = draftValue ?? localDraft;
+  const setDraft = onDraftChange ?? setLocalDraft;
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmingProposalId, setConfirmingProposalId] = useState<string | null>(null);
@@ -77,6 +87,7 @@ export function OperatorConsoleChat({
   }>({ hasMore: false, nextCursor: null, totalCount: 0 });
   const [loadingOlderCommands, setLoadingOlderCommands] = useState(false);
   const [commandRecordsError, setCommandRecordsError] = useState<string | null>(null);
+  const surfaceRef = useRef<HTMLElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestRef = useRef(0);
   const confirmationRequestRef = useRef(0);
@@ -174,7 +185,7 @@ export function OperatorConsoleChat({
     commandRecordsRequestRef.current += 1;
     setMessages(initialMessages ?? []);
     setSessionId(initialSessionId ?? null);
-    setDraft("");
+    setLocalDraft("");
     setStatus(null);
     setError(null);
     setConfirmingProposalId(null);
@@ -195,8 +206,15 @@ export function OperatorConsoleChat({
   useEffect(() => {
     const controller = new AbortController();
     void refreshCommandRecords({ signal: controller.signal });
-    return () => controller.abort();
+    return () => { commandRecordsRequestRef.current += 1; controller.abort(); };
   }, [refreshCommandRecords]);
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    requestRef.current += 1;
+    confirmationRequestRef.current += 1;
+    commandRecordsRequestRef.current += 1;
+  }, []);
 
   async function confirmCommand(proposal: OperatorCommandProposal) {
     if (!run || !proposal || confirmingProposalId) return;
@@ -311,9 +329,19 @@ export function OperatorConsoleChat({
   const durableReceipt =
     commandReceipt ?? commandRecords.find((record) => Boolean(record.receipt))?.receipt ?? null;
 
+  const pendingProposalId = pendingProposal?.proposal_id;
+  useEffect(() => {
+    if (!presentation || !pendingProposalId) return;
+    surfaceRef.current?.querySelector<HTMLElement>(".operator-chat__proposal")?.scrollIntoView?.({ block: "start" });
+  }, [presentation, pendingProposalId]);
+
+  function renderDetails(content: React.ReactNode) {
+    return detailsTarget ? createPortal(content, detailsTarget) : content;
+  }
+
   return (
-    <section className="panel__card panel__card--secondary">
-      <OperatorChatSummary
+    <section ref={surfaceRef} className={presentation ? "workspace-chat" : "panel__card panel__card--secondary"}>
+      {!presentation && <OperatorChatSummary
         run={run}
         briefing={
           run
@@ -325,55 +353,19 @@ export function OperatorConsoleChat({
         failedCount={counts.failed}
         policyCount={counts.policy}
         selectedAction={selectedAction}
-      />
-      <OperatorChatPrompts
+      />}
+      <details className="workspace-chat-prompts" open={presentation ? undefined : true}><summary>Conversation prompts</summary><OperatorChatPrompts
         selectedAction={selectedAction}
         hasNextAction={Boolean(nextRecommendedAction.action)}
         onPrompt={sendPrompt}
         onJumpToNextAction={onJumpToNextAction}
-      />
-      <OperatorChatThread messages={messages} />
+      /></details>
+      <OperatorChatThread messages={messages} workspace={Boolean(presentation)} />
+      {presentation && !pendingProposal && <OperatorWorkspacePrompts run={run} actions={actions} busy={Boolean(status) || Boolean(confirmingProposalId)} send={(question) => void sendQuestion(question)} />}
 
-      <form className="operator-chat__composer" onSubmit={submit}>
-        <label className="panel__label" htmlFor="operator-chat-question">
-          Ask about the selected run
-        </label>
-        <textarea
-          id="operator-chat-question"
-          className="panel__textarea"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="What evidence supports this result?"
-          rows={3}
-          maxLength={2000}
-          disabled={!run || !userId || Boolean(status)}
-        />
-        <div className="panel__actions">
-          <button
-            type="submit"
-            className="button button--primary button--sm"
-            disabled={!run || !userId || !draft.trim() || Boolean(status)}
-          >
-            Ask
-          </button>
-          {status ? <span className="panel__muted">{status.replaceAll("_", " ")}</span> : null}
-        </div>
-      </form>
 
       {error ? <div className="panel__notice panel__notice--error">{error}</div> : null}
-      {latestResponse ? (
-        <div className="operator-chat__artifacts" aria-label="Verified answer details">
-          <div className="panel__notice panel__notice--info">
-            Evidence view {latestResponse.snapshot.digest.slice(0, 12)} · {latestResponse.freshness.state}
-            {" · "}Data {latestResponse.freshness.data_state}
-            {" · "}Cursor {latestResponse.freshness.snapshot_cursor?.slice(0, 12) ?? "no events"}
-          </div>
-          <p className="panel__muted">Answer recorded: {new Date(latestResponse.snapshot.fetched_at).toLocaleString()}. Freshness reflects answer time; progress refresh preserves this evidence.</p>
-          {latestResponse.warnings.map((warning) => (
-            <div key={warning.code} className="panel__notice panel__notice--warning">
-              {warning.message}
-            </div>
-          ))}
+      {latestResponse && <>
           {latestResponse.warnings.some((warning) => warning.code === "action_review_target_required") ? (
             <div className="panel__actions" aria-label="Select an action to review">
               {actions.filter((action) => action.status === "proposed").map((action) => (
@@ -384,64 +376,16 @@ export function OperatorConsoleChat({
               ))}
             </div>
           ) : null}
-          {latestResponse.recommendation ? (
-            <div className="panel__notice panel__notice--info">
-              <strong>Recommendation:</strong> {latestResponse.recommendation.text}
-            </div>
-          ) : null}
-          <details className="panel__details">
-            <summary className="panel__details-summary">
-              Verified facts ({latestResponse.verified_facts.length})
-            </summary>
-            <ul className="operator-chat__fact-list">
-              {latestResponse.verified_facts.map((fact) => (
-                <li key={fact.id}>
-                  <span>{fact.text}</span>
-                  <small>
-                    {fact.category} · {fact.trust ?? "authoritative_projection"} · {fact.provenance.record_type}{" "}
-                    <a href={fact.source}>Source</a>
-                  </small>
-                </li>
-              ))}
-            </ul>
-          </details>
-          {latestResponse.evidence.length ? (
-            <details className="panel__details">
-              <summary className="panel__details-summary">
-                Evidence records ({latestResponse.evidence.length})
-              </summary>
-              <ul className="operator-chat__fact-list">
-                {latestResponse.evidence.map((item, index) => {
-                  const evidenceId = String(
-                    item.record.evidence_id ?? item.record.id ?? `record-${index + 1}`,
-                  );
-                  const sourceType = String(item.record.source_type ?? item.kind);
-                  return (
-                    <li key={`${item.kind}-${evidenceId}-${index}`}>
-                      <span>{evidenceId}</span>
-                      <small>
-                        {sourceType} · <a href={item.href}>Open evidence</a>
-                      </small>
-                    </li>
-                  );
-                })}
-              </ul>
-            </details>
-          ) : null}
-          <div className="panel__actions">
-            {latestResponse.navigation.map((link) => (
-              <a key={link.href} className="button button--ghost button--sm" href={link.href}>
-                {link.label}
-              </a>
-            ))}
-          </div>
-        </div>
+      </>}
+      {presentation && latestResponse?.warnings.map((warning) => <p role="status" key={warning.code}>{warning.message}</p>)}
+      {latestResponse ? renderDetails(
+        <OperatorAnswerDetails response={latestResponse} />
       ) : null}
       {showCreationDecision && creationDecision ? <RunCreationDecision proposal={creationDecision.proposal} receipt={creationDecision.receipt} busy={false} onConfirm={() => {}} /> : null}
       {run ? (
         <section className="operator-chat__artifacts" aria-label="Durable operator commands">
           <div className="control-section__header">
-            <strong>Operator commands</strong>
+            <strong>{presentation ? "Your decisions" : "Operator commands"}</strong>
             <span className="control-chip">
               {commandRecords.length}
               {commandHistoryPage.totalCount > commandRecords.length
@@ -502,6 +446,32 @@ export function OperatorConsoleChat({
           ) : null}
         </section>
       ) : null}
+      <form className="operator-chat__composer" onSubmit={submit}>
+        <label className="panel__label" htmlFor="operator-chat-question">
+          Ask about the selected run
+        </label>
+        <textarea
+          id="operator-chat-question"
+          className="panel__textarea"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="What evidence supports this result?"
+          rows={3}
+          maxLength={2000}
+          disabled={!run || !userId || Boolean(status)}
+        />
+        <div className="panel__actions">
+          <button
+            type="submit"
+            className="button button--primary button--sm"
+            disabled={!run || !userId || !draft.trim() || Boolean(status)}
+          >
+            Ask
+          </button>
+          {status ? <span className="panel__muted">{status.replaceAll("_", " ")}</span> : null}
+        </div>
+      </form>
+
     </section>
   );
 }

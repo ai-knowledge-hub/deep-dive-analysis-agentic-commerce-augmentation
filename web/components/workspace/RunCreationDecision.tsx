@@ -1,12 +1,6 @@
 import React from "react";
 import type { CreationProposal, CreationReceipt } from "../../lib/workspace";
-const LABELS: Record<string, string> = {
-  freeze_retrieval_protocol: "Freeze comparison evidence", run_control_baseline: "Measure the baseline",
-  seed_hypotheses: "Suggest improvement hypotheses", generate_variants: "Draft candidate variants",
-  run_variant: "Evaluate one candidate", request_synthetic_validation: "Request synthetic validation",
-  review_validation_readiness: "Review validation coverage", update_posterior_and_decisions: "Update evidence and decisions",
-  recommend_next_action: "Recommend the next step",
-};
+import { workspaceActionLabel } from "../../lib/workspaceDisplay";
 export function RunCreationDecision({ proposal, receipt, busy, onConfirm }: {
   proposal: CreationProposal | null; receipt: CreationReceipt | null; busy: boolean; onConfirm: () => void;
 }) {
@@ -24,7 +18,7 @@ export function RunCreationDecision({ proposal, receipt, busy, onConfirm }: {
     <h2>Review your objective</h2><p>{parameters.objective.goal}</p>
     <dl><dt>Product</dt><dd>{scope.product}</dd><dt>Experiment</dt><dd>{scope.experiment}</dd></dl>
     <a href={`/experiments?experiment_id=${encodeURIComponent(parameters.experiment_id)}`}>Inspect the selected experiment</a>
-    <ol>{plan.map((step, i) => <li key={i}>{LABELS[step.capability_name] ?? step.rationale}</li>)}</ol>
+    <ol>{plan.map((step, i) => <li key={i}>{workspaceActionLabel(step.capability_name)}</li>)}</ol>
     <p>Limits: {parameters.budgets.max_actions} actions, {parameters.budgets.max_variant_runs} candidate evaluation, ${parameters.budgets.max_cost_usd} recorded cost.</p>
     <p>{proposal.preflight.execution_posture}</p>
     <p>Every action needs a separate approval. Review the committed plan after creation.</p>

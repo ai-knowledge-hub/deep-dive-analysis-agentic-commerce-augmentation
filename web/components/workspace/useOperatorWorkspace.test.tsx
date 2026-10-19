@@ -53,3 +53,69 @@ describe("workspace conversation pagination", () => {
     expect(result.current.history?.turns.map((turn) => turn.id)).toEqual([5, 504]);
   });
 });
+
+describe("workspace refresh, drafts and scope", () => {
+  it("retains loaded older history and its paging boundary after refresh and navigation", async () => {
+    const { result } = renderHook(() => useOperatorWorkspace("tenant", "human"));
+    await waitFor(() => expect(result.current.history?.session_id).toBe("session"));
+    act(() => result.current.setDraft("Unsent question"));
+    request.mockResolvedValueOnce({ ...latest, turns: [{ id: 1, speaker: "agent", content: "Older answer", metadata: {} }], turns_has_more: false, turns_before_id: null });
+    await act(() => result.current.loadOlderTurns());
+    request.mockResolvedValueOnce({ ...latest, run: { id: "run", status: "paused" }, turns: [...latest.turns, { id: 510, speaker: "agent", content: "New answer", metadata: {} }] });
+    await act(() => result.current.refresh());
+    expect(result.current.history?.turns.map((turn) => turn.id)).toEqual([1, 5, 504, 510]);
+    expect(result.current.history?.turns_has_more).toBe(false);
+    expect(result.current.history?.turns_before_id).toBeNull();
+    expect(result.current.draft).toBe("Unsent question");
+    expect(result.current.history?.turns.find((turn) => turn.id === 504)?.metadata.operator_response).toEqual(evidence);
+    request.mockResolvedValueOnce({ ...latest, session_id: "second", turns: [] });
+    await act(() => result.current.select("second"));
+    expect(result.current.draft).toBe("");
+    act(() => result.current.setDraft("Second question"));
+    await act(() => result.current.select("session"));
+    expect(result.current.draft).toBe("Unsent question");
+    request.mockResolvedValueOnce({ ...latest, session_id: "second", turns: [] });
+    await act(() => result.current.select("second"));
+    expect(result.current.draft).toBe("Second question");
+  });
+  it.each(["tenant", "human"])("erases drafts and ignores a delayed refresh failure after %s changes", async (identity) => {
+    const { result, rerender } = renderHook(({ tenant, human }) => useOperatorWorkspace(tenant, human), { initialProps: { tenant: "tenant", human: "human" } });
+    await waitFor(() => expect(result.current.history?.session_id).toBe("session"));
+    act(() => result.current.setDraft("Private draft"));
+    let reject!: (error: Error) => void;
+    request.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.refresh(); });
+    rerender({ tenant: identity === "tenant" ? "other" : "tenant", human: identity === "human" ? "other" : "human" });
+    await act(async () => { reject(new Error("Prior private failure")); await pending; });
+    expect(result.current.history).toBeNull();
+    expect(result.current.draft).toBe("");
+    expect(result.current.error).toBeNull();
+    await act(() => result.current.select("session"));
+    expect(result.current.draft).toBe("");
+  });
+  it("keeps the most recent refresh when reads complete in reverse order", async () => {
+    const { result } = renderHook(() => useOperatorWorkspace("tenant", "human"));
+    await waitFor(() => expect(result.current.history?.session_id).toBe("session"));
+    let deliver!: (value: unknown) => void;
+    request.mockImplementationOnce(() => new Promise((resolve) => { deliver = resolve; }));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.refresh(); });
+    request.mockResolvedValueOnce({ ...latest, run: { id: "run", status: "paused" } });
+    await act(() => result.current.refresh());
+    await act(async () => { deliver({ ...latest, run: { id: "run", status: "running" } }); await pending; });
+    expect(result.current.history?.run?.status).toBe("paused");
+  });
+});
+
+it("keeps paging available when the newest window no longer overlaps loaded history", async () => {
+  const { result } = renderHook(() => useOperatorWorkspace("tenant", "human"));
+  await waitFor(() => expect(result.current.history?.session_id).toBe("session"));
+  request.mockResolvedValueOnce({ ...latest, turns: [{ id: 1, speaker: "user", content: "Oldest", metadata: {} }], turns_has_more: false, turns_before_id: null });
+  await act(() => result.current.loadOlderTurns());
+  request.mockResolvedValueOnce({ ...latest, turns: [{ id: 900, speaker: "agent", content: "Much later answer", metadata: {} }], turns_has_more: true, turns_before_id: 900 });
+  await act(() => result.current.refresh());
+  expect(result.current.history?.turns.map((turn) => turn.id)).toEqual([1, 5, 504, 900]);
+  expect(result.current.history?.turns_has_more).toBe(true);
+  expect(result.current.history?.turns_before_id).toBe(900);
+});
